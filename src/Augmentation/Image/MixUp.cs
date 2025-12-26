@@ -88,7 +88,7 @@ public class MixUp<T> : LabelMixingAugmentationBase<T, ImageTensor<T>>
     {
         // Sample mixing coefficient
         double lambda = SampleLambda(context);
-        LastMixingLambda = (T)Convert.ChangeType(lambda, typeof(T));
+        LastMixingLambda = NumOps.FromDouble(lambda);
 
         // Ensure images have same dimensions
         if (image1.Height != image2.Height || image1.Width != image2.Width || image1.Channels != image2.Channels)
@@ -108,10 +108,10 @@ public class MixUp<T> : LabelMixingAugmentationBase<T, ImageTensor<T>>
             {
                 for (int c = 0; c < channels; c++)
                 {
-                    double v1 = Convert.ToDouble(image1.GetPixel(y, x, c));
-                    double v2 = Convert.ToDouble(image2.GetPixel(y, x, c));
+                    double v1 = NumOps.ToDouble(image1.GetPixel(y, x, c));
+                    double v2 = NumOps.ToDouble(image2.GetPixel(y, x, c));
                     double mixed = lambda * v1 + (1 - lambda) * v2;
-                    result.SetPixel(y, x, c, (T)Convert.ChangeType(mixed, typeof(T)));
+                    result.SetPixel(y, x, c, NumOps.FromDouble(mixed));
                 }
             }
         }

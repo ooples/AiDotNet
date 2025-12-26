@@ -163,7 +163,7 @@ public class ColorJitter<T> : AugmentationBase<T, ImageTensor<T>>
             {
                 for (int x = 0; x < width; x++)
                 {
-                    sum += Convert.ToDouble(data.GetPixel(y, x, c));
+                    sum += NumOps.ToDouble(data.GetPixel(y, x, c));
                 }
             }
             channelMeans[c] = sum / totalPixels;
@@ -183,9 +183,9 @@ public class ColorJitter<T> : AugmentationBase<T, ImageTensor<T>>
         {
             for (int x = 0; x < width; x++)
             {
-                double r = Convert.ToDouble(data.GetPixel(y, x, 0));
-                double g = Convert.ToDouble(data.GetPixel(y, x, 1));
-                double b = Convert.ToDouble(data.GetPixel(y, x, 2));
+                double r = NumOps.ToDouble(data.GetPixel(y, x, 0));
+                double g = NumOps.ToDouble(data.GetPixel(y, x, 1));
+                double b = NumOps.ToDouble(data.GetPixel(y, x, 2));
 
                 // Apply operations in random order
                 foreach (int op in order)
@@ -229,9 +229,9 @@ public class ColorJitter<T> : AugmentationBase<T, ImageTensor<T>>
                 g = Math.Max(minValue, Math.Min(maxValue, g));
                 b = Math.Max(minValue, Math.Min(maxValue, b));
 
-                result.SetPixel(y, x, 0, (T)Convert.ChangeType(r, typeof(T)));
-                result.SetPixel(y, x, 1, (T)Convert.ChangeType(g, typeof(T)));
-                result.SetPixel(y, x, 2, (T)Convert.ChangeType(b, typeof(T)));
+                result.SetPixel(y, x, 0, NumOps.FromDouble(r));
+                result.SetPixel(y, x, 1, NumOps.FromDouble(g));
+                result.SetPixel(y, x, 2, NumOps.FromDouble(b));
 
                 // Keep alpha channel unchanged if present
                 for (int c = 3; c < channels; c++)

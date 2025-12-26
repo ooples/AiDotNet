@@ -1,7 +1,6 @@
 using AiDotNet.Augmentation.Image;
-
-
-
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Interfaces;
 
 namespace AiDotNet.Augmentation;
 
@@ -26,6 +25,11 @@ namespace AiDotNet.Augmentation;
 /// <typeparam name="TData">The data type being augmented.</typeparam>
 public abstract class AugmentationBase<T, TData> : IAugmentation<T, TData>
 {
+    /// <summary>
+    /// Numeric operations for type T.
+    /// </summary>
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     /// <summary>
     /// Event raised when this augmentation is applied.
     /// </summary>

@@ -103,10 +103,10 @@ public class HorizontalFlip<T> : SpatialAugmentationBase<T, ImageTensor<T>>
         double newX = imageWidth - x - width;
 
         var result = box.Clone();
-        result.X1 = (T)Convert.ChangeType(newX, typeof(T));
-        result.Y1 = (T)Convert.ChangeType(y, typeof(T));
-        result.X2 = (T)Convert.ChangeType(newX + width, typeof(T));
-        result.Y2 = (T)Convert.ChangeType(y + height, typeof(T));
+        result.X1 = NumOps.FromDouble(newX);
+        result.Y1 = NumOps.FromDouble(y);
+        result.X2 = NumOps.FromDouble(newX + width);
+        result.Y2 = NumOps.FromDouble(y + height);
         result.Format = BoundingBoxFormat.XYXY;
         return result;
     }
@@ -122,7 +122,7 @@ public class HorizontalFlip<T> : SpatialAugmentationBase<T, ImageTensor<T>>
         IDictionary<string, object> transformParams,
         AugmentationContext<T> context)
     {
-        double x = Convert.ToDouble(keypoint.X);
+        double x = NumOps.ToDouble(keypoint.X);
         double newX;
 
         if (keypoint.IsNormalized)
@@ -138,7 +138,7 @@ public class HorizontalFlip<T> : SpatialAugmentationBase<T, ImageTensor<T>>
         }
 
         var result = keypoint.Clone();
-        result.X = (T)Convert.ChangeType(newX, typeof(T));
+        result.X = NumOps.FromDouble(newX);
         return result;
     }
 

@@ -110,13 +110,13 @@ public class Brightness<T> : AugmentationBase<T, ImageTensor<T>>
             {
                 for (int c = 0; c < channels; c++)
                 {
-                    double value = Convert.ToDouble(data.GetPixel(y, x, c));
+                    double value = NumOps.ToDouble(data.GetPixel(y, x, c));
                     double adjusted = value * factor;
 
                     // Clamp to valid range
                     adjusted = Math.Max(minValue, Math.Min(maxValue, adjusted));
 
-                    result.SetPixel(y, x, c, (T)Convert.ChangeType(adjusted, typeof(T)));
+                    result.SetPixel(y, x, c, NumOps.FromDouble(adjusted));
                 }
             }
         }

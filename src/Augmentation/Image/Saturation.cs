@@ -122,9 +122,9 @@ public class Saturation<T> : AugmentationBase<T, ImageTensor<T>>
             for (int x = 0; x < width; x++)
             {
                 // Get RGB values
-                double r = Convert.ToDouble(data.GetPixel(y, x, 0));
-                double g = Convert.ToDouble(data.GetPixel(y, x, 1));
-                double b = Convert.ToDouble(data.GetPixel(y, x, 2));
+                double r = NumOps.ToDouble(data.GetPixel(y, x, 0));
+                double g = NumOps.ToDouble(data.GetPixel(y, x, 1));
+                double b = NumOps.ToDouble(data.GetPixel(y, x, 2));
 
                 // Calculate luminance (grayscale equivalent)
                 double gray = rWeight * r + gWeight * g + bWeight * b;
@@ -142,9 +142,9 @@ public class Saturation<T> : AugmentationBase<T, ImageTensor<T>>
                 newG = Math.Max(minValue, Math.Min(maxValue, newG));
                 newB = Math.Max(minValue, Math.Min(maxValue, newB));
 
-                result.SetPixel(y, x, 0, (T)Convert.ChangeType(newR, typeof(T)));
-                result.SetPixel(y, x, 1, (T)Convert.ChangeType(newG, typeof(T)));
-                result.SetPixel(y, x, 2, (T)Convert.ChangeType(newB, typeof(T)));
+                result.SetPixel(y, x, 0, NumOps.FromDouble(newR));
+                result.SetPixel(y, x, 1, NumOps.FromDouble(newG));
+                result.SetPixel(y, x, 2, NumOps.FromDouble(newB));
 
                 // Keep alpha channel unchanged if present
                 for (int c = 3; c < channels; c++)

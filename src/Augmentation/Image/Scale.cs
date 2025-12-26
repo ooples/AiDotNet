@@ -245,16 +245,16 @@ public class Scale<T> : SpatialAugmentationBase<T, ImageTensor<T>>
         double xFrac = x - Math.Floor(x);
         double yFrac = y - Math.Floor(y);
 
-        double v00 = Convert.ToDouble(image.GetPixel(y0, x0, channel));
-        double v01 = Convert.ToDouble(image.GetPixel(y0, x1, channel));
-        double v10 = Convert.ToDouble(image.GetPixel(y1, x0, channel));
-        double v11 = Convert.ToDouble(image.GetPixel(y1, x1, channel));
+        double v00 = NumOps.ToDouble(image.GetPixel(y0, x0, channel));
+        double v01 = NumOps.ToDouble(image.GetPixel(y0, x1, channel));
+        double v10 = NumOps.ToDouble(image.GetPixel(y1, x0, channel));
+        double v11 = NumOps.ToDouble(image.GetPixel(y1, x1, channel));
 
         double v0 = v00 * (1 - xFrac) + v01 * xFrac;
         double v1 = v10 * (1 - xFrac) + v11 * xFrac;
         double result = v0 * (1 - yFrac) + v1 * yFrac;
 
-        return (T)Convert.ChangeType(result, typeof(T));
+        return NumOps.FromDouble(result);
     }
 
     /// <summary>
@@ -278,10 +278,10 @@ public class Scale<T> : SpatialAugmentationBase<T, ImageTensor<T>>
         double newH = h * scaleFactor;
 
         var result = box.Clone();
-        result.X1 = (T)Convert.ChangeType(newX, typeof(T));
-        result.Y1 = (T)Convert.ChangeType(newY, typeof(T));
-        result.X2 = (T)Convert.ChangeType(newX + newW, typeof(T));
-        result.Y2 = (T)Convert.ChangeType(newY + newH, typeof(T));
+        result.X1 = NumOps.FromDouble(newX);
+        result.Y1 = NumOps.FromDouble(newY);
+        result.X2 = NumOps.FromDouble(newX + newW);
+        result.Y2 = NumOps.FromDouble(newY + newH);
         result.Format = BoundingBoxFormat.XYXY;
         return result;
     }
@@ -298,15 +298,15 @@ public class Scale<T> : SpatialAugmentationBase<T, ImageTensor<T>>
         double centerX = (double)transformParams["center_x"];
         double centerY = (double)transformParams["center_y"];
 
-        double x = Convert.ToDouble(keypoint.X);
-        double y = Convert.ToDouble(keypoint.Y);
+        double x = NumOps.ToDouble(keypoint.X);
+        double y = NumOps.ToDouble(keypoint.Y);
 
         double newX = (x - centerX) * scaleFactor + centerX;
         double newY = (y - centerY) * scaleFactor + centerY;
 
         var result = keypoint.Clone();
-        result.X = (T)Convert.ChangeType(newX, typeof(T));
-        result.Y = (T)Convert.ChangeType(newY, typeof(T));
+        result.X = NumOps.FromDouble(newX);
+        result.Y = NumOps.FromDouble(newY);
         return result;
     }
 

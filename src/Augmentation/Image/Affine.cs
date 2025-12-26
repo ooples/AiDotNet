@@ -327,16 +327,16 @@ public class Affine<T> : SpatialAugmentationBase<T, ImageTensor<T>>
         double xFrac = x - Math.Floor(x);
         double yFrac = y - Math.Floor(y);
 
-        double v00 = Convert.ToDouble(image.GetPixel(y0, x0, channel));
-        double v01 = Convert.ToDouble(image.GetPixel(y0, x1, channel));
-        double v10 = Convert.ToDouble(image.GetPixel(y1, x0, channel));
-        double v11 = Convert.ToDouble(image.GetPixel(y1, x1, channel));
+        double v00 = NumOps.ToDouble(image.GetPixel(y0, x0, channel));
+        double v01 = NumOps.ToDouble(image.GetPixel(y0, x1, channel));
+        double v10 = NumOps.ToDouble(image.GetPixel(y1, x0, channel));
+        double v11 = NumOps.ToDouble(image.GetPixel(y1, x1, channel));
 
         double v0 = v00 * (1 - xFrac) + v01 * xFrac;
         double v1 = v10 * (1 - xFrac) + v11 * xFrac;
         double result = v0 * (1 - yFrac) + v1 * yFrac;
 
-        return (T)Convert.ChangeType(result, typeof(T));
+        return NumOps.FromDouble(result);
     }
 
     /// <summary>
@@ -384,10 +384,10 @@ public class Affine<T> : SpatialAugmentationBase<T, ImageTensor<T>>
         }
 
         var result = box.Clone();
-        result.X1 = (T)Convert.ChangeType(minX, typeof(T));
-        result.Y1 = (T)Convert.ChangeType(minY, typeof(T));
-        result.X2 = (T)Convert.ChangeType(maxX, typeof(T));
-        result.Y2 = (T)Convert.ChangeType(maxY, typeof(T));
+        result.X1 = NumOps.FromDouble(minX);
+        result.Y1 = NumOps.FromDouble(minY);
+        result.X2 = NumOps.FromDouble(maxX);
+        result.Y2 = NumOps.FromDouble(maxY);
         result.Format = BoundingBoxFormat.XYXY;
         return result;
     }
@@ -409,8 +409,8 @@ public class Affine<T> : SpatialAugmentationBase<T, ImageTensor<T>>
         double centerX = (double)transformParams["center_x"];
         double centerY = (double)transformParams["center_y"];
 
-        double x = Convert.ToDouble(keypoint.X);
-        double y = Convert.ToDouble(keypoint.Y);
+        double x = NumOps.ToDouble(keypoint.X);
+        double y = NumOps.ToDouble(keypoint.Y);
 
         double dx = x - centerX;
         double dy = y - centerY;
@@ -418,8 +418,8 @@ public class Affine<T> : SpatialAugmentationBase<T, ImageTensor<T>>
         double newY = m10 * dx + m11 * dy + centerY + translateY;
 
         var result = keypoint.Clone();
-        result.X = (T)Convert.ChangeType(newX, typeof(T));
-        result.Y = (T)Convert.ChangeType(newY, typeof(T));
+        result.X = NumOps.FromDouble(newX);
+        result.Y = NumOps.FromDouble(newY);
         return result;
     }
 

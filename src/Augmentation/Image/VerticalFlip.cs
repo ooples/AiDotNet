@@ -106,10 +106,10 @@ public class VerticalFlip<T> : SpatialAugmentationBase<T, ImageTensor<T>>
         double newY = imageHeight - y - height;
 
         var result = box.Clone();
-        result.X1 = (T)Convert.ChangeType(x, typeof(T));
-        result.Y1 = (T)Convert.ChangeType(newY, typeof(T));
-        result.X2 = (T)Convert.ChangeType(x + width, typeof(T));
-        result.Y2 = (T)Convert.ChangeType(newY + height, typeof(T));
+        result.X1 = NumOps.FromDouble(x);
+        result.Y1 = NumOps.FromDouble(newY);
+        result.X2 = NumOps.FromDouble(x + width);
+        result.Y2 = NumOps.FromDouble(newY + height);
         result.Format = BoundingBoxFormat.XYXY;
         return result;
     }
@@ -125,11 +125,11 @@ public class VerticalFlip<T> : SpatialAugmentationBase<T, ImageTensor<T>>
         int imageHeight = (int)transformParams["image_height"];
 
         // For vertical flip: new_y = image_height - 1 - old_y (0-indexed)
-        double y = Convert.ToDouble(keypoint.Y);
+        double y = NumOps.ToDouble(keypoint.Y);
         double newY = imageHeight - 1 - y;
 
         var result = keypoint.Clone();
-        result.Y = (T)Convert.ChangeType(newY, typeof(T));
+        result.Y = NumOps.FromDouble(newY);
         return result;
     }
 

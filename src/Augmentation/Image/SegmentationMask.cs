@@ -1,3 +1,6 @@
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Interfaces;
+
 namespace AiDotNet.Augmentation.Image;
 
 /// <summary>
@@ -65,6 +68,8 @@ public enum MaskEncoding
 /// <typeparam name="T">The numeric type for mask values.</typeparam>
 public class SegmentationMask<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     /// <summary>
     /// Gets or sets the mask data as a 2D array [height, width].
     /// </summary>
@@ -293,7 +298,7 @@ public class SegmentationMask<T>
         {
             for (int x = 0; x < Width; x++)
             {
-                if (Convert.ToDouble(dense[y, x]) > 0)
+                if (NumOps.ToDouble(dense[y, x]) > 0)
                 {
                     count++;
                 }
@@ -315,7 +320,7 @@ public class SegmentationMask<T>
         {
             for (int x = 0; x < Width; x++)
             {
-                if (Convert.ToDouble(dense[y, x]) > 0)
+                if (NumOps.ToDouble(dense[y, x]) > 0)
                 {
                     xMin = Math.Min(xMin, x);
                     yMin = Math.Min(yMin, y);
@@ -355,8 +360,8 @@ public class SegmentationMask<T>
         {
             for (int x = 0; x < Width; x++)
             {
-                bool m1 = Convert.ToDouble(mask1[y, x]) > 0;
-                bool m2 = Convert.ToDouble(mask2[y, x]) > 0;
+                bool m1 = NumOps.ToDouble(mask1[y, x]) > 0;
+                bool m2 = NumOps.ToDouble(mask2[y, x]) > 0;
 
                 if (m1 && m2) intersection++;
                 if (m1 || m2) union++;
@@ -388,8 +393,8 @@ public class SegmentationMask<T>
         {
             for (int x = 0; x < Width; x++)
             {
-                bool m1 = Convert.ToDouble(mask1[y, x]) > 0;
-                bool m2 = Convert.ToDouble(mask2[y, x]) > 0;
+                bool m1 = NumOps.ToDouble(mask1[y, x]) > 0;
+                bool m2 = NumOps.ToDouble(mask2[y, x]) > 0;
 
                 if (m1 && m2) intersection++;
                 if (m1) sum++;
@@ -423,7 +428,7 @@ public class SegmentationMask<T>
 
                 if (isForeground)
                 {
-                    result[y, x] = (T)Convert.ChangeType(1, typeof(T));
+                    result[y, x] = NumOps.FromDouble(1);
                 }
 
                 position++;
@@ -447,7 +452,7 @@ public class SegmentationMask<T>
         {
             for (int x = 0; x < Width; x++)
             {
-                bool pixelValue = Convert.ToDouble(dense[y, x]) > 0;
+                bool pixelValue = NumOps.ToDouble(dense[y, x]) > 0;
 
                 if (pixelValue == currentValue)
                 {
@@ -531,7 +536,7 @@ public class SegmentationMask<T>
 
                 for (int x = xStart; x <= xEnd; x++)
                 {
-                    result[y, x] = (T)Convert.ChangeType(1, typeof(T));
+                    result[y, x] = NumOps.FromDouble(1);
                 }
             }
         }

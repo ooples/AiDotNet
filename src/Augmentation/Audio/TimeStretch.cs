@@ -102,10 +102,10 @@ public class TimeStretch<T> : AudioAugmenterBase<T>
             }
             else
             {
-                double val1 = Convert.ToDouble(waveform[srcIndex]);
-                double val2 = Convert.ToDouble(waveform[srcIndex + 1]);
+                double val1 = NumOps.ToDouble(waveform[srcIndex]);
+                double val2 = NumOps.ToDouble(waveform[srcIndex + 1]);
                 double interpolated = val1 + frac * (val2 - val1);
-                result[i] = (T)Convert.ChangeType(interpolated, typeof(T));
+                result[i] = NumOps.FromDouble(interpolated);
             }
         }
 

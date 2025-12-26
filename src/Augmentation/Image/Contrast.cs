@@ -112,7 +112,7 @@ public class Contrast<T> : AugmentationBase<T, ImageTensor<T>>
             {
                 for (int x = 0; x < width; x++)
                 {
-                    sum += Convert.ToDouble(data.GetPixel(y, x, c));
+                    sum += NumOps.ToDouble(data.GetPixel(y, x, c));
                 }
             }
             channelMeans[c] = sum / totalPixels;
@@ -129,13 +129,13 @@ public class Contrast<T> : AugmentationBase<T, ImageTensor<T>>
             {
                 for (int c = 0; c < channels; c++)
                 {
-                    double value = Convert.ToDouble(data.GetPixel(y, x, c));
+                    double value = NumOps.ToDouble(data.GetPixel(y, x, c));
                     double adjusted = channelMeans[c] + (value - channelMeans[c]) * factor;
 
                     // Clamp to valid range
                     adjusted = Math.Max(minValue, Math.Min(maxValue, adjusted));
 
-                    result.SetPixel(y, x, c, (T)Convert.ChangeType(adjusted, typeof(T)));
+                    result.SetPixel(y, x, c, NumOps.FromDouble(adjusted));
                 }
             }
         }

@@ -54,7 +54,7 @@ public class TabularMixUp<T> : TabularMixingAugmenterBase<T>
 
         // Sample lambda from Beta(alpha, alpha) distribution
         double lambda = SampleLambda(context);
-        LastMixingLambda = (T)Convert.ChangeType(lambda, typeof(T));
+        LastMixingLambda = NumOps.FromDouble(lambda);
 
         // Shuffle indices to pair samples for mixing
         var indices = Enumerable.Range(0, rows).ToArray();
@@ -72,10 +72,10 @@ public class TabularMixUp<T> : TabularMixingAugmenterBase<T>
 
             for (int c = 0; c < cols; c++)
             {
-                double val1 = Convert.ToDouble(data[i, c]);
-                double val2 = Convert.ToDouble(data[j, c]);
+                double val1 = NumOps.ToDouble(data[i, c]);
+                double val2 = NumOps.ToDouble(data[j, c]);
                 double mixed = lambda * val1 + (1 - lambda) * val2;
-                result[i, c] = (T)Convert.ChangeType(mixed, typeof(T));
+                result[i, c] = NumOps.FromDouble(mixed);
             }
         }
 
@@ -113,23 +113,23 @@ public class TabularMixUp<T> : TabularMixingAugmenterBase<T>
         var mixedLabels = new Vector<T>(rows);
 
         double lambda = SampleLambda(context);
-        LastMixingLambda = (T)Convert.ChangeType(lambda, typeof(T));
+        LastMixingLambda = NumOps.FromDouble(lambda);
 
         for (int i = 0; i < rows; i++)
         {
             for (int c = 0; c < cols; c++)
             {
-                double val1 = Convert.ToDouble(data1[i, c]);
-                double val2 = Convert.ToDouble(data2[i, c]);
+                double val1 = NumOps.ToDouble(data1[i, c]);
+                double val2 = NumOps.ToDouble(data2[i, c]);
                 double mixed = lambda * val1 + (1 - lambda) * val2;
-                mixedData[i, c] = (T)Convert.ChangeType(mixed, typeof(T));
+                mixedData[i, c] = NumOps.FromDouble(mixed);
             }
 
             // Mix labels the same way
-            double label1 = Convert.ToDouble(labels1[i]);
-            double label2 = Convert.ToDouble(labels2[i]);
+            double label1 = NumOps.ToDouble(labels1[i]);
+            double label2 = NumOps.ToDouble(labels2[i]);
             double mixedLabel = lambda * label1 + (1 - lambda) * label2;
-            mixedLabels[i] = (T)Convert.ChangeType(mixedLabel, typeof(T));
+            mixedLabels[i] = NumOps.FromDouble(mixedLabel);
         }
 
         return (mixedData, mixedLabels, lambda);

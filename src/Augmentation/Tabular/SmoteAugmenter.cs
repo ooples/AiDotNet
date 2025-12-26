@@ -130,10 +130,10 @@ public class SmoteAugmenter<T> : TabularAugmenterBase<T>
 
             for (int c = 0; c < cols; c++)
             {
-                double val1 = Convert.ToDouble(minorityData[sampleIdx, c]);
-                double val2 = Convert.ToDouble(minorityData[neighborIdx, c]);
+                double val1 = NumOps.ToDouble(minorityData[sampleIdx, c]);
+                double val2 = NumOps.ToDouble(minorityData[neighborIdx, c]);
                 double synthetic = val1 + gap * (val2 - val1);
-                syntheticSamples[syntheticIndex, c] = (T)Convert.ChangeType(synthetic, typeof(T));
+                syntheticSamples[syntheticIndex, c] = NumOps.FromDouble(synthetic);
             }
 
             syntheticIndex++;
@@ -206,7 +206,7 @@ public class SmoteAugmenter<T> : TabularAugmenterBase<T>
                 double dist = 0;
                 for (int c = 0; c < cols; c++)
                 {
-                    double diff = Convert.ToDouble(data[i, c]) - Convert.ToDouble(data[j, c]);
+                    double diff = NumOps.ToDouble(data[i, c]) - NumOps.ToDouble(data[j, c]);
                     dist += diff * diff;
                 }
                 dist = Math.Sqrt(dist);

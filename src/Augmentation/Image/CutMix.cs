@@ -155,7 +155,7 @@ public class CutMix<T> : LabelMixingAugmentationBase<T, ImageTensor<T>>
         int actualCutArea = (x2 - x1) * (y2 - y1);
         int totalArea = width * height;
         double lambda = 1.0 - ((double)actualCutArea / totalArea);
-        LastMixingLambda = (T)Convert.ChangeType(lambda, typeof(T));
+        LastMixingLambda = NumOps.FromDouble(lambda);
 
         // Create result by copying image1 and pasting region from image2
         var result = image1.Clone();

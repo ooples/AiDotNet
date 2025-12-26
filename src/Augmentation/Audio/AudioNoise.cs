@@ -79,7 +79,7 @@ public class AudioNoise<T> : AudioAugmenterBase<T>
         double signalPower = 0;
         for (int i = 0; i < samples; i++)
         {
-            double val = Convert.ToDouble(waveform[i]);
+            double val = NumOps.ToDouble(waveform[i]);
             signalPower += val * val;
         }
         signalPower /= samples;
@@ -95,12 +95,12 @@ public class AudioNoise<T> : AudioAugmenterBase<T>
         for (int i = 0; i < samples; i++)
         {
             double noise = GenerateNoise(context, noiseStd);
-            double originalValue = Convert.ToDouble(waveform[i]);
+            double originalValue = NumOps.ToDouble(waveform[i]);
             double newValue = originalValue + noise;
 
             // Clip to valid range [-1, 1]
             newValue = Math.Max(-1.0, Math.Min(1.0, newValue));
-            result[i] = (T)Convert.ChangeType(newValue, typeof(T));
+            result[i] = NumOps.FromDouble(newValue);
         }
 
         return result;

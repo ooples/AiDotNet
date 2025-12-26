@@ -119,7 +119,7 @@ public class GaussianNoise<T> : AugmentationBase<T, ImageTensor<T>>
             {
                 for (int c = 0; c < channels; c++)
                 {
-                    double value = Convert.ToDouble(data.GetPixel(y, x, c));
+                    double value = NumOps.ToDouble(data.GetPixel(y, x, c));
 
                     // Generate Gaussian noise using Box-Muller transform
                     double noise = SampleGaussian(context, Mean, std);
@@ -128,7 +128,7 @@ public class GaussianNoise<T> : AugmentationBase<T, ImageTensor<T>>
                     // Clamp to valid range
                     newValue = Math.Max(MinValue, Math.Min(MaxValue, newValue));
 
-                    result.SetPixel(y, x, c, (T)Convert.ChangeType(newValue, typeof(T)));
+                    result.SetPixel(y, x, c, NumOps.FromDouble(newValue));
                 }
             }
         }

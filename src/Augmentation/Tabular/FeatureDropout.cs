@@ -89,7 +89,7 @@ public class FeatureDropout<T> : TabularAugmenterBase<T>
                 // Each feature has an independent chance of being dropped
                 if (context.Random.NextDouble() < DropoutRate)
                 {
-                    result[i, j] = (T)Convert.ChangeType(DropValue, typeof(T));
+                    result[i, j] = NumOps.FromDouble(DropValue);
                 }
             }
         }

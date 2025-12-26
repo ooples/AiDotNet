@@ -127,9 +127,9 @@ public class VideoColorJitter<T> : SpatialVideoAugmenterBase<T>
                 if (channels >= 3)
                 {
                     // RGB processing
-                    double r = Convert.ToDouble(frame.GetPixel(y, x, 0));
-                    double g = Convert.ToDouble(frame.GetPixel(y, x, 1));
-                    double b = Convert.ToDouble(frame.GetPixel(y, x, 2));
+                    double r = NumOps.ToDouble(frame.GetPixel(y, x, 0));
+                    double g = NumOps.ToDouble(frame.GetPixel(y, x, 1));
+                    double b = NumOps.ToDouble(frame.GetPixel(y, x, 2));
 
                     // Apply brightness (additive)
                     r += brightness;
@@ -148,9 +148,9 @@ public class VideoColorJitter<T> : SpatialVideoAugmenterBase<T>
                     b = gray + (b - gray) * saturation;
 
                     // Clamp to [0, 1]
-                    result.SetPixel(y, x, 0, (T)Convert.ChangeType(Math.Max(0, Math.Min(1, r)), typeof(T)));
-                    result.SetPixel(y, x, 1, (T)Convert.ChangeType(Math.Max(0, Math.Min(1, g)), typeof(T)));
-                    result.SetPixel(y, x, 2, (T)Convert.ChangeType(Math.Max(0, Math.Min(1, b)), typeof(T)));
+                    result.SetPixel(y, x, 0, NumOps.FromDouble(Math.Max(0, Math.Min(1, r))));
+                    result.SetPixel(y, x, 1, NumOps.FromDouble(Math.Max(0, Math.Min(1, g))));
+                    result.SetPixel(y, x, 2, NumOps.FromDouble(Math.Max(0, Math.Min(1, b))));
 
                     // Copy alpha channel if present
                     if (channels == 4)
@@ -161,10 +161,10 @@ public class VideoColorJitter<T> : SpatialVideoAugmenterBase<T>
                 else
                 {
                     // Grayscale - apply brightness and contrast only
-                    double val = Convert.ToDouble(frame.GetPixel(y, x, 0));
+                    double val = NumOps.ToDouble(frame.GetPixel(y, x, 0));
                     val += brightness;
                     val = (val - 0.5) * contrast + 0.5;
-                    result.SetPixel(y, x, 0, (T)Convert.ChangeType(Math.Max(0, Math.Min(1, val)), typeof(T)));
+                    result.SetPixel(y, x, 0, NumOps.FromDouble(Math.Max(0, Math.Min(1, val))));
                 }
             }
         }

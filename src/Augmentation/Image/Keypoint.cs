@@ -1,3 +1,6 @@
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Interfaces;
+
 namespace AiDotNet.Augmentation.Image;
 
 /// <summary>
@@ -18,6 +21,8 @@ namespace AiDotNet.Augmentation.Image;
 /// <typeparam name="T">The numeric type for coordinates.</typeparam>
 public class Keypoint<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     /// <summary>
     /// Gets or sets the X coordinate.
     /// </summary>
@@ -137,8 +142,8 @@ public class Keypoint<T>
     /// <returns>The (x, y) coordinates in pixels.</returns>
     public (double x, double y) ToAbsolute()
     {
-        double x = Convert.ToDouble(X);
-        double y = Convert.ToDouble(Y);
+        double x = NumOps.ToDouble(X);
+        double y = NumOps.ToDouble(Y);
 
         if (IsNormalized)
         {
@@ -164,8 +169,8 @@ public class Keypoint<T>
             throw new InvalidOperationException("ImageWidth and ImageHeight must be set for normalization.");
         }
 
-        double x = Convert.ToDouble(X);
-        double y = Convert.ToDouble(Y);
+        double x = NumOps.ToDouble(X);
+        double y = NumOps.ToDouble(Y);
 
         if (IsNormalized)
         {

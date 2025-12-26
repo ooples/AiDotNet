@@ -321,16 +321,16 @@ public class RandomCrop<T> : SpatialAugmentationBase<T, ImageTensor<T>>
         double xFrac = x - Math.Floor(x);
         double yFrac = y - Math.Floor(y);
 
-        double v00 = Convert.ToDouble(image.GetPixel(y0, x0, channel));
-        double v01 = Convert.ToDouble(image.GetPixel(y0, x1, channel));
-        double v10 = Convert.ToDouble(image.GetPixel(y1, x0, channel));
-        double v11 = Convert.ToDouble(image.GetPixel(y1, x1, channel));
+        double v00 = NumOps.ToDouble(image.GetPixel(y0, x0, channel));
+        double v01 = NumOps.ToDouble(image.GetPixel(y0, x1, channel));
+        double v10 = NumOps.ToDouble(image.GetPixel(y1, x0, channel));
+        double v11 = NumOps.ToDouble(image.GetPixel(y1, x1, channel));
 
         double v0 = v00 * (1 - xFrac) + v01 * xFrac;
         double v1 = v10 * (1 - xFrac) + v11 * xFrac;
         double result = v0 * (1 - yFrac) + v1 * yFrac;
 
-        return (T)Convert.ChangeType(result, typeof(T));
+        return NumOps.FromDouble(result);
     }
 
     /// <summary>
@@ -361,10 +361,10 @@ public class RandomCrop<T> : SpatialAugmentationBase<T, ImageTensor<T>>
         newY2 = Math.Max(0, Math.Min(CropHeight, newY2));
 
         var result = box.Clone();
-        result.X1 = (T)Convert.ChangeType(newX1, typeof(T));
-        result.Y1 = (T)Convert.ChangeType(newY1, typeof(T));
-        result.X2 = (T)Convert.ChangeType(newX2, typeof(T));
-        result.Y2 = (T)Convert.ChangeType(newY2, typeof(T));
+        result.X1 = NumOps.FromDouble(newX1);
+        result.Y1 = NumOps.FromDouble(newY1);
+        result.X2 = NumOps.FromDouble(newX2);
+        result.Y2 = NumOps.FromDouble(newY2);
         result.Format = BoundingBoxFormat.XYXY;
         return result;
     }
@@ -382,15 +382,15 @@ public class RandomCrop<T> : SpatialAugmentationBase<T, ImageTensor<T>>
         double scaleX = (double)transformParams["scale_x"];
         double scaleY = (double)transformParams["scale_y"];
 
-        double x = Convert.ToDouble(keypoint.X);
-        double y = Convert.ToDouble(keypoint.Y);
+        double x = NumOps.ToDouble(keypoint.X);
+        double y = NumOps.ToDouble(keypoint.Y);
 
         double newX = (x - cropX) * scaleX;
         double newY = (y - cropY) * scaleY;
 
         var result = keypoint.Clone();
-        result.X = (T)Convert.ChangeType(newX, typeof(T));
-        result.Y = (T)Convert.ChangeType(newY, typeof(T));
+        result.X = NumOps.FromDouble(newX);
+        result.Y = NumOps.FromDouble(newY);
 
         // Mark as not visible if outside crop bounds (0 = not labeled/not visible)
         if (newX < 0 || newX >= CropWidth || newY < 0 || newY >= CropHeight)

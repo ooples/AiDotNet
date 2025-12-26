@@ -1,3 +1,6 @@
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Interfaces;
+
 namespace AiDotNet.Augmentation.Image;
 
 /// <summary>
@@ -53,6 +56,8 @@ public enum BoundingBoxFormat
 /// <typeparam name="T">The numeric type for coordinates.</typeparam>
 public class BoundingBox<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     /// <summary>
     /// Gets or sets the X coordinate of the first point.
     /// </summary>
@@ -170,10 +175,10 @@ public class BoundingBox<T>
     /// <returns>Coordinates as [x_min, y_min, x_max, y_max].</returns>
     public (double xMin, double yMin, double xMax, double yMax) ToXYXY()
     {
-        double x1 = Convert.ToDouble(X1);
-        double y1 = Convert.ToDouble(Y1);
-        double x2 = Convert.ToDouble(X2);
-        double y2 = Convert.ToDouble(Y2);
+        double x1 = NumOps.ToDouble(X1);
+        double y1 = NumOps.ToDouble(Y1);
+        double x2 = NumOps.ToDouble(X2);
+        double y2 = NumOps.ToDouble(Y2);
 
         return Format switch
         {
@@ -281,10 +286,10 @@ public class BoundingBox<T>
         yMax = Math.Max(0, Math.Min(height, yMax));
 
         // Update coordinates based on format
-        X1 = (T)Convert.ChangeType(xMin, typeof(T));
-        Y1 = (T)Convert.ChangeType(yMin, typeof(T));
-        X2 = (T)Convert.ChangeType(xMax, typeof(T));
-        Y2 = (T)Convert.ChangeType(yMax, typeof(T));
+        X1 = NumOps.FromDouble(xMin);
+        Y1 = NumOps.FromDouble(yMin);
+        X2 = NumOps.FromDouble(xMax);
+        Y2 = NumOps.FromDouble(yMax);
         Format = BoundingBoxFormat.XYXY;
         ImageWidth = width;
         ImageHeight = height;

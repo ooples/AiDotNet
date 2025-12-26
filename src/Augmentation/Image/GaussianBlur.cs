@@ -172,12 +172,12 @@ public class GaussianBlur<T> : AugmentationBase<T, ImageTensor<T>>
                             srcY = ReflectIndex(srcY, height);
                             srcX = ReflectIndex(srcX, width);
 
-                            double pixelValue = Convert.ToDouble(image.GetPixel(srcY, srcX, c));
+                            double pixelValue = NumOps.ToDouble(image.GetPixel(srcY, srcX, c));
                             sum += pixelValue * kernel[ky, kx];
                         }
                     }
 
-                    result.SetPixel(y, x, c, (T)Convert.ChangeType(sum, typeof(T)));
+                    result.SetPixel(y, x, c, NumOps.FromDouble(sum));
                 }
             }
         }
