@@ -3055,6 +3055,36 @@ public interface IEngine
     /// <returns>The gradient with respect to the input.</returns>
     Tensor<T> LayerNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta);
 
+    /// <summary>
+    /// Applies group normalization to a tensor with shape [batch, channels, ...spatial].
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor with shape [batch, channels, height, width] or [batch, channels].</param>
+    /// <param name="numGroups">The number of groups to divide channels into.</param>
+    /// <param name="gamma">Scale parameter with shape [channels].</param>
+    /// <param name="beta">Shift parameter with shape [channels].</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    /// <param name="mean">Output: computed mean per group with shape [batch, numGroups].</param>
+    /// <param name="variance">Output: computed variance per group with shape [batch, numGroups].</param>
+    /// <returns>The normalized tensor with the same shape as input.</returns>
+    Tensor<T> GroupNorm<T>(Tensor<T> input, int numGroups, Tensor<T> gamma, Tensor<T> beta, double epsilon, out Tensor<T> mean, out Tensor<T> variance);
+
+    /// <summary>
+    /// Computes the backward pass for group normalization.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="input">The original input tensor.</param>
+    /// <param name="numGroups">The number of groups used during forward pass.</param>
+    /// <param name="gamma">Scale parameter.</param>
+    /// <param name="mean">The mean computed during forward pass.</param>
+    /// <param name="variance">The variance computed during forward pass.</param>
+    /// <param name="epsilon">Small constant used during forward pass.</param>
+    /// <param name="gradGamma">Output: gradient with respect to gamma.</param>
+    /// <param name="gradBeta">Output: gradient with respect to beta.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> GroupNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, int numGroups, Tensor<T> gamma, Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta);
+
     #endregion
 
     #region Tensor Reduction Operations

@@ -109,17 +109,11 @@ public sealed class DDIMScheduler<T> : NoiseSchedulerBase<T>
         T oneMinusAlphaCumprod = NumOps.Subtract(NumOps.One, alphaCumprod);
         T sqrtOneMinusAlphaCumprod = NumOps.Sqrt(oneMinusAlphaCumprod);
 
-        int n = sample.Length;
-
-        // Step 1: Predict the original sample (x_0) from noise prediction
+        // Step 1: Predict the original sample (x_0) from noise prediction (VECTORIZED)
         // x_0 = (x_t - sqrt(1 - alpha_cumprod) * epsilon) / sqrt(alpha_cumprod)
-        var predictedOriginal = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            var noiseTerm = NumOps.Multiply(sqrtOneMinusAlphaCumprod, modelOutput[i]);
-            var numerator = NumOps.Subtract(sample[i], noiseTerm);
-            predictedOriginal[i] = NumOps.Divide(numerator, sqrtAlphaCumprod);
-        }
+        var noiseTerm = Engine.Multiply(modelOutput, sqrtOneMinusAlphaCumprod);
+        var numerator = Engine.Subtract(sample, noiseTerm);
+        var predictedOriginal = Engine.Divide(numerator, sqrtAlphaCumprod);
 
         // Optionally clip the predicted original sample
         predictedOriginal = ClipSampleIfNeeded(predictedOriginal);
@@ -162,30 +156,17 @@ public sealed class DDIMScheduler<T> : NoiseSchedulerBase<T>
             sigma = NumOps.Zero;
         }
 
-        // Prepare noise vector for stochastic sampling
-        var noiseVec = noise;
-        if (NumOps.GreaterThan(sigma, NumOps.Zero) && noiseVec == null)
-        {
-            // NOTE: When eta > 0 but noise is not provided, step becomes deterministic.
-            // Callers should provide noise for true stochastic behavior.
-            noiseVec = new Vector<T>(n);
-        }
-
-        // Step 4: Compute the previous sample
+        // Step 4: Compute the previous sample (VECTORIZED)
         // x_{t-1} = sqrt(alpha_prev) * x_0 + coeffEps * epsilon + sigma * noise
-        var prevSample = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
+        var originalTerm = Engine.Multiply(predictedOriginal, sqrtAlphaCumprodPrev);
+        var epsTerm = Engine.Multiply(modelOutput, coeffEps);
+        var prevSample = Engine.Add(originalTerm, epsTerm);
+
+        // Add noise term for stochastic sampling
+        if (NumOps.GreaterThan(sigma, NumOps.Zero) && noise != null)
         {
-            T originalTerm = NumOps.Multiply(sqrtAlphaCumprodPrev, predictedOriginal[i]);
-            T epsTerm = NumOps.Multiply(coeffEps, modelOutput[i]);
-            T noiseTerm = NumOps.Zero;
-
-            if (NumOps.GreaterThan(sigma, NumOps.Zero) && noiseVec != null)
-            {
-                noiseTerm = NumOps.Multiply(sigma, noiseVec[i]);
-            }
-
-            prevSample[i] = NumOps.Add(NumOps.Add(originalTerm, epsTerm), noiseTerm);
+            var noisyTerm = Engine.Multiply(noise, sigma);
+            prevSample = Engine.Add(prevSample, noisyTerm);
         }
 
         return prevSample;
