@@ -122,17 +122,15 @@ public static class ClipTokenizerFactory
         var merges = new Dictionary<(string, string), int>();
         int rank = 0;
 
-        foreach (var line in mergesText)
-        {
-            // Skip header line if present
-            if (line.StartsWith("#") || string.IsNullOrWhiteSpace(line))
-                continue;
+        // Process merges, skipping header lines and empty lines
+        var validLines = mergesText
+            .Where(line => !line.StartsWith("#") && !string.IsNullOrWhiteSpace(line))
+            .Select(line => line.Split(' '))
+            .Where(parts => parts.Length == 2);
 
-            var parts = line.Split(' ');
-            if (parts.Length == 2)
-            {
-                merges[(parts[0], parts[1])] = rank++;
-            }
+        foreach (var parts in validLines)
+        {
+            merges[(parts[0], parts[1])] = rank++;
         }
 
         return new BpeTokenizer(vocabulary, merges, SpecialTokens.Clip(), ClipPattern);

@@ -209,20 +209,41 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         _imageEncoderPath = imageEncoderPath;
         _textEncoderPath = textEncoderPath;
 
-        // Load ONNX models
-        _imageEncoder = new InferenceSession(imageEncoderPath);
-        _textEncoder = new InferenceSession(textEncoderPath);
+        // Load ONNX models with proper cleanup on failure
+        InferenceSession? tempImageEncoder = null;
+        InferenceSession? tempTextEncoder = null;
+        try
+        {
+            tempImageEncoder = new InferenceSession(imageEncoderPath);
+            tempTextEncoder = new InferenceSession(textEncoderPath);
 
-        // Tokenizer is required; validate argument
-        if (tokenizer is null)
-            throw new ArgumentNullException(nameof(tokenizer));
+            // Tokenizer is required; validate argument
+            if (tokenizer is null)
+                throw new ArgumentNullException(nameof(tokenizer));
 
-        _tokenizer = tokenizer;
+            _tokenizer = tokenizer;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? new ContrastiveLoss<T>();
+            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _lossFunction = lossFunction ?? new ContrastiveLoss<T>();
 
-        InitializeLayers();
+            // Transfer ownership after all validation passes
+            _imageEncoder = tempImageEncoder;
+            _textEncoder = tempTextEncoder;
+            tempImageEncoder = null;
+            tempTextEncoder = null;
+
+            // Note: InitializeLayers is called from base class via overridden method pattern.
+            // While this triggers a virtual call warning, it is intentional as part of the
+            // template method pattern for neural network initialization.
+            InitializeLayers();
+        }
+        catch
+        {
+            // Dispose resources if constructor fails partway through
+            tempImageEncoder?.Dispose();
+            tempTextEncoder?.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
@@ -305,6 +326,12 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
     /// </summary>
     /// <param name="texts">The texts to embed.</param>
     /// <returns>A collection of normalized embedding vectors.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses true batched inference when all tokenized sequences have the same length.
+    /// When sequence lengths differ, it falls back to sequential processing.
+    /// </para>
+    /// </remarks>
     public IEnumerable<Vector<T>> GetTextEmbeddings(IEnumerable<string> texts)
     {
         if (texts == null)
@@ -314,7 +341,7 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         if (textList.Count == 0)
             return Enumerable.Empty<Vector<T>>();
 
-        // Tokenize all texts with CLIP-specific options
+        // Tokenize all texts with CLIP-specific options (padding ensures uniform length)
         var encodingOptions = new EncodingOptions
         {
             MaxLength = _maxSequenceLength,
@@ -326,14 +353,28 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
             ReturnAttentionMask = true
         };
         var tokenResults = _tokenizer.EncodeBatch(textList, encodingOptions);
+        var tokenResultList = tokenResults.ToList();
 
-        // Process batch
-        var embeddings = new List<Vector<T>>();
-        foreach (var tokenResult in tokenResults)
+        // Check if all sequences have the same length for true batching
+        int seqLength = tokenResultList.First().TokenIds.Count;
+        bool canBatch = tokenResultList.All(r => r.TokenIds.Count == seqLength);
+
+        if (canBatch && tokenResultList.Count > 1)
         {
-            var inputIds = tokenResult.TokenIds.ToArray();
-            var inputTensor = new OnnxTensors.DenseTensor<long>(inputIds.Select(i => (long)i).ToArray(), new[] { 1, inputIds.Length });
+            // True batched inference: create a single [batch_size, seq_length] tensor
+            int batchSize = tokenResultList.Count;
+            var batchedIds = new long[batchSize * seqLength];
 
+            for (int b = 0; b < batchSize; b++)
+            {
+                var tokenIds = tokenResultList[b].TokenIds;
+                for (int i = 0; i < seqLength; i++)
+                {
+                    batchedIds[b * seqLength + i] = tokenIds[i];
+                }
+            }
+
+            var inputTensor = new OnnxTensors.DenseTensor<long>(batchedIds, new[] { batchSize, seqLength });
             var inputs = new List<NamedOnnxValue>
             {
                 NamedOnnxValue.CreateFromTensor("input_ids", inputTensor)
@@ -342,11 +383,31 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
             using var results = _textEncoder.Run(inputs);
             var outputTensor = results.First().AsTensor<float>();
 
-            var embedding = ConvertToVector(outputTensor);
-            embeddings.Add(NormalizeVector(embedding));
+            return ExtractBatchEmbeddings(outputTensor, batchSize);
         }
+        else
+        {
+            // Fallback to sequential processing for varying sequence lengths
+            var embeddings = new List<Vector<T>>();
+            foreach (var tokenResult in tokenResultList)
+            {
+                var inputIds = tokenResult.TokenIds.ToArray();
+                var inputTensor = new OnnxTensors.DenseTensor<long>(inputIds.Select(i => (long)i).ToArray(), new[] { 1, inputIds.Length });
 
-        return embeddings;
+                var inputs = new List<NamedOnnxValue>
+                {
+                    NamedOnnxValue.CreateFromTensor("input_ids", inputTensor)
+                };
+
+                using var results = _textEncoder.Run(inputs);
+                var outputTensor = results.First().AsTensor<float>();
+
+                var embedding = ConvertToVector(outputTensor);
+                embeddings.Add(NormalizeVector(embedding));
+            }
+
+            return embeddings;
+        }
     }
 
     /// <summary>
@@ -388,6 +449,12 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
     /// </summary>
     /// <param name="images">The preprocessed image tensors.</param>
     /// <returns>A collection of normalized embedding vectors.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses true batched inference by stacking all images into a single
+    /// tensor with shape [batch_size, channels, height, width] for efficient GPU processing.
+    /// </para>
+    /// </remarks>
     public IEnumerable<Vector<T>> GetImageEmbeddings(IEnumerable<Tensor<T>> images)
     {
         if (images == null)
@@ -397,13 +464,39 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         if (imageList.Count == 0)
             return Enumerable.Empty<Vector<T>>();
 
-        var embeddings = new List<Vector<T>>();
+        // Validate all images
         foreach (var image in imageList)
         {
-            embeddings.Add(GetImageEmbedding(image));
+            ValidateImageShape(image);
         }
 
-        return embeddings;
+        // Create batched tensor: [batch_size, channels, height, width]
+        int batchSize = imageList.Count;
+        int channels = imageList[0].Shape[0];
+        int height = imageList[0].Shape[1];
+        int width = imageList[0].Shape[2];
+        int imageSize = channels * height * width;
+
+        var batchedData = new float[batchSize * imageSize];
+        for (int b = 0; b < batchSize; b++)
+        {
+            var imageData = imageList[b].Data;
+            for (int i = 0; i < imageSize && i < imageData.Length; i++)
+            {
+                batchedData[b * imageSize + i] = NumOps.ToFloat(imageData[i]);
+            }
+        }
+
+        var batchedTensor = new OnnxTensors.DenseTensor<float>(batchedData, new[] { batchSize, channels, height, width });
+        var inputs = new List<NamedOnnxValue>
+        {
+            NamedOnnxValue.CreateFromTensor("pixel_values", batchedTensor)
+        };
+
+        using var results = _imageEncoder.Run(inputs);
+        var outputTensor = results.First().AsTensor<float>();
+
+        return ExtractBatchEmbeddings(outputTensor, batchSize);
     }
 
     /// <summary>
@@ -598,8 +691,12 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         int embeddingDim = reader.ReadInt32();
         int maxSeqLen = reader.ReadInt32();
         int imgSize = reader.ReadInt32();
-        string optimizerType = reader.ReadString();
-        string lossFunctionType = reader.ReadString();
+
+        // Read optimizer and loss function types to maintain binary format compatibility.
+        // The stream must be read to advance past these values, even though they're not used
+        // during deserialization (the current instance already has these configured).
+        _ = reader.ReadString(); // optimizerType - read and discard
+        _ = reader.ReadString(); // lossFunctionType - read and discard
 
         // Validate that loaded values match current instance
         if (embeddingDim != _embeddingDimension)
@@ -690,24 +787,98 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
     }
 
     /// <summary>
+    /// Extracts embeddings from a batched ONNX output tensor.
+    /// </summary>
+    /// <param name="onnxTensor">The batched output tensor.</param>
+    /// <param name="batchSize">The number of items in the batch.</param>
+    /// <returns>A collection of normalized embedding vectors.</returns>
+    private IEnumerable<Vector<T>> ExtractBatchEmbeddings(OnnxTensors.Tensor<float> onnxTensor, int batchSize)
+    {
+        var dims = onnxTensor.Dimensions.ToArray();
+        var embeddings = new List<Vector<T>>();
+
+        if (dims.Length == 2)
+        {
+            // Shape: [batch, hidden]
+            int hiddenDim = dims[1];
+            for (int b = 0; b < batchSize; b++)
+            {
+                var result = new Vector<T>(_embeddingDimension);
+                for (int i = 0; i < _embeddingDimension && i < hiddenDim; i++)
+                {
+                    result[i] = NumOps.FromDouble(onnxTensor[b, i]);
+                }
+                embeddings.Add(NormalizeVector(result));
+            }
+        }
+        else if (dims.Length == 3)
+        {
+            // Shape: [batch, seq_len, hidden] - take CLS token (position 0) from each batch
+            int hiddenDim = dims[2];
+            for (int b = 0; b < batchSize; b++)
+            {
+                var result = new Vector<T>(_embeddingDimension);
+                for (int i = 0; i < _embeddingDimension && i < hiddenDim; i++)
+                {
+                    result[i] = NumOps.FromDouble(onnxTensor[b, 0, i]);
+                }
+                embeddings.Add(NormalizeVector(result));
+            }
+        }
+        else
+        {
+            // Fallback: treat as individual embeddings via ConvertToVector
+            for (int b = 0; b < batchSize; b++)
+            {
+                var singleEmbedding = ConvertToVector(onnxTensor);
+                embeddings.Add(singleEmbedding);
+            }
+        }
+
+        return embeddings;
+    }
+
+    /// <summary>
     /// Converts an ONNX output tensor to a Vector.
     /// </summary>
     private Vector<T> ConvertToVector(OnnxTensors.Tensor<float> onnxTensor)
     {
         var result = new Vector<T>(_embeddingDimension);
+        var dims = onnxTensor.Dimensions.ToArray();
 
-        // Get the embedding from the last token (CLS token) for text or pooled output for images
-        // The output shape is typically [batch, seq_len, hidden] or [batch, hidden]
-        int startIdx = 0;
-        if (onnxTensor.Dimensions.Length > 2)
+        if (dims.Length == 2)
         {
-            // For text encoder: use the embedding at position 0 (CLS token)
-            startIdx = 0;
+            // Shape: [batch, hidden] - take first batch embedding
+            int hiddenDim = dims[1];
+            for (int i = 0; i < _embeddingDimension && i < hiddenDim; i++)
+            {
+                result[i] = NumOps.FromDouble(onnxTensor[0, i]);
+            }
         }
-
-        for (int i = 0; i < _embeddingDimension && i < onnxTensor.Length; i++)
+        else if (dims.Length == 3)
         {
-            result[i] = NumOps.FromDouble(onnxTensor.GetValue(startIdx + i));
+            // Shape: [batch, seq_len, hidden] - take CLS token (position 0) embedding
+            int hiddenDim = dims[2];
+            for (int i = 0; i < _embeddingDimension && i < hiddenDim; i++)
+            {
+                result[i] = NumOps.FromDouble(onnxTensor[0, 0, i]);
+            }
+        }
+        else if (dims.Length == 1)
+        {
+            // Shape: [hidden] - flat embedding
+            for (int i = 0; i < _embeddingDimension && i < dims[0]; i++)
+            {
+                result[i] = NumOps.FromDouble(onnxTensor.GetValue(i));
+            }
+        }
+        else
+        {
+            // Fallback for unexpected shapes - use flat indexing
+            for (int i = 0; i < _embeddingDimension && i < onnxTensor.Length; i++)
+            {
+                result[i] = NumOps.FromDouble(onnxTensor.GetValue(i));
+            }
         }
 
         return result;

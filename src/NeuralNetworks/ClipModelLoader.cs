@@ -389,12 +389,14 @@ public static class ClipModelLoader
 
         try
         {
-            using var response = await HttpClient.GetAsync(url, cancellationToken);
+            // Use streaming to handle large files without loading entire file into memory
+            using var response = await HttpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
             if (response.IsSuccessStatusCode)
             {
-                var content = await response.Content.ReadAsByteArrayAsync();
-                File.WriteAllBytes(localPath, content);
+                using var contentStream = await response.Content.ReadAsStreamAsync();
+                using var fileStream = new FileStream(localPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 81920, useAsync: true);
+                await contentStream.CopyToAsync(fileStream, 81920, cancellationToken);
             }
             else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {

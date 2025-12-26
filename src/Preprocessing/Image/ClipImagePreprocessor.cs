@@ -427,11 +427,17 @@ public class ClipImagePreprocessor<T>
     /// </summary>
     private T BilinearInterpolate(Tensor<T> image, int channel, T y, T x, int maxH, int maxW)
     {
-        int y0 = Math.Max(0, Math.Min((int)_numOps.ToDouble(y), maxH - 1));
+        // Use explicit floor semantics on the double representation of y/x
+        double yDouble = _numOps.ToDouble(y);
+        double xDouble = _numOps.ToDouble(x);
+
+        // Cast to int performs truncation (floor for positive values)
+        int y0 = Math.Max(0, Math.Min((int)Math.Floor(yDouble), maxH - 1));
         int y1 = Math.Max(0, Math.Min(y0 + 1, maxH - 1));
-        int x0 = Math.Max(0, Math.Min((int)_numOps.ToDouble(x), maxW - 1));
+        int x0 = Math.Max(0, Math.Min((int)Math.Floor(xDouble), maxW - 1));
         int x1 = Math.Max(0, Math.Min(x0 + 1, maxW - 1));
 
+        // y0/x0 are floor(y)/floor(x), so subtracting them yields the fractional parts
         T fracY = _numOps.Subtract(y, _numOps.FromDouble(y0));
         T fracX = _numOps.Subtract(x, _numOps.FromDouble(x0));
 
