@@ -40,6 +40,9 @@ public class LocallyLinearEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     private int _nSamples;
     private int _nFeaturesIn;
 
+    // Warning flags to prevent log spam (static because InvertSmallMatrix is static)
+    private static bool _nearSingularWarningEmitted;
+
     /// <summary>
     /// Gets the number of components.
     /// </summary>
@@ -292,6 +295,13 @@ public class LocallyLinearEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             double pivot = augmented[col, col];
             if (Math.Abs(pivot) < 1e-10)
             {
+                if (!_nearSingularWarningEmitted)
+                {
+                    _nearSingularWarningEmitted = true;
+                    System.Diagnostics.Debug.WriteLine(
+                        "[LLE Warning] Near-singular matrix detected in SolveLinearSystem. " +
+                        "Clamping pivot to 1e-10 for numerical stability.");
+                }
                 pivot = 1e-10;
             }
 
@@ -317,6 +327,13 @@ public class LocallyLinearEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             double diag = augmented[row, row];
             if (Math.Abs(diag) < 1e-10)
             {
+                if (!_nearSingularWarningEmitted)
+                {
+                    _nearSingularWarningEmitted = true;
+                    System.Diagnostics.Debug.WriteLine(
+                        "[LLE Warning] Near-singular matrix detected during back substitution. " +
+                        "Clamping diagonal to 1e-10 for numerical stability.");
+                }
                 diag = 1e-10;
             }
             x[row] /= diag;
@@ -957,6 +974,13 @@ public class LocallyLinearEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             double pivot = temp[i, i];
             if (Math.Abs(pivot) < 1e-10)
             {
+                if (!_nearSingularWarningEmitted)
+                {
+                    _nearSingularWarningEmitted = true;
+                    System.Diagnostics.Debug.WriteLine(
+                        "[LLE Warning] Near-singular matrix detected during inversion. " +
+                        "Clamping pivot to 1e-10 for numerical stability.");
+                }
                 pivot = 1e-10;
             }
 
