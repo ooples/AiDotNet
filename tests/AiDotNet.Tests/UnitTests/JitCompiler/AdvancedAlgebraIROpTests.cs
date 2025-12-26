@@ -1,6 +1,6 @@
-using Xunit;
 using AiDotNet.JitCompiler.IR;
 using AiDotNet.JitCompiler.IR.Operations;
+using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.JitCompiler;
 
