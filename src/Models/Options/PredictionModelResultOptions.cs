@@ -582,50 +582,31 @@ public class PredictionModelResultOptions<T, TInput, TOutput>
     public InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
 
     // ============================================================================
-    // Test-Time Augmentation Properties
+    // Augmentation Properties
     // ============================================================================
 
     /// <summary>
-    /// Gets or sets the Test-Time Augmentation (TTA) configuration.
+    /// Gets or sets the unified augmentation configuration.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// TTA applies augmentations during inference to improve prediction quality.
-    /// Multiple augmented versions of the input are created, predictions are made
-    /// on each, and the results are aggregated (e.g., mean, median, majority vote).
+    /// This configuration covers both training-time augmentation and Test-Time
+    /// Augmentation (TTA) for improved inference accuracy. It includes:
+    /// - Core settings (enabled, probability, seed)
+    /// - TTA settings (enabled by default, aggregation method)
+    /// - Modality-specific settings (image, tabular, audio, text, video)
     /// </para>
-    /// <para><b>For Beginners:</b> Instead of making one prediction on one input,
-    /// TTA makes predictions on multiple variations (flipped, rotated, etc.) and
-    /// combines them. This often produces more accurate and robust predictions.
+    /// <para><b>For Beginners:</b> Augmentation creates variations of your data:
+    /// - During training: Helps the model learn to recognize objects regardless of orientation, lighting, etc.
+    /// - During inference (TTA): Makes predictions on multiple variations and combines them for better accuracy.
     ///
     /// Example use cases:
-    /// - Image classification: Predict on original + flipped + rotated versions
-    /// - Object detection: Average confidence scores across augmentations
-    /// - Medical imaging: Reduce noise in predictions by aggregating multiple views
+    /// - Image classification: Train on flipped, rotated versions; predict on multiple views
+    /// - Tabular data: Add noise, apply MixUp for regularization
+    /// - Audio: Apply time stretch, pitch shift for robustness
     /// </para>
     /// </remarks>
-    public ITTAConfiguration? TTAConfiguration { get; set; }
-
-    /// <summary>
-    /// Gets or sets the training augmentation configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Training augmentation applies transformations during training to increase
-    /// data diversity and improve model generalization. Unlike TTA which is used
-    /// during inference, training augmentation is applied to training data.
-    /// </para>
-    /// <para><b>For Beginners:</b> This stores the augmentations that were applied
-    /// during training. While TTA makes predictions more accurate, training augmentation
-    /// helps the model learn better by showing it variations of the training data.
-    ///
-    /// Example use cases:
-    /// - Image classification: Train on flipped, rotated, and color-adjusted versions
-    /// - Object detection: Apply scale and perspective transforms during training
-    /// - Medical imaging: Add noise and contrast variations to improve robustness
-    /// </para>
-    /// </remarks>
-    public ITrainingAugmentationConfiguration? TrainingAugmentationConfiguration { get; set; }
+    public AugmentationConfig? AugmentationConfig { get; set; }
 
     // ============================================================================
     // Safety & Robustness Properties

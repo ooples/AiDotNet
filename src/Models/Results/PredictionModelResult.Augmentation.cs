@@ -33,45 +33,40 @@ public partial class PredictionModelResult<T, TInput, TOutput>
     public TestTimeAugmentationResult<TOutput> PredictWithTestTimeAugmentation<TAugData>(
         TAugData data,
         Func<TAugData, TInput> convertToModelInput,
-        Func<TOutput, Vector<T>> convertFromModelOutput)
+        Func<TOutput, Vector<T>> convertFromModelOutput,
+        IAugmentationPolicy<T, TAugData>? augmentationPipeline = null)
     {
-        if (Options?.TTAConfiguration == null)
+        var augConfig = Options?.AugmentationConfig;
+        if (augConfig == null)
         {
             throw new InvalidOperationException(
-                "Test-Time Augmentation is not configured. Use ConfigureTestTimeAugmentation() when building the model.");
+                "Augmentation is not configured. Use ConfigureAugmentation() when building the model.");
         }
 
-        var ttaConfig = Options.TTAConfiguration as TestTimeAugmentationConfiguration<T, TAugData>;
-        if (ttaConfig == null)
-        {
-            throw new InvalidOperationException(
-                $"TTA configuration type mismatch. Expected TestTimeAugmentationConfiguration<{typeof(T).Name}, {typeof(TAugData).Name}>.");
-        }
-
-        if (!ttaConfig.IsEnabled)
+        if (!augConfig.EnableTTA)
         {
             throw new InvalidOperationException("Test-Time Augmentation is disabled in the configuration.");
         }
 
         var predictions = new List<TOutput>();
-        var context = new AugmentationContext<T>(isTraining: false, seed: ttaConfig.Seed);
+        var context = new AugmentationContext<T>(isTraining: false, seed: augConfig.Seed);
 
         // Include original prediction if configured
-        if (ttaConfig.IncludeOriginal)
+        if (augConfig.TTAIncludeOriginal)
         {
             var originalInput = convertToModelInput(data);
             predictions.Add(Predict(originalInput));
         }
 
-        // Generate augmented predictions
-        if (ttaConfig.Pipeline != null)
+        // Generate augmented predictions using the provided pipeline
+        if (augmentationPipeline is not null)
         {
-            for (int i = 0; i < ttaConfig.NumberOfAugmentations; i++)
+            for (int i = 0; i < augConfig.TTANumAugmentations; i++)
             {
                 context.SampleIndex = i;
 
                 // Apply augmentation
-                var augmented = ttaConfig.Pipeline.Apply(data, context);
+                var augmented = augmentationPipeline.Apply(data, context);
                 var augmentedInput = convertToModelInput(augmented);
 
                 // Make prediction
@@ -83,15 +78,15 @@ public partial class PredictionModelResult<T, TInput, TOutput>
         if (predictions.Count == 0)
         {
             throw new InvalidOperationException(
-                "No predictions were made. Ensure IncludeOriginal is true or Pipeline is configured.");
+                "No predictions were made. Ensure TTAIncludeOriginal is true or provide an augmentation pipeline.");
         }
 
         // Aggregate predictions
         var aggregated = AggregatePredictions(
             predictions,
-            ttaConfig.AggregationMethod,
+            augConfig.TTAAggregation,
             convertFromModelOutput,
-            ttaConfig.ConfidenceThreshold);
+            confidenceThreshold: null); // Confidence threshold filtering not used in unified config
 
         // Calculate statistics
         double? confidence = null;
@@ -101,7 +96,7 @@ public partial class PredictionModelResult<T, TInput, TOutput>
         {
             var vectors = predictions.Select(convertFromModelOutput).ToList();
             stdDev = CalculateStandardDeviation(vectors);
-            confidence = CalculateConfidence(vectors, ttaConfig.AggregationMethod);
+            confidence = CalculateConfidence(vectors, augConfig.TTAAggregation);
         }
 
         return new TestTimeAugmentationResult<TOutput>(
@@ -120,14 +115,17 @@ public partial class PredictionModelResult<T, TInput, TOutput>
     /// This is a simplified overload for when TInput is directly augmentable (e.g., ImageTensor).
     /// For complex type conversions, use the full overload with converter functions.
     /// </remarks>
-    public TestTimeAugmentationResult<TOutput> PredictWithTestTimeAugmentation(TInput data)
+    public TestTimeAugmentationResult<TOutput> PredictWithTestTimeAugmentation(
+        TInput data,
+        IAugmentationPolicy<T, TInput>? augmentationPipeline = null)
     {
         // This overload requires TInput to be the same as TAugData
         // Use the generic version for type conversions
         return PredictWithTestTimeAugmentation(
             data,
             d => d,
-            output => ConvertOutputToVector(output));
+            output => ConvertOutputToVector(output),
+            augmentationPipeline);
     }
 
     /// <summary>

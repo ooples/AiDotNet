@@ -1833,100 +1833,61 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
         int nTrials = 10);
 
     /// <summary>
-    /// Configures data augmentation for training to improve model generalization.
+    /// Configures data augmentation for training and inference.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Data augmentation creates variations of training data on-the-fly to help models
-    /// generalize better. This is especially important for image, audio, and other
-    /// domains where data collection is expensive.
+    /// generalize better. This configuration covers both training-time augmentation
+    /// and Test-Time Augmentation (TTA) for improved inference accuracy.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Augmentation is like showing the model many variations of
     /// the same data. For images, this might include rotations, flips, and color changes.
     /// The model learns to recognize objects regardless of these variations.
     /// </para>
+    /// <para><b>Key features:</b>
+    /// <list type="bullet">
+    /// <item>Automatic data-type detection (image, tabular, audio, text, video)</item>
+    /// <item>Industry-standard defaults that work well out-of-the-box</item>
+    /// <item>Test-Time Augmentation (TTA) enabled by default for better predictions</item>
+    /// </list>
+    /// </para>
     /// <para>
-    /// Example:
+    /// Example - Simple usage with defaults:
     /// <code>
     /// var result = builder
-    ///     .ConfigureModel(cnnModel)
-    ///     .ConfigureTrainingAugmentation(aug => aug
-    ///         .Add(new HorizontalFlip&lt;double&gt;(probability: 0.5))
-    ///         .Add(new RandomRotation&lt;double&gt;(-15, 15))
-    ///         .Add(new ColorJitter&lt;double&gt;(brightness: 0.2, contrast: 0.2)))
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureAugmentation()  // Uses auto-detected defaults
+    ///     .Build(X, y);
+    /// </code>
+    /// </para>
+    /// <para>
+    /// Example - Custom configuration:
+    /// <code>
+    /// var result = builder
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureAugmentation(new AugmentationConfig
+    ///     {
+    ///         EnableTTA = true,
+    ///         TTANumAugmentations = 8,
+    ///         ImageSettings = new ImageAugmentationSettings
+    ///         {
+    ///             EnableFlips = true,
+    ///             EnableRotation = true,
+    ///             RotationRange = 20.0
+    ///         }
+    ///     })
     ///     .Build(images, labels);
     /// </code>
     /// </para>
     /// </remarks>
-    /// <typeparam name="TAugData">The data type being augmented.</typeparam>
-    /// <param name="pipelineBuilder">Action to configure the augmentation pipeline.</param>
+    /// <param name="config">
+    /// Augmentation configuration. If null, uses industry-standard defaults
+    /// with automatic data-type detection.
+    /// </param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingAugmentation<TAugData>(
-        Action<Augmentation.TrainingAugmentationBuilder<T, TAugData>> pipelineBuilder);
-
-    /// <summary>
-    /// Configures data augmentation for training using a pre-built configuration.
-    /// </summary>
-    /// <typeparam name="TAugData">The data type being augmented.</typeparam>
-    /// <param name="configuration">The augmentation configuration.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingAugmentation<TAugData>(
-        Augmentation.TrainingAugmentationConfiguration<T, TAugData> configuration);
-
-    /// <summary>
-    /// Configures Test-Time Augmentation to improve prediction accuracy during inference.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Test-Time Augmentation (TTA) is a technique that makes predictions
-    /// more accurate and reliable. Instead of asking the model to look at your image once, it:
-    ///
-    /// 1. Creates several slightly different versions of your image (flipped, rotated, etc.)
-    /// 2. Asks the model to predict on each version
-    /// 3. Combines all the predictions (usually by averaging)
-    ///
-    /// This is like asking multiple experts for their opinion and taking the average - you get a
-    /// more reliable answer than asking just one person.
-    ///
-    /// <b>When to use TTA:</b>
-    /// - Medical imaging (reducing diagnostic errors)
-    /// - Competition submissions (squeezing out extra accuracy)
-    /// - When prediction confidence matters more than speed
-    ///
-    /// <b>When NOT to use TTA:</b>
-    /// - Real-time applications (TTA is slower - N predictions instead of 1)
-    /// - Simple tasks where accuracy is already sufficient
-    /// </para>
-    /// <para>
-    /// Example:
-    /// <code>
-    /// var result = builder
-    ///     .ConfigureModel(cnnModel)
-    ///     .ConfigureTestTimeAugmentation&lt;ImageTensor&lt;double&gt;&gt;(tta => tta
-    ///         .Add(new HorizontalFlip&lt;double, ImageTensor&lt;double&gt;&gt;())
-    ///         .Add(new RandomRotation&lt;double, ImageTensor&lt;double&gt;&gt;(-5, 5))
-    ///         .WithNumberOfAugmentations(5)
-    ///         .WithAggregation(PredictionAggregationMethod.Mean))
-    ///     .Build(images, labels);
-    ///
-    /// // At inference time:
-    /// var prediction = result.PredictWithTestTimeAugmentation(newImage);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    /// <typeparam name="TAugData">The data type being augmented (e.g., ImageTensor, AudioClip).</typeparam>
-    /// <param name="pipelineBuilder">Optional action to configure the augmentation pipeline.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTestTimeAugmentation<TAugData>(
-        Action<Augmentation.TestTimeAugmentationBuilder<T, TAugData>>? pipelineBuilder = null);
-
-    /// <summary>
-    /// Configures Test-Time Augmentation using a pre-built configuration object.
-    /// </summary>
-    /// <typeparam name="TAugData">The data type being augmented (e.g., ImageTensor, AudioClip).</typeparam>
-    /// <param name="configuration">The TTA configuration (optional, uses industry defaults if null).</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTestTimeAugmentation<TAugData>(
-        Augmentation.TestTimeAugmentationConfiguration<T, TAugData>? configuration = null);
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureAugmentation(
+        Augmentation.AugmentationConfig? config = null);
 
 }
