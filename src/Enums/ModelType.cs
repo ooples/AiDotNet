@@ -1024,6 +1024,11 @@ public enum ModelType
 
     Clip,
 
+    /// <summary>
+    /// BLIP (Bootstrapped Language-Image Pre-training) for vision-language tasks.
+    /// </summary>
+    Blip,
+
     InterventionAnalysisModel,
 
     TBATSModel,
