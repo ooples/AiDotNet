@@ -28,6 +28,11 @@ namespace AiDotNet.Augmentation.Image;
 /// <item>When the full context of the image is important</item>
 /// </list>
 /// </para>
+/// <para><b>Padding behavior:</b> When <see cref="UseScaleCropping"/> is false and the input
+/// image is smaller than the requested crop dimensions (<see cref="CropWidth"/> x <see cref="CropHeight"/>),
+/// the output tensor will be zero-padded in the areas beyond the source image bounds. If you require
+/// the source image to be at least as large as the crop dimensions, validate this before applying
+/// the augmentation.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 public class RandomCrop<T> : SpatialAugmentationBase<T, ImageTensor<T>>

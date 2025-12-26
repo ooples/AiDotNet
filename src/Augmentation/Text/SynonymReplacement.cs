@@ -107,7 +107,12 @@ public class SynonymReplacement<T> : TextAugmenterBase<T>
         if (tokens.Length == 0) return text;
 
         var synonymDict = CustomSynonyms ?? DefaultSynonyms;
-        int numReplacements = Math.Max(1, (int)(tokens.Length * ReplacementFraction));
+        int numReplacements = (int)(tokens.Length * ReplacementFraction);
+        if (numReplacements == 0 && ReplacementFraction > 0 && tokens.Length > 0)
+        {
+            // Ensure at least one replacement when fraction is non-zero
+            numReplacements = 1;
+        }
 
         // Get indices of words that have synonyms and are not stopwords
         var replaceableIndices = new List<int>();

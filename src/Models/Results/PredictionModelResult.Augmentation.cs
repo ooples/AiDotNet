@@ -356,24 +356,25 @@ public partial class PredictionModelResult<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Computes the geometric mean of vectors.
+    /// Computes the geometric mean of vectors using log-sum-exp for numerical stability.
     /// </summary>
     private Vector<T> ComputeGeometricMean(List<Vector<T>> vectors)
     {
         int length = vectors[0].Length;
         var result = new T[length];
+        var numOps = MathHelper.GetNumericOperations<T>();
 
         for (int i = 0; i < length; i++)
         {
-            double product = 1.0;
+            double logSum = 0.0;
             foreach (var vector in vectors)
             {
-                double value = Math.Max(Convert.ToDouble(vector[i]), 1e-10); // Avoid log(0)
-                product *= value;
+                double value = Math.Max(numOps.ToDouble(vector[i]), 1e-10);
+                logSum += Math.Log(value);
             }
 
-            double geoMean = Math.Pow(product, 1.0 / vectors.Count);
-            result[i] = (T)Convert.ChangeType(geoMean, typeof(T));
+            double geoMean = Math.Exp(logSum / vectors.Count);
+            result[i] = numOps.FromDouble(geoMean);
         }
 
         return new Vector<T>(result);

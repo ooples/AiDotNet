@@ -180,7 +180,17 @@ public class SmoteAugmenter<T> : TabularAugmenterBase<T>
         }
 
         // Copy synthetic data with same label as minority class
-        T minorityLabel = minorityLabels[0]; // Assume all have same label
+        T minorityLabel = minorityLabels[0];
+
+        // Validate that all minority labels have the same value
+        for (int i = 1; i < minorityLabels.Length; i++)
+        {
+            if (!NumOps.ToDouble(minorityLabels[i]).Equals(NumOps.ToDouble(minorityLabel)))
+            {
+                throw new ArgumentException("All minority labels must have the same value.", nameof(minorityLabels));
+            }
+        }
+
         for (int i = 0; i < numSynthetic; i++)
         {
             for (int c = 0; c < cols; c++)

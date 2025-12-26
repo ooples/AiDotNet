@@ -147,10 +147,13 @@ public class VideoColorJitter<T> : SpatialVideoAugmenterBase<T>
                     g = gray + (g - gray) * saturation;
                     b = gray + (b - gray) * saturation;
 
-                    // Clamp to [0, 1]
-                    result.SetPixel(y, x, 0, NumOps.FromDouble(Math.Max(0, Math.Min(1, r))));
-                    result.SetPixel(y, x, 1, NumOps.FromDouble(Math.Max(0, Math.Min(1, g))));
-                    result.SetPixel(y, x, 2, NumOps.FromDouble(Math.Max(0, Math.Min(1, b))));
+                    // Determine clamping range based on normalization
+                    double maxVal = frame.IsNormalized ? 1.0 : 255.0;
+
+                    // Clamp to appropriate range
+                    result.SetPixel(y, x, 0, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, r))));
+                    result.SetPixel(y, x, 1, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, g))));
+                    result.SetPixel(y, x, 2, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, b))));
 
                     // Copy alpha channel if present
                     if (channels == 4)
@@ -164,7 +167,8 @@ public class VideoColorJitter<T> : SpatialVideoAugmenterBase<T>
                     double val = NumOps.ToDouble(frame.GetPixel(y, x, 0));
                     val += brightness;
                     val = (val - 0.5) * contrast + 0.5;
-                    result.SetPixel(y, x, 0, NumOps.FromDouble(Math.Max(0, Math.Min(1, val))));
+                    double maxVal = frame.IsNormalized ? 1.0 : 255.0;
+                    result.SetPixel(y, x, 0, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, val))));
                 }
             }
         }
