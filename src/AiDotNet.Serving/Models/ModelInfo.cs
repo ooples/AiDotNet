@@ -56,5 +56,25 @@ public class ModelInfo
     /// Gets or sets whether batching is enabled for this model.
     /// </summary>
     public bool EnableBatching { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether this model supports multimodal inputs (text, images, etc.).
+    /// </summary>
+    public bool IsMultimodal { get; set; }
+
+    /// <summary>
+    /// Gets or sets the embedding dimension for multimodal models.
+    /// </summary>
+    public int? EmbeddingDimension { get; set; }
+
+    /// <summary>
+    /// Gets or sets the maximum sequence length for text inputs in multimodal models.
+    /// </summary>
+    public int? MaxSequenceLength { get; set; }
+
+    /// <summary>
+    /// Gets or sets the expected image size for multimodal models.
+    /// </summary>
+    public int? ImageSize { get; set; }
 }
 

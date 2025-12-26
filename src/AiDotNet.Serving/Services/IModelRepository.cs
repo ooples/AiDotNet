@@ -68,4 +68,22 @@ public interface IModelRepository
         int registryVersion,
         string registryStage,
         string? sourcePath = null);
+
+    /// <summary>
+    /// Loads a multimodal model and stores it with the given name.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used by the model.</typeparam>
+    /// <param name="name">The unique name for the model.</param>
+    /// <param name="model">The multimodal model instance.</param>
+    /// <param name="sourcePath">Optional source path where the model was loaded from.</param>
+    /// <returns>True if the model was loaded successfully, false if a model with that name already exists.</returns>
+    bool LoadMultimodalModel<T>(string name, IServableMultimodalModel<T> model, string? sourcePath = null);
+
+    /// <summary>
+    /// Retrieves a multimodal model by name and type.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used by the model.</typeparam>
+    /// <param name="name">The name of the model.</param>
+    /// <returns>The multimodal model if found and supports multimodal operations, null otherwise.</returns>
+    IServableMultimodalModel<T>? GetMultimodalModel<T>(string name);
 }
