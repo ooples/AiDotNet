@@ -1009,8 +1009,9 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         // Store final state for future reference
         states.SetRow(n - 1, GetCurrentState());
 
-        // If anomaly detection is enabled, compute threshold from residuals
-        if (_prophetOptions.EnableAnomalyDetection)
+        // Compute residual statistics if anomaly detection or prediction intervals are enabled
+        // _residualStdDev is needed for both features
+        if (_prophetOptions.EnableAnomalyDetection || _prophetOptions.ComputePredictionIntervals)
         {
             ComputeAnomalyThresholdFromTraining(x, y);
         }
@@ -1664,6 +1665,14 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         if (!IsTrained)
         {
             throw new InvalidOperationException("Model must be trained before making predictions.");
+        }
+
+        // Check that residual statistics were computed during training
+        if (NumOps.Equals(_residualStdDev, NumOps.Zero))
+        {
+            throw new InvalidOperationException(
+                "Prediction intervals require residual statistics. " +
+                "Enable ComputePredictionIntervals or EnableAnomalyDetection in ProphetOptions before training.");
         }
 
         Vector<T> predictions = Predict(x);
