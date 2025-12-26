@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Helpers;
+using AiDotNet.WindowFunctions;
 
 namespace AiDotNet.Diffusion.Audio;
 
@@ -87,7 +88,7 @@ public class GriffinLim<T>
     /// </summary>
     /// <param name="nFft">FFT size (default: 2048).</param>
     /// <param name="hopLength">Hop length between frames (default: nFft/4).</param>
-    /// <param name="windowType">Window function type (default: Hann).</param>
+    /// <param name="windowFunction">Window function (default: Hanning - industry standard for audio STFT).</param>
     /// <param name="iterations">Number of iterations (default: 60).</param>
     /// <param name="momentum">Momentum factor for faster convergence (default: 0.99).</param>
     /// <param name="seed">Random seed for reproducibility (default: null for random).</param>
@@ -107,7 +108,7 @@ public class GriffinLim<T>
     public GriffinLim(
         int nFft = 2048,
         int? hopLength = null,
-        WindowType windowType = WindowType.Hann,
+        IWindowFunction<T>? windowFunction = null,
         int iterations = 60,
         double momentum = 0.99,
         int? seed = null)
@@ -122,7 +123,7 @@ public class GriffinLim<T>
         _stft = new ShortTimeFourierTransform<T>(
             nFft: nFft,
             hopLength: hopLength,
-            windowType: windowType);
+            windowFunction: windowFunction);
 
         _iterations = iterations;
         _momentum = momentum;

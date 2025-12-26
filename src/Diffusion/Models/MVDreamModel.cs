@@ -390,12 +390,12 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
             latents = new Tensor<T>(latentShape, latentVector);
         }
 
-        // Decode each view
+        // Decode each view (unscale latent before VAE decoding)
         var views = new Tensor<T>[numViews];
         for (int v = 0; v < numViews; v++)
         {
             var viewLatent = ExtractView(latents, v);
-            views[v] = _imageVAE.Decode(viewLatent);
+            views[v] = _imageVAE.Decode(_imageVAE.UnscaleLatent(viewLatent));
         }
 
         return views;

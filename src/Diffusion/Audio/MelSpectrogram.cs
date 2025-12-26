@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.WindowFunctions;
 
 namespace AiDotNet.Diffusion.Audio;
 
@@ -116,7 +117,7 @@ public class MelSpectrogram<T>
     /// <param name="hopLength">Hop length between frames (default: nFft/4).</param>
     /// <param name="fMin">Minimum frequency in Hz (default: 0).</param>
     /// <param name="fMax">Maximum frequency in Hz (default: sampleRate/2).</param>
-    /// <param name="windowType">Window function type (default: Hann).</param>
+    /// <param name="windowFunction">Window function to use (default: HanningWindow - industry standard for audio).</param>
     /// <param name="logMel">Whether to apply log compression (default: true).</param>
     /// <param name="refDb">Reference value for dB conversion (default: 1.0).</param>
     /// <param name="minDb">Minimum dB value floor (default: -80).</param>
@@ -127,6 +128,7 @@ public class MelSpectrogram<T>
     /// - nMels: More bins = more frequency detail (128 is common for music, 80 for speech)
     /// - nFft: Larger = more frequency resolution, less time resolution
     /// - fMin/fMax: Filter out frequencies outside your range of interest
+    /// - windowFunction: Reduces spectral leakage. Hann (default) is the industry standard.
     /// - logMel: Log compression makes the representation more perceptually uniform
     /// </para>
     /// </remarks>
@@ -137,7 +139,7 @@ public class MelSpectrogram<T>
         int? hopLength = null,
         double fMin = 0.0,
         double? fMax = null,
-        WindowType windowType = WindowType.Hann,
+        IWindowFunction<T>? windowFunction = null,
         bool logMel = true,
         double refDb = 1.0,
         double minDb = -80.0)
@@ -158,11 +160,11 @@ public class MelSpectrogram<T>
         if (_fMax > sampleRate / 2.0)
             throw new ArgumentOutOfRangeException(nameof(fMax), "fMax cannot exceed Nyquist frequency.");
 
-        // Initialize STFT
+        // Initialize STFT (uses HanningWindow by default - industry standard for audio)
         _stft = new ShortTimeFourierTransform<T>(
             nFft: nFft,
             hopLength: hopLength,
-            windowType: windowType);
+            windowFunction: windowFunction);
 
         // Create Mel filterbank
         _melFilterbank = CreateMelFilterbank(nMels, nFft, sampleRate, _fMin, _fMax);

@@ -77,8 +77,14 @@ namespace AiDotNet.AutoML
         /// <summary>Gets or sets the number of residual blocks per level.</summary>
         public int NumResBlocks { get; set; } = 2;
 
-        /// <summary>Gets or sets the latent dimension.</summary>
+        /// <summary>Gets or sets the latent dimension (channels).</summary>
         public int LatentDim { get; set; } = 4;
+
+        /// <summary>Gets or sets the latent spatial height (default: 64 for 512x512 images with 8x downscaling).</summary>
+        public int LatentHeight { get; set; } = 64;
+
+        /// <summary>Gets or sets the latent spatial width (default: 64 for 512x512 images with 8x downscaling).</summary>
+        public int LatentWidth { get; set; } = 64;
 
         /// <summary>Gets or sets the optional random seed.</summary>
         public int? Seed { get; set; }
@@ -98,6 +104,8 @@ namespace AiDotNet.AutoML
                 ["BaseChannels"] = BaseChannels,
                 ["NumResBlocks"] = NumResBlocks,
                 ["LatentDim"] = LatentDim,
+                ["LatentHeight"] = LatentHeight,
+                ["LatentWidth"] = LatentWidth,
                 ["Seed"] = Seed ?? 0
             };
         }
@@ -138,6 +146,12 @@ namespace AiDotNet.AutoML
 
             if (parameters.TryGetValue("LatentDim", out var ld))
                 config.LatentDim = Convert.ToInt32(ld);
+
+            if (parameters.TryGetValue("LatentHeight", out var lh))
+                config.LatentHeight = Convert.ToInt32(lh);
+
+            if (parameters.TryGetValue("LatentWidth", out var lw))
+                config.LatentWidth = Convert.ToInt32(lw);
 
             if (parameters.TryGetValue("Seed", out var seed))
             {
@@ -532,24 +546,22 @@ namespace AiDotNet.AutoML
             switch (config.SchedulerType)
             {
                 case DiffusionSchedulerType.DDPM:
-                    // DDPM uses DDIM with specific settings
+                    // DDPM is the original slow scheduler; DDIM is a more efficient equivalent
                     scheduler = new DDIMScheduler<T>(schedulerConfig);
                     break;
                 case DiffusionSchedulerType.DDIM:
                     scheduler = new DDIMScheduler<T>(schedulerConfig);
                     break;
                 case DiffusionSchedulerType.Euler:
-                    scheduler = new DDIMScheduler<T>(schedulerConfig);
-                    break;
                 case DiffusionSchedulerType.EulerAncestral:
-                    scheduler = new DDIMScheduler<T>(schedulerConfig);
-                    break;
                 case DiffusionSchedulerType.DPMSolver:
-                    scheduler = new DDIMScheduler<T>(schedulerConfig);
+                    // PNDM uses pseudo numerical methods similar to Euler/DPM-Solver
+                    // and provides high quality with fewer steps
+                    scheduler = new PNDMScheduler<T>(schedulerConfig);
                     break;
                 case DiffusionSchedulerType.LCM:
-                    // LCM uses few steps with high quality
-                    scheduler = new DDIMScheduler<T>(schedulerConfig);
+                    // LCM uses few steps with high quality - PNDM is best suited for few-step inference
+                    scheduler = new PNDMScheduler<T>(schedulerConfig);
                     numSteps = Math.Min(4, numSteps);
                     break;
                 default:
@@ -762,7 +774,7 @@ namespace AiDotNet.AutoML
 
             // Start from noise
             int latentSize = _config.LatentDim;
-            var latent = SampleNoise(new[] { 1, latentSize, 64, 64 });
+            var latent = SampleNoise(new[] { 1, latentSize, _config.LatentHeight, _config.LatentWidth });
 
             // Set scheduler timesteps
             _scheduler.SetTimesteps(_config.InferenceSteps);
@@ -946,15 +958,25 @@ namespace AiDotNet.AutoML
 
         public byte[] Serialize()
         {
-            // Serialize parameters
+            // Serialize parameters as doubles for portability across numeric types.
+            // This allows models trained with float to be loaded as double and vice versa.
+            // The format is: [version byte] [parameter count (4 bytes)] [parameters as doubles]
             var parameters = GetParameters();
-            var data = new byte[parameters.Length * sizeof(double)];
+            int headerSize = 1 + sizeof(int); // version + count
+            var data = new byte[headerSize + parameters.Length * sizeof(double)];
 
+            // Version byte (for future format changes)
+            data[0] = 1;
+
+            // Parameter count
+            Buffer.BlockCopy(BitConverter.GetBytes(parameters.Length), 0, data, 1, sizeof(int));
+
+            // Parameters as doubles
             for (int i = 0; i < parameters.Length; i++)
             {
                 double value = NumOps.ToDouble(parameters[i]);
                 var bytes = BitConverter.GetBytes(value);
-                Buffer.BlockCopy(bytes, 0, data, i * sizeof(double), sizeof(double));
+                Buffer.BlockCopy(bytes, 0, data, headerSize + i * sizeof(double), sizeof(double));
             }
 
             return data;
@@ -962,12 +984,25 @@ namespace AiDotNet.AutoML
 
         public void Deserialize(byte[] data)
         {
-            int numParams = data.Length / sizeof(double);
-            var parameters = new T[numParams];
+            // Check minimum header size
+            int headerSize = 1 + sizeof(int);
+            if (data.Length < headerSize)
+                throw new InvalidDataException("Invalid serialized data: too short for header.");
 
-            for (int i = 0; i < numParams; i++)
+            // Read version (currently only version 1 supported)
+            byte version = data[0];
+            if (version != 1)
+                throw new InvalidDataException($"Unsupported serialization version: {version}");
+
+            // Read parameter count
+            int paramCount = BitConverter.ToInt32(data, 1);
+            if (data.Length < headerSize + paramCount * sizeof(double))
+                throw new InvalidDataException("Invalid serialized data: truncated parameter data.");
+
+            var parameters = new T[paramCount];
+            for (int i = 0; i < paramCount; i++)
             {
-                double value = BitConverter.ToDouble(data, i * sizeof(double));
+                double value = BitConverter.ToDouble(data, headerSize + i * sizeof(double));
                 parameters[i] = NumOps.FromDouble(value);
             }
 

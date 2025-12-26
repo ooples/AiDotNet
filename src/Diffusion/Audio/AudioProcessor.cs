@@ -162,11 +162,10 @@ public class AudioProcessor<T>
         _minDb = minDb;
         _maxDb = maxDb;
 
-        // Initialize STFT
+        // Initialize STFT (uses HanningWindow by default - industry standard for audio)
         _stft = new ShortTimeFourierTransform<T>(
             nFft: nFft,
             hopLength: hopLength,
-            windowType: WindowType.Hann,
             center: true);
 
         // Initialize Mel spectrogram (without log for more control)

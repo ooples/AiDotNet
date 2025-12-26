@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.WindowFunctions;
 
 namespace AiDotNet.Diffusion.Audio;
 
@@ -98,7 +99,7 @@ public class ShortTimeFourierTransform<T>
     /// <param name="nFft">FFT size (default: 2048). Should be a power of 2.</param>
     /// <param name="hopLength">Hop length between frames (default: nFft/4).</param>
     /// <param name="windowLength">Window length (default: nFft).</param>
-    /// <param name="windowType">Type of window function (default: Hann).</param>
+    /// <param name="windowFunction">Window function to use (default: HanningWindow - industry standard for audio).</param>
     /// <param name="center">Whether to pad signal so frames are centered (default: true).</param>
     /// <param name="padMode">Padding mode when centering (default: Reflect).</param>
     /// <remarks>
@@ -107,14 +108,15 @@ public class ShortTimeFourierTransform<T>
     /// - nFft: Determines frequency resolution. Larger = more frequency detail but less time detail
     /// - hopLength: How much to slide between frames. Smaller = more overlap = smoother output
     ///   Common: hopLength = nFft/4 gives 75% overlap
-    /// - window: Reduces spectral leakage. Hann is the most common for audio
+    /// - windowFunction: Reduces spectral leakage. Hann (default) is the industry standard for audio.
+    ///   Other options: HammingWindow, BlackmanWindow, KaiserWindow, etc.
     /// </para>
     /// </remarks>
     public ShortTimeFourierTransform(
         int nFft = 2048,
         int? hopLength = null,
         int? windowLength = null,
-        WindowType windowType = WindowType.Hann,
+        IWindowFunction<T>? windowFunction = null,
         bool center = true,
         PaddingMode padMode = PaddingMode.Reflect)
     {
@@ -135,8 +137,16 @@ public class ShortTimeFourierTransform<T>
         if (_windowLength <= 0 || _windowLength > nFft)
             throw new ArgumentOutOfRangeException(nameof(windowLength), "Window length must be positive and <= nFft.");
 
-        // Create window function
-        _window = WindowFunctions<T>.Create(windowType, _windowLength);
+        // Create window function - default to Hanning (industry standard for audio STFT)
+        var window = windowFunction ?? new HanningWindow<T>();
+        var windowVector = window.Create(_windowLength);
+
+        // Convert Vector<T> to T[]
+        _window = new T[_windowLength];
+        for (int i = 0; i < _windowLength; i++)
+        {
+            _window[i] = windowVector[i];
+        }
 
         // Pad window to nFft if shorter
         if (_windowLength < nFft)
