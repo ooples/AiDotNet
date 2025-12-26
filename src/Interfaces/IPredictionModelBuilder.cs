@@ -1832,4 +1832,62 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
         HyperparameterSearchSpace? searchSpace = null,
         int nTrials = 10);
 
+    /// <summary>
+    /// Configures data augmentation for training and inference.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Data augmentation creates variations of training data on-the-fly to help models
+    /// generalize better. This configuration covers both training-time augmentation
+    /// and Test-Time Augmentation (TTA) for improved inference accuracy.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Augmentation is like showing the model many variations of
+    /// the same data. For images, this might include rotations, flips, and color changes.
+    /// The model learns to recognize objects regardless of these variations.
+    /// </para>
+    /// <para><b>Key features:</b>
+    /// <list type="bullet">
+    /// <item>Automatic data-type detection (image, tabular, audio, text, video)</item>
+    /// <item>Industry-standard defaults that work well out-of-the-box</item>
+    /// <item>Test-Time Augmentation (TTA) enabled by default for better predictions</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// Example - Simple usage with defaults:
+    /// <code>
+    /// var result = builder
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureAugmentation()  // Uses auto-detected defaults
+    ///     .Build(X, y);
+    /// </code>
+    /// </para>
+    /// <para>
+    /// Example - Custom configuration:
+    /// <code>
+    /// var result = builder
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureAugmentation(new AugmentationConfig
+    ///     {
+    ///         EnableTTA = true,
+    ///         TTANumAugmentations = 8,
+    ///         ImageSettings = new ImageAugmentationSettings
+    ///         {
+    ///             EnableFlips = true,
+    ///             EnableRotation = true,
+    ///             RotationRange = 20.0
+    ///         }
+    ///     })
+    ///     .Build(images, labels);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="config">
+    /// Augmentation configuration. If null, uses industry-standard defaults
+    /// with automatic data-type detection.
+    /// </param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureAugmentation(
+        Augmentation.AugmentationConfig? config = null);
+
 }

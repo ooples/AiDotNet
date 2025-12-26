@@ -108,6 +108,19 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     internal IFullModel<T, TInput, TOutput>? Model { get; private set; }
 
     /// <summary>
+    /// Gets the options used to create this model result.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This stores the full configuration options used when building the model,
+    /// including TTA configuration, preprocessing settings, and other optional features.
+    /// May be null when deserialized from storage (legacy models without options).
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal PredictionModelResultOptions<T, TInput, TOutput>? Options { get; private set; }
+
+    /// <summary>
     /// Gets the serialized model payload for the facade-hidden <see cref="Model"/>.
     /// </summary>
     /// <remarks>
@@ -1040,6 +1053,9 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
         {
             throw new ArgumentNullException(nameof(options));
         }
+
+        // Store the options for use by partial classes (e.g., TTA augmentation)
+        Options = options;
 
         // Determine initialization path: meta-learning or standard
         var isMetaLearningPath = options.MetaLearner is not null;
