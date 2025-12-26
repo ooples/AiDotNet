@@ -2,6 +2,7 @@ using System;
 using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.AutoML.NAS
@@ -80,7 +81,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             var searchSpace = new SearchSpaceBase<double>();
             var proxyless = new ProxylessNAS<double>(searchSpace, numNodes: 4, useBinarization: true);
             var alpha = new Matrix<double>(3, 5);
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < alpha.Rows; i++)
                 for (int j = 0; j < alpha.Columns; j++)
                     alpha[i, j] = random.NextDouble() - 0.5;
@@ -115,7 +116,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             var searchSpace = new SearchSpaceBase<double>();
             var proxyless = new ProxylessNAS<double>(searchSpace, numNodes: 4, useBinarization: false);
             var alpha = new Matrix<double>(3, 5);
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < alpha.Rows; i++)
                 for (int j = 0; j < alpha.Columns; j++)
                     alpha[i, j] = random.NextDouble() - 0.5;

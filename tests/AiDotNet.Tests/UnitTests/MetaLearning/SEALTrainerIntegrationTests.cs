@@ -5,6 +5,7 @@ using AiDotNet.MetaLearning;
 using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 using Xunit;
@@ -51,7 +52,7 @@ public class SEALTrainerIntegrationTests
         var queryOutput = new Tensor<double>(new int[] { 75 });
 
         // Fill with seeded random data that varies per task
-        var random = new Random(42 + seed);
+        var random = RandomHelper.CreateSeededRandom(42 + seed);
         for (int i = 0; i < supportInput.Shape[0]; i++)
         {
             for (int j = 0; j < supportInput.Shape[1]; j++)

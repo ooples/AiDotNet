@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.Helpers;
 
@@ -28,7 +29,7 @@ public static class ContinualLearningTestHelper
         int numFeatures = 10,
         int numClasses = 3)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         var inputData = new Vector<double>(numSamples * numFeatures);
         for (int i = 0; i < numSamples * numFeatures; i++)
@@ -53,7 +54,7 @@ public static class ContinualLearningTestHelper
     /// </summary>
     public static Vector<double> CreateTestGradients(int numParameters = 100)
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var gradients = new Vector<double>(numParameters);
 
         for (int i = 0; i < numParameters; i++)
@@ -130,7 +131,7 @@ public class MockNeuralNetwork<T> : INeuralNetwork<T>
     public Tensor<T> Backpropagate(Tensor<T> outputGradients)
     {
         // Simple mock backprop - set random gradients
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < _gradients.Length; i++)
         {
             _gradients[i] = _ops.FromDouble(random.NextDouble() * 0.1 - 0.05);
@@ -283,7 +284,7 @@ public class MockNeuralNetwork<T> : INeuralNetwork<T>
     public Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Simple mock - return random gradients
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var grads = new Vector<T>(_numParameters);
         for (int i = 0; i < _numParameters; i++)
         {
@@ -329,7 +330,7 @@ public class MockLayer<T> : ILayer<T>
         _gradients = new Vector<T>(parameterCount);
         _isTraining = true;
 
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < parameterCount; i++)
         {
             _parameters[i] = ops.FromDouble(random.NextDouble() * 0.1);
@@ -356,7 +357,7 @@ public class MockLayer<T> : ILayer<T>
     public Tensor<T> Backward(Tensor<T> outputGradient)
     {
         // Set some gradients for testing
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < _gradients.Length; i++)
         {
             _gradients[i] = _ops.FromDouble(random.NextDouble() * 0.01);

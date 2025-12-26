@@ -2,6 +2,7 @@ using AiDotNet.AutoML;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.AutoML;
@@ -42,7 +43,7 @@ public class MultiFidelityAutoMLIntegrationTests
             ReductionFactor = 3.0
         };
 
-        var autoML = new MultiFidelityAutoML<double, Matrix<double>, Vector<double>>(random: new Random(123), options: options);
+        var autoML = new MultiFidelityAutoML<double, Matrix<double>, Vector<double>>(random: RandomHelper.CreateSeededRandom(123), options: options);
         autoML.TrialLimit = 9;
         autoML.SetCandidateModels(new List<ModelType> { ModelType.MultipleRegression });
 

@@ -1,6 +1,7 @@
 using System;
 using AiDotNet.Models.Options;
 using AiDotNet.PointCloud.Models;
+using AiDotNet.Tensors.Helpers;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.PointCloud;
@@ -94,7 +95,7 @@ public class PointCloudIntegrationTests
 
     private static Tensor<double> CreatePointCloud(int numPoints, int featureDim, int seed)
     {
-        var random = new Random(seed);
+        var random = RandomHelper.CreateSeededRandom(seed);
         var data = new double[numPoints * featureDim];
 
         for (int i = 0; i < data.Length; i++)

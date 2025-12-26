@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralRadianceFields.Models;
+using AiDotNet.Tensors.Helpers;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.NeuralRadianceFields;
@@ -187,7 +188,7 @@ public class NeuralRadianceFieldsIntegrationTests
 
     private static Tensor<double> CreateInstantNgpInput(int numPoints, int seed)
     {
-        var random = new Random(seed);
+        var random = RandomHelper.CreateSeededRandom(seed);
         var data = new double[numPoints * 6];
 
         for (int i = 0; i < numPoints; i++)
@@ -228,7 +229,7 @@ public class NeuralRadianceFieldsIntegrationTests
 
     private static Tensor<double> CreateRayDirections(int numRays, int seed)
     {
-        var random = new Random(seed);
+        var random = RandomHelper.CreateSeededRandom(seed);
         var data = new double[numRays * 3];
 
         for (int i = 0; i < numRays; i++)

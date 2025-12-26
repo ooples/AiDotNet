@@ -1,6 +1,7 @@
 using AiDotNet.AutoML;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.AutoML;
@@ -35,7 +36,7 @@ public class BayesianOptimizationAutoMLIntegrationTests
             valY[i] = (2.0 * x1) + (3.0 * x2);
         }
 
-        var autoML = new BayesianOptimizationAutoML<double, Matrix<double>, Vector<double>>(random: new Random(123));
+        var autoML = new BayesianOptimizationAutoML<double, Matrix<double>, Vector<double>>(random: RandomHelper.CreateSeededRandom(123));
         autoML.TrialLimit = 3;
         autoML.SetCandidateModels(new List<ModelType> { ModelType.MultipleRegression });
 
