@@ -1490,6 +1490,337 @@ public enum ModelType
     /// </remarks>
     DiffusionNet,
 
+    // ==================== Classification Models ====================
+
+    /// <summary>
+    /// Gaussian Naive Bayes classifier for continuous features.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Gaussian Naive Bayes assumes features follow a Gaussian (normal) distribution.
+    /// It's fast, simple, and works well when features are continuous measurements like height, weight, or temperature.
+    /// The "naive" assumption is that all features are independent of each other given the class.
+    /// </para>
+    /// </remarks>
+    GaussianNaiveBayes,
+
+    /// <summary>
+    /// Multinomial Naive Bayes classifier for discrete count features.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Multinomial Naive Bayes is designed for count data, like word frequencies in text documents.
+    /// It's the go-to algorithm for text classification tasks like spam detection, sentiment analysis, and document categorization.
+    /// Each feature represents how many times something occurs (e.g., how many times each word appears).
+    /// </para>
+    /// </remarks>
+    MultinomialNaiveBayes,
+
+    /// <summary>
+    /// Bernoulli Naive Bayes classifier for binary features.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Bernoulli Naive Bayes works with binary (yes/no) features. Instead of counting how many times
+    /// a word appears, it only cares whether the word appears at all. This is useful for text classification when
+    /// you want to focus on the presence or absence of features rather than their frequency.
+    /// </para>
+    /// </remarks>
+    BernoulliNaiveBayes,
+
+    /// <summary>
+    /// Complement Naive Bayes classifier designed for imbalanced datasets.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Complement Naive Bayes is a variation designed to work better with imbalanced datasets
+    /// where some classes have many more examples than others. Instead of modeling each class directly,
+    /// it models the "complement" (everything except that class), which can provide more stable estimates.
+    /// </para>
+    /// </remarks>
+    ComplementNaiveBayes,
+
+    /// <summary>
+    /// Categorical Naive Bayes classifier for categorical features.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Categorical Naive Bayes handles features that have distinct categories (like color: red/blue/green,
+    /// or size: small/medium/large). Unlike Multinomial NB which counts occurrences, Categorical NB directly models
+    /// the probability of each category appearing.
+    /// </para>
+    /// </remarks>
+    CategoricalNaiveBayes,
+
+    /// <summary>
+    /// Support Vector Classifier using the kernel trick for non-linear boundaries.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Support Vector Classifier (SVC) finds the best boundary between classes by maximizing
+    /// the margin (distance from the boundary to the nearest points). Using kernels, it can learn complex,
+    /// non-linear decision boundaries. It's powerful but can be slow on large datasets.
+    /// </para>
+    /// </remarks>
+    SupportVectorClassifier,
+
+    /// <summary>
+    /// Linear Support Vector Classifier optimized for large-scale data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Linear SVC is a faster version of SVC that only uses linear boundaries (straight lines/planes).
+    /// While less flexible than kernel SVC, it's much faster and works well when you have many features
+    /// or when a linear boundary is sufficient (which is often the case for high-dimensional data).
+    /// </para>
+    /// </remarks>
+    LinearSupportVectorClassifier,
+
+    /// <summary>
+    /// Nu-Support Vector Classifier with nu parameter for margin control.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Nu-SVC is similar to regular SVC but uses a different parameter (nu) that has a more
+    /// intuitive interpretation. The nu parameter bounds the fraction of support vectors and training errors,
+    /// making it easier to tune for desired model complexity.
+    /// </para>
+    /// </remarks>
+    NuSupportVectorClassifier,
+
+    /// <summary>
+    /// K-Nearest Neighbors classifier based on similarity to training examples.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> K-Nearest Neighbors (KNN) classifies new samples by looking at the k most similar
+    /// training examples and taking a majority vote. It's simple, intuitive, and makes no assumptions
+    /// about the data distribution. The downside is that it can be slow for large datasets since it
+    /// needs to compare against all training examples.
+    /// </para>
+    /// </remarks>
+    KNeighborsClassifier,
+
+    /// <summary>
+    /// Decision Tree classifier using recursive partitioning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Decision Tree Classifier works like a flowchart of yes/no questions to classify data.
+    /// It's easy to understand and interpret (you can visualize the tree), handles both numeric and categorical
+    /// features, and requires minimal data preprocessing. However, single trees can overfit and are sensitive
+    /// to small changes in the data.
+    /// </para>
+    /// </remarks>
+    DecisionTreeClassifier,
+
+    /// <summary>
+    /// Random Forest classifier using ensemble of decision trees.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Random Forest combines many decision trees and lets them vote on the final prediction.
+    /// By training each tree on a random subset of data and features, it reduces overfitting and improves
+    /// accuracy. It's one of the most reliable "out of the box" classifiers and works well on many problems.
+    /// </para>
+    /// </remarks>
+    RandomForestClassifier,
+
+    /// <summary>
+    /// Gradient Boosting classifier that builds trees sequentially.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Gradient Boosting builds trees one at a time, with each new tree correcting errors
+    /// made by previous trees. This sequential approach often achieves higher accuracy than Random Forest
+    /// but requires more careful tuning and can be slower to train.
+    /// </para>
+    /// </remarks>
+    GradientBoostingClassifier,
+
+    /// <summary>
+    /// AdaBoost classifier that focuses on hard examples.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> AdaBoost (Adaptive Boosting) trains a sequence of weak classifiers, giving more weight
+    /// to examples that previous classifiers got wrong. This forces the ensemble to focus on the hardest cases.
+    /// It's effective and less prone to overfitting than some other boosting methods.
+    /// </para>
+    /// </remarks>
+    AdaBoostClassifier,
+
+    /// <summary>
+    /// Extra Trees (Extremely Randomized Trees) classifier with added randomness.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Extra Trees is similar to Random Forest but adds even more randomness when building trees.
+    /// Instead of finding the best split for each feature, it chooses splits randomly. This makes it faster
+    /// to train and can reduce overfitting, though it may need more trees to achieve the same accuracy.
+    /// </para>
+    /// </remarks>
+    ExtraTreesClassifier,
+
+    /// <summary>
+    /// Bagging classifier that combines predictions from multiple base estimators.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Bagging (Bootstrap Aggregating) trains multiple copies of any base classifier on
+    /// random subsets of the data, then combines their predictions. It's a general technique that can
+    /// improve stability and accuracy of any classifier that tends to overfit.
+    /// </para>
+    /// </remarks>
+    BaggingClassifier,
+
+    /// <summary>
+    /// Stochastic Gradient Descent classifier with various loss functions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SGD Classifier uses stochastic gradient descent to train linear classifiers efficiently.
+    /// It can handle very large datasets that don't fit in memory by processing one example at a time.
+    /// Different loss functions allow it to mimic logistic regression, SVM, or other linear models.
+    /// </para>
+    /// </remarks>
+    SGDClassifier,
+
+    /// <summary>
+    /// Passive Aggressive classifier for large-scale online learning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Passive Aggressive classifiers update aggressively when they make a mistake but stay
+    /// "passive" (don't change) when they predict correctly. This makes them suitable for online learning
+    /// where you receive data one example at a time.
+    /// </para>
+    /// </remarks>
+    PassiveAggressiveClassifier,
+
+    /// <summary>
+    /// Perceptron classifier - the simplest neural network.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The Perceptron is the simplest possible neural network - just one layer that learns
+    /// a linear boundary. While limited to linearly separable problems, it's historically important and
+    /// forms the building block for more complex neural networks.
+    /// </para>
+    /// </remarks>
+    PerceptronClassifier,
+
+    /// <summary>
+    /// Ridge classifier that uses L2 regularization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Ridge Classifier converts the classification problem to a regression problem and uses
+    /// L2 regularization (like Ridge Regression). It's fast and works well for multi-class problems,
+    /// especially when the number of classes is large.
+    /// </para>
+    /// </remarks>
+    RidgeClassifier,
+
+    /// <summary>
+    /// Linear Discriminant Analysis classifier that finds linear combinations of features.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> LDA finds the directions in the feature space that best separate the classes.
+    /// It's both a classifier and a dimensionality reduction technique. It assumes features follow
+    /// a Gaussian distribution with equal covariance for all classes, making it fast and effective
+    /// when these assumptions hold.
+    /// </para>
+    /// </remarks>
+    LinearDiscriminantAnalysis,
+
+    /// <summary>
+    /// Quadratic Discriminant Analysis classifier with class-specific covariance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> QDA is like LDA but allows each class to have its own covariance matrix.
+    /// This creates quadratic (curved) decision boundaries instead of linear ones. It's more flexible
+    /// than LDA but requires more data to estimate the additional parameters.
+    /// </para>
+    /// </remarks>
+    QuadraticDiscriminantAnalysis,
+
+    /// <summary>
+    /// One-vs-Rest classifier for multi-class classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> One-vs-Rest (also called One-vs-All) trains one binary classifier per class,
+    /// where each classifier distinguishes one class from all others. The class with the highest
+    /// confidence wins. It's simple and works with any binary classifier.
+    /// </para>
+    /// </remarks>
+    OneVsRestClassifier,
+
+    /// <summary>
+    /// One-vs-One classifier for multi-class classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> One-vs-One trains one classifier for each pair of classes. For N classes,
+    /// this means N*(N-1)/2 classifiers. Each classifier votes, and the class with the most votes wins.
+    /// It can be more accurate than One-vs-Rest but slower with many classes.
+    /// </para>
+    /// </remarks>
+    OneVsOneClassifier,
+
+    /// <summary>
+    /// Classifier Chain for multi-label classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Classifier Chain handles multi-label problems (where items can have multiple labels)
+    /// by training classifiers in sequence, each using predictions from previous classifiers as features.
+    /// This captures dependencies between labels, like "if it's labeled 'beach', it's more likely to also be labeled 'summer'".
+    /// </para>
+    /// </remarks>
+    ClassifierChain,
+
+    /// <summary>
+    /// Multi-output classifier for predicting multiple targets independently.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Multi-Output Classifier trains one classifier per target variable, treating each
+    /// target independently. It's useful when you need to predict multiple related but independent outputs
+    /// from the same input features.
+    /// </para>
+    /// </remarks>
+    MultiOutputClassifier,
+
+    /// <summary>
+    /// Stacking classifier that combines multiple classifiers with a meta-learner.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Stacking trains multiple base classifiers and then trains a "meta-learner" to combine
+    /// their predictions. The meta-learner learns which classifiers to trust for different types of inputs.
+    /// It often achieves better performance than any single classifier.
+    /// </para>
+    /// </remarks>
+    StackingClassifier,
+
+    /// <summary>
+    /// Voting classifier that combines predictions through voting.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Voting Classifier combines multiple classifiers by letting them vote. Hard voting
+    /// counts class predictions (majority wins), while soft voting averages predicted probabilities.
+    /// It's a simple but effective way to combine diverse classifiers.
+    /// </para>
+    /// </remarks>
+    VotingClassifier,
+
+    // ==================== Clustering Models ====================
+
     /// <summary>
     /// A clustering algorithm that groups similar data points together.
     /// </summary>
