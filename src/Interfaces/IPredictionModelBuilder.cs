@@ -1832,4 +1832,46 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
         HyperparameterSearchSpace? searchSpace = null,
         int nTrials = 10);
 
+    /// <summary>
+    /// Configures data augmentation for training to improve model generalization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Data augmentation creates variations of training data on-the-fly to help models
+    /// generalize better. This is especially important for image, audio, and other
+    /// domains where data collection is expensive.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Augmentation is like showing the model many variations of
+    /// the same data. For images, this might include rotations, flips, and color changes.
+    /// The model learns to recognize objects regardless of these variations.
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// var result = builder
+    ///     .ConfigureModel(cnnModel)
+    ///     .ConfigureTrainingAugmentation(aug => aug
+    ///         .Add(new HorizontalFlip&lt;double&gt;(probability: 0.5))
+    ///         .Add(new RandomRotation&lt;double&gt;(-15, 15))
+    ///         .Add(new ColorJitter&lt;double&gt;(brightness: 0.2, contrast: 0.2)))
+    ///     .Build(images, labels);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TAugData">The data type being augmented.</typeparam>
+    /// <param name="pipelineBuilder">Action to configure the augmentation pipeline.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingAugmentation<TAugData>(
+        Action<Augmentation.Integration.TrainingAugmentationBuilder<T, TAugData>> pipelineBuilder);
+
+    /// <summary>
+    /// Configures data augmentation for training using a pre-built configuration.
+    /// </summary>
+    /// <typeparam name="TAugData">The data type being augmented.</typeparam>
+    /// <param name="configuration">The augmentation configuration.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingAugmentation<TAugData>(
+        Augmentation.Integration.TrainingAugmentationConfiguration<T, TAugData> configuration);
+
 }

@@ -260,13 +260,8 @@ public class AugmentationValidationResult
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 /// <typeparam name="TData">The data type being augmented.</typeparam>
-public interface IAugmentationPolicy<T, TData>
+public interface IAugmentationPolicy<T, TData> : IAugmentationPolicy
 {
-    /// <summary>
-    /// Gets the name of this policy.
-    /// </summary>
-    string Name { get; }
-
     /// <summary>
     /// Gets the augmentations in this policy.
     /// </summary>

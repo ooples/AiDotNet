@@ -178,6 +178,9 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     // Curriculum learning configuration
     private CurriculumLearningOptions<T, TInput, TOutput>? _curriculumLearningOptions;
 
+    // Training augmentation configuration
+    private object? _trainingAugmentationConfiguration;
+
     // Federated learning configuration (facade-first: orchestration is internal)
     private FederatedLearningOptions? _federatedLearningOptions;
     private IAggregationStrategy<IFullModel<T, TInput, TOutput>>? _federatedAggregationStrategy;
@@ -3887,6 +3890,58 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         _hyperparameterOptimizer = optimizer;
         _hyperparameterSearchSpace = searchSpace;
         _hyperparameterTrials = nTrials;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures data augmentation for training to improve model generalization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Data augmentation creates variations of training data on-the-fly to help models
+    /// generalize better. This is especially important for image, audio, and other
+    /// domains where data collection is expensive.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Augmentation is like showing the model many variations of
+    /// the same data. For images, this might include rotations, flips, and color changes.
+    /// The model learns to recognize objects regardless of these variations.
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// var result = builder
+    ///     .ConfigureModel(cnnModel)
+    ///     .ConfigureTrainingAugmentation&lt;ImageTensor&lt;double&gt;&gt;(aug => aug
+    ///         .Add(new HorizontalFlip&lt;double&gt;(probability: 0.5))
+    ///         .Add(new RandomRotation&lt;double&gt;(-15, 15))
+    ///         .Add(new ColorJitter&lt;double&gt;(brightness: 0.2, contrast: 0.2)))
+    ///     .Build(images, labels);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TAugData">The data type being augmented.</typeparam>
+    /// <param name="pipelineBuilder">Action to configure the augmentation pipeline.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingAugmentation<TAugData>(
+        Action<Augmentation.Integration.TrainingAugmentationBuilder<T, TAugData>> pipelineBuilder)
+    {
+        var builder = new Augmentation.Integration.TrainingAugmentationBuilder<T, TAugData>();
+        pipelineBuilder(builder);
+        _trainingAugmentationConfiguration = builder.Build();
+        return this;
+    }
+
+    /// <summary>
+    /// Configures data augmentation for training using a pre-built configuration.
+    /// </summary>
+    /// <typeparam name="TAugData">The data type being augmented.</typeparam>
+    /// <param name="configuration">The augmentation configuration.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingAugmentation<TAugData>(
+        Augmentation.Integration.TrainingAugmentationConfiguration<T, TAugData> configuration)
+    {
+        _trainingAugmentationConfiguration = configuration;
         return this;
     }
 
