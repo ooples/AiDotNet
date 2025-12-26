@@ -75,15 +75,12 @@ public class FeatureNoise<T> : TabularAugmenterBase<T>
 
         for (int i = 0; i < rows; i++)
         {
-            foreach (int j in featuresToAugment)
+            foreach (int j in featuresToAugment.Where(f => f >= 0 && f < cols))
             {
-                if (j >= 0 && j < cols)
-                {
-                    double originalValue = Convert.ToDouble(result[i, j]);
-                    double noise = context.SampleGaussian(0, NoiseStdDev);
-                    double newValue = originalValue + noise;
-                    result[i, j] = (T)Convert.ChangeType(newValue, typeof(T));
-                }
+                double originalValue = Convert.ToDouble(result[i, j]);
+                double noise = context.SampleGaussian(0, NoiseStdDev);
+                double newValue = originalValue + noise;
+                result[i, j] = (T)Convert.ChangeType(newValue, typeof(T));
             }
         }
 

@@ -84,15 +84,12 @@ public class FeatureDropout<T> : TabularAugmenterBase<T>
 
         for (int i = 0; i < rows; i++)
         {
-            foreach (int j in droppableFeatures)
+            foreach (int j in droppableFeatures.Where(f => f >= 0 && f < cols))
             {
-                if (j >= 0 && j < cols)
+                // Each feature has an independent chance of being dropped
+                if (context.Random.NextDouble() < DropoutRate)
                 {
-                    // Each feature has an independent chance of being dropped
-                    if (context.Random.NextDouble() < DropoutRate)
-                    {
-                        result[i, j] = (T)Convert.ChangeType(DropValue, typeof(T));
-                    }
+                    result[i, j] = (T)Convert.ChangeType(DropValue, typeof(T));
                 }
             }
         }
