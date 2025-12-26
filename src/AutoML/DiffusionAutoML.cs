@@ -210,7 +210,7 @@ namespace AiDotNet.AutoML
             _seed = seed;
             _random = seed.HasValue
                 ? RandomHelper.CreateSeededRandom(seed.Value)
-                : new Random();
+                : RandomHelper.CreateSecureRandom();
 
             // Set default search space
             SetSearchSpace(GetDefaultDiffusionSearchSpace());
@@ -752,7 +752,7 @@ namespace AiDotNet.AutoML
             _seed = seed;
             _random = seed.HasValue
                 ? RandomHelper.CreateSeededRandom(seed.Value)
-                : new Random();
+                : RandomHelper.CreateSecureRandom();
         }
 
         public Tensor<T> Predict(Tensor<T> input)

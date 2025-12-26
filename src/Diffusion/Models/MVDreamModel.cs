@@ -1450,7 +1450,7 @@ public class MultiViewAttention<T>
         _channels = channels;
         _numViews = numViews;
 
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : new Random();
+        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         var scale = Math.Sqrt(2.0 / channels);
 
         _queryWeights = new Matrix<T>(channels, channels);
@@ -1596,7 +1596,7 @@ public class CameraEmbedding<T>
         _embeddingDim = embeddingDim;
         _inputDim = 12; // Sinusoidal encoding of azimuth, elevation, radius
 
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : new Random();
+        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         var scale = Math.Sqrt(2.0 / _inputDim);
 
         _projectionWeights = new Matrix<T>(embeddingDim, _inputDim);

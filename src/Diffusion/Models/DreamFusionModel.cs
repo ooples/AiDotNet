@@ -292,7 +292,7 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
 
         // Simple hash-based embedding for fallback
         int hash = text.GetHashCode();
-        var rng = new Random(hash);
+        var rng = RandomHelper.CreateSeededRandom(hash);
 
         for (int i = 0; i < embSpan.Length; i++)
         {
@@ -915,7 +915,7 @@ public class NeRFNetwork<T>
     public NeRFNetwork(int hiddenDim = 64, int numLayers = 4, int? seed = null)
     {
         _hiddenDim = hiddenDim;
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
 
         // Density network: position (3D + positional encoding) -> density
         _densityLayers = new List<DenseLayer<T>>();

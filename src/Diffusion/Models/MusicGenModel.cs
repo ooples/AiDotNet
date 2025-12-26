@@ -1069,7 +1069,7 @@ public class MelodyEncoder<T>
         _outputDim = outputDim;
         _intermediateChannels = 64;
 
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : new Random();
+        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         var convScale = Math.Sqrt(2.0 / inputChannels);
         var projScale = Math.Sqrt(2.0 / _intermediateChannels);
 
@@ -1242,7 +1242,7 @@ public class RhythmEncoder<T>
         _outputDim = outputDim;
         _inputDim = 32; // Onset strength over 32 frequency bands
 
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : new Random();
+        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         var scale = Math.Sqrt(2.0 / _inputDim);
 
         _weights = new Matrix<T>(outputDim, _inputDim);

@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.Diffusion.Audio;
 
@@ -125,7 +126,7 @@ public class GriffinLim<T>
 
         _iterations = iterations;
         _momentum = momentum;
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>
@@ -144,7 +145,7 @@ public class GriffinLim<T>
         _stft = stft ?? throw new ArgumentNullException(nameof(stft));
         _iterations = iterations;
         _momentum = momentum;
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>

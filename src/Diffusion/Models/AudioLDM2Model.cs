@@ -993,7 +993,7 @@ internal class ProjectionLayer<T>
         _inputDim = inputDim;
         _outputDim = outputDim;
 
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : new Random();
+        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         var scale = Math.Sqrt(2.0 / inputDim);
 
         _weights = new Matrix<T>(outputDim, inputDim);
