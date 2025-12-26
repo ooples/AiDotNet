@@ -1036,19 +1036,9 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
     {
         if (points.Count == 0)
         {
-            // Return default sphere if no points
-            var result = new List<(double x, double y, double z)>();
-            var rng = RandomGenerator;
-            for (int i = 0; i < targetCount; i++)
-            {
-                var theta = 2.0 * Math.PI * rng.NextDouble();
-                var phi = Math.Acos(2.0 * rng.NextDouble() - 1.0);
-                var r = 0.5;
-                result.Add((r * Math.Sin(phi) * Math.Cos(theta),
-                            r * Math.Sin(phi) * Math.Sin(theta),
-                            r * Math.Cos(phi)));
-            }
-            return result;
+            throw new InvalidOperationException(
+                "Point cloud reconstruction failed: no valid 3D points were extracted from the multi-view images. " +
+                "This may indicate failures in depth estimation or silhouette extraction.");
         }
 
         // Find bounds

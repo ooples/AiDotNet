@@ -143,6 +143,11 @@ public class GriffinLim<T>
         double momentum = 0.99,
         int? seed = null)
     {
+        if (iterations <= 0)
+            throw new ArgumentOutOfRangeException(nameof(iterations), "Iterations must be positive.");
+        if (momentum < 0 || momentum >= 1)
+            throw new ArgumentOutOfRangeException(nameof(momentum), "Momentum must be in [0, 1).");
+
         _stft = stft ?? throw new ArgumentNullException(nameof(stft));
         _iterations = iterations;
         _momentum = momentum;

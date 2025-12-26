@@ -180,9 +180,8 @@ public class ShortTimeFourierTransform<T>
             return ForwardBatched(signal);
         }
 
-        // Flatten to 1D if needed
-        var flatSignal = signal.Shape.Length == 1 ? signal.Data : signal.Data;
-        return ForwardSingle(flatSignal);
+        // Process 1D signal directly
+        return ForwardSingle(signal.Data);
     }
 
     /// <summary>

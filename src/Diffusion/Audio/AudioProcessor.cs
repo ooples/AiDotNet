@@ -531,14 +531,16 @@ public class AudioProcessor<T>
 
         for (int y = 0; y < targetHeight; y++)
         {
-            double srcY = (double)y * (srcHeight - 1) / (targetHeight - 1);
+            // Guard against division by zero when targetHeight is 1
+            double srcY = targetHeight == 1 ? 0 : (double)y * (srcHeight - 1) / (targetHeight - 1);
             int y0 = (int)Math.Floor(srcY);
             int y1 = Math.Min(y0 + 1, srcHeight - 1);
             double yFrac = srcY - y0;
 
             for (int x = 0; x < targetWidth; x++)
             {
-                double srcX = (double)x * (srcWidth - 1) / (targetWidth - 1);
+                // Guard against division by zero when targetWidth is 1
+                double srcX = targetWidth == 1 ? 0 : (double)x * (srcWidth - 1) / (targetWidth - 1);
                 int x0 = (int)Math.Floor(srcX);
                 int x1 = Math.Min(x0 + 1, srcWidth - 1);
                 double xFrac = srcX - x0;
