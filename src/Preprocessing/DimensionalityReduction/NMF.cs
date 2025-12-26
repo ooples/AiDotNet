@@ -372,53 +372,49 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            // Update H: H *= (W^T V) / (W^T W H + eps)
-            var WTV = new double[k, p];
-            var WTW = new double[k, k];
-            var WTWH = new double[k, p];
-
-            // Compute W^T V
-            for (int i = 0; i < k; i++)
+            // Compute WH (reconstruction)
+            var WH = new double[n, p];
+            for (int i = 0; i < n; i++)
             {
                 for (int j = 0; j < p; j++)
                 {
                     double sum = 0;
-                    for (int l = 0; l < n; l++)
+                    for (int c = 0; c < k; c++)
                     {
-                        sum += W[l, i] * V[l, j];
+                        sum += W[i, c] * H[c, j];
                     }
-                    WTV[i, j] = sum;
+                    WH[i, j] = Math.Max(eps, sum);
                 }
             }
 
-            // Compute W^T W
-            for (int i = 0; i < k; i++)
-            {
-                for (int j = 0; j < k; j++)
-                {
-                    double sum = 0;
-                    for (int l = 0; l < n; l++)
-                    {
-                        sum += W[l, i] * W[l, j];
-                    }
-                    WTW[i, j] = sum;
-                }
-            }
+            // Beta-divergence multiplicative update
+            // For beta = 2 (Frobenius): standard update
+            // For beta = 1 (KL-divergence): special case
+            // For beta = 0 (Itakura-Saito): special case
+            // General: uses (WH)^(beta-2) and (WH)^(beta-1)
 
-            // Compute W^T W H with regularization
+            // Update H: H *= (W^T * ((WH)^(beta-2) * V)) / (W^T * (WH)^(beta-1) + reg)
+            var numeratorH = new double[k, p];
+            var denominatorH = new double[k, p];
+
             for (int i = 0; i < k; i++)
             {
                 for (int j = 0; j < p; j++)
                 {
-                    double sum = 0;
-                    for (int l = 0; l < k; l++)
+                    double numSum = 0;
+                    double denSum = 0;
+                    for (int l = 0; l < n; l++)
                     {
-                        sum += WTW[i, l] * H[l, j];
+                        double whPowBetaMinus2 = Math.Pow(WH[l, j], _beta - 2);
+                        double whPowBetaMinus1 = Math.Pow(WH[l, j], _beta - 1);
+                        numSum += W[l, i] * whPowBetaMinus2 * V[l, j];
+                        denSum += W[l, i] * whPowBetaMinus1;
                     }
-                    // Add L1/L2 regularization: alpha * (l1_ratio + (1-l1_ratio) * H[i,j])
+                    numeratorH[i, j] = numSum;
+                    // Add L1/L2 regularization
                     double l1Reg = _alpha * _l1Ratio;
                     double l2Reg = _alpha * (1 - _l1Ratio) * H[i, j];
-                    WTWH[i, j] = sum + l1Reg + l2Reg + eps;
+                    denominatorH[i, j] = denSum + l1Reg + l2Reg + eps;
                 }
             }
 
@@ -427,58 +423,47 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             {
                 for (int j = 0; j < p; j++)
                 {
-                    H[i, j] *= WTV[i, j] / WTWH[i, j];
+                    H[i, j] *= numeratorH[i, j] / denominatorH[i, j];
                     H[i, j] = Math.Max(eps, H[i, j]);
                 }
             }
 
-            // Update W: W *= (V H^T) / (W H H^T + eps)
-            var VHT = new double[n, k];
-            var HHT = new double[k, k];
-            var WHHT = new double[n, k];
+            // Recompute WH after H update
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < p; j++)
+                {
+                    double sum = 0;
+                    for (int c = 0; c < k; c++)
+                    {
+                        sum += W[i, c] * H[c, j];
+                    }
+                    WH[i, j] = Math.Max(eps, sum);
+                }
+            }
 
-            // Compute V H^T
+            // Update W: W *= (((WH)^(beta-2) * V) * H^T) / ((WH)^(beta-1) * H^T + reg)
+            var numeratorW = new double[n, k];
+            var denominatorW = new double[n, k];
+
             for (int i = 0; i < n; i++)
             {
                 for (int j = 0; j < k; j++)
                 {
-                    double sum = 0;
+                    double numSum = 0;
+                    double denSum = 0;
                     for (int l = 0; l < p; l++)
                     {
-                        sum += V[i, l] * H[j, l];
+                        double whPowBetaMinus2 = Math.Pow(WH[i, l], _beta - 2);
+                        double whPowBetaMinus1 = Math.Pow(WH[i, l], _beta - 1);
+                        numSum += whPowBetaMinus2 * V[i, l] * H[j, l];
+                        denSum += whPowBetaMinus1 * H[j, l];
                     }
-                    VHT[i, j] = sum;
-                }
-            }
-
-            // Compute H H^T
-            for (int i = 0; i < k; i++)
-            {
-                for (int j = 0; j < k; j++)
-                {
-                    double sum = 0;
-                    for (int l = 0; l < p; l++)
-                    {
-                        sum += H[i, l] * H[j, l];
-                    }
-                    HHT[i, j] = sum;
-                }
-            }
-
-            // Compute W H H^T with regularization
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < k; j++)
-                {
-                    double sum = 0;
-                    for (int l = 0; l < k; l++)
-                    {
-                        sum += W[i, l] * HHT[l, j];
-                    }
-                    // Add L1/L2 regularization: alpha * (l1_ratio + (1-l1_ratio) * W[i,j])
+                    numeratorW[i, j] = numSum;
+                    // Add L1/L2 regularization
                     double l1Reg = _alpha * _l1Ratio;
                     double l2Reg = _alpha * (1 - _l1Ratio) * W[i, j];
-                    WHHT[i, j] = sum + l1Reg + l2Reg + eps;
+                    denominatorW[i, j] = denSum + l1Reg + l2Reg + eps;
                 }
             }
 
@@ -487,7 +472,7 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             {
                 for (int j = 0; j < k; j++)
                 {
-                    W[i, j] *= VHT[i, j] / WHHT[i, j];
+                    W[i, j] *= numeratorW[i, j] / denominatorW[i, j];
                     W[i, j] = Math.Max(eps, W[i, j]);
                 }
             }
@@ -539,10 +524,15 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                         denominator += W[i, c] * W[i, c];
                     }
 
-                    // Add L1/L2 regularization to denominator
-                    denominator += _alpha * _l1Ratio + _alpha * (1 - _l1Ratio);
+                    // L2 regularization: add to denominator
+                    denominator += _alpha * (1 - _l1Ratio);
 
-                    H[c, j] = Math.Max(0, numerator / denominator);
+                    // L1 regularization: soft-thresholding on numerator
+                    double l1Penalty = _alpha * _l1Ratio;
+                    double thresholdedNum = Math.Max(0, numerator - l1Penalty) -
+                                            Math.Max(0, -numerator - l1Penalty);
+
+                    H[c, j] = Math.Max(0, thresholdedNum / denominator);
                 }
             }
 
@@ -568,10 +558,15 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                         denominator += H[c, j] * H[c, j];
                     }
 
-                    // Add L1/L2 regularization to denominator
-                    denominator += _alpha * _l1Ratio + _alpha * (1 - _l1Ratio);
+                    // L2 regularization: add to denominator
+                    denominator += _alpha * (1 - _l1Ratio);
 
-                    W[i, c] = Math.Max(0, numerator / denominator);
+                    // L1 regularization: soft-thresholding on numerator
+                    double l1Penalty = _alpha * _l1Ratio;
+                    double thresholdedNum = Math.Max(0, numerator - l1Penalty) -
+                                            Math.Max(0, -numerator - l1Penalty);
+
+                    W[i, c] = Math.Max(0, thresholdedNum / denominator);
                 }
             }
 

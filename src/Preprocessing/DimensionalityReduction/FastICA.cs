@@ -322,7 +322,23 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                     norm += w[j] * w[j];
                 }
                 norm = Math.Sqrt(norm);
-                if (norm < 1e-10) break;
+
+                if (norm < 1e-10)
+                {
+                    // Vector is near-zero, re-initialize with random unit vector
+                    double reinitNorm = 0;
+                    for (int j = 0; j < p; j++)
+                    {
+                        w[j] = random.NextDouble() - 0.5;
+                        reinitNorm += w[j] * w[j];
+                    }
+                    reinitNorm = Math.Sqrt(reinitNorm);
+                    for (int j = 0; j < p; j++)
+                    {
+                        w[j] /= reinitNorm;
+                    }
+                    break;
+                }
 
                 for (int j = 0; j < p; j++)
                 {
@@ -457,11 +473,18 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             else
             {
                 // Vector is near-zero after orthogonalization (linearly dependent)
-                // Re-initialize with small random values to maintain orthogonality
+                // Re-initialize with random unit vector to maintain orthonormality
                 var random = RandomHelper.CreateSeededRandom(_randomState + i);
+                double reinitNorm = 0;
                 for (int k = 0; k < cols; k++)
                 {
-                    W[i, k] = (random.NextDouble() - 0.5) * 1e-6;
+                    W[i, k] = random.NextDouble() - 0.5;
+                    reinitNorm += W[i, k] * W[i, k];
+                }
+                reinitNorm = Math.Sqrt(reinitNorm);
+                for (int k = 0; k < cols; k++)
+                {
+                    W[i, k] /= reinitNorm;
                 }
             }
         }
@@ -527,7 +550,25 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 }
                 norm = Math.Sqrt(norm);
 
-                if (norm < 1e-10) break;
+                if (norm < 1e-10)
+                {
+                    // Av is near-zero, keep current normalized v as eigenvector
+                    // Ensure v is still normalized (it should be from previous iteration or init)
+                    double vNorm = 0;
+                    for (int i = 0; i < n; i++)
+                    {
+                        vNorm += v[i] * v[i];
+                    }
+                    vNorm = Math.Sqrt(vNorm);
+                    if (vNorm > 1e-10)
+                    {
+                        for (int i = 0; i < n; i++)
+                        {
+                            v[i] /= vNorm;
+                        }
+                    }
+                    break;
+                }
 
                 for (int i = 0; i < n; i++)
                 {

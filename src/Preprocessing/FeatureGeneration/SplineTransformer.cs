@@ -130,9 +130,11 @@ public class SplineTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _knots = new double[_nInputFeatures][];
 
         // Number of spline basis functions per feature
-        // For B-splines: nKnots + degree - 1 (if including intercept)
-        // Without intercept: nKnots + degree - 2
-        _nSplineFeatures = _nKnots + _degree - 1;
+        // For B-splines with m knots and degree d: number of basis = m - d - 1
+        // Our knot vector has: (degree+1) lower + nKnots internal + (degree+1) upper = nKnots + 2*(degree+1) knots
+        // So: nBasis = nKnots + 2*(degree+1) - degree - 1 = nKnots + degree + 1
+        // Without intercept (drop first basis): nKnots + degree
+        _nSplineFeatures = _nKnots + _degree + 1;
         if (!_includeIntercept)
         {
             _nSplineFeatures -= 1;

@@ -208,16 +208,19 @@ public class LocallyLinearEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>
                 }
             }
 
-            // Regularization
+            // Regularization - use user-specified _reg as minimum
             double trace = 0;
             for (int j = 0; j < k; j++)
             {
                 trace += C[j, j];
             }
             double regVal = _reg * trace / k;
-            if (regVal < 1e-10)
+            // Ensure minimum regularization for numerical stability,
+            // but respect user's _reg parameter by using it as the floor
+            double minReg = Math.Max(_reg, 1e-10);
+            if (regVal < minReg)
             {
-                regVal = 1e-3;
+                regVal = minReg;
             }
 
             for (int j = 0; j < k; j++)
