@@ -167,6 +167,13 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
             throw new InvalidOperationException("Image-to-image generation requires a conditioning module.");
 
         strength = MathPolyfill.Clamp(strength, 0.0, 1.0);
+
+        // If strength is 0, no modification is needed - return the input image
+        if (strength <= 0.0)
+        {
+            return inputImage;
+        }
+
         var effectiveGuidanceScale = guidanceScale ?? GuidanceScale;
         var useCFG = effectiveGuidanceScale > 1.0 && NoisePredictor.SupportsCFG;
 
@@ -195,6 +202,13 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
         // Calculate starting timestep based on strength
         Scheduler.SetTimesteps(numInferenceSteps);
         var startStep = (int)(numInferenceSteps * (1.0 - strength));
+
+        // If startStep equals numInferenceSteps, there's nothing to denoise
+        if (startStep >= numInferenceSteps)
+        {
+            return DecodeFromLatent(latents);
+        }
+
         var startTimestep = Scheduler.Timesteps.Skip(startStep).First();
 
         // Add noise to latents at starting timestep

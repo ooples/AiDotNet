@@ -458,6 +458,12 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
             throw new ArgumentException("Number of control images must match number of control types.");
         }
 
+        if (conditioningStrengths != null && conditioningStrengths.Length != controlImages.Length)
+        {
+            throw new ArgumentException(
+                $"Number of conditioning strengths ({conditioningStrengths.Length}) must match number of control images ({controlImages.Length}).");
+        }
+
         // Default strengths to 1.0
         var strengths = conditioningStrengths ?? Enumerable.Repeat(1.0, controlImages.Length).ToArray();
 

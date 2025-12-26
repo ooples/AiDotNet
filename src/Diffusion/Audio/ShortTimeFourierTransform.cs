@@ -513,7 +513,7 @@ public class ShortTimeFourierTransform<T>
         {
             int sourceIdx = mode switch
             {
-                PaddingMode.Reflect => padBefore - i,
+                PaddingMode.Reflect => ReflectIndex(padBefore - 1 - i, signal.Length),
                 PaddingMode.Replicate => 0,
                 PaddingMode.Zero => -1,
                 _ => -1
@@ -529,7 +529,7 @@ public class ShortTimeFourierTransform<T>
         {
             int sourceIdx = mode switch
             {
-                PaddingMode.Reflect => signal.Length - 2 - i,
+                PaddingMode.Reflect => ReflectIndex(signal.Length + i, signal.Length),
                 PaddingMode.Replicate => signal.Length - 1,
                 PaddingMode.Zero => -1,
                 _ => -1
@@ -568,6 +568,38 @@ public class ShortTimeFourierTransform<T>
             length -= _nFft;
         }
         return length;
+    }
+
+    /// <summary>
+    /// Computes the reflected index for padding, handling short signals safely.
+    /// </summary>
+    /// <param name="idx">The virtual index (can be negative or >= length).</param>
+    /// <param name="length">The length of the original signal.</param>
+    /// <returns>A valid index within [0, length-1], or -1 if length <= 1.</returns>
+    private static int ReflectIndex(int idx, int length)
+    {
+        if (length <= 1)
+        {
+            // For signals of length 0 or 1, reflection is not meaningful
+            return length == 1 ? 0 : -1;
+        }
+
+        // Normalize idx to handle arbitrary offsets
+        // Reflection period is 2*(length-1)
+        int period = 2 * (length - 1);
+        idx = idx % period;
+        if (idx < 0)
+        {
+            idx += period;
+        }
+
+        // Map to the reflected range [0, length-1]
+        if (idx >= length)
+        {
+            idx = period - idx;
+        }
+
+        return idx;
     }
 }
 

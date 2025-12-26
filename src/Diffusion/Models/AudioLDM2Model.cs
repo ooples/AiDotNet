@@ -365,13 +365,15 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
     private Tensor<T> ConcatenateEmbeddings(Tensor<T> clap, Tensor<T> language)
     {
         var batchSize = clap.Shape[0];
-        var seqLen = clap.Shape.Length > 2 ? Math.Max(clap.Shape[1], language.Shape[1]) : 1;
+        var clapSeqLen = clap.Shape.Length > 2 ? clap.Shape[1] : 1;
+        var langSeqLen = language.Shape.Length > 2 ? language.Shape[1] : 1;
+        var outputSeqLen = Math.Max(clapSeqLen, langSeqLen);
         var clapDim = clap.Shape.Length > 2 ? clap.Shape[2] : clap.Shape[1];
         var langDim = language.Shape.Length > 2 ? language.Shape[2] : language.Shape[1];
         var totalDim = clapDim + langDim;
 
         var resultShape = clap.Shape.Length > 2
-            ? new[] { batchSize, seqLen, totalDim }
+            ? new[] { batchSize, outputSeqLen, totalDim }
             : new[] { batchSize, totalDim };
 
         var result = new Tensor<T>(resultShape);
@@ -381,29 +383,37 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
 
         for (int b = 0; b < batchSize; b++)
         {
-            for (int s = 0; s < seqLen; s++)
+            for (int s = 0; s < outputSeqLen; s++)
             {
-                // Copy CLAP features
-                for (int d = 0; d < clapDim; d++)
+                // Copy CLAP features (only if within clap's actual sequence length)
+                if (s < clapSeqLen)
                 {
-                    var srcIdx = b * seqLen * clapDim + s * clapDim + d;
-                    var dstIdx = b * seqLen * totalDim + s * totalDim + d;
-                    if (srcIdx < clapSpan.Length && dstIdx < resultSpan.Length)
+                    for (int d = 0; d < clapDim; d++)
                     {
-                        resultSpan[dstIdx] = clapSpan[srcIdx];
+                        var srcIdx = b * clapSeqLen * clapDim + s * clapDim + d;
+                        var dstIdx = b * outputSeqLen * totalDim + s * totalDim + d;
+                        if (srcIdx < clapSpan.Length && dstIdx < resultSpan.Length)
+                        {
+                            resultSpan[dstIdx] = clapSpan[srcIdx];
+                        }
                     }
                 }
+                // Positions beyond clapSeqLen remain zero-initialized
 
-                // Copy language features
-                for (int d = 0; d < langDim; d++)
+                // Copy language features (only if within language's actual sequence length)
+                if (s < langSeqLen)
                 {
-                    var srcIdx = b * seqLen * langDim + s * langDim + d;
-                    var dstIdx = b * seqLen * totalDim + s * totalDim + clapDim + d;
-                    if (srcIdx < langSpan.Length && dstIdx < resultSpan.Length)
+                    for (int d = 0; d < langDim; d++)
                     {
-                        resultSpan[dstIdx] = langSpan[srcIdx];
+                        var srcIdx = b * langSeqLen * langDim + s * langDim + d;
+                        var dstIdx = b * outputSeqLen * totalDim + s * totalDim + clapDim + d;
+                        if (srcIdx < langSpan.Length && dstIdx < resultSpan.Length)
+                        {
+                            resultSpan[dstIdx] = langSpan[srcIdx];
+                        }
                     }
                 }
+                // Positions beyond langSeqLen remain zero-initialized
             }
         }
 

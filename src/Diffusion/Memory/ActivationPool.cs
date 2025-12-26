@@ -43,11 +43,6 @@ namespace AiDotNet.Diffusion.Memory;
 public class ActivationPool<T> : IDisposable
 {
     /// <summary>
-    /// Provides numeric operations for the specific type T.
-    /// </summary>
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
-    /// <summary>
     /// Maximum memory to use for pooling in bytes.
     /// </summary>
     private readonly long _maxMemoryBytes;
@@ -62,11 +57,6 @@ public class ActivationPool<T> : IDisposable
     /// Each bucket holds tensors of similar total element counts.
     /// </summary>
     private readonly ConcurrentDictionary<int, ConcurrentBag<PooledTensor<T>>> _pools;
-
-    /// <summary>
-    /// Track all rented tensors for eviction if needed.
-    /// </summary>
-    private readonly ConcurrentDictionary<int, DateTime> _rentedTimestamps;
 
     /// <summary>
     /// Lock for memory accounting.
@@ -97,7 +87,6 @@ public class ActivationPool<T> : IDisposable
     {
         _maxMemoryBytes = maxMemoryMB * 1024 * 1024;
         _pools = new ConcurrentDictionary<int, ConcurrentBag<PooledTensor<T>>>();
-        _rentedTimestamps = new ConcurrentDictionary<int, DateTime>();
     }
 
     /// <summary>
@@ -123,25 +112,38 @@ public class ActivationPool<T> : IDisposable
         // Try to get from pool
         if (_pools.TryGetValue(sizeClass, out var pool))
         {
+            // Collect non-matching tensors to return after the loop
+            var toReturn = new List<PooledTensor<T>>();
+
             while (pool.TryTake(out var pooledTensor))
             {
                 if (ShapeMatches(pooledTensor.Tensor.Shape, shape))
                 {
-                    Stats.CacheHits++;
+                    // Return non-matching tensors back to pool before returning
+                    foreach (var pt in toReturn)
+                    {
+                        pool.Add(pt);
+                    }
+                    Stats.IncrementCacheHits();
                     return pooledTensor.Tensor;
                 }
 
-                // Wrong shape - can we reshape?
+                // Wrong shape - keep for returning to pool after the loop
                 if (pooledTensor.TotalElements >= totalElements)
                 {
-                    // Return to pool and create new (shape mismatch)
-                    pool.Add(pooledTensor);
+                    toReturn.Add(pooledTensor);
                 }
+            }
+
+            // Return non-matching tensors back to pool
+            foreach (var pt in toReturn)
+            {
+                pool.Add(pt);
             }
         }
 
         // Need to allocate new
-        Stats.CacheMisses++;
+        Stats.IncrementCacheMisses();
 
         // Check if we need to evict
         lock (_memoryLock)
@@ -184,7 +186,7 @@ public class ActivationPool<T> : IDisposable
             LastUsed = DateTime.UtcNow
         });
 
-        Stats.Returns++;
+        Stats.IncrementReturns();
     }
 
     /// <summary>
@@ -236,7 +238,7 @@ public class ActivationPool<T> : IDisposable
                 {
                     // Evict
                     freedBytes += GetMemorySize(tensor.TotalElements);
-                    Stats.Evictions++;
+                    Stats.IncrementEvictions();
                 }
                 else
                 {
@@ -281,7 +283,7 @@ public class ActivationPool<T> : IDisposable
                 {
                     // Evict
                     freedBytes += GetMemorySize(tensor.TotalElements);
-                    Stats.Evictions++;
+                    Stats.IncrementEvictions();
                 }
             }
         }
@@ -381,28 +383,70 @@ internal class PooledTensor<T>
 
 /// <summary>
 /// Statistics about activation pool usage.
+/// Thread-safe counters for concurrent access.
 /// </summary>
 public class ActivationPoolStats
 {
+    private long _cacheHits;
+    private long _cacheMisses;
+    private long _returns;
+    private long _evictions;
+
     /// <summary>
     /// Number of times a tensor was found in the pool.
     /// </summary>
-    public long CacheHits { get; set; }
+    public long CacheHits
+    {
+        get => Interlocked.Read(ref _cacheHits);
+        set => Interlocked.Exchange(ref _cacheHits, value);
+    }
 
     /// <summary>
     /// Number of times a new tensor had to be allocated.
     /// </summary>
-    public long CacheMisses { get; set; }
+    public long CacheMisses
+    {
+        get => Interlocked.Read(ref _cacheMisses);
+        set => Interlocked.Exchange(ref _cacheMisses, value);
+    }
 
     /// <summary>
     /// Number of tensors returned to the pool.
     /// </summary>
-    public long Returns { get; set; }
+    public long Returns
+    {
+        get => Interlocked.Read(ref _returns);
+        set => Interlocked.Exchange(ref _returns, value);
+    }
 
     /// <summary>
     /// Number of tensors evicted due to memory pressure.
     /// </summary>
-    public long Evictions { get; set; }
+    public long Evictions
+    {
+        get => Interlocked.Read(ref _evictions);
+        set => Interlocked.Exchange(ref _evictions, value);
+    }
+
+    /// <summary>
+    /// Thread-safe increment of cache hits counter.
+    /// </summary>
+    public void IncrementCacheHits() => Interlocked.Increment(ref _cacheHits);
+
+    /// <summary>
+    /// Thread-safe increment of cache misses counter.
+    /// </summary>
+    public void IncrementCacheMisses() => Interlocked.Increment(ref _cacheMisses);
+
+    /// <summary>
+    /// Thread-safe increment of returns counter.
+    /// </summary>
+    public void IncrementReturns() => Interlocked.Increment(ref _returns);
+
+    /// <summary>
+    /// Thread-safe increment of evictions counter.
+    /// </summary>
+    public void IncrementEvictions() => Interlocked.Increment(ref _evictions);
 
     /// <summary>
     /// Current number of tensors in the pool.

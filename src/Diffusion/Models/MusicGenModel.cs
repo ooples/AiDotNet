@@ -795,10 +795,12 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
         // Concatenate along feature dimension
         var totalFeatures = conditions.Sum(c => c.Shape[^1]);
         var batchSize = conditions[0].Shape[0];
-        var seqLen = conditions[0].Shape.Length > 2 ? conditions[0].Shape[1] : 1;
+
+        // Use maximum sequence length across all conditions
+        var outputSeqLen = conditions.Max(c => c.Shape.Length > 2 ? c.Shape[1] : 1);
 
         var resultShape = conditions[0].Shape.Length > 2
-            ? new[] { batchSize, seqLen, totalFeatures }
+            ? new[] { batchSize, outputSeqLen, totalFeatures }
             : new[] { batchSize, totalFeatures };
 
         var result = new Tensor<T>(resultShape);
@@ -809,20 +811,26 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
         {
             var condSpan = cond.AsSpan();
             var condFeatures = cond.Shape[^1];
+            var condSeqLen = cond.Shape.Length > 2 ? cond.Shape[1] : 1;
 
             for (int b = 0; b < batchSize; b++)
             {
-                for (int s = 0; s < seqLen; s++)
+                for (int s = 0; s < outputSeqLen; s++)
                 {
-                    for (int f = 0; f < condFeatures; f++)
+                    // Only copy if within this condition's actual sequence length
+                    if (s < condSeqLen)
                     {
-                        var srcIdx = b * seqLen * condFeatures + s * condFeatures + f;
-                        var dstIdx = b * seqLen * totalFeatures + s * totalFeatures + featureOffset + f;
-                        if (srcIdx < condSpan.Length && dstIdx < resultSpan.Length)
+                        for (int f = 0; f < condFeatures; f++)
                         {
-                            resultSpan[dstIdx] = condSpan[srcIdx];
+                            var srcIdx = b * condSeqLen * condFeatures + s * condFeatures + f;
+                            var dstIdx = b * outputSeqLen * totalFeatures + s * totalFeatures + featureOffset + f;
+                            if (srcIdx < condSpan.Length && dstIdx < resultSpan.Length)
+                            {
+                                resultSpan[dstIdx] = condSpan[srcIdx];
+                            }
                         }
                     }
+                    // Positions beyond condSeqLen remain zero-initialized
                 }
             }
             featureOffset += condFeatures;
@@ -859,6 +867,10 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
     {
         var firstLen = first.Shape[^1];
         var secondLen = second.Shape[^1];
+
+        // Clamp overlap to valid range to prevent negative indices
+        overlapSamples = Math.Max(0, Math.Min(overlapSamples, Math.Min(firstLen, secondLen)));
+
         var totalLen = firstLen + secondLen - overlapSamples;
 
         var result = new Tensor<T>(new[] { 1, totalLen });

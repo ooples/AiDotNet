@@ -150,7 +150,8 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => CM_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _noisePredictor.ParameterCount;
+    public override int ParameterCount =>
+        _noisePredictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the minimum sigma value used by this model.

@@ -59,14 +59,25 @@ public class PretrainedModelLoader<T>
     }
 
     /// <summary>
-    /// Loads VAE weights from a SafeTensors file.
+    /// Validates and maps VAE weights from a SafeTensors file.
     /// </summary>
-    /// <param name="vae">The VAE model to load weights into.</param>
+    /// <param name="vae">The VAE model to validate weights for.</param>
     /// <param name="weightsPath">Path to the .safetensors file.</param>
     /// <param name="mapping">Optional custom weight mapping. Uses SD v1.x mapping if null.</param>
-    /// <returns>Load result with statistics.</returns>
+    /// <returns>Load result with mapping statistics. Note: WeightsApplied will be false as
+    /// actual weight application requires model-specific implementation.</returns>
     /// <exception cref="ArgumentNullException">Thrown when vae or weightsPath is null.</exception>
     /// <exception cref="FileNotFoundException">Thrown when weights file doesn't exist.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method validates that weights can be mapped from the SafeTensors file to the
+    /// VAE model's expected parameter names. To actually apply the weights, the VAE model
+    /// would need to implement a SetParameterByName method, which is not yet available.
+    /// </para>
+    /// <para>
+    /// Use the returned LoadResult.MappedNames to see which weights would be applied.
+    /// </para>
+    /// </remarks>
     public LoadResult LoadVAEWeights(IVAEModel<T> vae, string weightsPath, WeightMapping? mapping = null)
     {
         if (vae == null)
@@ -121,10 +132,15 @@ public class PretrainedModelLoader<T>
             }
 
             result.Success = result.MappedTensors > 0;
+            // Note: Weights are not actually applied to the model yet
+            // as IVAEModel doesn't expose SetParameterByName.
+            // Use LoadAllTensors to get the raw weights and apply them manually.
+            result.WeightsApplied = false;
         }
         catch (Exception ex)
         {
             result.Success = false;
+            result.WeightsApplied = false;
             result.ErrorMessage = ex.Message;
         }
 
@@ -218,6 +234,12 @@ public class LoadResult
     public bool Success { get; set; }
 
     /// <summary>
+    /// Whether weights were actually applied to the model.
+    /// Currently always false as VAE models don't yet support SetParameterByName.
+    /// </summary>
+    public bool WeightsApplied { get; set; }
+
+    /// <summary>
     /// Total number of tensors in the file.
     /// </summary>
     public int TotalTensors { get; set; }
@@ -257,7 +279,8 @@ public class LoadResult
             return $"Load failed: {ErrorMessage}";
         }
 
-        return $"Loaded {MappedTensors}/{TotalTensors} tensors ({UnmappedTensors} unmapped)";
+        var appliedStatus = WeightsApplied ? "applied" : "mapped only";
+        return $"Loaded {MappedTensors}/{TotalTensors} tensors ({UnmappedTensors} unmapped, {appliedStatus})";
     }
 }
 

@@ -221,6 +221,14 @@ public static class WindowFunctions<T>
             throw new ArgumentOutOfRangeException(nameof(length), "Length must be positive.");
 
         var window = new T[length];
+
+        // Special case: length == 1 means just the center point (peak of triangle)
+        if (length == 1)
+        {
+            window[0] = NumOps.One;
+            return window;
+        }
+
         double center = (length - 1) / 2.0;
 
         for (int n = 0; n < length; n++)
