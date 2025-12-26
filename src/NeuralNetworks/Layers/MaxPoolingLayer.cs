@@ -165,20 +165,11 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         var poolSizeArr = new[] { PoolSize, PoolSize };
         var strideArr = new[] { Strides, Strides };
 
-        // Use Engine operation (always 4D)
+        // Use Engine operation (expects 4D); final output shape will match the original input (3D or 4D)
         var output4D = Engine.MaxPool2DWithIndices(input4D, poolSizeArr, strideArr, out _maxIndices);
 
-        // Return with matching dimensions
-        if (_addedBatchDimension)
-        {
-            // Remove batch dimension: [1, C, H, W] -> [C, H, W]
-            return output4D.Reshape(OutputShape);
-        }
-        else
-        {
-            // Keep 4D: [B, C, outH, outW]
-            return output4D;
-        }
+        // Return with matching dimensions (3D if batch was added, 4D otherwise)
+        return _addedBatchDimension ? output4D.Reshape(OutputShape) : output4D;
     }
 
     /// <summary>
@@ -241,7 +232,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         var poolSizeArr = new int[] { PoolSize, PoolSize };
         var strideArr = new int[] { Strides, Strides };
 
-        // Use Engine operation (always 4D)
+        // Use Engine operation in 4D; reshape so the returned gradient matches the original input dimensions
         var inputGradient4D = Engine.MaxPool2DBackward(gradient4D, _maxIndices, inputShape4D, poolSizeArr, strideArr);
 
         // Return with matching dimensions

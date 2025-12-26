@@ -169,7 +169,7 @@ public class AvgPoolingLayer<T> : LayerBase<T>
             input4D = input;
         }
 
-        // Use GPU-accelerated AvgPool2D via Engine (always 4D)
+        // Use Engine's GPU-accelerated AvgPool2D (operates on 4D); return shape matches input rank (3D or 4D)
         var output4D = Engine.AvgPool2D(input4D, PoolSize, Strides, padding: 0);
 
         // Return with matching dimensions
@@ -245,7 +245,7 @@ public class AvgPoolingLayer<T> : LayerBase<T>
         var poolSizeArr = new int[] { PoolSize, PoolSize };
         var strideArr = new int[] { Strides, Strides };
 
-        // Use GPU-accelerated AvgPool2DBackward via Engine (always 4D)
+        // Use GPU-accelerated AvgPool2DBackward via Engine (operates on 4D tensors internally; result is reshaped to match the input dimensions)
         var inputGradient4D = Engine.AvgPool2DBackward(gradient4D, inputShape4D, poolSizeArr, strideArr);
 
         // Return with matching dimensions

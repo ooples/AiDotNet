@@ -748,7 +748,24 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
+        // Support both 3D [C, H, W] and 4D [B, C, H, W] input
+        Tensor<T> input4D;
+        if (input.Shape.Length == 3)
+        {
+            _addedBatchDimension = true;
+            input4D = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2]);
+        }
+        else if (input.Shape.Length == 4)
+        {
+            _addedBatchDimension = false;
+            input4D = input;
+        }
+        else
+        {
+            throw new ArgumentException($"Conv2D input requires 3D or 4D tensor. Got rank {input.Shape.Length}.");
+        }
+
+        _lastInput = input4D;
 
         // === GPU-Accelerated Convolution ===
         // Phase B: US-GPU-016 - Replace 6 nested loops with IEngine.Conv2D
@@ -762,7 +779,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         output = Engine.TensorBroadcastAdd(output, biasReshaped);
 
         _lastOutput = ApplyActivation(output);
-        return _lastOutput;
+        
+        // Return with matching dimensions (3D if batch was added, 4D otherwise)
+        return _addedBatchDimension ? _lastOutput.Reshape(OutputShape) : _lastOutput;
     }
 
     /// <summary>
@@ -852,14 +871,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
 
         // Handle 3D gradient input by adding batch dimension if needed
         Tensor<T> gradient4D;
-        if (outputGradient.Shape.Length == 3)
-        {
-            gradient4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
-        }
-        else
-        {
-            gradient4D = outputGradient;
-        }
+        gradient4D = outputGradient.Shape.Length == 3
+            ? outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2])
+            : outputGradient;
 
         // Convert parameters to computation nodes
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);

@@ -205,7 +205,9 @@ public static class LayerHelper<T>
                     activation: new ReLUActivation<T>()
                 );
 
-                // Optional batch normalization
+                // Optional batch normalization (per-channel normalization)
+                // BatchNormalizationLayer only needs the number of channels - spatial dimensions
+                // are handled dynamically in the forward pass via Engine.BatchNorm
                 if (configuration.UseBatchNormalization)
                 {
                     yield return new BatchNormalizationLayer<T>(outputChannels);

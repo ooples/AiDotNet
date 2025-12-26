@@ -56,12 +56,12 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.
     /// </summary>
-    private ILossFunction<T> _lossFunction;
+    private readonly ILossFunction<T> _lossFunction;
 
     /// <summary>
     /// The optimization algorithm used to update the network's parameters during training.
     /// </summary>
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <summary>
     /// The VGG configuration specifying the variant and parameters.
@@ -184,7 +184,7 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
     /// architecture with the appropriate number of convolutional blocks for your chosen variant.
     /// </para>
     /// </remarks>
-    protected override void InitializeLayers()
+    protected sealed override void InitializeLayers()
     {
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
@@ -202,7 +202,7 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Performs a forward pass through the VGG network with the given input tensor.
     /// </summary>
-    /// <param name="input">The input tensor to process (shape: [batch, channels, height, width]).</param>
+    /// <param name="input">The input tensor to process (shape: [channels, height, width] for a single example, or [batch, channels, height, width] for a batch; a missing batch dimension is added internally).</param>
     /// <returns>The output tensor after processing through all layers.</returns>
     /// <exception cref="TensorShapeMismatchException">Thrown when the input shape doesn't match expected shape.</exception>
     /// <remarks>
@@ -218,19 +218,38 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        TensorValidator.ValidateShape(
-            input,
-            Architecture.GetInputShape(),
-            nameof(VGGNetwork<T>),
-            "forward pass");
-
-        // Add batch dimension if input is 3D (single image)
+        var expectedShape = Architecture.GetInputShape();
+        
+        // Validate input shape - accept both 3D [C,H,W] and 4D [B,C,H,W]
         bool addedBatch = false;
-        Tensor<T> processedInput = input;
+        Tensor<T> processedInput;
+        
         if (input.Rank == 3)
         {
+            // 3D input: validate against expected shape directly
+            TensorValidator.ValidateShape(
+                input,
+                expectedShape,
+                nameof(VGGNetwork<T>),
+                "forward pass");
             addedBatch = true;
             processedInput = AddBatchDimension(input);
+        }
+        else if (input.Rank == 4)
+        {
+            // 4D input: validate the non-batch dimensions [C,H,W] match expected shape
+            var actualNonBatch = new int[] { input.Shape[1], input.Shape[2], input.Shape[3] };
+            if (!actualNonBatch.SequenceEqual(expectedShape))
+            {
+                throw new TensorShapeMismatchException(
+                    $"Shape mismatch in VGGNetwork during forward pass: Expected non-batch dimensions [{string.Join(", ", expectedShape)}], but got [{string.Join(", ", actualNonBatch)}].");
+            }
+            processedInput = input;
+        }
+        else
+        {
+            throw new TensorShapeMismatchException(
+                $"Shape mismatch in VGGNetwork during forward pass: Expected 3D [C,H,W] or 4D [B,C,H,W] input, but got rank {input.Rank}.");
         }
 
         Tensor<T> output = processedInput;
@@ -365,25 +384,28 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
         var outputGradient = CalculateOutputGradient(prediction, expectedOutput);
         var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
 
-        // Backpropagation
-        var gradients = new List<Tensor<T>>();
+        // Backpropagation: propagate gradients through all layers
+        // Each layer stores its parameter gradients internally during Backward()
         var currentGradient = outputGradientTensor;
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
             currentGradient = Layers[i].Backward(currentGradient);
-            gradients.Insert(0, currentGradient);
         }
 
-        // Update parameters
-        UpdateParameters(gradients);
+        // Update parameters using the optimizer
+        // The optimizer retrieves parameter gradients from each layer
+        ApplyParameterUpdates();
     }
 
     /// <summary>
-    /// Updates the parameters of the network based on the calculated gradients.
+    /// Applies parameter updates using the optimizer.
     /// </summary>
-    private void UpdateParameters(List<Tensor<T>> gradients)
+    /// <remarks>
+    /// The optimizer retrieves parameter gradients from each layer's internal state
+    /// (set during the backward pass) and updates the weights accordingly.
+    /// </remarks>
+    private void ApplyParameterUpdates()
     {
-        ClipGradients(gradients);
         _optimizer.UpdateParameters(Layers);
     }
 
@@ -442,7 +464,7 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
                 { "NumClasses", _configuration.NumClasses },
                 { "UseBatchNormalization", _configuration.UseBatchNormalization },
                 { "InputShape", Architecture.GetInputShape() },
-                { "OutputShape", Layers[Layers.Count - 1].GetOutputShape() },
+                { "OutputShape", Layers.Count > 0 ? Layers[Layers.Count - 1].GetOutputShape() : Array.Empty<int>() },
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() },
                 { "NumConvLayers", _configuration.NumConvLayers },
@@ -474,8 +496,7 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // Read VGG configuration - note: configuration is set in constructor
-        // This is for validation/compatibility checking
+        // Read VGG configuration and validate compatibility
         var variant = (VGGVariant)reader.ReadInt32();
         var numClasses = reader.ReadInt32();
         var inputHeight = reader.ReadInt32();
@@ -483,13 +504,43 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
         var inputChannels = reader.ReadInt32();
         var dropoutRate = reader.ReadDouble();
         var includeClassifier = reader.ReadBoolean();
-        var useAutodiff = reader.ReadBoolean();
+        _ = reader.ReadBoolean(); // useAutodiff - read but not validated (runtime setting)
 
         // Validate loaded configuration matches current
         if (variant != _configuration.Variant)
         {
             throw new InvalidOperationException(
                 $"Serialized VGG variant ({variant}) does not match current configuration ({_configuration.Variant}).");
+        }
+
+        if (numClasses != _configuration.NumClasses)
+        {
+            throw new InvalidOperationException(
+                $"Serialized number of classes ({numClasses}) does not match current configuration ({_configuration.NumClasses}).");
+        }
+
+        if (inputHeight != _configuration.InputHeight || inputWidth != _configuration.InputWidth)
+        {
+            throw new InvalidOperationException(
+                $"Serialized input dimensions ({inputHeight}x{inputWidth}) do not match current configuration ({_configuration.InputHeight}x{_configuration.InputWidth}).");
+        }
+
+        if (inputChannels != _configuration.InputChannels)
+        {
+            throw new InvalidOperationException(
+                $"Serialized input channels ({inputChannels}) does not match current configuration ({_configuration.InputChannels}).");
+        }
+
+        if (Math.Abs(dropoutRate - _configuration.DropoutRate) > 1e-6)
+        {
+            throw new InvalidOperationException(
+                $"Serialized dropout rate ({dropoutRate}) does not match current configuration ({_configuration.DropoutRate}).");
+        }
+
+        if (includeClassifier != _configuration.IncludeClassifier)
+        {
+            throw new InvalidOperationException(
+                $"Serialized includeClassifier ({includeClassifier}) does not match current configuration ({_configuration.IncludeClassifier}).");
         }
     }
 

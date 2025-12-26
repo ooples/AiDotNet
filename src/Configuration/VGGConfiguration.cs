@@ -268,6 +268,8 @@ public class VGGConfiguration
                 "Input channels must be greater than 0.");
         }
 
+        // Dropout rate of 1.0 is explicitly disallowed as it would drop all neurons,
+        // making the network unable to learn. Use 0.0 to disable dropout entirely.
         if (dropoutRate < 0.0 || dropoutRate >= 1.0)
         {
             throw new ArgumentOutOfRangeException(nameof(dropoutRate),
@@ -275,9 +277,15 @@ public class VGGConfiguration
         }
 
         // Validate minimum input size for VGG (needs at least 32x32 after 5 pooling layers)
-        if (inputHeight < 32 || inputWidth < 32)
+        if (inputHeight < 32)
         {
             throw new ArgumentOutOfRangeException(nameof(inputHeight),
+                "VGG requires input dimensions of at least 32x32 pixels.");
+        }
+
+        if (inputWidth < 32)
+        {
+            throw new ArgumentOutOfRangeException(nameof(inputWidth),
                 "VGG requires input dimensions of at least 32x32 pixels.");
         }
 

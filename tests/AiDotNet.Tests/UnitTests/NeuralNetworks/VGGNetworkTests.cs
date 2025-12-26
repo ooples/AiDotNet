@@ -328,6 +328,37 @@ public class VGGNetworkTests
         Assert.Equal(10, output.Shape[0]);
     }
 
+    [Fact]
+    public void VGGNetwork_Predict_With4DInput_ReturnsCorrectShape()
+    {
+        // Arrange - test with batch dimension [B, C, H, W]
+        var config = new VGGConfiguration(VGGVariant.VGG11, numClasses: 10,
+            inputHeight: 32, inputWidth: 32);
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.ThreeDimensional,
+            inputHeight: 32,
+            inputWidth: 32,
+            inputDepth: 3,
+            outputSize: 10,
+            taskType: NeuralNetworkTaskType.MultiClassClassification
+        );
+        var network = new VGGNetwork<float>(architecture, config);
+
+        // Create 4D input with batch size 1: [1, 3, 32, 32]
+        var input = new Tensor<float>([1, 3, 32, 32]);
+        for (int i = 0; i < input.Length; i++)
+        {
+            input[i] = 0.5f;
+        }
+
+        // Act
+        var output = network.Predict(input);
+
+        // Assert - output should maintain batch dimension
+        Assert.True(output.Shape.Length >= 1);
+        Assert.Equal(10, output.Shape[output.Shape.Length - 1]);
+    }
+
     #endregion
 
     #region VGGNetwork Training Tests
