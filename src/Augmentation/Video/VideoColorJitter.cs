@@ -124,6 +124,11 @@ public class VideoColorJitter<T> : SpatialVideoAugmenterBase<T>
         {
             for (int x = 0; x < width; x++)
             {
+                // Determine range based on normalization
+                double maxVal = frame.IsNormalized ? 1.0 : 255.0;
+                double midPoint = maxVal / 2.0;
+                double brightnessScaled = brightness * maxVal;
+
                 if (channels >= 3)
                 {
                     // RGB processing
@@ -131,24 +136,21 @@ public class VideoColorJitter<T> : SpatialVideoAugmenterBase<T>
                     double g = NumOps.ToDouble(frame.GetPixel(y, x, 1));
                     double b = NumOps.ToDouble(frame.GetPixel(y, x, 2));
 
-                    // Apply brightness (additive)
-                    r += brightness;
-                    g += brightness;
-                    b += brightness;
+                    // Apply brightness (additive, scaled to range)
+                    r += brightnessScaled;
+                    g += brightnessScaled;
+                    b += brightnessScaled;
 
-                    // Apply contrast (multiplicative around 0.5)
-                    r = (r - 0.5) * contrast + 0.5;
-                    g = (g - 0.5) * contrast + 0.5;
-                    b = (b - 0.5) * contrast + 0.5;
+                    // Apply contrast (multiplicative around midpoint)
+                    r = (r - midPoint) * contrast + midPoint;
+                    g = (g - midPoint) * contrast + midPoint;
+                    b = (b - midPoint) * contrast + midPoint;
 
                     // Apply saturation
                     double gray = 0.299 * r + 0.587 * g + 0.114 * b;
                     r = gray + (r - gray) * saturation;
                     g = gray + (g - gray) * saturation;
                     b = gray + (b - gray) * saturation;
-
-                    // Determine clamping range based on normalization
-                    double maxVal = frame.IsNormalized ? 1.0 : 255.0;
 
                     // Clamp to appropriate range
                     result.SetPixel(y, x, 0, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, r))));
@@ -165,9 +167,8 @@ public class VideoColorJitter<T> : SpatialVideoAugmenterBase<T>
                 {
                     // Grayscale - apply brightness and contrast only
                     double val = NumOps.ToDouble(frame.GetPixel(y, x, 0));
-                    val += brightness;
-                    val = (val - 0.5) * contrast + 0.5;
-                    double maxVal = frame.IsNormalized ? 1.0 : 255.0;
+                    val += brightnessScaled;
+                    val = (val - midPoint) * contrast + midPoint;
                     result.SetPixel(y, x, 0, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, val))));
                 }
             }

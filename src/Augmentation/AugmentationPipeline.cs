@@ -110,6 +110,16 @@ public class AugmentationPipeline<T, TData> : IAugmentationPolicy<T, TData>
     /// <returns>This pipeline for method chaining.</returns>
     public AugmentationPipeline<T, TData> OneOf(params IAugmentation<T, TData>[] augmentations)
     {
+        if (augmentations is null)
+        {
+            throw new ArgumentNullException(nameof(augmentations));
+        }
+
+        if (augmentations.Any(a => a is null))
+        {
+            throw new ArgumentException("Augmentations array cannot contain null elements.", nameof(augmentations));
+        }
+
         var subPipeline = new AugmentationPipeline<T, TData>("OneOf")
         {
             Order = AugmentationOrder.OneOf
@@ -126,6 +136,16 @@ public class AugmentationPipeline<T, TData> : IAugmentationPolicy<T, TData>
     /// <returns>This pipeline for method chaining.</returns>
     public AugmentationPipeline<T, TData> Shuffle(params IAugmentation<T, TData>[] augmentations)
     {
+        if (augmentations is null)
+        {
+            throw new ArgumentNullException(nameof(augmentations));
+        }
+
+        if (augmentations.Any(a => a is null))
+        {
+            throw new ArgumentException("Augmentations array cannot contain null elements.", nameof(augmentations));
+        }
+
         var subPipeline = new AugmentationPipeline<T, TData>("Shuffle")
         {
             Order = AugmentationOrder.Random

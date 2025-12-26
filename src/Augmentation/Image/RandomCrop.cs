@@ -222,6 +222,11 @@ public class RandomCrop<T> : SpatialAugmentationBase<T, ImageTensor<T>>
             }
         }
 
+        // For simple crop mode (no scaling), scale factors are 1.0 since we do a direct 1:1 copy
+        // For scale cropping mode, we resize from cropW/cropH to CropWidth/CropHeight
+        double scaleX = UseScaleCropping ? (double)CropWidth / cropW : 1.0;
+        double scaleY = UseScaleCropping ? (double)CropHeight / cropH : 1.0;
+
         var parameters = new Dictionary<string, object>
         {
             ["crop_x"] = cropX,
@@ -232,8 +237,8 @@ public class RandomCrop<T> : SpatialAugmentationBase<T, ImageTensor<T>>
             ["output_height"] = CropHeight,
             ["original_width"] = width,
             ["original_height"] = height,
-            ["scale_x"] = (double)CropWidth / cropW,
-            ["scale_y"] = (double)CropHeight / cropH
+            ["scale_x"] = scaleX,
+            ["scale_y"] = scaleY
         };
 
         return (result, parameters);

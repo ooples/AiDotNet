@@ -440,8 +440,9 @@ public partial class PredictionModelResult<T, TInput, TOutput>
         else
         {
             // For other methods, confidence is inversely related to variance
+            // Use normalized formula: 1/(1+stdDev) to properly map to [0,1] range
             double stdDev = CalculateStandardDeviation(vectors);
-            return Math.Max(0, 1.0 - stdDev);
+            return 1.0 / (1.0 + stdDev);
         }
     }
 

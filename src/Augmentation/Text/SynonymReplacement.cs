@@ -166,7 +166,14 @@ public class SynonymReplacement<T> : TextAugmenterBase<T>
 
         // Title case (first letter uppercase)
         if (char.IsUpper(original[0]))
+        {
+            if (replacement.Length == 1)
+            {
+                return char.ToUpperInvariant(replacement[0]).ToString();
+            }
+
             return char.ToUpperInvariant(replacement[0]) + replacement.Substring(1).ToLowerInvariant();
+        }
 
         // All lowercase
         return replacement.ToLowerInvariant();
