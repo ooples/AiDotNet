@@ -46,6 +46,63 @@ public static class ClipModelLoader
     private const string DefaultCacheDir = ".cache/huggingface/clip";
 
     /// <summary>
+    /// Validates that a combined path does not escape the base directory (path traversal protection).
+    /// </summary>
+    /// <param name="baseDirectory">The base directory that should contain the result.</param>
+    /// <param name="relativePath">The relative path to combine with the base.</param>
+    /// <returns>The validated full path.</returns>
+    /// <exception cref="InvalidOperationException">If path traversal is detected.</exception>
+    private static string ValidateAndCombinePath(string baseDirectory, string relativePath)
+    {
+        // Reject obviously malicious patterns early
+        if (relativePath.Contains("..") || relativePath.StartsWith("/", StringComparison.Ordinal) ||
+            relativePath.StartsWith("\\", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Invalid path component detected: '{relativePath}'. Path traversal is not allowed.");
+        }
+
+        string baseFullPath = Path.GetFullPath(baseDirectory);
+        if (!baseFullPath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+        {
+            baseFullPath += Path.DirectorySeparatorChar;
+        }
+
+        string combinedPath = Path.Combine(baseDirectory, relativePath);
+        string combinedFullPath = Path.GetFullPath(combinedPath);
+
+        if (!combinedFullPath.StartsWith(baseFullPath, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Path traversal detected. The path '{relativePath}' would escape the base directory.");
+        }
+
+        return combinedFullPath;
+    }
+
+    /// <summary>
+    /// Sanitizes a model ID for use as a directory name.
+    /// </summary>
+    /// <param name="modelId">The model ID to sanitize.</param>
+    /// <returns>A sanitized directory name.</returns>
+    /// <exception cref="ArgumentException">If the model ID contains invalid characters.</exception>
+    private static string SanitizeModelIdForPath(string modelId)
+    {
+        // Replace forward slash with double dash (standard HuggingFace convention)
+        // and validate no path traversal characters remain
+        var sanitized = modelId.Replace("/", "--");
+
+        if (sanitized.Contains("..") || sanitized.Contains("\\") || sanitized.Contains(":"))
+        {
+            throw new ArgumentException(
+                $"Model ID '{modelId}' contains invalid characters for use as a directory name.",
+                nameof(modelId));
+        }
+
+        return sanitized;
+    }
+
+    /// <summary>
     /// Known CLIP model configurations on HuggingFace Hub.
     /// </summary>
     public static readonly IReadOnlyDictionary<string, ClipModelConfig> KnownModels = new Dictionary<string, ClipModelConfig>
@@ -107,9 +164,10 @@ public static class ClipModelLoader
         // Get or create model configuration
         var config = GetModelConfig(modelId);
 
-        // Set up cache directory
+        // Set up cache directory with path traversal protection
         cacheDir ??= GetDefaultCacheDir();
-        var modelCacheDir = Path.Combine(cacheDir, modelId.Replace("/", "--"));
+        var sanitizedModelId = SanitizeModelIdForPath(modelId);
+        var modelCacheDir = ValidateAndCombinePath(cacheDir, sanitizedModelId);
 
         if (!Directory.Exists(modelCacheDir))
             Directory.CreateDirectory(modelCacheDir);
@@ -123,7 +181,7 @@ public static class ClipModelLoader
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var localPath = Path.Combine(modelCacheDir, fileName);
+            var localPath = ValidateAndCombinePath(modelCacheDir, fileName);
             downloadedFiles[fileName] = localPath;
 
             if (!File.Exists(localPath))
@@ -191,8 +249,9 @@ public static class ClipModelLoader
 
         config ??= DetectModelConfig(modelPath);
 
-        var imageEncoderPath = Path.Combine(modelPath, config.ImageEncoderFile);
-        var textEncoderPath = Path.Combine(modelPath, config.TextEncoderFile);
+        // Validate paths to prevent path traversal attacks
+        var imageEncoderPath = ValidateAndCombinePath(modelPath, config.ImageEncoderFile);
+        var textEncoderPath = ValidateAndCombinePath(modelPath, config.TextEncoderFile);
 
         if (!File.Exists(imageEncoderPath))
             throw new FileNotFoundException($"Image encoder not found: {imageEncoderPath}");
@@ -242,7 +301,7 @@ public static class ClipModelLoader
         var requiredFiles = GetRequiredFiles(config);
         foreach (var fileName in requiredFiles)
         {
-            var localPath = Path.Combine(modelCacheDir, fileName);
+            var localPath = ValidateAndCombinePath(modelCacheDir, fileName);
             if (!File.Exists(localPath))
                 return false;
         }
@@ -261,7 +320,8 @@ public static class ClipModelLoader
             return;
 
         cacheDir ??= GetDefaultCacheDir();
-        var modelCacheDir = Path.Combine(cacheDir, modelId.Replace("/", "--"));
+        var sanitizedModelId = SanitizeModelIdForPath(modelId);
+        var modelCacheDir = ValidateAndCombinePath(cacheDir, sanitizedModelId);
 
         if (Directory.Exists(modelCacheDir))
         {
@@ -288,7 +348,7 @@ public static class ClipModelLoader
     private static ClipModelConfig DetectModelConfig(string modelPath)
     {
         // Try to load config.json if it exists
-        var configPath = Path.Combine(modelPath, "config.json");
+        var configPath = ValidateAndCombinePath(modelPath, "config.json");
         if (File.Exists(configPath))
         {
             try
@@ -305,9 +365,13 @@ public static class ClipModelLoader
                     MaxSequenceLength = configObj["text_config"]?["max_position_embeddings"]?.Value<int>() ?? 77
                 };
             }
-            catch
+            catch (JsonException)
             {
-                // Fall through to defaults
+                // Invalid JSON - fall through to defaults
+            }
+            catch (IOException)
+            {
+                // File read error - fall through to defaults
             }
         }
 
@@ -363,20 +427,30 @@ public static class ClipModelLoader
             // Try to load using HuggingFace tokenizer loader
             return HuggingFaceTokenizerLoader.LoadFromDirectory(modelPath);
         }
-        catch
+        catch (FileNotFoundException)
         {
-            // Fall back to CLIP factory
-            var vocabPath = Path.Combine(modelPath, "vocab.json");
-            var mergesPath = Path.Combine(modelPath, "merges.txt");
-
-            if (File.Exists(vocabPath) && File.Exists(mergesPath))
-            {
-                return ClipTokenizerFactory.FromPretrained(vocabPath, mergesPath);
-            }
-
-            // Last resort: create simple tokenizer
-            return ClipTokenizerFactory.CreateSimple();
+            // Tokenizer files not found - fall back to CLIP factory
         }
+        catch (IOException)
+        {
+            // File read error - fall back to CLIP factory
+        }
+        catch (JsonException)
+        {
+            // Invalid tokenizer JSON - fall back to CLIP factory
+        }
+
+        // Fall back to CLIP factory
+        var vocabPath = ValidateAndCombinePath(modelPath, "vocab.json");
+        var mergesPath = ValidateAndCombinePath(modelPath, "merges.txt");
+
+        if (File.Exists(vocabPath) && File.Exists(mergesPath))
+        {
+            return ClipTokenizerFactory.FromPretrained(vocabPath, mergesPath);
+        }
+
+        // Last resort: create simple tokenizer
+        return ClipTokenizerFactory.CreateSimple();
     }
 
     private static async Task DownloadFileAsync(
