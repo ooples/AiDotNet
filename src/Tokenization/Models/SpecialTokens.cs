@@ -110,6 +110,31 @@ namespace AiDotNet.Tokenization.Models
         };
 
         /// <summary>
+        /// Creates CLIP-style special tokens.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// CLIP uses a specific token format:
+        /// - Start of text: <|startoftext|>
+        /// - End of text: <|endoftext|>
+        /// </para>
+        /// <para><b>For Beginners:</b> CLIP uses special markers to tell the model
+        /// where text begins and ends. These are similar to GPT tokens but with
+        /// a distinct start token.
+        /// </para>
+        /// </remarks>
+        public static SpecialTokens Clip() => new SpecialTokens
+        {
+            UnkToken = "<|endoftext|>",
+            PadToken = "<|endoftext|>",
+            BosToken = "<|startoftext|>",
+            EosToken = "<|endoftext|>",
+            ClsToken = "<|startoftext|>",
+            SepToken = string.Empty,
+            MaskToken = string.Empty
+        };
+
+        /// <summary>
         /// Creates default special tokens (BERT-style).
         /// </summary>
         public static SpecialTokens Default() => Bert();
