@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -165,14 +166,7 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
 
         int batchSize = inputs.Length;
 
-        // Assume TOutput is Vector<T> for batch processing
-        if (typeof(TOutput) != typeof(Vector<T>))
-        {
-            throw new NotSupportedException(
-                $"Batch processing requires TOutput to be Vector<T>, but got {typeof(TOutput).Name}");
-        }
-
-        // Collect all outputs into matrices
+        // Collect all outputs into matrices using ConversionsHelper for generic TOutput support
         var studentOutputsList = new List<Vector<T>>(batchSize);
         var teacherOutputsList = new List<Vector<T>>(batchSize);
 
@@ -180,29 +174,23 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
         {
             var input = inputs[i];
 
-            // Student forward pass
+            // Student forward pass - use ConversionsHelper to convert any TOutput to Vector<T>
             var studentOutput = studentForward(input);
-            if (studentOutput is not null and Vector<T> studentVec)
-            {
-                studentOutputsList.Add(studentVec);
-            }
-            else
+            if (studentOutput == null)
             {
                 throw new InvalidOperationException(
-                    $"Student forward pass returned invalid output type at index {i}");
+                    $"Student forward pass returned null at index {i}");
             }
+            studentOutputsList.Add(ConversionsHelper.ConvertToVector<T, TOutput>(studentOutput));
 
-            // Get teacher predictions
+            // Get teacher predictions - use ConversionsHelper to convert any TOutput to Vector<T>
             var teacherOutput = GetTeacherPredictions(input, i);
-            if (teacherOutput is not null and Vector<T> teacherVec)
-            {
-                teacherOutputsList.Add(teacherVec);
-            }
-            else
+            if (teacherOutput == null)
             {
                 throw new InvalidOperationException(
-                    $"Teacher forward pass returned invalid output type at index {i}");
+                    $"Teacher forward pass returned null at index {i}");
             }
+            teacherOutputsList.Add(ConversionsHelper.ConvertToVector<T, TOutput>(teacherOutput));
         }
 
         // Convert lists to matrices
@@ -219,24 +207,22 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
             }
         }
 
-        // Convert labels to matrix if provided
+        // Convert labels to matrix if provided - use ConversionsHelper for generic TOutput support
         Matrix<T>? labelsBatchMatrix = null;
         if (trueLabels != null && trueLabels.Length > 0)
         {
             labelsBatchMatrix = new Matrix<T>(batchSize, outputDim);
             for (int r = 0; r < batchSize; r++)
             {
-                if (trueLabels[r] is not null and Vector<T> labelVec)
-                {
-                    for (int c = 0; c < outputDim; c++)
-                    {
-                        labelsBatchMatrix[r, c] = labelVec[c];
-                    }
-                }
-                else
+                if (trueLabels[r] == null)
                 {
                     throw new InvalidOperationException(
-                        $"Label at index {r} has invalid type");
+                        $"Label at index {r} is null");
+                }
+                var labelVec = ConversionsHelper.ConvertToVector<T, TOutput>(trueLabels[r]);
+                for (int c = 0; c < outputDim; c++)
+                {
+                    labelsBatchMatrix[r, c] = labelVec[c];
                 }
             }
         }
@@ -245,11 +231,11 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
         var batchLoss = DistillationStrategy.ComputeLoss(studentBatchMatrix, teacherBatchMatrix, labelsBatchMatrix);
         var batchGradient = DistillationStrategy.ComputeGradient(studentBatchMatrix, teacherBatchMatrix, labelsBatchMatrix);
 
-        // Apply gradients to each sample
+        // Apply gradients to each sample - use ConversionsHelper to convert Vector<T> back to TOutput
         for (int i = 0; i < batchSize; i++)
         {
             var sampleGradient = batchGradient.GetRow(i);
-            studentBackward((TOutput)(object)sampleGradient);
+            studentBackward(ConversionsHelper.ConvertVectorToInputWithoutReference<T, TOutput>(sampleGradient));
         }
 
         return batchLoss;
@@ -361,7 +347,7 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
                 // Compute validation loss for early stopping
                 if (_useEarlyStopping)
                 {
-                    // Collect validation outputs into matrices
+                    // Collect validation outputs into matrices using ConversionsHelper
                     int valSize = validationInputs.Length;
                     var valStudentOutputs = new List<Vector<T>>(valSize);
                     var valTeacherOutputs = new List<Vector<T>>(valSize);
@@ -369,26 +355,20 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
                     for (int i = 0; i < valSize; i++)
                     {
                         var studentOutput = studentForward(validationInputs[i]);
-                        if (studentOutput is not null and Vector<T> studentVec)
-                        {
-                            valStudentOutputs.Add(studentVec);
-                        }
-                        else
+                        if (studentOutput == null)
                         {
                             throw new InvalidOperationException(
-                                $"Validation student output at index {i} has invalid type");
+                                $"Validation student output at index {i} is null");
                         }
+                        valStudentOutputs.Add(ConversionsHelper.ConvertToVector<T, TOutput>(studentOutput));
 
                         var teacherOutput = GetTeacherPredictions(validationInputs[i], i);
-                        if (teacherOutput is not null and Vector<T> teacherVec)
-                        {
-                            valTeacherOutputs.Add(teacherVec);
-                        }
-                        else
+                        if (teacherOutput == null)
                         {
                             throw new InvalidOperationException(
-                                $"Validation teacher output at index {i} has invalid type");
+                                $"Validation teacher output at index {i} is null");
                         }
+                        valTeacherOutputs.Add(ConversionsHelper.ConvertToVector<T, TOutput>(teacherOutput));
                     }
 
                     // Convert to matrices
@@ -405,24 +385,22 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
                         }
                     }
 
-                    // Convert labels to matrix
+                    // Convert labels to matrix using ConversionsHelper
                     Matrix<T>? valLabelsMatrix = null;
                     if (validationLabels != null && validationLabels.Length > 0)
                     {
                         valLabelsMatrix = new Matrix<T>(valSize, valOutputDim);
                         for (int r = 0; r < valSize; r++)
                         {
-                            if (validationLabels[r] is not null and Vector<T> labelVec)
-                            {
-                                for (int c = 0; c < valOutputDim; c++)
-                                {
-                                    valLabelsMatrix[r, c] = labelVec[c];
-                                }
-                            }
-                            else
+                            if (validationLabels[r] == null)
                             {
                                 throw new InvalidOperationException(
-                                    $"Validation label at index {r} has invalid type");
+                                    $"Validation label at index {r} is null");
+                            }
+                            var labelVec = ConversionsHelper.ConvertToVector<T, TOutput>(validationLabels[r]);
+                            for (int c = 0; c < valOutputDim; c++)
+                            {
+                                valLabelsMatrix[r, c] = labelVec[c];
                             }
                         }
                     }
@@ -606,25 +584,24 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
     protected abstract TOutput GetTeacherPredictions(TInput input, int index);
 
     /// <summary>
-    /// Determines if a prediction matches the true label. Default implementation for Vector outputs.
+    /// Determines if a prediction matches the true label.
     /// </summary>
     /// <param name="prediction">Student's prediction.</param>
     /// <param name="trueLabel">True label.</param>
     /// <returns>True if prediction is correct.</returns>
     /// <remarks>
-    /// <para><b>For Classification:</b> Uses argmax to find predicted class and compares with true class.</para>
-    /// <para><b>Override This:</b> If you have different output types or evaluation criteria.</para>
+    /// <para><b>For Classification:</b> Uses argmax to find predicted class and compares with true class.
+    /// The conversion to Vector&lt;T&gt; is handled by ConversionsHelper, so this works for any TOutput type
+    /// (Vector&lt;T&gt;, Tensor&lt;T&gt;, T[], or scalar T).</para>
+    /// <para><b>Override This:</b> If you need different evaluation criteria (e.g., regression).</para>
     /// </remarks>
     protected virtual bool IsCorrectPrediction(TOutput prediction, TOutput trueLabel)
     {
-        // Default implementation for Vector<T> - finds argmax
-        if (prediction is Vector<T> predVector && trueLabel is Vector<T> labelVector)
-        {
-            return ArgMax(predVector) == ArgMax(labelVector);
-        }
+        // Use ConversionsHelper to convert any TOutput to Vector<T>
+        var predVector = ConversionsHelper.ConvertToVector<T, TOutput>(prediction);
+        var labelVector = ConversionsHelper.ConvertToVector<T, TOutput>(trueLabel);
 
-        throw new NotImplementedException(
-            $"IsCorrectPrediction must be overridden for output type {typeof(TOutput).Name}");
+        return ArgMax(predVector) == ArgMax(labelVector);
     }
 
     /// <summary>
