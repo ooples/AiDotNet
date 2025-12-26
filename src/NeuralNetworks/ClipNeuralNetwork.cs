@@ -388,8 +388,7 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         else
         {
             // Fallback to sequential processing for varying sequence lengths
-            var embeddings = new List<Vector<T>>();
-            foreach (var tokenResult in tokenResultList)
+            return tokenResultList.Select(tokenResult =>
             {
                 var inputIds = tokenResult.TokenIds.ToArray();
                 var inputTensor = new OnnxTensors.DenseTensor<long>(inputIds.Select(i => (long)i).ToArray(), new[] { 1, inputIds.Length });
@@ -403,10 +402,8 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
                 var outputTensor = results.First().AsTensor<float>();
 
                 var embedding = ConvertToVector(outputTensor);
-                embeddings.Add(NormalizeVector(embedding));
-            }
-
-            return embeddings;
+                return NormalizeVector(embedding);
+            }).ToList();
         }
     }
 
@@ -745,19 +742,10 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         if (image.Shape.Length != 3 && image.Shape.Length != 4)
             throw new ArgumentException($"Image tensor must have 3 or 4 dimensions, got {image.Shape.Length}.");
 
-        int channels, height, width;
-        if (image.Shape.Length == 3)
-        {
-            channels = image.Shape[0];
-            height = image.Shape[1];
-            width = image.Shape[2];
-        }
-        else
-        {
-            channels = image.Shape[1];
-            height = image.Shape[2];
-            width = image.Shape[3];
-        }
+        bool is3D = image.Shape.Length == 3;
+        int channels = is3D ? image.Shape[0] : image.Shape[1];
+        int height = is3D ? image.Shape[1] : image.Shape[2];
+        int width = is3D ? image.Shape[2] : image.Shape[3];
 
         if (channels != 3)
             throw new ArgumentException($"Image must have 3 channels (RGB), got {channels}.");

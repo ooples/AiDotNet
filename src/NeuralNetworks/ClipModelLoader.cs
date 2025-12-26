@@ -403,15 +403,16 @@ public static class ClipModelLoader
     private static string? FindOnnxFile(string directory, params string[] keywords)
     {
         var onnxFiles = Directory.GetFiles(directory, "*.onnx");
-        foreach (var file in onnxFiles)
+
+        var matchingFile = onnxFiles.FirstOrDefault(file =>
         {
             var fileName = Path.GetFileName(file).ToLowerInvariant();
-            foreach (var keyword in keywords)
-            {
-                if (fileName.Contains(keyword.ToLowerInvariant()))
-                    return Path.GetFileName(file);
-            }
-        }
+            return keywords.Any(keyword => fileName.Contains(keyword.ToLowerInvariant()));
+        });
+
+        if (matchingFile != null)
+            return Path.GetFileName(matchingFile);
+
         return onnxFiles.Length > 0 ? Path.GetFileName(onnxFiles[0]) : null;
     }
 
