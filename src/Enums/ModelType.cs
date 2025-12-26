@@ -1488,7 +1488,31 @@ public enum ModelType
     /// Strengths: Robust to mesh quality, captures intrinsic geometry, state-of-the-art on surfaces
     /// </para>
     /// </remarks>
-    DiffusionNet
+    DiffusionNet,
+
+    /// <summary>
+    /// A clustering algorithm that groups similar data points together.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Clustering algorithms find natural groups in data without being told
+    /// what groups to look for. Unlike classification (which learns from labeled examples),
+    /// clustering discovers patterns on its own.
+    ///
+    /// Common clustering algorithms:
+    /// - K-Means: Divides data into k spherical clusters
+    /// - DBSCAN: Finds clusters of arbitrary shape based on density
+    /// - Hierarchical: Creates a tree of nested clusters
+    /// - GMM: Models clusters as Gaussian distributions
+    ///
+    /// Applications:
+    /// - Customer segmentation
+    /// - Image segmentation
+    /// - Anomaly detection
+    /// - Document grouping
+    /// </para>
+    /// </remarks>
+    Clustering
 }
 
 

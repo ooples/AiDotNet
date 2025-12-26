@@ -223,7 +223,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             {
                 var options = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
                 {
-                    LearningRate = learningRate
+                    InitialLearningRate = learningRate
                 };
                 _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, options);
             }
