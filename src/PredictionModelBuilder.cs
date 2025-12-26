@@ -38,9 +38,7 @@ global using AiDotNet.Tokenization.HuggingFace;
 global using AiDotNet.Tokenization.Interfaces;
 global using AiDotNet.Tools;
 global using AiDotNet.UncertaintyQuantification.Layers;
-using AiDotNet.Augmentation.Integration;
-using AiDotNet.Augmentation.Interfaces;
-using AiDotNet.Augmentation.TTA;
+using AiDotNet.Augmentation;
 using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.Policies;
 using AiDotNet.AutoML.SearchSpace;
@@ -3936,9 +3934,9 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <param name="pipelineBuilder">Action to configure the augmentation pipeline.</param>
     /// <returns>The builder instance for method chaining.</returns>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingAugmentation<TAugData>(
-        Action<Augmentation.Integration.TrainingAugmentationBuilder<T, TAugData>> pipelineBuilder)
+        Action<Augmentation.TrainingAugmentationBuilder<T, TAugData>> pipelineBuilder)
     {
-        var builder = new Augmentation.Integration.TrainingAugmentationBuilder<T, TAugData>();
+        var builder = new Augmentation.TrainingAugmentationBuilder<T, TAugData>();
         pipelineBuilder(builder);
         _trainingAugmentationConfiguration = builder.Build();
         return this;
@@ -3951,7 +3949,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <param name="configuration">The augmentation configuration.</param>
     /// <returns>The builder instance for method chaining.</returns>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingAugmentation<TAugData>(
-        Augmentation.Integration.TrainingAugmentationConfiguration<T, TAugData> configuration)
+        Augmentation.TrainingAugmentationConfiguration<T, TAugData> configuration)
     {
         _trainingAugmentationConfiguration = configuration;
         return this;

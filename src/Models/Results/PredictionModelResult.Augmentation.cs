@@ -1,7 +1,5 @@
 using AiDotNet.Augmentation;
-using AiDotNet.Augmentation.Data;
-using AiDotNet.Augmentation.Interfaces;
-using AiDotNet.Augmentation.TTA;
+using AiDotNet.Augmentation.Image;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Models.Results;

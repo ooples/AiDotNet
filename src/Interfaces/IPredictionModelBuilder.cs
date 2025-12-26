@@ -1863,7 +1863,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="pipelineBuilder">Action to configure the augmentation pipeline.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingAugmentation<TAugData>(
-        Action<Augmentation.Integration.TrainingAugmentationBuilder<T, TAugData>> pipelineBuilder);
+        Action<Augmentation.TrainingAugmentationBuilder<T, TAugData>> pipelineBuilder);
 
     /// <summary>
     /// Configures data augmentation for training using a pre-built configuration.
@@ -1872,7 +1872,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="configuration">The augmentation configuration.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingAugmentation<TAugData>(
-        Augmentation.Integration.TrainingAugmentationConfiguration<T, TAugData> configuration);
+        Augmentation.TrainingAugmentationConfiguration<T, TAugData> configuration);
 
     /// <summary>
     /// Configures Test-Time Augmentation to improve prediction accuracy during inference.
@@ -1918,7 +1918,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="pipelineBuilder">Optional action to configure the augmentation pipeline.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureTestTimeAugmentation<TAugData>(
-        Action<Augmentation.TTA.TestTimeAugmentationBuilder<T, TAugData>>? pipelineBuilder = null);
+        Action<Augmentation.TestTimeAugmentationBuilder<T, TAugData>>? pipelineBuilder = null);
 
     /// <summary>
     /// Configures Test-Time Augmentation using a pre-built configuration object.
@@ -1927,6 +1927,6 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="configuration">The TTA configuration (optional, uses industry defaults if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureTestTimeAugmentation<TAugData>(
-        Augmentation.TTA.TestTimeAugmentationConfiguration<T, TAugData>? configuration = null);
+        Augmentation.TestTimeAugmentationConfiguration<T, TAugData>? configuration = null);
 
 }
