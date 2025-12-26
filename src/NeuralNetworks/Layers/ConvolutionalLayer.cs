@@ -284,6 +284,11 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T> _lastOutput;
 
     /// <summary>
+    /// Tracks whether a batch dimension was added during the forward pass.
+    /// </summary>
+    private bool _addedBatchDimension;
+
+    /// <summary>
     /// Random number generator used for weight initialization.
     /// </summary>
     /// <remarks>
@@ -845,6 +850,17 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Handle 3D gradient input by adding batch dimension if needed
+        Tensor<T> gradient4D;
+        if (outputGradient.Shape.Length == 3)
+        {
+            gradient4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
+        }
+        else
+        {
+            gradient4D = outputGradient;
+        }
+
         // Convert parameters to computation nodes
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
         var kernelNode = Autodiff.TensorOperations<T>.Variable(_kernels, "kernel", requiresGradient: true);
@@ -873,8 +889,8 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             activated = convOutput;
         }
 
-        // Set output gradient
-        activated.Gradient = outputGradient;
+        // Set output gradient (use 4D version)
+        activated.Gradient = gradient4D;
 
         // Inline topological sort
         var visited = new HashSet<Autodiff.ComputationNode<T>>();
@@ -927,7 +943,15 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             _biasesGradient = biasNode.Gradient;
         }
 
-        return inputNode.Gradient!;
+        var inputGrad = inputNode.Gradient!;
+        
+        // Return with matching dimensions
+        if (_addedBatchDimension)
+        {
+            // Remove batch dimension: [1, C, H, W] -> [C, H, W]
+            return inputGrad.Reshape(inputGrad.Shape[1], inputGrad.Shape[2], inputGrad.Shape[3]);
+        }
+        return inputGrad;
     }
 
     /// <summary>
@@ -1141,6 +1165,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         // Clear cached values from forward pass
         _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+        _addedBatchDimension = false;
     }
 
     /// <summary>

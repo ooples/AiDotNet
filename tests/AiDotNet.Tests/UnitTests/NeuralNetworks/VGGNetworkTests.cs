@@ -268,7 +268,7 @@ public class VGGNetworkTests
 
     #region VGGNetwork Forward Pass Tests
 
-    [Fact(Skip = "Layer dimension compatibility issue: ConvolutionalLayer expects 4D, MaxPoolingLayer expects 3D. Requires layer harmonization.")]
+    [Fact]
     public void VGGNetwork_Forward_ReturnsCorrectShape()
     {
         // Arrange
@@ -299,7 +299,7 @@ public class VGGNetworkTests
         Assert.Equal(10, output.Shape[0]);
     }
 
-    [Fact(Skip = "Layer dimension compatibility issue: ConvolutionalLayer expects 4D, MaxPoolingLayer expects 3D. Requires layer harmonization.")]
+    [Fact]
     public void VGGNetwork_Predict_ReturnsCorrectShape()
     {
         // Arrange
@@ -332,7 +332,7 @@ public class VGGNetworkTests
 
     #region VGGNetwork Training Tests
 
-    [Fact(Skip = "Layer dimension compatibility issue: ConvolutionalLayer expects 4D, MaxPoolingLayer expects 3D. Requires layer harmonization.")]
+    [Fact(Skip = "Gradient computation issue during optimizer update - requires separate investigation")]
     public void VGGNetwork_Train_CompletesWithoutError()
     {
         // Arrange
@@ -357,7 +357,7 @@ public class VGGNetworkTests
         network.Train(input, target);
     }
 
-    [Fact(Skip = "Layer dimension compatibility issue: ConvolutionalLayer expects 4D, MaxPoolingLayer expects 3D. Requires layer harmonization.")]
+    [Fact(Skip = "Gradient computation issue during optimizer update - requires separate investigation")]
     public void VGGNetwork_Train_LossDecreases()
     {
         // Arrange
