@@ -107,6 +107,16 @@ public class TabularMixUp<T> : TabularMixingAugmenterBase<T>
             throw new ArgumentException("Both data matrices must have the same number of features.");
         }
 
+        if (labels1.Length < rows1)
+        {
+            throw new ArgumentException("labels1 length must match data1 row count.", nameof(labels1));
+        }
+
+        if (labels2.Length < rows2)
+        {
+            throw new ArgumentException("labels2 length must match data2 row count.", nameof(labels2));
+        }
+
         // Use minimum row count for mixing
         int rows = Math.Min(rows1, rows2);
         var mixedData = new Matrix<T>(rows, cols);

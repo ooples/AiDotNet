@@ -149,13 +149,24 @@ public class Compose<T, TData> : IAugmentation<T, TData>, ISpatialAugmentation<T
     }
 
     /// <summary>
-    /// Adds an augmentation to the end of this composition.
+    /// Creates a new composition with an additional augmentation appended.
     /// </summary>
-    /// <param name="augmentation">The augmentation to add.</param>
-    /// <returns>This composition for chaining.</returns>
-    public Compose<T, TData> Add(IAugmentation<T, TData> augmentation)
+    /// <param name="augmentation">The augmentation to append.</param>
+    /// <returns>A new Compose instance with the augmentation added.</returns>
+    /// <remarks>
+    /// This method returns a new immutable instance rather than modifying the current one,
+    /// making it safe for use in multi-threaded scenarios.
+    /// </remarks>
+    public Compose<T, TData> With(IAugmentation<T, TData> augmentation)
     {
-        _augmentations.Add(augmentation ?? throw new ArgumentNullException(nameof(augmentation)));
-        return this;
+        if (augmentation is null)
+            throw new ArgumentNullException(nameof(augmentation));
+
+        var newList = new List<IAugmentation<T, TData>>(_augmentations) { augmentation };
+        return new Compose<T, TData>(newList, Probability)
+        {
+            IsTrainingOnly = IsTrainingOnly,
+            IsEnabled = IsEnabled
+        };
     }
 }

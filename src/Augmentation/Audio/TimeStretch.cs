@@ -88,24 +88,37 @@ public class TimeStretch<T> : AudioAugmenterBase<T>
         newShape[waveform.Rank - 1] = newLength;
         var result = new Tensor<T>(newShape);
 
-        // Simple resampling using linear interpolation
-        // Production implementation would use phase vocoder for better quality
-        for (int i = 0; i < newLength; i++)
+        // Calculate total elements excluding time dimension (handles multi-channel audio)
+        int outerElements = 1;
+        for (int d = 0; d < waveform.Rank - 1; d++)
         {
-            double srcPos = (double)i * originalSamples / newLength;
-            int srcIndex = (int)srcPos;
-            double frac = srcPos - srcIndex;
+            outerElements *= waveform.Shape[d];
+        }
 
-            if (srcIndex >= originalSamples - 1)
+        // Process each channel/batch independently using linear interpolation
+        // Production implementation would use phase vocoder for better quality
+        for (int outer = 0; outer < outerElements; outer++)
+        {
+            int srcOffset = outer * originalSamples;
+            int dstOffset = outer * newLength;
+
+            for (int i = 0; i < newLength; i++)
             {
-                result[i] = waveform[originalSamples - 1];
-            }
-            else
-            {
-                double val1 = NumOps.ToDouble(waveform[srcIndex]);
-                double val2 = NumOps.ToDouble(waveform[srcIndex + 1]);
-                double interpolated = val1 + frac * (val2 - val1);
-                result[i] = NumOps.FromDouble(interpolated);
+                double srcPos = (double)i * originalSamples / newLength;
+                int srcIndex = (int)srcPos;
+                double frac = srcPos - srcIndex;
+
+                if (srcIndex >= originalSamples - 1)
+                {
+                    result[dstOffset + i] = waveform[srcOffset + originalSamples - 1];
+                }
+                else
+                {
+                    double val1 = NumOps.ToDouble(waveform[srcOffset + srcIndex]);
+                    double val2 = NumOps.ToDouble(waveform[srcOffset + srcIndex + 1]);
+                    double interpolated = val1 + frac * (val2 - val1);
+                    result[dstOffset + i] = NumOps.FromDouble(interpolated);
+                }
             }
         }
 
