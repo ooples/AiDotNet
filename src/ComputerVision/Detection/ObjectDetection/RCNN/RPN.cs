@@ -33,6 +33,8 @@ public class RPN<T>
     private readonly AnchorGenerator<T> _anchorGenerator;
     private readonly int _hiddenDim;
     private readonly int _numAnchors;
+    private readonly int _featureStride;
+    private readonly double _baseAnchorSize;
 
     /// <summary>
     /// Gets the anchor generator used by this RPN.
@@ -46,7 +48,8 @@ public class RPN<T>
     /// <param name="hiddenDim">Hidden dimension for the intermediate convolution.</param>
     /// <param name="anchorSizes">Sizes of anchors in pixels.</param>
     /// <param name="aspectRatios">Aspect ratios for anchors.</param>
-    public RPN(int inChannels, int hiddenDim = 256, int[]? anchorSizes = null, double[]? aspectRatios = null)
+    /// <param name="featureLevel">Feature pyramid level to use (0-indexed). Determines stride and base size. Default is middle level.</param>
+    public RPN(int inChannels, int hiddenDim = 256, int[]? anchorSizes = null, double[]? aspectRatios = null, int? featureLevel = null)
     {
         _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         _hiddenDim = hiddenDim;
@@ -73,6 +76,16 @@ public class RPN<T>
             aspectRatios: aspectRatios,
             scales: new double[] { 1.0 },
             strides: strides);
+
+        // Use specified feature level or default to middle level (index 2 for default config: stride=16, baseSize=128)
+        int level = featureLevel ?? Math.Min(2, anchorSizes.Length - 1);
+        if (level < 0 || level >= anchorSizes.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(featureLevel),
+                $"Feature level must be between 0 and {anchorSizes.Length - 1}.");
+        }
+        _featureStride = strides[level];
+        _baseAnchorSize = baseSizes[level];
     }
 
     /// <summary>
@@ -100,8 +113,8 @@ public class RPN<T>
         // Reshape: [B, numAnchors*4, H, W] -> [B, H*W*numAnchors, 4]
         bboxDeltas = ReshapeRPNOutput(bboxDeltas, batch, height, width, 4);
 
-        // Generate anchors for this feature map size (stride=16 typical for P4 features)
-        var anchors = _anchorGenerator.GenerateAnchorsForLevel(height, width, stride: 16, baseSize: 256);
+        // Generate anchors for this feature map size using configured stride and base size
+        var anchors = _anchorGenerator.GenerateAnchorsForLevel(height, width, stride: _featureStride, baseSize: _baseAnchorSize);
 
         return (objectness, bboxDeltas, anchors);
     }

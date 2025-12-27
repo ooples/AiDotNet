@@ -161,8 +161,8 @@ public class DINO<T> : ObjectDetectorBase<T>
             }
         }
 
-        // Apply NMS with high threshold (DINO should have minimal duplicates)
-        var nmsResults = _nms.Apply(candidateDetections, Math.Max(0.8, nmsThreshold));
+        // Apply NMS (DINO typically has minimal duplicates due to set prediction)
+        var nmsResults = _nms.Apply(candidateDetections, nmsThreshold);
 
         if (nmsResults.Count > Options.MaxDetections)
         {

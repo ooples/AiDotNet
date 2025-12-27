@@ -259,6 +259,8 @@ internal class RTDETREncoderLayer<T>
     private readonly MultiHeadSelfAttention<T> _selfAttn;
     private readonly Dense<T> _ffn1;
     private readonly Dense<T> _ffn2;
+    private readonly LayerNorm<T> _norm1;
+    private readonly LayerNorm<T> _norm2;
     private readonly int _hiddenDim;
 
     public RTDETREncoderLayer(int hiddenDim, int numHeads)
@@ -269,6 +271,8 @@ internal class RTDETREncoderLayer<T>
         _selfAttn = new MultiHeadSelfAttention<T>(hiddenDim, numHeads);
         _ffn1 = new Dense<T>(hiddenDim, hiddenDim * 4);
         _ffn2 = new Dense<T>(hiddenDim * 4, hiddenDim);
+        _norm1 = new LayerNorm<T>(hiddenDim);
+        _norm2 = new LayerNorm<T>(hiddenDim);
     }
 
     public Tensor<T> Forward(Tensor<T> x, int[][] spatialShapes, int[] levelStarts)
@@ -276,12 +280,12 @@ internal class RTDETREncoderLayer<T>
         // Self-attention with residual
         var attnOut = _selfAttn.Forward(x);
         var x1 = AddTensors(x, attnOut);
-        x1 = LayerNorm(x1);
+        x1 = _norm1.Forward(x1);
 
         // FFN with residual
         var ffnOut = ApplyFFN(x1);
         var output = AddTensors(x1, ffnOut);
-        output = LayerNorm(output);
+        output = _norm2.Forward(output);
 
         return output;
     }
@@ -290,7 +294,9 @@ internal class RTDETREncoderLayer<T>
     {
         return _selfAttn.GetParameterCount() +
                _ffn1.GetParameterCount() +
-               _ffn2.GetParameterCount();
+               _ffn2.GetParameterCount() +
+               _norm1.GetParameterCount() +
+               _norm2.GetParameterCount();
     }
 
     private Tensor<T> ApplyFFN(Tensor<T> x)
@@ -337,46 +343,6 @@ internal class RTDETREncoderLayer<T>
         {
             result[i] = _numOps.Add(a[i], b[i]);
         }
-        return result;
-    }
-
-    private Tensor<T> LayerNorm(Tensor<T> x)
-    {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-        int hiddenDim = x.Shape[2];
-
-        var result = new Tensor<T>(x.Shape);
-        double eps = 1e-6;
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                double mean = 0;
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    mean += _numOps.ToDouble(x[b, s, d]);
-                }
-                mean /= hiddenDim;
-
-                double variance = 0;
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    double diff = _numOps.ToDouble(x[b, s, d]) - mean;
-                    variance += diff * diff;
-                }
-                variance /= hiddenDim;
-
-                double std = Math.Sqrt(variance + eps);
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    double val = (_numOps.ToDouble(x[b, s, d]) - mean) / std;
-                    result[b, s, d] = _numOps.FromDouble(val);
-                }
-            }
-        }
-
         return result;
     }
 

@@ -316,12 +316,12 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
         // k = floor(4 + log2(sqrt(area) / 224))
         const int k0 = 4;
         const double canonicalSize = 224.0;
-        double k = k0 + Math.Log2(Math.Sqrt(area) / canonicalSize);
+        double k = k0 + MathHelper.Log2(Math.Sqrt(area) / canonicalSize);
         int level = (int)Math.Floor(k);
 
         // Clamp to valid FPN levels (P3=0, P4=1, P5=2, P6=3, etc.)
         // Map from P-levels to array indices: P3->0, P4->1, P5->2
-        int fpnLevel = Math.Clamp(level - 3, 0, numLevels - 1);
+        int fpnLevel = MathHelper.Clamp(level - 3, 0, numLevels - 1);
 
         // Strides for each FPN level: P3=8, P4=16, P5=32, P6=64
         double[] strides = { 8.0, 16.0, 32.0, 64.0 };

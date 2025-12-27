@@ -23,7 +23,24 @@ internal static class DETRHelpers
         List<Tensor<T>> features,
         int hiddenDim)
     {
+        if (features is null || features.Count == 0)
+        {
+            throw new ArgumentException("Features list cannot be null or empty.", nameof(features));
+        }
+
         int batch = features[0].Shape[0];
+
+        // Validate consistent batch size across all features
+        for (int i = 1; i < features.Count; i++)
+        {
+            if (features[i].Shape[0] != batch)
+            {
+                throw new ArgumentException(
+                    $"All features must have the same batch size. Feature 0 has batch={batch}, feature {i} has batch={features[i].Shape[0]}.",
+                    nameof(features));
+            }
+        }
+
         int totalTokens = 0;
         var spatialShapes = new int[features.Count][];
         var levelStarts = new int[features.Count];
@@ -89,6 +106,21 @@ internal static class DETRHelpers
     /// <returns>Element-wise sum of the tensors.</returns>
     public static Tensor<T> AddTensors<T>(Tensor<T> a, Tensor<T> b, INumericOperations<T> numOps)
     {
+        if (a is null)
+        {
+            throw new ArgumentNullException(nameof(a));
+        }
+        if (b is null)
+        {
+            throw new ArgumentNullException(nameof(b));
+        }
+        if (a.Shape.Length != b.Shape.Length || !a.Shape.SequenceEqual(b.Shape))
+        {
+            throw new ArgumentException(
+                $"Tensors must have the same shape. a.Shape=[{string.Join(",", a.Shape)}], b.Shape=[{string.Join(",", b.Shape)}].",
+                nameof(b));
+        }
+
         var result = new Tensor<T>(a.Shape);
         for (int i = 0; i < a.Length; i++)
         {

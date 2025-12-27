@@ -134,8 +134,32 @@ public class SwinTransformer<T> : BackboneBase<T>
 
         // Calculate output spatial dimensions
         int stride = Strides[stageIdx];
+
+        // Validate input dimensions are divisible by stride
+        if (inputHeight % stride != 0)
+        {
+            throw new ArgumentException(
+                $"Input height ({inputHeight}) must be divisible by stride ({stride}) at stage {stageIdx}.",
+                nameof(inputHeight));
+        }
+        if (inputWidth % stride != 0)
+        {
+            throw new ArgumentException(
+                $"Input width ({inputWidth}) must be divisible by stride ({stride}) at stage {stageIdx}.",
+                nameof(inputWidth));
+        }
+
         int height = inputHeight / stride;
         int width = inputWidth / stride;
+
+        // Validate sequence length matches expected spatial dimensions
+        int expectedSeqLen = height * width;
+        if (seqLen != expectedSeqLen)
+        {
+            throw new InvalidOperationException(
+                $"Sequence length mismatch at stage {stageIdx}: expected {expectedSeqLen} (height={height}, width={width}), got {seqLen}. " +
+                "Ensure input dimensions are divisible by patch size and all stride factors.");
+        }
 
         var featureMap = new Tensor<T>(new[] { batch, dim, height, width });
 
@@ -146,12 +170,9 @@ public class SwinTransformer<T> : BackboneBase<T>
                 for (int w = 0; w < width; w++)
                 {
                     int seqIdx = h * width + w;
-                    if (seqIdx < seqLen)
+                    for (int c = 0; c < dim; c++)
                     {
-                        for (int c = 0; c < dim; c++)
-                        {
-                            featureMap[n, c, h, w] = x[n, seqIdx, c];
-                        }
+                        featureMap[n, c, h, w] = x[n, seqIdx, c];
                     }
                 }
             }
@@ -455,6 +476,20 @@ internal class PatchMergingBlock<T>
         {
             h = inputHeight.Value;
             w = inputWidth.Value;
+
+            // Validate that dimensions match sequence length
+            if (h * w != seqLen)
+            {
+                throw new ArgumentException(
+                    $"Provided dimensions ({h} x {w} = {h * w}) do not match sequence length {seqLen}.");
+            }
+
+            // Validate dimensions are even for patch merging
+            if (h % 2 != 0 || w % 2 != 0)
+            {
+                throw new ArgumentException(
+                    $"Both dimensions must be even for 2x2 patch merging. Got h={h}, w={w}.");
+            }
         }
         else
         {

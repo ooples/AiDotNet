@@ -1,6 +1,7 @@
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Weights;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.ComputerVision.OCR.Recognition;
 
@@ -245,7 +246,7 @@ public class TrOCR<T> : OCRBase<T>
         var oneHot = new Tensor<T>(new[] { 1, seqLen, vocabSize });
         for (int t = 0; t < seqLen; t++)
         {
-            int tokenId = Math.Clamp(tokens[t], 0, vocabSize - 1);
+            int tokenId = MathHelper.Clamp(tokens[t], 0, vocabSize - 1);
             oneHot[0, t, tokenId] = NumOps.FromDouble(1.0);
         }
 

@@ -39,8 +39,14 @@ public class DetectionVisualizer<T>
     /// <returns>Image with visualizations drawn.</returns>
     public Tensor<T> Visualize(Tensor<T> image, DetectionResult<T> result, string[]? classNames = null)
     {
-        ArgumentNullException.ThrowIfNull(image);
-        ArgumentNullException.ThrowIfNull(result);
+        if (image is null)
+        {
+            throw new ArgumentNullException(nameof(image));
+        }
+        if (result is null)
+        {
+            throw new ArgumentNullException(nameof(result));
+        }
 
         if (image.Shape.Length != 4)
         {
