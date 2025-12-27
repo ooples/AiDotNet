@@ -63,6 +63,24 @@ internal class YOLOHead<T>
     /// <returns>Raw detection outputs for each scale.</returns>
     public List<Tensor<T>> Forward(List<Tensor<T>> features)
     {
+        if (features is null)
+        {
+            throw new ArgumentNullException(nameof(features));
+        }
+
+        if (features.Count > _convLayers.Count)
+        {
+            throw new ArgumentException(
+                $"Feature count ({features.Count}) exceeds number of configured layers ({_convLayers.Count}). " +
+                $"YOLOHead was initialized with inputChannels for {_inputChannels.Length} levels.",
+                nameof(features));
+        }
+
+        if (features.Count == 0)
+        {
+            return new List<Tensor<T>>();
+        }
+
         var outputs = new List<Tensor<T>>();
 
         for (int i = 0; i < features.Count; i++)
@@ -88,9 +106,28 @@ internal class YOLOHead<T>
         int imageHeight,
         int imageWidth)
     {
+        if (outputs is null)
+        {
+            throw new ArgumentNullException(nameof(outputs));
+        }
+
+        if (strides is null)
+        {
+            throw new ArgumentNullException(nameof(strides));
+        }
+
         if (outputs.Count == 0)
         {
             return new List<(float[] boxes, float[] scores, int[] classIds)>();
+        }
+
+        // Validate strides array length matches output count
+        if (strides.Length < outputs.Count)
+        {
+            throw new ArgumentException(
+                $"Strides array length ({strides.Length}) is less than outputs count ({outputs.Count}). " +
+                $"Each feature level requires a corresponding stride value.",
+                nameof(strides));
         }
 
         // Determine batch size from first output tensor
@@ -261,6 +298,24 @@ internal class YOLOv8Head<T>
     /// <returns>Classification and regression outputs for each scale.</returns>
     public (List<Tensor<T>> clsOutputs, List<Tensor<T>> regOutputs) Forward(List<Tensor<T>> features)
     {
+        if (features is null)
+        {
+            throw new ArgumentNullException(nameof(features));
+        }
+
+        if (features.Count > _clsConvs.Count)
+        {
+            throw new ArgumentException(
+                $"Feature count ({features.Count}) exceeds number of configured layers ({_clsConvs.Count}). " +
+                $"YOLOv8Head was initialized with inputChannels for {_inputChannels.Length} levels.",
+                nameof(features));
+        }
+
+        if (features.Count == 0)
+        {
+            return (new List<Tensor<T>>(), new List<Tensor<T>>());
+        }
+
         var clsOutputs = new List<Tensor<T>>();
         var regOutputs = new List<Tensor<T>>();
 
@@ -292,9 +347,42 @@ internal class YOLOv8Head<T>
         int imageHeight,
         int imageWidth)
     {
+        if (clsOutputs is null)
+        {
+            throw new ArgumentNullException(nameof(clsOutputs));
+        }
+
+        if (regOutputs is null)
+        {
+            throw new ArgumentNullException(nameof(regOutputs));
+        }
+
+        if (strides is null)
+        {
+            throw new ArgumentNullException(nameof(strides));
+        }
+
         if (clsOutputs.Count == 0)
         {
             return new List<(float[] boxes, float[] scores, int[] classIds)>();
+        }
+
+        // Validate that classification and regression outputs have matching count
+        if (clsOutputs.Count != regOutputs.Count)
+        {
+            throw new ArgumentException(
+                $"Classification outputs count ({clsOutputs.Count}) must match " +
+                $"regression outputs count ({regOutputs.Count}).",
+                nameof(regOutputs));
+        }
+
+        // Validate strides array length matches output count
+        if (strides.Length < clsOutputs.Count)
+        {
+            throw new ArgumentException(
+                $"Strides array length ({strides.Length}) is less than outputs count ({clsOutputs.Count}). " +
+                $"Each feature level requires a corresponding stride value.",
+                nameof(strides));
         }
 
         // Determine batch size from first output tensor

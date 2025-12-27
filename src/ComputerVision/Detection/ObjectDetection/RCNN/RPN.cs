@@ -57,7 +57,9 @@ public class RPN<T>
         anchorSizes ??= new[] { 32, 64, 128, 256, 512 };
         aspectRatios ??= new[] { 0.5, 1.0, 2.0 };
 
-        _numAnchors = aspectRatios.Length; // One scale per location, multiple aspect ratios
+        // Define scales - this makes _numAnchors calculation robust if scales change
+        var scales = new double[] { 1.0 };
+        _numAnchors = aspectRatios.Length * scales.Length;
 
         // Shared 3x3 convolution
         _conv = new Conv2D<T>(inChannels, hiddenDim, kernelSize: 3, padding: 1);
@@ -74,7 +76,7 @@ public class RPN<T>
         _anchorGenerator = new AnchorGenerator<T>(
             baseSizes: baseSizes,
             aspectRatios: aspectRatios,
-            scales: new double[] { 1.0 },
+            scales: scales,
             strides: strides);
 
         // Use specified feature level or default to middle level (index 2 for default config: stride=16, baseSize=128)
@@ -142,7 +144,20 @@ public class RPN<T>
         double nmsThreshold = 0.7)
     {
         int batch = objectness.Shape[0];
-        int numAnchors = Math.Min(objectness.Shape[1], anchors.Count);
+        int objectnessAnchors = objectness.Shape[1];
+        int anchorCount = anchors.Count;
+
+        // Validate shape consistency - objectness and anchors must match
+        if (objectnessAnchors != anchorCount)
+        {
+            throw new ArgumentException(
+                $"Shape mismatch: objectness tensor has {objectnessAnchors} anchor positions " +
+                $"but anchor list contains {anchorCount} anchors. " +
+                $"Ensure Forward() and GenerateProposals() use the same feature map dimensions.",
+                nameof(anchors));
+        }
+
+        int numAnchors = objectnessAnchors;
 
         var proposals = new List<(Tensor<T> boxes, Tensor<T> scores)>();
 
@@ -241,7 +256,17 @@ public class RPN<T>
 
     private Tensor<T> ReshapeRPNOutput(Tensor<T> x, int batch, int height, int width, int outputDim)
     {
-        int numAnchors = x.Shape[1] / outputDim;
+        int channelDim = x.Shape[1];
+
+        // Validate divisibility before integer division
+        if (channelDim % outputDim != 0)
+        {
+            throw new InvalidOperationException(
+                $"Cannot reshape RPN output: channel dimension {channelDim} is not divisible by outputDim {outputDim}. " +
+                $"Expected channel dimension to be numAnchors * {outputDim}.");
+        }
+
+        int numAnchors = channelDim / outputDim;
         var result = new Tensor<T>(new[] { batch, height * width * numAnchors, outputDim });
 
         for (int b = 0; b < batch; b++)

@@ -271,7 +271,11 @@ public class TrOCR<T> : OCRBase<T>
             }
         }
 
-        return embedded;
+        // Add positional encoding - critical for transformer to understand token positions
+        // Uses sinusoidal positional encoding matching the encoder's positional encoding
+        var embeddedWithPos = AddPositionalEncoding(embedded);
+
+        return embeddedWithPos;
     }
 
     private Tensor<T> AddPositionalEncoding(Tensor<T> x)

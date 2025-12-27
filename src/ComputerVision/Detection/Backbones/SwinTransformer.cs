@@ -339,16 +339,39 @@ internal class SwinStage<T>
 }
 
 /// <summary>
-/// Single Swin Transformer block with windowed attention.
+/// Single Swin Transformer block with windowed multi-head self-attention.
 /// </summary>
+/// <remarks>
+/// <para>Implements the full Swin Transformer block with:
+/// - Pre-norm architecture (LayerNorm before attention and MLP)
+/// - Window-based multi-head self-attention with learnable relative position bias
+/// - Shifted window partitioning for cross-window connections
+/// - Two-layer MLP with GELU activation
+/// </para>
+/// </remarks>
 internal class SwinTransformerBlock<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _dim;
     private readonly int _numHeads;
+    private readonly int _headDim;
     private readonly int _windowSize;
     private readonly int _shiftSize;
-    private readonly MultiHeadSelfAttention<T> _attention;
+    private readonly double _scale;
+
+    // Layer normalization with learnable parameters
+    private readonly SwinLayerNorm<T> _norm1;
+    private readonly SwinLayerNorm<T> _norm2;
+
+    // Window attention projections
+    private readonly Dense<T> _qkvProj;
+    private readonly Dense<T> _outProj;
+
+    // Relative position bias table: (2*windowSize-1) * (2*windowSize-1) entries for each head
+    private readonly Tensor<T> _relativePositionBiasTable;
+    private readonly int[,] _relativePositionIndex;
+
+    // MLP layers
     private readonly Dense<T> _mlpFc1;
     private readonly Dense<T> _mlpFc2;
 
@@ -357,44 +380,524 @@ internal class SwinTransformerBlock<T>
         _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         _dim = dim;
         _numHeads = numHeads;
+        _headDim = dim / numHeads;
         _windowSize = windowSize;
         _shiftSize = shiftSize;
+        _scale = 1.0 / Math.Sqrt(_headDim);
 
-        // Window attention
-        _attention = new MultiHeadSelfAttention<T>(dim, numHeads);
+        // Layer normalization
+        _norm1 = new SwinLayerNorm<T>(dim);
+        _norm2 = new SwinLayerNorm<T>(dim);
 
-        // MLP (2-layer feed-forward with GELU)
+        // QKV projection (3 * dim for Q, K, V)
+        _qkvProj = new Dense<T>(dim, dim * 3);
+        _outProj = new Dense<T>(dim, dim);
+
+        // Relative position bias table
+        int biasTableSize = (2 * windowSize - 1) * (2 * windowSize - 1);
+        _relativePositionBiasTable = new Tensor<T>(new[] { biasTableSize, numHeads });
+        InitializeRelativePositionBias();
+
+        // Compute relative position index for windows
+        _relativePositionIndex = ComputeRelativePositionIndex(windowSize);
+
+        // MLP (2-layer with GELU)
         int mlpHiddenDim = dim * 4;
         _mlpFc1 = new Dense<T>(dim, mlpHiddenDim);
         _mlpFc2 = new Dense<T>(mlpHiddenDim, dim);
     }
 
+    private void InitializeRelativePositionBias()
+    {
+        // Initialize with truncated normal distribution (std=0.02)
+        var random = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
+        for (int i = 0; i < _relativePositionBiasTable.Length; i++)
+        {
+            // Box-Muller transform for normal distribution
+            double u1 = random.NextDouble();
+            double u2 = random.NextDouble();
+            double z = Math.Sqrt(-2.0 * Math.Log(u1 + 1e-10)) * Math.Cos(2.0 * Math.PI * u2);
+            double value = z * 0.02;
+            // Truncate to [-0.04, 0.04]
+            value = Math.Max(-0.04, Math.Min(0.04, value));
+            _relativePositionBiasTable[i] = _numOps.FromDouble(value);
+        }
+    }
+
+    private int[,] ComputeRelativePositionIndex(int windowSize)
+    {
+        // Create coordinate grid
+        var coordsH = new int[windowSize];
+        var coordsW = new int[windowSize];
+        for (int i = 0; i < windowSize; i++)
+        {
+            coordsH[i] = i;
+            coordsW[i] = i;
+        }
+
+        // Compute pairwise relative positions
+        int windowArea = windowSize * windowSize;
+        var relativePositionIndex = new int[windowArea, windowArea];
+
+        for (int i = 0; i < windowArea; i++)
+        {
+            int h1 = i / windowSize;
+            int w1 = i % windowSize;
+
+            for (int j = 0; j < windowArea; j++)
+            {
+                int h2 = j / windowSize;
+                int w2 = j % windowSize;
+
+                // Relative position
+                int relH = h1 - h2 + windowSize - 1;
+                int relW = w1 - w2 + windowSize - 1;
+
+                // Index into bias table
+                relativePositionIndex[i, j] = relH * (2 * windowSize - 1) + relW;
+            }
+        }
+
+        return relativePositionIndex;
+    }
+
     public Tensor<T> Forward(Tensor<T> input)
     {
         // input: [batch, seq_len, dim]
+        int batch = input.Shape[0];
+        int seqLen = input.Shape[1];
 
-        // Window-based self-attention with residual
-        // Note: For efficiency in production, window partitioning should be applied here
-        // Current implementation uses global attention as a simplified version
-        var attnOut = ApplyWindowAttention(input);
+        // Infer spatial dimensions (assume square or near-square)
+        int h = (int)Math.Sqrt(seqLen);
+        int w = seqLen / h;
+        if (h * w != seqLen)
+        {
+            // Try to find valid factorization
+            for (int candidate = h; candidate >= 1; candidate--)
+            {
+                if (seqLen % candidate == 0)
+                {
+                    h = seqLen / candidate;
+                    w = candidate;
+                    break;
+                }
+            }
+        }
+
+        // Pre-norm + Window attention + residual
+        var normed1 = _norm1.Forward(input);
+        var attnOut = WindowAttention(normed1, h, w);
         var x = AddTensors(input, attnOut);
 
-        // MLP with residual
-        var mlpInput = x;
-        var mlpHidden = _mlpFc1.Forward(x);
-        mlpHidden = ApplyGELU(mlpHidden);
-        var mlpOut = _mlpFc2.Forward(mlpHidden);
-
-        x = AddTensors(mlpInput, mlpOut);
+        // Pre-norm + MLP + residual
+        var normed2 = _norm2.Forward(x);
+        var mlpOut = ApplyMLP(normed2);
+        x = AddTensors(x, mlpOut);
 
         return x;
     }
 
-    public long GetParameterCount()
+    private Tensor<T> WindowAttention(Tensor<T> x, int h, int w)
     {
-        return _attention.GetParameterCount() +
-               _dim * _dim * 4 + _dim * 4 + // MLP fc1
-               _dim * 4 * _dim + _dim; // MLP fc2
+        int batch = x.Shape[0];
+        int seqLen = x.Shape[1];
+
+        // Reshape to spatial: [B, H, W, C]
+        var spatial = ReshapeToSpatial(x, batch, h, w, _dim);
+
+        // Apply cyclic shift if needed
+        if (_shiftSize > 0)
+        {
+            spatial = CyclicShift(spatial, -_shiftSize);
+        }
+
+        // Partition into windows: [numWindows*B, windowSize*windowSize, C]
+        var (windows, numWindowsH, numWindowsW) = WindowPartition(spatial);
+        int numWindows = numWindowsH * numWindowsW;
+
+        // Apply attention within each window
+        var attnOut = WindowedSelfAttention(windows);
+
+        // Merge windows back: [B, H, W, C]
+        var merged = WindowReverse(attnOut, numWindowsH, numWindowsW, batch, h, w);
+
+        // Reverse cyclic shift if applied
+        if (_shiftSize > 0)
+        {
+            merged = CyclicShift(merged, _shiftSize);
+        }
+
+        // Reshape back to sequence: [B, H*W, C]
+        return ReshapeToSequence(merged);
+    }
+
+    private Tensor<T> ReshapeToSpatial(Tensor<T> x, int batch, int h, int w, int c)
+    {
+        var spatial = new Tensor<T>(new[] { batch, h, w, c });
+        for (int b = 0; b < batch; b++)
+        {
+            for (int i = 0; i < h; i++)
+            {
+                for (int j = 0; j < w; j++)
+                {
+                    int seqIdx = i * w + j;
+                    for (int d = 0; d < c; d++)
+                    {
+                        spatial[b, i, j, d] = x[b, seqIdx, d];
+                    }
+                }
+            }
+        }
+        return spatial;
+    }
+
+    private Tensor<T> ReshapeToSequence(Tensor<T> spatial)
+    {
+        int batch = spatial.Shape[0];
+        int h = spatial.Shape[1];
+        int w = spatial.Shape[2];
+        int c = spatial.Shape[3];
+
+        var seq = new Tensor<T>(new[] { batch, h * w, c });
+        for (int b = 0; b < batch; b++)
+        {
+            for (int i = 0; i < h; i++)
+            {
+                for (int j = 0; j < w; j++)
+                {
+                    int seqIdx = i * w + j;
+                    for (int d = 0; d < c; d++)
+                    {
+                        seq[b, seqIdx, d] = spatial[b, i, j, d];
+                    }
+                }
+            }
+        }
+        return seq;
+    }
+
+    private Tensor<T> CyclicShift(Tensor<T> x, int shift)
+    {
+        int batch = x.Shape[0];
+        int h = x.Shape[1];
+        int w = x.Shape[2];
+        int c = x.Shape[3];
+
+        var shifted = new Tensor<T>(x.Shape);
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int i = 0; i < h; i++)
+            {
+                for (int j = 0; j < w; j++)
+                {
+                    // Compute source indices with cyclic wrapping
+                    int srcI = (i - shift % h + h) % h;
+                    int srcJ = (j - shift % w + w) % w;
+
+                    for (int d = 0; d < c; d++)
+                    {
+                        shifted[b, i, j, d] = x[b, srcI, srcJ, d];
+                    }
+                }
+            }
+        }
+
+        return shifted;
+    }
+
+    private (Tensor<T> windows, int numWindowsH, int numWindowsW) WindowPartition(Tensor<T> x)
+    {
+        int batch = x.Shape[0];
+        int h = x.Shape[1];
+        int w = x.Shape[2];
+        int c = x.Shape[3];
+
+        // Pad if necessary to make dimensions divisible by window size
+        int padH = (_windowSize - h % _windowSize) % _windowSize;
+        int padW = (_windowSize - w % _windowSize) % _windowSize;
+        int paddedH = h + padH;
+        int paddedW = w + padW;
+
+        Tensor<T> padded;
+        if (padH > 0 || padW > 0)
+        {
+            padded = new Tensor<T>(new[] { batch, paddedH, paddedW, c });
+            for (int b = 0; b < batch; b++)
+            {
+                for (int i = 0; i < paddedH; i++)
+                {
+                    for (int j = 0; j < paddedW; j++)
+                    {
+                        for (int d = 0; d < c; d++)
+                        {
+                            if (i < h && j < w)
+                                padded[b, i, j, d] = x[b, i, j, d];
+                            else
+                                padded[b, i, j, d] = _numOps.FromDouble(0.0);
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            padded = x;
+            paddedH = h;
+            paddedW = w;
+        }
+
+        int numWindowsH = paddedH / _windowSize;
+        int numWindowsW = paddedW / _windowSize;
+        int numWindows = numWindowsH * numWindowsW;
+        int windowArea = _windowSize * _windowSize;
+
+        var windows = new Tensor<T>(new[] { batch * numWindows, windowArea, c });
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int wh = 0; wh < numWindowsH; wh++)
+            {
+                for (int ww = 0; ww < numWindowsW; ww++)
+                {
+                    int windowIdx = b * numWindows + wh * numWindowsW + ww;
+                    int startH = wh * _windowSize;
+                    int startW = ww * _windowSize;
+
+                    for (int i = 0; i < _windowSize; i++)
+                    {
+                        for (int j = 0; j < _windowSize; j++)
+                        {
+                            int tokenIdx = i * _windowSize + j;
+                            for (int d = 0; d < c; d++)
+                            {
+                                windows[windowIdx, tokenIdx, d] = padded[b, startH + i, startW + j, d];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return (windows, numWindowsH, numWindowsW);
+    }
+
+    private Tensor<T> WindowReverse(Tensor<T> windows, int numWindowsH, int numWindowsW, int batch, int h, int w)
+    {
+        int numWindows = numWindowsH * numWindowsW;
+        int c = windows.Shape[2];
+        int paddedH = numWindowsH * _windowSize;
+        int paddedW = numWindowsW * _windowSize;
+
+        var spatial = new Tensor<T>(new[] { batch, h, w, c });
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int wh = 0; wh < numWindowsH; wh++)
+            {
+                for (int ww = 0; ww < numWindowsW; ww++)
+                {
+                    int windowIdx = b * numWindows + wh * numWindowsW + ww;
+                    int startH = wh * _windowSize;
+                    int startW = ww * _windowSize;
+
+                    for (int i = 0; i < _windowSize; i++)
+                    {
+                        for (int j = 0; j < _windowSize; j++)
+                        {
+                            int outH = startH + i;
+                            int outW = startW + j;
+
+                            // Only copy if within original bounds
+                            if (outH < h && outW < w)
+                            {
+                                int tokenIdx = i * _windowSize + j;
+                                for (int d = 0; d < c; d++)
+                                {
+                                    spatial[b, outH, outW, d] = windows[windowIdx, tokenIdx, d];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return spatial;
+    }
+
+    private Tensor<T> WindowedSelfAttention(Tensor<T> windows)
+    {
+        int numWindows = windows.Shape[0];
+        int windowArea = windows.Shape[1];
+        int c = windows.Shape[2];
+
+        // Project to Q, K, V
+        var qkv = new Tensor<T>(new[] { numWindows, windowArea, 3 * c });
+        for (int w = 0; w < numWindows; w++)
+        {
+            var windowIn = new Tensor<T>(new[] { windowArea, c });
+            for (int t = 0; t < windowArea; t++)
+            {
+                for (int d = 0; d < c; d++)
+                {
+                    windowIn[t, d] = windows[w, t, d];
+                }
+            }
+
+            // Apply QKV projection per token
+            for (int t = 0; t < windowArea; t++)
+            {
+                var tokenIn = new Tensor<T>(new[] { 1, c });
+                for (int d = 0; d < c; d++)
+                {
+                    tokenIn[0, d] = windowIn[t, d];
+                }
+                var tokenQkv = _qkvProj.Forward(tokenIn);
+                for (int d = 0; d < 3 * c; d++)
+                {
+                    qkv[w, t, d] = tokenQkv[0, d];
+                }
+            }
+        }
+
+        // Compute attention per window
+        var output = new Tensor<T>(new[] { numWindows, windowArea, c });
+
+        for (int w = 0; w < numWindows; w++)
+        {
+            // Compute attention scores for this window
+            var attnScores = new double[_numHeads, windowArea, windowArea];
+
+            for (int head = 0; head < _numHeads; head++)
+            {
+                int headOffset = head * _headDim;
+
+                for (int i = 0; i < windowArea; i++)
+                {
+                    for (int j = 0; j < windowArea; j++)
+                    {
+                        double score = 0;
+                        for (int d = 0; d < _headDim; d++)
+                        {
+                            double q = _numOps.ToDouble(qkv[w, i, headOffset + d]);
+                            double k = _numOps.ToDouble(qkv[w, j, c + headOffset + d]);
+                            score += q * k;
+                        }
+                        score *= _scale;
+
+                        // Add relative position bias
+                        int biasIdx = _relativePositionIndex[i, j];
+                        score += _numOps.ToDouble(_relativePositionBiasTable[biasIdx, head]);
+
+                        attnScores[head, i, j] = score;
+                    }
+                }
+            }
+
+            // Softmax per head per query
+            var attnProbs = new double[_numHeads, windowArea, windowArea];
+            for (int head = 0; head < _numHeads; head++)
+            {
+                for (int i = 0; i < windowArea; i++)
+                {
+                    double maxScore = double.NegativeInfinity;
+                    for (int j = 0; j < windowArea; j++)
+                    {
+                        if (attnScores[head, i, j] > maxScore)
+                            maxScore = attnScores[head, i, j];
+                    }
+
+                    double sumExp = 0;
+                    for (int j = 0; j < windowArea; j++)
+                    {
+                        attnProbs[head, i, j] = Math.Exp(attnScores[head, i, j] - maxScore);
+                        sumExp += attnProbs[head, i, j];
+                    }
+
+                    for (int j = 0; j < windowArea; j++)
+                    {
+                        attnProbs[head, i, j] /= sumExp;
+                    }
+                }
+            }
+
+            // Apply attention to values and concatenate heads
+            var attnOut = new double[windowArea, c];
+            for (int head = 0; head < _numHeads; head++)
+            {
+                int headOffset = head * _headDim;
+                int vOffset = 2 * c + headOffset;
+
+                for (int i = 0; i < windowArea; i++)
+                {
+                    for (int d = 0; d < _headDim; d++)
+                    {
+                        double val = 0;
+                        for (int j = 0; j < windowArea; j++)
+                        {
+                            val += attnProbs[head, i, j] * _numOps.ToDouble(qkv[w, j, vOffset + d]);
+                        }
+                        attnOut[i, headOffset + d] = val;
+                    }
+                }
+            }
+
+            // Output projection
+            for (int t = 0; t < windowArea; t++)
+            {
+                var tokenIn = new Tensor<T>(new[] { 1, c });
+                for (int d = 0; d < c; d++)
+                {
+                    tokenIn[0, d] = _numOps.FromDouble(attnOut[t, d]);
+                }
+                var tokenOut = _outProj.Forward(tokenIn);
+                for (int d = 0; d < c; d++)
+                {
+                    output[w, t, d] = tokenOut[0, d];
+                }
+            }
+        }
+
+        return output;
+    }
+
+    private Tensor<T> ApplyMLP(Tensor<T> x)
+    {
+        int batch = x.Shape[0];
+        int seqLen = x.Shape[1];
+
+        var result = new Tensor<T>(x.Shape);
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int s = 0; s < seqLen; s++)
+            {
+                var tokenIn = new Tensor<T>(new[] { 1, _dim });
+                for (int d = 0; d < _dim; d++)
+                {
+                    tokenIn[0, d] = x[b, s, d];
+                }
+
+                // FC1 + GELU
+                var hidden = _mlpFc1.Forward(tokenIn);
+                for (int d = 0; d < hidden.Shape[1]; d++)
+                {
+                    double val = _numOps.ToDouble(hidden[0, d]);
+                    double gelu = 0.5 * val * (1 + Math.Tanh(Math.Sqrt(2 / Math.PI) * (val + 0.044715 * val * val * val)));
+                    hidden[0, d] = _numOps.FromDouble(gelu);
+                }
+
+                // FC2
+                var tokenOut = _mlpFc2.Forward(hidden);
+                for (int d = 0; d < _dim; d++)
+                {
+                    result[b, s, d] = tokenOut[0, d];
+                }
+            }
+        }
+
+        return result;
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
@@ -407,38 +910,101 @@ internal class SwinTransformerBlock<T>
         return result;
     }
 
-    /// <summary>
-    /// Applies window-based attention (simplified implementation).
-    /// </summary>
-    /// <remarks>
-    /// A full implementation would partition the input into windows of size windowSize x windowSize,
-    /// apply self-attention within each window, and then merge the results.
-    /// The shift_size parameter would cyclically shift the windows for cross-window connections.
-    /// </remarks>
-    private Tensor<T> ApplyWindowAttention(Tensor<T> input)
+    public long GetParameterCount()
     {
-        // For the simplified version, we apply global attention
-        // A production implementation should:
-        // 1. Reshape [B, H*W, C] to [B, H, W, C]
-        // 2. If _shiftSize > 0, cyclically shift the tensor
-        // 3. Partition into non-overlapping windows of size [windowSize, windowSize]
-        // 4. Apply attention within each window
-        // 5. Merge windows and reverse shift if applied
-        return _attention.Forward(input);
+        // LayerNorm: 2 * dim each (gamma + beta)
+        long normParams = 2 * 2 * _dim;
+
+        // QKV projection: dim * 3*dim + 3*dim bias
+        long qkvParams = _dim * 3 * _dim + 3 * _dim;
+
+        // Output projection: dim * dim + dim bias
+        long outProjParams = _dim * _dim + _dim;
+
+        // Relative position bias table
+        int biasTableSize = (2 * _windowSize - 1) * (2 * _windowSize - 1);
+        long biasParams = biasTableSize * _numHeads;
+
+        // MLP: fc1 (dim * 4*dim + 4*dim) + fc2 (4*dim * dim + dim)
+        long mlpParams = _dim * 4 * _dim + 4 * _dim + 4 * _dim * _dim + _dim;
+
+        return normParams + qkvParams + outProjParams + biasParams + mlpParams;
+    }
+}
+
+/// <summary>
+/// Layer normalization with learnable affine parameters for Swin Transformer.
+/// </summary>
+internal class SwinLayerNorm<T>
+{
+    private readonly INumericOperations<T> _numOps;
+    private readonly int _dim;
+    private readonly Tensor<T> _gamma;
+    private readonly Tensor<T> _beta;
+    private readonly double _eps;
+
+    public SwinLayerNorm(int dim, double eps = 1e-6)
+    {
+        _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        _dim = dim;
+        _eps = eps;
+
+        _gamma = new Tensor<T>(new[] { dim });
+        _beta = new Tensor<T>(new[] { dim });
+
+        // Initialize gamma to 1 and beta to 0
+        for (int i = 0; i < dim; i++)
+        {
+            _gamma[i] = _numOps.FromDouble(1.0);
+            _beta[i] = _numOps.FromDouble(0.0);
+        }
     }
 
-    private Tensor<T> ApplyGELU(Tensor<T> x)
+    public Tensor<T> Forward(Tensor<T> x)
     {
+        int batch = x.Shape[0];
+        int seqLen = x.Shape[1];
+        int dim = x.Shape[2];
+
         var result = new Tensor<T>(x.Shape);
-        for (int i = 0; i < x.Length; i++)
+
+        for (int b = 0; b < batch; b++)
         {
-            double val = _numOps.ToDouble(x[i]);
-            // GELU approximation: 0.5 * x * (1 + tanh(sqrt(2/PI) * (x + 0.044715 * x^3)))
-            double gelu = 0.5 * val * (1 + Math.Tanh(Math.Sqrt(2 / Math.PI) * (val + 0.044715 * val * val * val)));
-            result[i] = _numOps.FromDouble(gelu);
+            for (int s = 0; s < seqLen; s++)
+            {
+                // Compute mean
+                double mean = 0;
+                for (int d = 0; d < dim; d++)
+                {
+                    mean += _numOps.ToDouble(x[b, s, d]);
+                }
+                mean /= dim;
+
+                // Compute variance
+                double variance = 0;
+                for (int d = 0; d < dim; d++)
+                {
+                    double diff = _numOps.ToDouble(x[b, s, d]) - mean;
+                    variance += diff * diff;
+                }
+                variance /= dim;
+
+                // Normalize and apply affine transformation
+                double std = Math.Sqrt(variance + _eps);
+                for (int d = 0; d < dim; d++)
+                {
+                    double normalized = (_numOps.ToDouble(x[b, s, d]) - mean) / std;
+                    double gamma = _numOps.ToDouble(_gamma[d]);
+                    double beta = _numOps.ToDouble(_beta[d]);
+                    result[b, s, d] = _numOps.FromDouble(gamma * normalized + beta);
+                }
+            }
         }
+
         return result;
     }
+
+    public long GetParameterCount() => 2 * _dim;
 }
 
 /// <summary>
