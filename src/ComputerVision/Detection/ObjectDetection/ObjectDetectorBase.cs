@@ -139,12 +139,28 @@ public abstract class ObjectDetectorBase<T>
         var results = new List<DetectionResult<T>>();
 
         int batchSize = images.Shape[0];
+        int imageHeight = images.Shape[2];
+        int imageWidth = images.Shape[3];
+
+        // Perform batch forward pass (single GPU call for all images)
+        var batchOutputs = Forward(images);
+
+        // Post-process outputs for each image in the batch
         for (int i = 0; i < batchSize; i++)
         {
-            // Extract single image from batch
-            var singleImage = ExtractBatchItem(images, i);
-            var result = Detect(singleImage, confidenceThreshold, nmsThreshold);
-            results.Add(result);
+            // Extract outputs for this batch item
+            var itemOutputs = ExtractBatchOutputs(batchOutputs, i);
+
+            // Post-process to get detections for this image
+            var detections = PostProcess(itemOutputs, imageWidth, imageHeight, confidenceThreshold, nmsThreshold);
+
+            results.Add(new DetectionResult<T>
+            {
+                Detections = detections,
+                InferenceTime = TimeSpan.Zero, // Individual times not tracked in batch mode
+                ImageWidth = imageWidth,
+                ImageHeight = imageHeight
+            });
         }
 
         return new BatchDetectionResult<T>
@@ -152,6 +168,47 @@ public abstract class ObjectDetectorBase<T>
             Results = results,
             TotalInferenceTime = DateTime.UtcNow - startTime
         };
+    }
+
+    /// <summary>
+    /// Extracts the outputs for a single batch item from batch outputs.
+    /// </summary>
+    protected virtual List<Tensor<T>> ExtractBatchOutputs(List<Tensor<T>> batchOutputs, int batchIndex)
+    {
+        var itemOutputs = new List<Tensor<T>>();
+
+        foreach (var output in batchOutputs)
+        {
+            int batchSize = output.Shape[0];
+            if (batchSize == 1 && batchIndex == 0)
+            {
+                // Single image in batch, return as-is
+                itemOutputs.Add(output);
+            }
+            else
+            {
+                // Extract the slice for this batch item
+                var itemShape = new int[output.Shape.Length];
+                itemShape[0] = 1;
+                for (int d = 1; d < output.Shape.Length; d++)
+                {
+                    itemShape[d] = output.Shape[d];
+                }
+
+                var itemTensor = new Tensor<T>(itemShape);
+                int elementsPerItem = output.Length / batchSize;
+                int sourceOffset = batchIndex * elementsPerItem;
+                
+                for (int j = 0; j < elementsPerItem; j++)
+                {
+                    itemTensor[j] = output[sourceOffset + j];
+                }
+
+                itemOutputs.Add(itemTensor);
+            }
+        }
+
+        return itemOutputs;
     }
 
     /// <summary>
@@ -363,15 +420,12 @@ public abstract class ObjectDetectorBase<T>
 
         var single = new Tensor<T>(new[] { 1, channels, height, width });
 
-        for (int c = 0; c < channels; c++)
+        // Use contiguous memory copy for better performance
+        int pixelsPerImage = channels * height * width;
+        int sourceOffset = index * pixelsPerImage;
+        for (int i = 0; i < pixelsPerImage; i++)
         {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    single[0, c, h, w] = batch[index, c, h, w];
-                }
-            }
+            single[i] = batch[sourceOffset + i];
         }
 
         return single;
