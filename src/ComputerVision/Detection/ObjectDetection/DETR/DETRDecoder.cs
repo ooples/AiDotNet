@@ -1,5 +1,6 @@
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
 
@@ -205,7 +206,7 @@ internal class DETRDecoder<T>
 
         // Xavier/Glorot initialization
         double scale = Math.Sqrt(2.0 / (numQueries + hiddenDim));
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < embeddings.Length; i++)
         {

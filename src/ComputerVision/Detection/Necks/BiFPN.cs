@@ -1,4 +1,5 @@
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.ComputerVision.Detection.Necks;
 
@@ -88,7 +89,7 @@ public class BiFPN<T> : NeckBase<T>
 
     private void InitializeWeightsForNetwork()
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         // Lateral connections (only for first repeat)
         for (int i = 0; i < _numLevels; i++)

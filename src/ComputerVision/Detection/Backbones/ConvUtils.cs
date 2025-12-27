@@ -1,4 +1,5 @@
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.ComputerVision.Detection.Backbones;
 
@@ -54,7 +55,7 @@ internal class Conv2D<T>
     {
         // He initialization
         double scale = Math.Sqrt(2.0 / (_inChannels * _kernelSize * _kernelSize));
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < _weights.Length; i++)
         {
@@ -187,7 +188,7 @@ internal class Dense<T>
     {
         // He initialization
         double scale = Math.Sqrt(2.0 / _inFeatures);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < _weights.Length; i++)
         {

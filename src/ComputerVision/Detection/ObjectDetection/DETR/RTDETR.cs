@@ -4,6 +4,7 @@ using AiDotNet.ComputerVision.Detection.Necks;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
 
@@ -620,7 +621,7 @@ internal class RTDETRDecoder<T>
     {
         var queries = new Tensor<T>(new[] { numQueries, hiddenDim });
         double scale = Math.Sqrt(2.0 / (numQueries + hiddenDim));
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < queries.Length; i++)
         {

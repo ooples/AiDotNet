@@ -1,4 +1,5 @@
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.ComputerVision.Detection.Necks;
 
@@ -86,7 +87,7 @@ public class FPN<T> : NeckBase<T>
     {
         // He initialization
         double scale = Math.Sqrt(2.0 / weights.Shape[1]);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < weights.Length; i++)
         {
