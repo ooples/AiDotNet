@@ -38,6 +38,7 @@ global using AiDotNet.Tokenization.HuggingFace;
 global using AiDotNet.Tokenization.Interfaces;
 global using AiDotNet.Tools;
 global using AiDotNet.UncertaintyQuantification.Layers;
+using AiDotNet.Augmentation;
 using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.Policies;
 using AiDotNet.AutoML.SearchSpace;
@@ -177,6 +178,9 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
 
     // Curriculum learning configuration
     private CurriculumLearningOptions<T, TInput, TOutput>? _curriculumLearningOptions;
+
+    // Unified augmentation configuration
+    private Augmentation.AugmentationConfig? _augmentationConfig;
 
     // Federated learning configuration (facade-first: orchestration is internal)
     private FederatedLearningOptions? _federatedLearningOptions;
@@ -1041,6 +1045,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            AugmentationConfig = _augmentationConfig,
             ReasoningConfig = _reasoningConfig,
             DeploymentConfiguration = deploymentConfig,
             BiasDetector = _biasDetector,
@@ -1213,6 +1218,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            AugmentationConfig = _augmentationConfig,
             ReasoningConfig = _reasoningConfig,
             DeploymentConfiguration = deploymentConfig,
             BiasDetector = _biasDetector,
@@ -2166,6 +2172,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             DeploymentConfiguration = deploymentConfig,
             JitCompiledFunction = jitCompiledFunction,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            AugmentationConfig = _augmentationConfig,
             ReasoningConfig = _reasoningConfig,
             KnowledgeGraph = _knowledgeGraph,
             GraphStore = _graphStore,
@@ -3888,6 +3895,103 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         _hyperparameterSearchSpace = searchSpace;
         _hyperparameterTrials = nTrials;
         return this;
+    }
+
+    /// <summary>
+    /// Configures data augmentation for training and inference.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Data augmentation creates variations of training data on-the-fly to help models
+    /// generalize better. This configuration covers both training-time augmentation
+    /// and Test-Time Augmentation (TTA) for improved inference accuracy.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Augmentation is like showing the model many variations of
+    /// the same data. For images, this might include rotations, flips, and color changes.
+    /// The model learns to recognize objects regardless of these variations.
+    /// </para>
+    /// <para><b>Key features:</b>
+    /// <list type="bullet">
+    /// <item>Automatic data-type detection (image, tabular, audio, text, video)</item>
+    /// <item>Industry-standard defaults that work well out-of-the-box</item>
+    /// <item>Test-Time Augmentation (TTA) enabled by default for better predictions</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// Example - Simple usage with defaults:
+    /// <code>
+    /// var result = builder
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureAugmentation()  // Uses auto-detected defaults
+    ///     .Build(X, y);
+    /// </code>
+    /// </para>
+    /// <para>
+    /// Example - Custom configuration:
+    /// <code>
+    /// var result = builder
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureAugmentation(new AugmentationConfig
+    ///     {
+    ///         EnableTTA = true,
+    ///         TTANumAugmentations = 8,
+    ///         ImageSettings = new ImageAugmentationSettings
+    ///         {
+    ///             EnableFlips = true,
+    ///             EnableRotation = true,
+    ///             RotationRange = 20.0
+    ///         }
+    ///     })
+    ///     .Build(images, labels);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="config">
+    /// Augmentation configuration. If null, uses industry-standard defaults
+    /// with automatic data-type detection.
+    /// </param>
+    /// <returns>The builder instance for method chaining.</returns>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAugmentation(
+        Augmentation.AugmentationConfig? config = null)
+    {
+        _augmentationConfig = config ?? CreateDefaultAugmentationConfig();
+        return this;
+    }
+
+    /// <summary>
+    /// Creates a default augmentation configuration with auto-detected modality settings.
+    /// </summary>
+    private Augmentation.AugmentationConfig CreateDefaultAugmentationConfig()
+    {
+        var config = new Augmentation.AugmentationConfig();
+
+        // Auto-detect data type from TInput and apply appropriate defaults
+        var dataType = Augmentation.DataModalityDetector.Detect<TInput>();
+
+        switch (dataType)
+        {
+            case Augmentation.DataModality.Image:
+                config.ImageSettings = new Augmentation.ImageAugmentationSettings();
+                break;
+            case Augmentation.DataModality.Tabular:
+                config.TabularSettings = new Augmentation.TabularAugmentationSettings();
+                break;
+            case Augmentation.DataModality.Audio:
+                config.AudioSettings = new Augmentation.AudioAugmentationSettings();
+                break;
+            case Augmentation.DataModality.Text:
+                config.TextSettings = new Augmentation.TextAugmentationSettings();
+                break;
+            case Augmentation.DataModality.Video:
+                config.VideoSettings = new Augmentation.VideoAugmentationSettings();
+                break;
+            default:
+                // Unknown type - use generic settings, user can configure manually
+                break;
+        }
+
+        return config;
     }
 
     /// <summary>
