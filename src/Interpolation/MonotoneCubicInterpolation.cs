@@ -146,7 +146,7 @@ public class MonotoneCubicInterpolation<T> : IInterpolation<T>
     {
         int n = _x.Length;
 
-        // Calculate secant slopes
+        // Calculate secant slopes (delta_k = (y_{k+1} - y_k) / (x_{k+1} - x_k))
         Vector<T> delta = new Vector<T>(n - 1);
         for (int i = 0; i < n - 1; i++)
         {
@@ -156,32 +156,54 @@ public class MonotoneCubicInterpolation<T> : IInterpolation<T>
             );
         }
 
-        // Initialize slopes
+        // Step 1: Initialize slopes using central differences or one-sided differences
         _m[0] = delta[0];
         _m[n - 1] = delta[n - 2];
 
-        // Calculate interior slopes
         for (int i = 1; i < n - 1; i++)
         {
-            T m = _numOps.Divide(_numOps.Add(delta[i - 1], delta[i]), _numOps.FromDouble(2));
-
-            // Ensure monotonicity
-            if (!_numOps.Equals(delta[i - 1], _numOps.Zero) && !_numOps.Equals(delta[i], _numOps.Zero))
+            // Check if adjacent secants have opposite signs (local extremum)
+            T product = _numOps.Multiply(delta[i - 1], delta[i]);
+            if (_numOps.LessThanOrEquals(product, _numOps.Zero))
             {
-                T alpha = _numOps.Divide(delta[i - 1], delta[i]);
-                T beta = _numOps.Divide(_numOps.FromDouble(3), _numOps.Add(_numOps.FromDouble(2), alpha));
+                // Local extremum - set slope to zero for monotonicity
+                _m[i] = _numOps.Zero;
+            }
+            else
+            {
+                // Use arithmetic mean of adjacent secants as initial slope
+                _m[i] = _numOps.Divide(_numOps.Add(delta[i - 1], delta[i]), _numOps.FromDouble(2));
+            }
+        }
 
-                if (_numOps.GreaterThan(_numOps.Multiply(beta, m), delta[i - 1]))
-                {
-                    m = _numOps.Divide(delta[i - 1], beta);
-                }
-                else if (_numOps.GreaterThan(_numOps.Multiply(beta, m), delta[i]))
-                {
-                    m = _numOps.Divide(delta[i], beta);
-                }
+        // Step 2: Apply Fritsch-Carlson monotonicity constraint
+        // For each interval, ensure alpha^2 + beta^2 <= 9 where
+        // alpha = m[i] / delta[i], beta = m[i+1] / delta[i]
+        for (int i = 0; i < n - 1; i++)
+        {
+            // Skip if secant is zero (flat section)
+            if (_numOps.Equals(delta[i], _numOps.Zero))
+            {
+                _m[i] = _numOps.Zero;
+                _m[i + 1] = _numOps.Zero;
+                continue;
             }
 
-            _m[i] = m;
+            T alpha = _numOps.Divide(_m[i], delta[i]);
+            T beta = _numOps.Divide(_m[i + 1], delta[i]);
+
+            // Check constraint: alpha^2 + beta^2 <= 9
+            T alpha2 = _numOps.Multiply(alpha, alpha);
+            T beta2 = _numOps.Multiply(beta, beta);
+            T sum = _numOps.Add(alpha2, beta2);
+
+            if (_numOps.GreaterThan(sum, _numOps.FromDouble(9)))
+            {
+                // Scale down slopes to satisfy constraint
+                T tau = _numOps.Divide(_numOps.FromDouble(3), _numOps.Sqrt(sum));
+                _m[i] = _numOps.Multiply(tau, _numOps.Multiply(alpha, delta[i]));
+                _m[i + 1] = _numOps.Multiply(tau, _numOps.Multiply(beta, delta[i]));
+            }
         }
     }
 
