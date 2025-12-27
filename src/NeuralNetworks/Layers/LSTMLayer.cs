@@ -537,6 +537,66 @@ public class LSTMLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets the forget gate input weights for weight loading.
+    /// </summary>
+    public Tensor<T> WeightsFi => _weightsFi;
+
+    /// <summary>
+    /// Gets the input gate input weights for weight loading.
+    /// </summary>
+    public Tensor<T> WeightsIi => _weightsIi;
+
+    /// <summary>
+    /// Gets the cell gate input weights for weight loading.
+    /// </summary>
+    public Tensor<T> WeightsCi => _weightsCi;
+
+    /// <summary>
+    /// Gets the output gate input weights for weight loading.
+    /// </summary>
+    public Tensor<T> WeightsOi => _weightsOi;
+
+    /// <summary>
+    /// Gets the forget gate hidden weights for weight loading.
+    /// </summary>
+    public Tensor<T> WeightsFh => _weightsFh;
+
+    /// <summary>
+    /// Gets the input gate hidden weights for weight loading.
+    /// </summary>
+    public Tensor<T> WeightsIh => _weightsIh;
+
+    /// <summary>
+    /// Gets the cell gate hidden weights for weight loading.
+    /// </summary>
+    public Tensor<T> WeightsCh => _weightsCh;
+
+    /// <summary>
+    /// Gets the output gate hidden weights for weight loading.
+    /// </summary>
+    public Tensor<T> WeightsOh => _weightsOh;
+
+    /// <summary>
+    /// Gets the forget gate bias for weight loading.
+    /// </summary>
+    public Tensor<T> BiasF => _biasF;
+
+    /// <summary>
+    /// Gets the input gate bias for weight loading.
+    /// </summary>
+    public Tensor<T> BiasI => _biasI;
+
+    /// <summary>
+    /// Gets the cell gate bias for weight loading.
+    /// </summary>
+    public Tensor<T> BiasC => _biasC;
+
+    /// <summary>
+    /// Gets the output gate bias for weight loading.
+    /// </summary>
+    public Tensor<T> BiasO => _biasO;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="LSTMLayer{T}"/> class with scalar activation functions.
     /// </summary>
     /// <param name="inputSize">The size of each input vector (number of features).</param>
