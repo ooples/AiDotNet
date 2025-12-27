@@ -1278,4 +1278,17 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             return activation?.SupportsJitCompilation ?? true;
         }
     }
+
+    /// <summary>
+    /// Returns layer-specific metadata for serialization purposes.
+    /// </summary>
+    /// <returns>A dictionary of metadata key-value pairs including kernel size, stride, and padding.</returns>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["FilterSize"] = KernelSize.ToString();
+        metadata["Stride"] = Stride.ToString();
+        metadata["Padding"] = Padding.ToString();
+        return metadata;
+    }
 }

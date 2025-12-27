@@ -1,123 +1,14 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Configuration;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.NeuralNetworks;
-
-/// <summary>
-/// Specifies the EfficientNet model variant (B0-B7).
-/// </summary>
-/// <remarks>
-/// Each variant uses different compound scaling coefficients for width, depth, and resolution.
-/// Higher variants have more parameters and accuracy but require more compute.
-/// </remarks>
-public enum EfficientNetVariant
-{
-    /// <summary>
-    /// EfficientNet-B0: Baseline model (5.3M parameters, 224x224 input).
-    /// </summary>
-    B0,
-
-    /// <summary>
-    /// EfficientNet-B1: Scaled model (7.8M parameters, 240x240 input).
-    /// </summary>
-    B1,
-
-    /// <summary>
-    /// EfficientNet-B2: Scaled model (9.2M parameters, 260x260 input).
-    /// </summary>
-    B2,
-
-    /// <summary>
-    /// EfficientNet-B3: Scaled model (12M parameters, 300x300 input).
-    /// </summary>
-    B3,
-
-    /// <summary>
-    /// EfficientNet-B4: Scaled model (19M parameters, 380x380 input).
-    /// </summary>
-    B4,
-
-    /// <summary>
-    /// EfficientNet-B5: Scaled model (30M parameters, 456x456 input).
-    /// </summary>
-    B5,
-
-    /// <summary>
-    /// EfficientNet-B6: Scaled model (43M parameters, 528x528 input).
-    /// </summary>
-    B6,
-
-    /// <summary>
-    /// EfficientNet-B7: Largest model (66M parameters, 600x600 input).
-    /// </summary>
-    B7
-}
-
-/// <summary>
-/// Configuration for an EfficientNet network.
-/// </summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class EfficientNetConfiguration<T>
-{
-    /// <summary>
-    /// Gets or sets the EfficientNet variant (B0-B7).
-    /// </summary>
-    public EfficientNetVariant Variant { get; set; } = EfficientNetVariant.B0;
-
-    /// <summary>
-    /// Gets or sets the number of input channels (e.g., 3 for RGB, 1 for grayscale).
-    /// </summary>
-    public int InputChannels { get; set; } = 3;
-
-    /// <summary>
-    /// Gets or sets the number of output classes.
-    /// </summary>
-    public int NumClasses { get; set; } = 1000;
-
-    /// <summary>
-    /// Gets or sets the loss function. Defaults to CrossEntropyLoss for classification.
-    /// </summary>
-    public ILossFunction<T>? LossFunction { get; set; }
-
-    /// <summary>
-    /// Gets or sets the optimizer. Defaults to Adam.
-    /// </summary>
-    public IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer { get; set; }
-
-    /// <summary>
-    /// Gets or sets the maximum gradient norm for gradient clipping.
-    /// </summary>
-    public double MaxGradNorm { get; set; } = 1.0;
-
-    /// <summary>
-    /// Gets the compound scaling coefficients for the selected variant.
-    /// </summary>
-    /// <returns>A tuple of (widthCoefficient, depthCoefficient, resolution).</returns>
-    public (double Width, double Depth, int Resolution) GetScalingCoefficients()
-    {
-        return Variant switch
-        {
-            EfficientNetVariant.B0 => (1.0, 1.0, 224),
-            EfficientNetVariant.B1 => (1.0, 1.1, 240),
-            EfficientNetVariant.B2 => (1.1, 1.2, 260),
-            EfficientNetVariant.B3 => (1.2, 1.4, 300),
-            EfficientNetVariant.B4 => (1.4, 1.8, 380),
-            EfficientNetVariant.B5 => (1.6, 2.2, 456),
-            EfficientNetVariant.B6 => (1.8, 2.6, 528),
-            EfficientNetVariant.B7 => (2.0, 3.1, 600),
-            _ => (1.0, 1.0, 224)
-        };
-    }
-
-    /// <summary>
-    /// Gets the input resolution for this variant.
-    /// </summary>
-    public int InputResolution => GetScalingCoefficients().Resolution;
-}
 
 /// <summary>
 /// Implements the EfficientNet architecture with compound scaling.
@@ -171,35 +62,48 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-    private readonly EfficientNetConfiguration<T> _config;
+    private readonly EfficientNetConfiguration _configuration;
 
     /// <summary>
     /// Gets the EfficientNet variant.
     /// </summary>
-    public EfficientNetVariant Variant => _config.Variant;
+    public EfficientNetVariant Variant => _configuration.Variant;
 
     /// <summary>
     /// Gets the number of output classes.
     /// </summary>
-    public int NumClasses => _config.NumClasses;
+    public int NumClasses => _configuration.NumClasses;
 
     /// <summary>
     /// Gets the input resolution for this variant.
     /// </summary>
-    public int InputResolution => _config.InputResolution;
+    public int InputResolution => _configuration.GetInputHeight();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="EfficientNetNetwork{T}"/> class.
     /// </summary>
-    /// <param name="config">The EfficientNet configuration.</param>
-    public EfficientNetNetwork(EfficientNetConfiguration<T> config)
-        : base(CreateArchitecture(config),
-               config.LossFunction ?? new CrossEntropyLoss<T>(),
-               config.MaxGradNorm)
+    /// <param name="architecture">The architecture defining the structure of the neural network.</param>
+    /// <param name="configuration">The EfficientNet-specific configuration.</param>
+    /// <param name="optimizer">Optional optimizer for training (default: Adam).</param>
+    /// <param name="lossFunction">Optional loss function (default: based on task type).</param>
+    /// <param name="maxGradNorm">Maximum gradient norm for gradient clipping (default: 1.0).</param>
+    public EfficientNetNetwork(
+        NeuralNetworkArchitecture<T> architecture,
+        EfficientNetConfiguration configuration,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null,
+        double maxGradNorm = 1.0)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
-        _config = config ?? throw new ArgumentNullException(nameof(config));
-        _lossFunction = config.LossFunction ?? new CrossEntropyLoss<T>();
-        _optimizer = config.Optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+
+        ArchitectureValidator.ValidateInputType(
+            architecture,
+            InputType.ThreeDimensional,
+            nameof(EfficientNetNetwork<T>));
+
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         InitializeLayers();
     }
@@ -212,12 +116,9 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
     /// <returns>A configured EfficientNet-B0 network.</returns>
     public static EfficientNetNetwork<T> EfficientNetB0(int numClasses = 1000, int inputChannels = 3)
     {
-        return new EfficientNetNetwork<T>(new EfficientNetConfiguration<T>
-        {
-            Variant = EfficientNetVariant.B0,
-            NumClasses = numClasses,
-            InputChannels = inputChannels
-        });
+        var config = new EfficientNetConfiguration(EfficientNetVariant.B0, numClasses, inputChannels);
+        var architecture = CreateArchitectureFromConfig(config);
+        return new EfficientNetNetwork<T>(architecture, config);
     }
 
     /// <summary>
@@ -225,12 +126,9 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public static EfficientNetNetwork<T> EfficientNetB1(int numClasses = 1000, int inputChannels = 3)
     {
-        return new EfficientNetNetwork<T>(new EfficientNetConfiguration<T>
-        {
-            Variant = EfficientNetVariant.B1,
-            NumClasses = numClasses,
-            InputChannels = inputChannels
-        });
+        var config = new EfficientNetConfiguration(EfficientNetVariant.B1, numClasses, inputChannels);
+        var architecture = CreateArchitectureFromConfig(config);
+        return new EfficientNetNetwork<T>(architecture, config);
     }
 
     /// <summary>
@@ -238,12 +136,9 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public static EfficientNetNetwork<T> EfficientNetB2(int numClasses = 1000, int inputChannels = 3)
     {
-        return new EfficientNetNetwork<T>(new EfficientNetConfiguration<T>
-        {
-            Variant = EfficientNetVariant.B2,
-            NumClasses = numClasses,
-            InputChannels = inputChannels
-        });
+        var config = new EfficientNetConfiguration(EfficientNetVariant.B2, numClasses, inputChannels);
+        var architecture = CreateArchitectureFromConfig(config);
+        return new EfficientNetNetwork<T>(architecture, config);
     }
 
     /// <summary>
@@ -251,12 +146,9 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public static EfficientNetNetwork<T> EfficientNetB3(int numClasses = 1000, int inputChannels = 3)
     {
-        return new EfficientNetNetwork<T>(new EfficientNetConfiguration<T>
-        {
-            Variant = EfficientNetVariant.B3,
-            NumClasses = numClasses,
-            InputChannels = inputChannels
-        });
+        var config = new EfficientNetConfiguration(EfficientNetVariant.B3, numClasses, inputChannels);
+        var architecture = CreateArchitectureFromConfig(config);
+        return new EfficientNetNetwork<T>(architecture, config);
     }
 
     /// <summary>
@@ -264,12 +156,9 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public static EfficientNetNetwork<T> EfficientNetB4(int numClasses = 1000, int inputChannels = 3)
     {
-        return new EfficientNetNetwork<T>(new EfficientNetConfiguration<T>
-        {
-            Variant = EfficientNetVariant.B4,
-            NumClasses = numClasses,
-            InputChannels = inputChannels
-        });
+        var config = new EfficientNetConfiguration(EfficientNetVariant.B4, numClasses, inputChannels);
+        var architecture = CreateArchitectureFromConfig(config);
+        return new EfficientNetNetwork<T>(architecture, config);
     }
 
     /// <summary>
@@ -277,12 +166,9 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public static EfficientNetNetwork<T> EfficientNetB5(int numClasses = 1000, int inputChannels = 3)
     {
-        return new EfficientNetNetwork<T>(new EfficientNetConfiguration<T>
-        {
-            Variant = EfficientNetVariant.B5,
-            NumClasses = numClasses,
-            InputChannels = inputChannels
-        });
+        var config = new EfficientNetConfiguration(EfficientNetVariant.B5, numClasses, inputChannels);
+        var architecture = CreateArchitectureFromConfig(config);
+        return new EfficientNetNetwork<T>(architecture, config);
     }
 
     /// <summary>
@@ -290,12 +176,9 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public static EfficientNetNetwork<T> EfficientNetB6(int numClasses = 1000, int inputChannels = 3)
     {
-        return new EfficientNetNetwork<T>(new EfficientNetConfiguration<T>
-        {
-            Variant = EfficientNetVariant.B6,
-            NumClasses = numClasses,
-            InputChannels = inputChannels
-        });
+        var config = new EfficientNetConfiguration(EfficientNetVariant.B6, numClasses, inputChannels);
+        var architecture = CreateArchitectureFromConfig(config);
+        return new EfficientNetNetwork<T>(architecture, config);
     }
 
     /// <summary>
@@ -303,17 +186,14 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public static EfficientNetNetwork<T> EfficientNetB7(int numClasses = 1000, int inputChannels = 3)
     {
-        return new EfficientNetNetwork<T>(new EfficientNetConfiguration<T>
-        {
-            Variant = EfficientNetVariant.B7,
-            NumClasses = numClasses,
-            InputChannels = inputChannels
-        });
+        var config = new EfficientNetConfiguration(EfficientNetVariant.B7, numClasses, inputChannels);
+        var architecture = CreateArchitectureFromConfig(config);
+        return new EfficientNetNetwork<T>(architecture, config);
     }
 
-    private static NeuralNetworkArchitecture<T> CreateArchitecture(EfficientNetConfiguration<T> config)
+    private static NeuralNetworkArchitecture<T> CreateArchitectureFromConfig(EfficientNetConfiguration config)
     {
-        var resolution = config.InputResolution;
+        var resolution = config.GetInputHeight();
         return new NeuralNetworkArchitecture<T>(
             inputType: InputType.ThreeDimensional,
             taskType: NeuralNetworkTaskType.MultiClassClassification,
@@ -326,134 +206,20 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
         );
     }
 
-    /// <summary>
-    /// Scales channel count by the width coefficient.
-    /// </summary>
-    private int MakeScaledChannels(int channels, double widthCoefficient)
-    {
-        // Ensure channels is divisible by 8 (important for efficient computation)
-        int scaled = (int)Math.Round(channels * widthCoefficient);
-        return Math.Max(8, (scaled + 4) / 8 * 8); // Round to nearest 8, minimum 8
-    }
-
-    /// <summary>
-    /// Scales layer repeat count by the depth coefficient.
-    /// </summary>
-    private int MakeScaledDepth(int numLayers, double depthCoefficient)
-    {
-        return (int)Math.Ceiling(numLayers * depthCoefficient);
-    }
-
     /// <inheritdoc />
-    protected override void InitializeLayers()
+    protected sealed override void InitializeLayers()
     {
-        var layers = new List<ILayer<T>>();
-        var (widthCoeff, depthCoeff, resolution) = _config.GetScalingCoefficients();
-
-        int currentHeight = resolution;
-        int currentWidth = resolution;
-
-        // Stem: 3x3 conv, stride 2
-        int stemChannels = MakeScaledChannels(32, widthCoeff);
-        layers.Add(new ConvolutionalLayer<T>(
-            inputDepth: _config.InputChannels,
-            outputDepth: stemChannels,
-            kernelSize: 3,
-            inputHeight: currentHeight,
-            inputWidth: currentWidth,
-            stride: 2,
-            padding: 1,
-            activation: new IdentityActivation<T>()));
-
-        currentHeight = (currentHeight + 2 * 1 - 3) / 2 + 1;
-        currentWidth = (currentWidth + 2 * 1 - 3) / 2 + 1;
-
-        layers.Add(new BatchNormalizationLayer<T>(stemChannels));
-        layers.Add(new ActivationLayer<T>([stemChannels, currentHeight, currentWidth],
-            activationFunction: new SwishActivation<T>()));
-
-        int currentChannels = stemChannels;
-
-        // EfficientNet-B0 block configuration:
-        // (expansion, output_channels, num_layers, stride, kernel_size)
-        // Note: kernel_size is stored but we currently use 3x3 for all blocks
-        var blockConfigs = new (int expansion, int outChannels, int numLayers, int stride, int kernelSize)[]
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            (1, 16, 1, 1, 3),   // Stage 1: MBConv1
-            (6, 24, 2, 2, 3),   // Stage 2: MBConv6
-            (6, 40, 2, 2, 5),   // Stage 3: MBConv6 (5x5 in original, using 3x3)
-            (6, 80, 3, 2, 3),   // Stage 4: MBConv6
-            (6, 112, 3, 1, 5),  // Stage 5: MBConv6 (5x5 in original, using 3x3)
-            (6, 192, 4, 2, 5),  // Stage 6: MBConv6 (5x5 in original, using 3x3)
-            (6, 320, 1, 1, 3)   // Stage 7: MBConv6
-        };
-
-        // Add MBConv blocks with SE and Swish activation
-        foreach (var (expansion, outChannels, numLayers, stride, kernelSize) in blockConfigs)
-        {
-            int scaledOutChannels = MakeScaledChannels(outChannels, widthCoeff);
-            int scaledNumLayers = MakeScaledDepth(numLayers, depthCoeff);
-
-            // First block in each stage may have stride > 1
-            layers.Add(new InvertedResidualBlock<T>(
-                inChannels: currentChannels,
-                outChannels: scaledOutChannels,
-                inputHeight: currentHeight,
-                inputWidth: currentWidth,
-                expansionRatio: expansion,
-                stride: stride,
-                useSE: true, // EfficientNet uses SE blocks
-                seRatio: 4,
-                activation: new SwishActivation<T>()));
-
-            // Update dimensions after first block
-            currentHeight = (currentHeight + stride - 1) / stride;
-            currentWidth = (currentWidth + stride - 1) / stride;
-            currentChannels = scaledOutChannels;
-
-            // Remaining blocks in the stage (stride=1)
-            for (int i = 1; i < scaledNumLayers; i++)
-            {
-                layers.Add(new InvertedResidualBlock<T>(
-                    inChannels: currentChannels,
-                    outChannels: currentChannels, // Same channels
-                    inputHeight: currentHeight,
-                    inputWidth: currentWidth,
-                    expansionRatio: expansion,
-                    stride: 1,
-                    useSE: true,
-                    seRatio: 4,
-                    activation: new SwishActivation<T>()));
-            }
+            // Use the layers provided by the user
+            Layers.AddRange(Architecture.Layers);
+            ValidateCustomLayers(Layers);
         }
-
-        // Head: 1x1 conv
-        int headChannels = MakeScaledChannels(1280, widthCoeff);
-        layers.Add(new ConvolutionalLayer<T>(
-            inputDepth: currentChannels,
-            outputDepth: headChannels,
-            kernelSize: 1,
-            inputHeight: currentHeight,
-            inputWidth: currentWidth,
-            stride: 1,
-            padding: 0,
-            activation: new IdentityActivation<T>()));
-
-        layers.Add(new BatchNormalizationLayer<T>(headChannels));
-        layers.Add(new ActivationLayer<T>([headChannels, currentHeight, currentWidth],
-            activationFunction: new SwishActivation<T>()));
-
-        // Global average pooling
-        layers.Add(new AdaptiveAvgPoolingLayer<T>(headChannels, currentHeight, currentWidth, 1, 1));
-
-        // Flatten
-        layers.Add(new FlattenLayer<T>([headChannels, 1, 1]));
-
-        // Classification head
-        layers.Add(new DenseLayer<T>(headChannels, _config.NumClasses,
-            activationFunction: new IdentityActivation<T>()));
-
-        Layers.AddRange(layers);
+        else
+        {
+            // Use EfficientNet-specific layer configuration
+            Layers.AddRange(LayerHelper<T>.CreateDefaultEfficientNetLayers(Architecture, _configuration));
+        }
     }
 
     /// <summary>
@@ -527,19 +293,22 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var (widthCoeff, depthCoeff, resolution) = _config.GetScalingCoefficients();
+        var widthCoeff = _configuration.GetWidthMultiplier();
+        var depthCoeff = _configuration.GetDepthMultiplier();
+        var resolution = _configuration.GetInputHeight();
+
         return new ModelMetadata<T>
         {
             ModelType = ModelType.ConvolutionalNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "EfficientNetNetwork" },
-                { "Variant", _config.Variant.ToString() },
+                { "Variant", _configuration.Variant.ToString() },
                 { "WidthCoefficient", widthCoeff },
                 { "DepthCoefficient", depthCoeff },
                 { "Resolution", resolution },
-                { "NumClasses", _config.NumClasses },
-                { "InputShape", $"{_config.InputChannels}x{resolution}x{resolution}" },
+                { "NumClasses", _configuration.NumClasses },
+                { "InputShape", $"{_configuration.InputChannels}x{resolution}x{resolution}" },
                 { "LayerCount", Layers.Count },
                 { "ParameterCount", GetParameterCount() }
             },
@@ -550,9 +319,9 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write((int)_config.Variant);
-        writer.Write(_config.InputChannels);
-        writer.Write(_config.NumClasses);
+        writer.Write((int)_configuration.Variant);
+        writer.Write(_configuration.InputChannels);
+        writer.Write(_configuration.NumClasses);
     }
 
     /// <inheritdoc />
@@ -562,9 +331,9 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
         var inputChannels = reader.ReadInt32();
         var numClasses = reader.ReadInt32();
 
-        if (variant != _config.Variant ||
-            inputChannels != _config.InputChannels ||
-            numClasses != _config.NumClasses)
+        if (variant != _configuration.Variant ||
+            inputChannels != _configuration.InputChannels ||
+            numClasses != _configuration.NumClasses)
         {
             throw new InvalidDataException("Serialized EfficientNet configuration does not match current configuration.");
         }
@@ -573,15 +342,12 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new EfficientNetNetwork<T>(new EfficientNetConfiguration<T>
-        {
-            Variant = _config.Variant,
-            InputChannels = _config.InputChannels,
-            NumClasses = _config.NumClasses,
-            MaxGradNorm = _config.MaxGradNorm,
-            LossFunction = _lossFunction,
-            Optimizer = _optimizer
-        });
+        var config = new EfficientNetConfiguration(
+            _configuration.Variant,
+            _configuration.NumClasses,
+            _configuration.InputChannels);
+
+        return new EfficientNetNetwork<T>(Architecture, config, _optimizer, _lossFunction);
     }
 
     /// <inheritdoc />

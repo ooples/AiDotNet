@@ -192,6 +192,30 @@ public class DenseBlock<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Sets all trainable parameters from the given parameter vector.
+    /// </summary>
+    /// <param name="parameters">The parameter vector containing all layer parameters.</param>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+        foreach (var layer in _layers)
+        {
+            int count = layer.GetParameters().Length;
+            layer.SetParameters(parameters.SubVector(offset, count));
+            offset += count;
+        }
+    }
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["InputChannels"] = _inputChannels.ToString();
+        metadata["NumLayers"] = _numLayers.ToString();
+        metadata["GrowthRate"] = _growthRate.ToString();
+        return metadata;
+    }
+
+    /// <summary>
     /// Resets the internal state of the block.
     /// </summary>
     public override void ResetState()
@@ -435,6 +459,26 @@ internal class DenseBlockLayer<T> : LayerBase<T>
         parameters.AddRange(_bn2.GetParameters().ToArray());
         parameters.AddRange(_conv3x3.GetParameters().ToArray());
         return new Vector<T>(parameters.ToArray());
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+
+        int count = _bn1.GetParameters().Length;
+        _bn1.SetParameters(parameters.SubVector(offset, count));
+        offset += count;
+
+        count = _conv1x1.GetParameters().Length;
+        _conv1x1.SetParameters(parameters.SubVector(offset, count));
+        offset += count;
+
+        count = _bn2.GetParameters().Length;
+        _bn2.SetParameters(parameters.SubVector(offset, count));
+        offset += count;
+
+        count = _conv3x3.GetParameters().Length;
+        _conv3x3.SetParameters(parameters.SubVector(offset, count));
     }
 
     public override void ResetState()

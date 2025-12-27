@@ -473,4 +473,12 @@ public class MaxPoolingLayer<T> : LayerBase<T>
             return InputShape != null && InputShape.Length > 0;
         }
     }
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["PoolSize"] = PoolSize.ToString();
+        metadata["Strides"] = Strides.ToString();
+        return metadata;
+    }
 }

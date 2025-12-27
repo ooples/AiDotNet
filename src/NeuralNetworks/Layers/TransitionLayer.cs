@@ -238,6 +238,30 @@ public class TransitionLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Sets all trainable parameters from the given parameter vector.
+    /// </summary>
+    /// <param name="parameters">The parameter vector containing all layer parameters.</param>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+
+        int count = _bn.GetParameters().Length;
+        _bn.SetParameters(parameters.SubVector(offset, count));
+        offset += count;
+
+        count = _conv.GetParameters().Length;
+        _conv.SetParameters(parameters.SubVector(offset, count));
+    }
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["InputChannels"] = InputShape[0].ToString();
+        metadata["OutputChannels"] = OutputChannels.ToString();
+        return metadata;
+    }
+
+    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     public override void ResetState()

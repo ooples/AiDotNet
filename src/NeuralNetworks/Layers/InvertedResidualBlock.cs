@@ -344,6 +344,57 @@ public class InvertedResidualBlock<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Sets all trainable parameters from the given parameter vector.
+    /// </summary>
+    /// <param name="parameters">The parameter vector containing all layer parameters.</param>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+
+        if (_expandConv is not null)
+        {
+            int count = _expandConv.GetParameters().Length;
+            _expandConv.SetParameters(parameters.SubVector(offset, count));
+            offset += count;
+        }
+        if (_expandBn is not null)
+        {
+            int count = _expandBn.GetParameters().Length;
+            _expandBn.SetParameters(parameters.SubVector(offset, count));
+            offset += count;
+        }
+
+        {
+            int count = _dwConv.GetParameters().Length;
+            _dwConv.SetParameters(parameters.SubVector(offset, count));
+            offset += count;
+        }
+        {
+            int count = _dwBn.GetParameters().Length;
+            _dwBn.SetParameters(parameters.SubVector(offset, count));
+            offset += count;
+        }
+
+        if (_se is not null)
+        {
+            int count = _se.GetParameters().Length;
+            _se.SetParameters(parameters.SubVector(offset, count));
+            offset += count;
+        }
+
+        {
+            int count = _projectConv.GetParameters().Length;
+            _projectConv.SetParameters(parameters.SubVector(offset, count));
+            offset += count;
+        }
+        {
+            int count = _projectBn.GetParameters().Length;
+            _projectBn.SetParameters(parameters.SubVector(offset, count));
+            offset += count;
+        }
+    }
+
+    /// <summary>
     /// Resets the internal state of the block.
     /// </summary>
     public override void ResetState()
@@ -435,4 +486,18 @@ public class InvertedResidualBlock<T> : LayerBase<T>
     }
 
     #endregion
+
+    /// <summary>
+    /// Returns layer-specific metadata for serialization purposes.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["InChannels"] = InChannels.ToString();
+        metadata["OutChannels"] = OutChannels.ToString();
+        metadata["ExpansionRatio"] = ExpansionRatio.ToString();
+        metadata["Stride"] = Stride.ToString();
+        metadata["UseSE"] = _useSE.ToString();
+        return metadata;
+    }
 }

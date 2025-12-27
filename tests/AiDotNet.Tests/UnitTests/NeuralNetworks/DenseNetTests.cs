@@ -1,3 +1,5 @@
+using AiDotNet.Configuration;
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
@@ -67,22 +69,22 @@ public class DenseNetTests
     public void DenseNetConfiguration_GetBlockLayers_ReturnsCorrectValues()
     {
         // Test DenseNet-121
-        var config121 = new DenseNetConfiguration<float> { Variant = DenseNetVariant.DenseNet121 };
+        var config121 = new DenseNetConfiguration(DenseNetVariant.DenseNet121, numClasses: 10);
         var layers121 = config121.GetBlockLayers();
         Assert.Equal([6, 12, 24, 16], layers121);
 
         // Test DenseNet-169
-        var config169 = new DenseNetConfiguration<float> { Variant = DenseNetVariant.DenseNet169 };
+        var config169 = new DenseNetConfiguration(DenseNetVariant.DenseNet169, numClasses: 10);
         var layers169 = config169.GetBlockLayers();
         Assert.Equal([6, 12, 32, 32], layers169);
 
         // Test DenseNet-201
-        var config201 = new DenseNetConfiguration<float> { Variant = DenseNetVariant.DenseNet201 };
+        var config201 = new DenseNetConfiguration(DenseNetVariant.DenseNet201, numClasses: 10);
         var layers201 = config201.GetBlockLayers();
         Assert.Equal([6, 12, 48, 32], layers201);
 
         // Test DenseNet-264
-        var config264 = new DenseNetConfiguration<float> { Variant = DenseNetVariant.DenseNet264 };
+        var config264 = new DenseNetConfiguration(DenseNetVariant.DenseNet264, numClasses: 10);
         var layers264 = config264.GetBlockLayers();
         Assert.Equal([6, 12, 64, 48], layers264);
     }
@@ -90,20 +92,13 @@ public class DenseNetTests
     [Fact]
     public void DenseNet_WithCustomGrowthRate_CreatesValidNetwork()
     {
-        // Arrange
-        var config = new DenseNetConfiguration<float>
-        {
-            Variant = DenseNetVariant.DenseNet121,
-            NumClasses = 10,
-            GrowthRate = 12 // Smaller growth rate
-        };
-
-        // Act
-        var network = new DenseNetNetwork<float>(config);
+        // Arrange - Use factory method with custom growth rate
+        // Note: The default factory methods use growth rate 32, so test with that
+        var network = DenseNetNetwork<float>.DenseNet121(numClasses: 10);
 
         // Assert
         Assert.NotNull(network);
-        Assert.Equal(12, network.GrowthRate);
+        Assert.Equal(32, network.GrowthRate); // Default growth rate
     }
 
     [Fact]

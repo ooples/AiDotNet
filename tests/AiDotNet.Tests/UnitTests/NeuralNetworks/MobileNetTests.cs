@@ -1,4 +1,6 @@
 using Xunit;
+using AiDotNet.Configuration;
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
@@ -15,8 +17,8 @@ public class MobileNetTests
     [Fact]
     public void MobileNetV2Configuration_DefaultValues_AreCorrect()
     {
-        // Arrange & Act
-        var config = new MobileNetV2Configuration<double>();
+        // Arrange & Act - Use the standard factory method
+        var config = MobileNetV2Configuration.CreateStandard(numClasses: 1000);
 
         // Assert
         Assert.Equal(MobileNetV2WidthMultiplier.Alpha100, config.WidthMultiplier);
@@ -37,7 +39,7 @@ public class MobileNetTests
         MobileNetV2WidthMultiplier multiplier, double expectedAlpha)
     {
         // Arrange
-        var config = new MobileNetV2Configuration<double> { WidthMultiplier = multiplier };
+        var config = new MobileNetV2Configuration(multiplier, numClasses: 10);
 
         // Assert
         Assert.Equal(expectedAlpha, config.Alpha);
@@ -57,7 +59,7 @@ public class MobileNetTests
         Assert.NotNull(network);
         Assert.Equal(MobileNetV2WidthMultiplier.Alpha100, network.WidthMultiplier);
         Assert.Equal(10, network.NumClasses);
-        Assert.True(network.LayerCount > 0);
+        Assert.True(network.Layers.Count > 0);
     }
 
     [Fact]
@@ -75,22 +77,12 @@ public class MobileNetTests
     [Fact]
     public void MobileNetV2_CustomConfig_CreatesValidNetwork()
     {
-        // Arrange
-        var config = new MobileNetV2Configuration<double>
-        {
-            WidthMultiplier = MobileNetV2WidthMultiplier.Alpha075,
-            InputChannels = 1,
-            InputHeight = 32,
-            InputWidth = 32,
-            NumClasses = 10
-        };
-
-        // Act
-        var network = new MobileNetV2Network<double>(config);
+        // Arrange - Use factory method for testing custom channels
+        var network = MobileNetV2Network<double>.MobileNetV2_075(numClasses: 10, inputChannels: 1);
 
         // Assert
         Assert.NotNull(network);
-        Assert.True(network.LayerCount > 0);
+        Assert.True(network.Layers.Count > 0);
     }
 
     [Theory]
@@ -101,17 +93,18 @@ public class MobileNetTests
     [InlineData(MobileNetV2WidthMultiplier.Alpha140)]
     public void MobileNetV2_AllWidthMultipliers_AreValid(MobileNetV2WidthMultiplier multiplier)
     {
-        // Arrange
-        var config = new MobileNetV2Configuration<double>
+        // Arrange & Act - Use factory methods based on multiplier
+        var network = multiplier switch
         {
-            WidthMultiplier = multiplier,
-            InputHeight = 32,
-            InputWidth = 32,
-            NumClasses = 10
+            MobileNetV2WidthMultiplier.Alpha035 => MobileNetV2Network<double>.MobileNetV2_035(numClasses: 10),
+            MobileNetV2WidthMultiplier.Alpha050 => MobileNetV2Network<double>.MobileNetV2_050(numClasses: 10),
+            MobileNetV2WidthMultiplier.Alpha075 => MobileNetV2Network<double>.MobileNetV2_075(numClasses: 10),
+            MobileNetV2WidthMultiplier.Alpha100 => MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10),
+            MobileNetV2WidthMultiplier.Alpha140 => MobileNetV2Network<double>.MobileNetV2_140(numClasses: 10),
+            _ => MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10)
         };
 
-        // Act & Assert - should not throw
-        var network = new MobileNetV2Network<double>(config);
+        // Assert
         Assert.NotNull(network);
         Assert.Equal(multiplier, network.WidthMultiplier);
     }
@@ -123,18 +116,11 @@ public class MobileNetTests
     [Fact]
     public void MobileNetV2_Forward_ProducesCorrectOutputShape()
     {
-        // Arrange - use smaller input for faster tests
-        var config = new MobileNetV2Configuration<double>
-        {
-            WidthMultiplier = MobileNetV2WidthMultiplier.Alpha100,
-            InputChannels = 3,
-            InputHeight = 32,
-            InputWidth = 32,
-            NumClasses = 10
-        };
-        var network = new MobileNetV2Network<double>(config);
+        // Arrange - use factory method
+        var network = MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10);
 
-        var input = new Tensor<double>([1, 3, 32, 32]);
+        // Use standard 224x224 resolution expected by MobileNetV2
+        var input = new Tensor<double>([1, 3, 224, 224]);
         var random = new Random(123);
         for (int i = 0; i < input.Data.Length; i++)
             input.Data[i] = random.NextDouble() * 0.5 + 0.1;
@@ -150,17 +136,9 @@ public class MobileNetTests
     public void MobileNetV2_Forward_ReturnsNonZeroOutput()
     {
         // Arrange
-        var config = new MobileNetV2Configuration<double>
-        {
-            WidthMultiplier = MobileNetV2WidthMultiplier.Alpha100,
-            InputChannels = 3,
-            InputHeight = 64,
-            InputWidth = 64,
-            NumClasses = 10
-        };
-        var network = new MobileNetV2Network<double>(config);
+        var network = MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10);
 
-        var input = new Tensor<double>([1, 3, 64, 64]);
+        var input = new Tensor<double>([1, 3, 224, 224]);
         var random = new Random(42);
         for (int i = 0; i < input.Data.Length; i++)
             input.Data[i] = random.NextDouble();
@@ -180,8 +158,8 @@ public class MobileNetTests
     [Fact]
     public void MobileNetV3Configuration_DefaultValues_AreCorrect()
     {
-        // Arrange & Act
-        var config = new MobileNetV3Configuration<double>();
+        // Arrange & Act - Use the Large factory method
+        var config = MobileNetV3Configuration.CreateLarge(numClasses: 1000);
 
         // Assert
         Assert.Equal(MobileNetV3Variant.Large, config.Variant);
@@ -199,7 +177,7 @@ public class MobileNetTests
         MobileNetV3WidthMultiplier multiplier, double expectedAlpha)
     {
         // Arrange
-        var config = new MobileNetV3Configuration<double> { WidthMultiplier = multiplier };
+        var config = new MobileNetV3Configuration(MobileNetV3Variant.Large, numClasses: 10, widthMultiplier: multiplier);
 
         // Assert
         Assert.Equal(expectedAlpha, config.Alpha);
@@ -219,7 +197,7 @@ public class MobileNetTests
         Assert.NotNull(network);
         Assert.Equal(MobileNetV3Variant.Large, network.Variant);
         Assert.Equal(10, network.NumClasses);
-        Assert.True(network.LayerCount > 0);
+        Assert.True(network.Layers.Count > 0);
     }
 
     [Fact]
@@ -232,29 +210,18 @@ public class MobileNetTests
         Assert.NotNull(network);
         Assert.Equal(MobileNetV3Variant.Small, network.Variant);
         Assert.Equal(10, network.NumClasses);
-        Assert.True(network.LayerCount > 0);
+        Assert.True(network.Layers.Count > 0);
     }
 
     [Fact]
     public void MobileNetV3_CustomConfig_CreatesValidNetwork()
     {
-        // Arrange
-        var config = new MobileNetV3Configuration<double>
-        {
-            Variant = MobileNetV3Variant.Large,
-            WidthMultiplier = MobileNetV3WidthMultiplier.Alpha075,
-            InputChannels = 1,
-            InputHeight = 32,
-            InputWidth = 32,
-            NumClasses = 10
-        };
-
-        // Act
-        var network = new MobileNetV3Network<double>(config);
+        // Arrange - Use factory method for testing custom channels
+        var network = MobileNetV3Network<double>.MobileNetV3Large(numClasses: 10, inputChannels: 1);
 
         // Assert
         Assert.NotNull(network);
-        Assert.True(network.LayerCount > 0);
+        Assert.True(network.Layers.Count > 0);
     }
 
     [Theory]
@@ -262,17 +229,15 @@ public class MobileNetTests
     [InlineData(MobileNetV3Variant.Small)]
     public void MobileNetV3_AllVariants_AreValid(MobileNetV3Variant variant)
     {
-        // Arrange
-        var config = new MobileNetV3Configuration<double>
+        // Arrange & Act - Use factory methods based on variant
+        var network = variant switch
         {
-            Variant = variant,
-            InputHeight = 32,
-            InputWidth = 32,
-            NumClasses = 10
+            MobileNetV3Variant.Large => MobileNetV3Network<double>.MobileNetV3Large(numClasses: 10),
+            MobileNetV3Variant.Small => MobileNetV3Network<double>.MobileNetV3Small(numClasses: 10),
+            _ => MobileNetV3Network<double>.MobileNetV3Large(numClasses: 10)
         };
 
-        // Act & Assert - should not throw
-        var network = new MobileNetV3Network<double>(config);
+        // Assert
         Assert.NotNull(network);
         Assert.Equal(variant, network.Variant);
     }
@@ -284,18 +249,11 @@ public class MobileNetTests
     [Fact]
     public void MobileNetV3Large_Forward_ProducesCorrectOutputShape()
     {
-        // Arrange
-        var config = new MobileNetV3Configuration<double>
-        {
-            Variant = MobileNetV3Variant.Large,
-            InputChannels = 3,
-            InputHeight = 32,
-            InputWidth = 32,
-            NumClasses = 10
-        };
-        var network = new MobileNetV3Network<double>(config);
+        // Arrange - Use factory method
+        var network = MobileNetV3Network<double>.MobileNetV3Large(numClasses: 10);
 
-        var input = new Tensor<double>([1, 3, 32, 32]);
+        // Use standard 224x224 resolution expected by MobileNetV3
+        var input = new Tensor<double>([1, 3, 224, 224]);
         var random = new Random(123);
         for (int i = 0; i < input.Data.Length; i++)
             input.Data[i] = random.NextDouble() * 0.5 + 0.1;
@@ -310,18 +268,11 @@ public class MobileNetTests
     [Fact]
     public void MobileNetV3Small_Forward_ProducesCorrectOutputShape()
     {
-        // Arrange
-        var config = new MobileNetV3Configuration<double>
-        {
-            Variant = MobileNetV3Variant.Small,
-            InputChannels = 3,
-            InputHeight = 32,
-            InputWidth = 32,
-            NumClasses = 10
-        };
-        var network = new MobileNetV3Network<double>(config);
+        // Arrange - Use factory method
+        var network = MobileNetV3Network<double>.MobileNetV3Small(numClasses: 10);
 
-        var input = new Tensor<double>([1, 3, 32, 32]);
+        // Use standard 224x224 resolution expected by MobileNetV3
+        var input = new Tensor<double>([1, 3, 224, 224]);
         var random = new Random(123);
         for (int i = 0; i < input.Data.Length; i++)
             input.Data[i] = random.NextDouble() * 0.5 + 0.1;
@@ -653,18 +604,10 @@ public class MobileNetTests
     [Fact(Skip = "Training tests require significant compute resources")]
     public void MobileNetV2_Train_CompletesWithoutError()
     {
-        // Arrange
-        var config = new MobileNetV2Configuration<double>
-        {
-            WidthMultiplier = MobileNetV2WidthMultiplier.Alpha100,
-            InputChannels = 3,
-            InputHeight = 32,
-            InputWidth = 32,
-            NumClasses = 10
-        };
-        var network = new MobileNetV2Network<double>(config);
+        // Arrange - Use factory method
+        var network = MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10);
 
-        var input = new Tensor<double>([1, 3, 32, 32]);
+        var input = new Tensor<double>([1, 3, 224, 224]);
         var target = new Tensor<double>([10]);
         for (int i = 0; i < input.Data.Length; i++) input.Data[i] = 0.5;
         target.Data[0] = 1.0;
@@ -676,18 +619,10 @@ public class MobileNetTests
     [Fact(Skip = "Training tests require significant compute resources")]
     public void MobileNetV3_Train_CompletesWithoutError()
     {
-        // Arrange
-        var config = new MobileNetV3Configuration<double>
-        {
-            Variant = MobileNetV3Variant.Small,
-            InputChannels = 3,
-            InputHeight = 32,
-            InputWidth = 32,
-            NumClasses = 10
-        };
-        var network = new MobileNetV3Network<double>(config);
+        // Arrange - Use factory method
+        var network = MobileNetV3Network<double>.MobileNetV3Small(numClasses: 10);
 
-        var input = new Tensor<double>([1, 3, 32, 32]);
+        var input = new Tensor<double>([1, 3, 224, 224]);
         var target = new Tensor<double>([10]);
         for (int i = 0; i < input.Data.Length; i++) input.Data[i] = 0.5;
         target.Data[0] = 1.0;

@@ -1,4 +1,6 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Configuration;
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
@@ -47,14 +49,8 @@ public class EfficientNetTests
     [Fact]
     public void EfficientNetB0_ForwardSmallInput_ProducesCorrectShape()
     {
-        // Arrange - Use smaller input for faster testing
-        var config = new EfficientNetConfiguration<float>
-        {
-            Variant = EfficientNetVariant.B0,
-            NumClasses = 5,
-            InputChannels = 3
-        };
-        var network = new EfficientNetNetwork<float>(config);
+        // Arrange - Use the static factory method
+        var network = EfficientNetNetwork<float>.EfficientNetB0(numClasses: 5);
         // We still need to use the expected resolution
         var input = new Tensor<float>([1, 3, 224, 224]);
         InitializeWithRandomValues(input);
@@ -77,16 +73,15 @@ public class EfficientNetTests
     [InlineData(EfficientNetVariant.B3, 300)]
     public void EfficientNet_Variants_HaveCorrectResolution(EfficientNetVariant variant, int expectedResolution)
     {
-        // Arrange
-        var config = new EfficientNetConfiguration<float>
+        // Arrange & Act - Use factory methods based on variant
+        var network = variant switch
         {
-            Variant = variant,
-            NumClasses = 10,
-            InputChannels = 3
+            EfficientNetVariant.B0 => EfficientNetNetwork<float>.EfficientNetB0(numClasses: 10),
+            EfficientNetVariant.B1 => EfficientNetNetwork<float>.EfficientNetB1(numClasses: 10),
+            EfficientNetVariant.B2 => EfficientNetNetwork<float>.EfficientNetB2(numClasses: 10),
+            EfficientNetVariant.B3 => EfficientNetNetwork<float>.EfficientNetB3(numClasses: 10),
+            _ => EfficientNetNetwork<float>.EfficientNetB0(numClasses: 10)
         };
-
-        // Act
-        var network = new EfficientNetNetwork<float>(config);
 
         // Assert
         Assert.Equal(variant, network.Variant);
@@ -186,25 +181,22 @@ public class EfficientNetTests
     public void EfficientNetConfiguration_GetScalingCoefficients_ReturnsCorrectValues()
     {
         // Test B0
-        var configB0 = new EfficientNetConfiguration<float> { Variant = EfficientNetVariant.B0 };
-        var (w0, d0, r0) = configB0.GetScalingCoefficients();
-        Assert.Equal(1.0, w0);
-        Assert.Equal(1.0, d0);
-        Assert.Equal(224, r0);
+        var configB0 = new EfficientNetConfiguration(EfficientNetVariant.B0, numClasses: 10);
+        Assert.Equal(1.0, configB0.GetWidthMultiplier());
+        Assert.Equal(1.0, configB0.GetDepthMultiplier());
+        Assert.Equal(224, configB0.GetInputHeight());
 
         // Test B3
-        var configB3 = new EfficientNetConfiguration<float> { Variant = EfficientNetVariant.B3 };
-        var (w3, d3, r3) = configB3.GetScalingCoefficients();
-        Assert.Equal(1.2, w3);
-        Assert.Equal(1.4, d3);
-        Assert.Equal(300, r3);
+        var configB3 = new EfficientNetConfiguration(EfficientNetVariant.B3, numClasses: 10);
+        Assert.Equal(1.2, configB3.GetWidthMultiplier());
+        Assert.Equal(1.4, configB3.GetDepthMultiplier());
+        Assert.Equal(300, configB3.GetInputHeight());
 
         // Test B7
-        var configB7 = new EfficientNetConfiguration<float> { Variant = EfficientNetVariant.B7 };
-        var (w7, d7, r7) = configB7.GetScalingCoefficients();
-        Assert.Equal(2.0, w7);
-        Assert.Equal(3.1, d7);
-        Assert.Equal(600, r7);
+        var configB7 = new EfficientNetConfiguration(EfficientNetVariant.B7, numClasses: 10);
+        Assert.Equal(2.0, configB7.GetWidthMultiplier());
+        Assert.Equal(3.1, configB7.GetDepthMultiplier());
+        Assert.Equal(600, configB7.GetInputHeight());
     }
 
     [Fact]

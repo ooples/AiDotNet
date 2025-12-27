@@ -1,113 +1,14 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Configuration;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.NeuralNetworks;
-
-/// <summary>
-/// Specifies the DenseNet model variant.
-/// </summary>
-/// <remarks>
-/// Each variant has different numbers of layers per dense block.
-/// Higher variants have more layers and better accuracy but require more compute.
-/// </remarks>
-public enum DenseNetVariant
-{
-    /// <summary>
-    /// DenseNet-121: [6, 12, 24, 16] layers per block (8M parameters).
-    /// </summary>
-    DenseNet121,
-
-    /// <summary>
-    /// DenseNet-169: [6, 12, 32, 32] layers per block (14M parameters).
-    /// </summary>
-    DenseNet169,
-
-    /// <summary>
-    /// DenseNet-201: [6, 12, 48, 32] layers per block (20M parameters).
-    /// </summary>
-    DenseNet201,
-
-    /// <summary>
-    /// DenseNet-264: [6, 12, 64, 48] layers per block (33M parameters).
-    /// </summary>
-    DenseNet264
-}
-
-/// <summary>
-/// Configuration for a DenseNet network.
-/// </summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class DenseNetConfiguration<T>
-{
-    /// <summary>
-    /// Gets or sets the DenseNet variant.
-    /// </summary>
-    public DenseNetVariant Variant { get; set; } = DenseNetVariant.DenseNet121;
-
-    /// <summary>
-    /// Gets or sets the number of input channels (e.g., 3 for RGB, 1 for grayscale).
-    /// </summary>
-    public int InputChannels { get; set; } = 3;
-
-    /// <summary>
-    /// Gets or sets the input image height.
-    /// </summary>
-    public int InputHeight { get; set; } = 224;
-
-    /// <summary>
-    /// Gets or sets the input image width.
-    /// </summary>
-    public int InputWidth { get; set; } = 224;
-
-    /// <summary>
-    /// Gets or sets the number of output classes.
-    /// </summary>
-    public int NumClasses { get; set; } = 1000;
-
-    /// <summary>
-    /// Gets or sets the growth rate (k in the paper). Default is 32.
-    /// </summary>
-    public int GrowthRate { get; set; } = 32;
-
-    /// <summary>
-    /// Gets or sets the compression factor for transition layers. Default is 0.5.
-    /// </summary>
-    public double CompressionFactor { get; set; } = 0.5;
-
-    /// <summary>
-    /// Gets or sets the loss function. Defaults to CrossEntropyLoss for classification.
-    /// </summary>
-    public ILossFunction<T>? LossFunction { get; set; }
-
-    /// <summary>
-    /// Gets or sets the optimizer. Defaults to Adam.
-    /// </summary>
-    public IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer { get; set; }
-
-    /// <summary>
-    /// Gets or sets the maximum gradient norm for gradient clipping.
-    /// </summary>
-    public double MaxGradNorm { get; set; } = 1.0;
-
-    /// <summary>
-    /// Gets the number of layers per dense block for this variant.
-    /// </summary>
-    public int[] GetBlockLayers()
-    {
-        return Variant switch
-        {
-            DenseNetVariant.DenseNet121 => [6, 12, 24, 16],
-            DenseNetVariant.DenseNet169 => [6, 12, 32, 32],
-            DenseNetVariant.DenseNet201 => [6, 12, 48, 32],
-            DenseNetVariant.DenseNet264 => [6, 12, 64, 48],
-            _ => [6, 12, 24, 16]
-        };
-    }
-}
 
 /// <summary>
 /// Implements the DenseNet (Densely Connected Convolutional Network) architecture.
@@ -155,35 +56,48 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-    private readonly DenseNetConfiguration<T> _config;
+    private readonly DenseNetConfiguration _configuration;
 
     /// <summary>
     /// Gets the DenseNet variant.
     /// </summary>
-    public DenseNetVariant Variant => _config.Variant;
+    public DenseNetVariant Variant => _configuration.Variant;
 
     /// <summary>
     /// Gets the number of output classes.
     /// </summary>
-    public int NumClasses => _config.NumClasses;
+    public int NumClasses => _configuration.NumClasses;
 
     /// <summary>
     /// Gets the growth rate (k).
     /// </summary>
-    public int GrowthRate => _config.GrowthRate;
+    public int GrowthRate => _configuration.GrowthRate;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DenseNetNetwork{T}"/> class.
     /// </summary>
-    /// <param name="config">The DenseNet configuration.</param>
-    public DenseNetNetwork(DenseNetConfiguration<T> config)
-        : base(CreateArchitecture(config),
-               config.LossFunction ?? new CrossEntropyLoss<T>(),
-               config.MaxGradNorm)
+    /// <param name="architecture">The architecture defining the structure of the neural network.</param>
+    /// <param name="configuration">The DenseNet-specific configuration.</param>
+    /// <param name="optimizer">Optional optimizer for training (default: Adam).</param>
+    /// <param name="lossFunction">Optional loss function (default: based on task type).</param>
+    /// <param name="maxGradNorm">Maximum gradient norm for gradient clipping (default: 1.0).</param>
+    public DenseNetNetwork(
+        NeuralNetworkArchitecture<T> architecture,
+        DenseNetConfiguration configuration,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null,
+        double maxGradNorm = 1.0)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
-        _config = config ?? throw new ArgumentNullException(nameof(config));
-        _lossFunction = config.LossFunction ?? new CrossEntropyLoss<T>();
-        _optimizer = config.Optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+
+        ArchitectureValidator.ValidateInputType(
+            architecture,
+            InputType.ThreeDimensional,
+            nameof(DenseNetNetwork<T>));
+
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         InitializeLayers();
     }
@@ -196,12 +110,9 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     /// <returns>A configured DenseNet-121 network.</returns>
     public static DenseNetNetwork<T> DenseNet121(int numClasses = 1000, int inputChannels = 3)
     {
-        return new DenseNetNetwork<T>(new DenseNetConfiguration<T>
-        {
-            Variant = DenseNetVariant.DenseNet121,
-            NumClasses = numClasses,
-            InputChannels = inputChannels
-        });
+        var config = new DenseNetConfiguration(DenseNetVariant.DenseNet121, numClasses, inputChannels: inputChannels);
+        var architecture = CreateArchitectureFromConfig(config);
+        return new DenseNetNetwork<T>(architecture, config);
     }
 
     /// <summary>
@@ -209,12 +120,9 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public static DenseNetNetwork<T> DenseNet169(int numClasses = 1000, int inputChannels = 3)
     {
-        return new DenseNetNetwork<T>(new DenseNetConfiguration<T>
-        {
-            Variant = DenseNetVariant.DenseNet169,
-            NumClasses = numClasses,
-            InputChannels = inputChannels
-        });
+        var config = new DenseNetConfiguration(DenseNetVariant.DenseNet169, numClasses, inputChannels: inputChannels);
+        var architecture = CreateArchitectureFromConfig(config);
+        return new DenseNetNetwork<T>(architecture, config);
     }
 
     /// <summary>
@@ -222,12 +130,9 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public static DenseNetNetwork<T> DenseNet201(int numClasses = 1000, int inputChannels = 3)
     {
-        return new DenseNetNetwork<T>(new DenseNetConfiguration<T>
-        {
-            Variant = DenseNetVariant.DenseNet201,
-            NumClasses = numClasses,
-            InputChannels = inputChannels
-        });
+        var config = new DenseNetConfiguration(DenseNetVariant.DenseNet201, numClasses, inputChannels: inputChannels);
+        var architecture = CreateArchitectureFromConfig(config);
+        return new DenseNetNetwork<T>(architecture, config);
     }
 
     /// <summary>
@@ -235,15 +140,12 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public static DenseNetNetwork<T> DenseNet264(int numClasses = 1000, int inputChannels = 3)
     {
-        return new DenseNetNetwork<T>(new DenseNetConfiguration<T>
-        {
-            Variant = DenseNetVariant.DenseNet264,
-            NumClasses = numClasses,
-            InputChannels = inputChannels
-        });
+        var config = new DenseNetConfiguration(DenseNetVariant.DenseNet264, numClasses, inputChannels: inputChannels);
+        var architecture = CreateArchitectureFromConfig(config);
+        return new DenseNetNetwork<T>(architecture, config);
     }
 
-    private static NeuralNetworkArchitecture<T> CreateArchitecture(DenseNetConfiguration<T> config)
+    private static NeuralNetworkArchitecture<T> CreateArchitectureFromConfig(DenseNetConfiguration config)
     {
         return new NeuralNetworkArchitecture<T>(
             inputType: InputType.ThreeDimensional,
@@ -258,91 +160,19 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc />
-    protected override void InitializeLayers()
+    protected sealed override void InitializeLayers()
     {
-        var layers = new List<ILayer<T>>();
-        int currentHeight = _config.InputHeight;
-        int currentWidth = _config.InputWidth;
-        var blockLayers = _config.GetBlockLayers();
-
-        // Stem: 7x7 conv, stride 2, padding 3
-        int stemChannels = 64; // 2 * growth rate is typical, but 64 is standard for DenseNet
-        layers.Add(new ConvolutionalLayer<T>(
-            inputDepth: _config.InputChannels,
-            outputDepth: stemChannels,
-            kernelSize: 7,
-            inputHeight: currentHeight,
-            inputWidth: currentWidth,
-            stride: 2,
-            padding: 3,
-            activation: new IdentityActivation<T>()));
-
-        currentHeight = (currentHeight + 2 * 3 - 7) / 2 + 1; // 112 for 224 input
-        currentWidth = (currentWidth + 2 * 3 - 7) / 2 + 1;
-
-        layers.Add(new BatchNormalizationLayer<T>(stemChannels));
-        layers.Add(new ActivationLayer<T>([stemChannels, currentHeight, currentWidth],
-            activationFunction: new ReLUActivation<T>()));
-
-        // MaxPool 3x3, stride 2, padding 1
-        layers.Add(new MaxPoolingLayer<T>(
-            inputShape: [stemChannels, currentHeight, currentWidth],
-            poolSize: 3,
-            strides: 2));
-
-        currentHeight = (currentHeight + 2 * 1 - 3) / 2 + 1; // 56 for 112
-        currentWidth = (currentWidth + 2 * 1 - 3) / 2 + 1;
-
-        int currentChannels = stemChannels;
-
-        // Dense blocks and transitions
-        for (int i = 0; i < blockLayers.Length; i++)
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            int numLayersInBlock = blockLayers[i];
-
-            // Add Dense Block
-            var denseBlock = new DenseBlock<T>(
-                inputChannels: currentChannels,
-                numLayers: numLayersInBlock,
-                growthRate: _config.GrowthRate,
-                inputHeight: currentHeight,
-                inputWidth: currentWidth);
-
-            layers.Add(denseBlock);
-            currentChannels = denseBlock.OutputChannels;
-
-            // Add Transition (except after the last block)
-            if (i < blockLayers.Length - 1)
-            {
-                var transition = new TransitionLayer<T>(
-                    inputChannels: currentChannels,
-                    inputHeight: currentHeight,
-                    inputWidth: currentWidth,
-                    compressionFactor: _config.CompressionFactor);
-
-                layers.Add(transition);
-                currentChannels = transition.OutputChannels;
-                currentHeight /= 2;
-                currentWidth /= 2;
-            }
+            // Use the layers provided by the user
+            Layers.AddRange(Architecture.Layers);
+            ValidateCustomLayers(Layers);
         }
-
-        // Final BN and ReLU
-        layers.Add(new BatchNormalizationLayer<T>(currentChannels));
-        layers.Add(new ActivationLayer<T>([currentChannels, currentHeight, currentWidth],
-            activationFunction: new ReLUActivation<T>()));
-
-        // Global average pooling
-        layers.Add(new AdaptiveAvgPoolingLayer<T>(currentChannels, currentHeight, currentWidth, 1, 1));
-
-        // Flatten
-        layers.Add(new FlattenLayer<T>([currentChannels, 1, 1]));
-
-        // Classification head
-        layers.Add(new DenseLayer<T>(currentChannels, _config.NumClasses,
-            activationFunction: new IdentityActivation<T>()));
-
-        Layers.AddRange(layers);
+        else
+        {
+            // Use DenseNet-specific layer configuration
+            Layers.AddRange(LayerHelper<T>.CreateDefaultDenseNetLayers(Architecture, _configuration));
+        }
     }
 
     /// <summary>
@@ -422,10 +252,10 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "DenseNetNetwork" },
-                { "Variant", _config.Variant.ToString() },
-                { "GrowthRate", _config.GrowthRate },
-                { "NumClasses", _config.NumClasses },
-                { "InputShape", $"{_config.InputChannels}x{_config.InputHeight}x{_config.InputWidth}" },
+                { "Variant", _configuration.Variant.ToString() },
+                { "GrowthRate", _configuration.GrowthRate },
+                { "NumClasses", _configuration.NumClasses },
+                { "InputShape", $"{_configuration.InputChannels}x{_configuration.InputHeight}x{_configuration.InputWidth}" },
                 { "LayerCount", Layers.Count },
                 { "ParameterCount", GetParameterCount() }
             },
@@ -436,13 +266,13 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write((int)_config.Variant);
-        writer.Write(_config.InputChannels);
-        writer.Write(_config.InputHeight);
-        writer.Write(_config.InputWidth);
-        writer.Write(_config.NumClasses);
-        writer.Write(_config.GrowthRate);
-        writer.Write(_config.CompressionFactor);
+        writer.Write((int)_configuration.Variant);
+        writer.Write(_configuration.InputChannels);
+        writer.Write(_configuration.InputHeight);
+        writer.Write(_configuration.InputWidth);
+        writer.Write(_configuration.NumClasses);
+        writer.Write(_configuration.GrowthRate);
+        writer.Write(_configuration.CompressionFactor);
     }
 
     /// <inheritdoc />
@@ -456,13 +286,13 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
         var growthRate = reader.ReadInt32();
         var compressionFactor = reader.ReadDouble();
 
-        if (variant != _config.Variant ||
-            inputChannels != _config.InputChannels ||
-            inputHeight != _config.InputHeight ||
-            inputWidth != _config.InputWidth ||
-            numClasses != _config.NumClasses ||
-            growthRate != _config.GrowthRate ||
-            Math.Abs(compressionFactor - _config.CompressionFactor) > 0.001)
+        if (variant != _configuration.Variant ||
+            inputChannels != _configuration.InputChannels ||
+            inputHeight != _configuration.InputHeight ||
+            inputWidth != _configuration.InputWidth ||
+            numClasses != _configuration.NumClasses ||
+            growthRate != _configuration.GrowthRate ||
+            Math.Abs(compressionFactor - _configuration.CompressionFactor) > 0.001)
         {
             throw new InvalidDataException("Serialized DenseNet configuration does not match current configuration.");
         }
@@ -471,19 +301,16 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new DenseNetNetwork<T>(new DenseNetConfiguration<T>
-        {
-            Variant = _config.Variant,
-            InputChannels = _config.InputChannels,
-            InputHeight = _config.InputHeight,
-            InputWidth = _config.InputWidth,
-            NumClasses = _config.NumClasses,
-            GrowthRate = _config.GrowthRate,
-            CompressionFactor = _config.CompressionFactor,
-            MaxGradNorm = _config.MaxGradNorm,
-            LossFunction = _lossFunction,
-            Optimizer = _optimizer
-        });
+        var config = new DenseNetConfiguration(
+            _configuration.Variant,
+            _configuration.NumClasses,
+            _configuration.InputHeight,
+            _configuration.InputWidth,
+            _configuration.InputChannels,
+            _configuration.GrowthRate,
+            _configuration.CompressionFactor);
+
+        return new DenseNetNetwork<T>(Architecture, config, _optimizer, _lossFunction);
     }
 
     /// <inheritdoc />
