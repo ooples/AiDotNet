@@ -157,24 +157,24 @@ public class SSLMetrics<T>
     /// </remarks>
     public T ComputeEffectiveRank(Tensor<T> representations)
     {
-        var batchSize = representations.Shape[0];
         var dim = representations.Shape[1];
 
         // Compute covariance matrix
         var cov = ComputeCovarianceMatrix(representations);
 
-        // Compute eigenvalues (simplified - just use diagonal as approximation)
-        var eigenvalues = new T[dim];
-        T sumEig = NumOps.Zero;
+        // Compute eigenvalues using Jacobi eigenvalue algorithm for symmetric matrices
+        var eigenvalues = ComputeEigenvaluesJacobi(cov, dim);
 
+        // Sum eigenvalues (for normalization)
+        T sumEig = NumOps.Zero;
         for (int i = 0; i < dim; i++)
         {
-            eigenvalues[i] = NumOps.Abs(cov[i, i]);
+            eigenvalues[i] = NumOps.Abs(eigenvalues[i]);
             eigenvalues[i] = NumOps.Add(eigenvalues[i], NumOps.FromDouble(1e-8));
             sumEig = NumOps.Add(sumEig, eigenvalues[i]);
         }
 
-        // Normalize to get probability distribution
+        // Normalize to get probability distribution and compute entropy
         T entropy = NumOps.Zero;
         for (int i = 0; i < dim; i++)
         {
@@ -188,6 +188,99 @@ public class SSLMetrics<T>
 
         // Effective rank = exp(entropy)
         return NumOps.Exp(entropy);
+    }
+
+    /// <summary>
+    /// Computes eigenvalues of a symmetric matrix using the Jacobi eigenvalue algorithm.
+    /// </summary>
+    private T[] ComputeEigenvaluesJacobi(Tensor<T> matrix, int n, int maxIterations = 100)
+    {
+        // Copy matrix to work array (algorithm modifies in place)
+        var A = new double[n, n];
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                A[i, j] = NumOps.ToDouble(matrix[i, j]);
+            }
+        }
+
+        const double tolerance = 1e-10;
+
+        for (int iter = 0; iter < maxIterations; iter++)
+        {
+            // Find largest off-diagonal element
+            int p = 0, q = 1;
+            double maxOffDiag = Math.Abs(A[0, 1]);
+
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = i + 1; j < n; j++)
+                {
+                    if (Math.Abs(A[i, j]) > maxOffDiag)
+                    {
+                        maxOffDiag = Math.Abs(A[i, j]);
+                        p = i;
+                        q = j;
+                    }
+                }
+            }
+
+            // Check convergence
+            if (maxOffDiag < tolerance)
+            {
+                break;
+            }
+
+            // Compute rotation angle using Jacobi rotation formula
+            double theta;
+            if (Math.Abs(A[p, p] - A[q, q]) < 1e-15)
+            {
+                theta = Math.PI / 4;
+            }
+            else
+            {
+                theta = 0.5 * Math.Atan2(2 * A[p, q], A[p, p] - A[q, q]);
+            }
+
+            double c = Math.Cos(theta);
+            double s = Math.Sin(theta);
+
+            // Apply Givens rotation: A' = G^T * A * G
+            // Store old values needed for update
+            double app = A[p, p];
+            double aqq = A[q, q];
+            double apq = A[p, q];
+
+            // Update diagonal elements
+            A[p, p] = c * c * app + s * s * aqq - 2 * s * c * apq;
+            A[q, q] = s * s * app + c * c * aqq + 2 * s * c * apq;
+            A[p, q] = 0; // By construction
+            A[q, p] = 0;
+
+            // Update other elements
+            for (int k = 0; k < n; k++)
+            {
+                if (k != p && k != q)
+                {
+                    double akp = A[k, p];
+                    double akq = A[k, q];
+                    A[k, p] = c * akp - s * akq;
+                    A[p, k] = A[k, p];
+                    A[k, q] = s * akp + c * akq;
+                    A[q, k] = A[k, q];
+                }
+            }
+        }
+
+        // Eigenvalues are on the diagonal
+        var eigenvalues = new T[n];
+        for (int i = 0; i < n; i++)
+        {
+            eigenvalues[i] = NumOps.FromDouble(A[i, i]);
+        }
+
+        return eigenvalues;
     }
 
     /// <summary>

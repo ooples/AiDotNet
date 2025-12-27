@@ -324,16 +324,77 @@ public class SSLAugmentationPolicies<T>
 
     private Tensor<T> RandomResizedCrop(Tensor<T> image, double scaleMin, double scaleMax)
     {
-        // Simplified implementation - in production, this would do actual cropping
-        // For now, we simulate by adding slight noise
+        // Random scale for the crop area
         var scale = scaleMin + _random.NextDouble() * (scaleMax - scaleMin);
+        var aspectRatio = 0.75 + _random.NextDouble() * 0.5; // Random aspect ratio 0.75 to 1.25
+
         var result = new T[image.Length];
 
-        for (int i = 0; i < image.Length; i++)
+        // For [batch, channels, height, width] or [batch, height, width, channels] tensors
+        if (image.Shape.Length >= 4)
         {
-            // Simulate crop effect with slight variation
-            var noise = NumOps.FromDouble((_random.NextDouble() - 0.5) * 0.05 * (1 - scale));
-            result[i] = NumOps.Add(image.Data[i], noise);
+            var batch = image.Shape[0];
+            var channels = image.Shape[1];
+            var height = image.Shape[2];
+            var width = image.Shape[3];
+
+            // Calculate crop dimensions
+            var cropArea = height * width * scale;
+            var cropHeight = (int)Math.Sqrt(cropArea / aspectRatio);
+            var cropWidth = (int)(cropHeight * aspectRatio);
+            cropHeight = Math.Min(cropHeight, height);
+            cropWidth = Math.Min(cropWidth, width);
+
+            // Random crop position
+            var top = _random.Next(0, Math.Max(1, height - cropHeight));
+            var left = _random.Next(0, Math.Max(1, width - cropWidth));
+
+            // Perform crop and resize via bilinear interpolation
+            for (int b = 0; b < batch; b++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    for (int h = 0; h < height; h++)
+                    {
+                        for (int w = 0; w < width; w++)
+                        {
+                            // Map output position to crop region
+                            var srcH = top + (double)h / height * cropHeight;
+                            var srcW = left + (double)w / width * cropWidth;
+
+                            // Bilinear interpolation
+                            var h0 = (int)Math.Floor(srcH);
+                            var h1 = Math.Min(h0 + 1, height - 1);
+                            var w0 = (int)Math.Floor(srcW);
+                            var w1 = Math.Min(w0 + 1, width - 1);
+
+                            var hFrac = srcH - h0;
+                            var wFrac = srcW - w0;
+
+                            var v00 = NumOps.ToDouble(image[b, c, h0, w0]);
+                            var v01 = NumOps.ToDouble(image[b, c, h0, w1]);
+                            var v10 = NumOps.ToDouble(image[b, c, h1, w0]);
+                            var v11 = NumOps.ToDouble(image[b, c, h1, w1]);
+
+                            var interpolated = v00 * (1 - hFrac) * (1 - wFrac) +
+                                             v01 * (1 - hFrac) * wFrac +
+                                             v10 * hFrac * (1 - wFrac) +
+                                             v11 * hFrac * wFrac;
+
+                            result[b * channels * height * width + c * height * width + h * width + w] =
+                                NumOps.FromDouble(interpolated);
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            // For 2D tensors, apply scaling transform
+            for (int i = 0; i < image.Length; i++)
+            {
+                result[i] = NumOps.Multiply(image.Data[i], NumOps.FromDouble(scale));
+            }
         }
 
         return new Tensor<T>(result, image.Shape);
@@ -341,10 +402,39 @@ public class SSLAugmentationPolicies<T>
 
     private Tensor<T> HorizontalFlip(Tensor<T> image)
     {
-        // For simplicity, just return the image
-        // In production, this would flip along the width dimension
         var result = new T[image.Length];
-        Array.Copy(image.Data, result, image.Length);
+
+        // For [batch, channels, height, width] tensors
+        if (image.Shape.Length >= 4)
+        {
+            var batch = image.Shape[0];
+            var channels = image.Shape[1];
+            var height = image.Shape[2];
+            var width = image.Shape[3];
+
+            for (int b = 0; b < batch; b++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    for (int h = 0; h < height; h++)
+                    {
+                        for (int w = 0; w < width; w++)
+                        {
+                            // Flip horizontally: map w to (width - 1 - w)
+                            var srcIdx = b * channels * height * width + c * height * width + h * width + (width - 1 - w);
+                            var dstIdx = b * channels * height * width + c * height * width + h * width + w;
+                            result[dstIdx] = image.Data[srcIdx];
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            // For 2D tensors, just copy (no spatial dimension to flip)
+            Array.Copy(image.Data, result, image.Length);
+        }
+
         return new Tensor<T>(result, image.Shape);
     }
 
@@ -371,13 +461,57 @@ public class SSLAugmentationPolicies<T>
 
     private Tensor<T> ToGrayscale(Tensor<T> image)
     {
-        // Simplified grayscale - average all channels
         var result = new T[image.Length];
 
-        for (int i = 0; i < image.Length; i++)
+        // For [batch, channels, height, width] tensors
+        if (image.Shape.Length >= 4)
         {
-            // In a real implementation, we'd average across channels
-            result[i] = image.Data[i];
+            var batch = image.Shape[0];
+            var channels = image.Shape[1];
+            var height = image.Shape[2];
+            var width = image.Shape[3];
+
+            // Standard luminosity weights for RGB to grayscale conversion
+            // ITU-R BT.601: Y = 0.299*R + 0.587*G + 0.114*B
+            const double rWeight = 0.299;
+            const double gWeight = 0.587;
+            const double bWeight = 0.114;
+
+            for (int b = 0; b < batch; b++)
+            {
+                for (int h = 0; h < height; h++)
+                {
+                    for (int w = 0; w < width; w++)
+                    {
+                        // Compute grayscale value from RGB channels
+                        double gray;
+                        if (channels >= 3)
+                        {
+                            var r = NumOps.ToDouble(image[b, 0, h, w]);
+                            var g = NumOps.ToDouble(image[b, 1, h, w]);
+                            var bVal = NumOps.ToDouble(image[b, 2, h, w]);
+                            gray = rWeight * r + gWeight * g + bWeight * bVal;
+                        }
+                        else
+                        {
+                            // Single channel - already grayscale
+                            gray = NumOps.ToDouble(image[b, 0, h, w]);
+                        }
+
+                        // Set all channels to the grayscale value (maintains tensor shape)
+                        for (int c = 0; c < channels; c++)
+                        {
+                            var idx = b * channels * height * width + c * height * width + h * width + w;
+                            result[idx] = NumOps.FromDouble(gray);
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            // For 2D tensors, just copy (no channel dimension)
+            Array.Copy(image.Data, result, image.Length);
         }
 
         return new Tensor<T>(result, image.Shape);
@@ -385,19 +519,90 @@ public class SSLAugmentationPolicies<T>
 
     private Tensor<T> GaussianBlur(Tensor<T> image, double sigmaMin, double sigmaMax)
     {
-        // Simplified blur - slight smoothing
         var sigma = sigmaMin + _random.NextDouble() * (sigmaMax - sigmaMin);
-        var result = new T[image.Length];
 
-        // Simple box blur approximation
-        for (int i = 0; i < image.Length; i++)
+        // For [batch, channels, height, width] tensors
+        if (image.Shape.Length >= 4)
         {
-            // Add small random noise to simulate blur effect
-            var blur = NumOps.FromDouble((_random.NextDouble() - 0.5) * 0.02 * sigma);
-            result[i] = NumOps.Add(image.Data[i], blur);
-        }
+            var batch = image.Shape[0];
+            var channels = image.Shape[1];
+            var height = image.Shape[2];
+            var width = image.Shape[3];
 
-        return new Tensor<T>(result, image.Shape);
+            // Compute kernel size (must be odd, at least 3)
+            // Standard practice: kernel_size = ceil(6*sigma) | 1 to make it odd
+            var kernelSize = Math.Max(3, (int)Math.Ceiling(sigma * 6) | 1);
+            var radius = kernelSize / 2;
+
+            // Generate 1D Gaussian kernel
+            var kernel = new double[kernelSize];
+            double kernelSum = 0;
+            for (int i = 0; i < kernelSize; i++)
+            {
+                var x = i - radius;
+                kernel[i] = Math.Exp(-0.5 * x * x / (sigma * sigma));
+                kernelSum += kernel[i];
+            }
+            // Normalize kernel
+            for (int i = 0; i < kernelSize; i++)
+            {
+                kernel[i] /= kernelSum;
+            }
+
+            // Apply separable convolution (horizontal then vertical) for efficiency
+            // First pass: horizontal blur
+            var temp = new double[batch * channels * height * width];
+            for (int b = 0; b < batch; b++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    for (int h = 0; h < height; h++)
+                    {
+                        for (int w = 0; w < width; w++)
+                        {
+                            double sum = 0;
+                            for (int k = 0; k < kernelSize; k++)
+                            {
+                                var srcW = Math.Max(0, Math.Min(w + k - radius, width - 1));
+                                sum += NumOps.ToDouble(image[b, c, h, srcW]) * kernel[k];
+                            }
+                            temp[b * channels * height * width + c * height * width + h * width + w] = sum;
+                        }
+                    }
+                }
+            }
+
+            // Second pass: vertical blur
+            var result = new T[image.Length];
+            for (int b = 0; b < batch; b++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    for (int h = 0; h < height; h++)
+                    {
+                        for (int w = 0; w < width; w++)
+                        {
+                            double sum = 0;
+                            for (int k = 0; k < kernelSize; k++)
+                            {
+                                var srcH = Math.Max(0, Math.Min(h + k - radius, height - 1));
+                                sum += temp[b * channels * height * width + c * height * width + srcH * width + w] * kernel[k];
+                            }
+                            result[b * channels * height * width + c * height * width + h * width + w] = NumOps.FromDouble(sum);
+                        }
+                    }
+                }
+            }
+
+            return new Tensor<T>(result, image.Shape);
+        }
+        else
+        {
+            // For 2D tensors, just copy (no spatial dimension to blur)
+            var result = new T[image.Length];
+            Array.Copy(image.Data, result, image.Length);
+            return new Tensor<T>(result, image.Shape);
+        }
     }
 
     private Tensor<T> Solarize(Tensor<T> image, double threshold)

@@ -119,13 +119,17 @@ public class SimSiam<T> : SSLMethodBase<T>
         // Symmetric loss: D(p1, stopgrad(z2)) + D(p2, stopgrad(z1))
         var loss = _loss.ComputeSymmetricLoss(p1, z2Detached, p2, z1Detached);
 
-        // Backward pass
+        // Backward pass for both symmetric paths
         var (_, gradP1) = _loss.ComputeLossWithGradients(p1, z2Detached);
         var (_, gradP2) = _loss.ComputeLossWithGradients(p2, z1Detached);
 
-        // Combine gradients (simplified - in practice would handle properly)
+        // Backpropagate gradients from first path (p1 -> z2)
         var gradZ1 = SymmetricProjector.Backward(gradP1);
         _encoder.Backpropagate(gradZ1);
+
+        // Backpropagate gradients from second path (p2 -> z1)
+        var gradZ2 = SymmetricProjector.Backward(gradP2);
+        _encoder.Backpropagate(gradZ2);
 
         // Update parameters
         var learningRate = NumOps.FromDouble(GetEffectiveLearningRate());

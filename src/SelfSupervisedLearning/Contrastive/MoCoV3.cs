@@ -127,13 +127,25 @@ public class MoCoV3<T> : SSLMethodBase<T>
         k1 = StopGradient<T>.Detach(k1);
         k2 = StopGradient<T>.Detach(k2);
 
-        // Compute symmetric loss: L = loss(q1, k2) + loss(q2, k1)
-        var loss1 = _loss.ComputeLossInBatch(q1, k2);
-        var loss2 = _loss.ComputeLossInBatch(q2, k1);
+        // Compute symmetric loss with gradients: L = loss(q1, k2) + loss(q2, k1)
+        var (loss1, gradQ1, _) = _loss.ComputeLossInBatchWithGradients(q1, k2);
+        var (loss2, gradQ2, _) = _loss.ComputeLossInBatchWithGradients(q2, k1);
         var loss = NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Add(loss1, loss2));
 
-        // Backward pass (simplified - in practice would compute proper gradients)
-        // The gradient flows through q1 and q2 only, not through k1 and k2
+        // Scale gradients by 0.5 (symmetric loss averaging)
+        var half = NumOps.FromDouble(0.5);
+        gradQ1 = ScaleGradient(gradQ1, half);
+        gradQ2 = ScaleGradient(gradQ2, half);
+
+        // Backward pass through predictor (if present) and projector for view 1
+        var gradZ1 = _predictor?.Backward(gradQ1) ?? gradQ1;
+        var gradH1 = _projector!.Backward(gradZ1);
+        _encoder.Backpropagate(gradH1);
+
+        // Backward pass through predictor (if present) and projector for view 2
+        var gradZ2 = _predictor?.Backward(gradQ2) ?? gradQ2;
+        var gradH2 = _projector.Backward(gradZ2);
+        _encoder.Backpropagate(gradH2);
 
         // Update momentum encoder
         _momentumEncoder.UpdateFromMainEncoder(_encoder);
@@ -199,6 +211,23 @@ public class MoCoV3<T> : SSLMethodBase<T>
             }
             _predictor.SetParameters(new Vector<T>(newPredParams));
         }
+    }
+
+    private Tensor<T> ScaleGradient(Tensor<T> grad, T scale)
+    {
+        var batchSize = grad.Shape[0];
+        var dim = grad.Shape[1];
+        var scaled = new T[batchSize * dim];
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            for (int j = 0; j < dim; j++)
+            {
+                scaled[i * dim + j] = NumOps.Multiply(grad[i, j], scale);
+            }
+        }
+
+        return new Tensor<T>(scaled, [batchSize, dim]);
     }
 
     /// <inheritdoc />
