@@ -642,11 +642,12 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         // Compute scores for the rest of the series
         for (int i = lagOrder; i < timeSeries.Length; i++)
         {
-            // Create input vector from previous lagOrder values
+            // Create input vector from previous lagOrder values in reverse order
+            // (most recent first, as expected by PredictSingle)
             Vector<T> input = new Vector<T>(lagOrder);
             for (int j = 0; j < lagOrder; j++)
             {
-                input[j] = timeSeries[i - lagOrder + j];
+                input[j] = timeSeries[i - 1 - j];
             }
 
             T prediction = PredictSingle(input);
@@ -690,10 +691,11 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
 
         for (int i = lagOrder; i < timeSeries.Length; i++)
         {
+            // Create input vector in reverse order (most recent first, as expected by PredictSingle)
             Vector<T> input = new Vector<T>(lagOrder);
             for (int j = 0; j < lagOrder; j++)
             {
-                input[j] = timeSeries[i - lagOrder + j];
+                input[j] = timeSeries[i - 1 - j];
             }
 
             T prediction = PredictSingle(input);

@@ -342,10 +342,15 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
 
     /// <summary>
     /// Trains the model using backpropagation through the Autoformer architecture.
+    /// For multi-step forecasting, the input should contain lookback + forecastHorizon values.
+    /// The first lookback values are used as input, and the last forecastHorizon values
+    /// from the sequence are used as multi-step targets.
     /// </summary>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
         T learningRate = _numOps.FromDouble(_options.LearningRate);
+        int forecastHorizon = _options.ForecastHorizon;
+        int lookback = _options.LookbackWindow;
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
@@ -361,10 +366,41 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
                 for (int idx = batchStart; idx < batchEnd; idx++)
                 {
                     int i = indices[idx];
-                    Vector<T> input = x.GetRow(i);
-                    T target = y[i];
+                    Vector<T> fullSequence = x.GetRow(i);
 
-                    var gradients = ComputeGradients(input, target);
+                    // Extract multi-step targets from the input sequence
+                    // If input contains lookback + forecastHorizon values, use the last forecastHorizon as targets
+                    // Otherwise, construct targets from available data
+                    var targets = new Vector<T>(forecastHorizon);
+                    int inputLen = Math.Min(fullSequence.Length, lookback);
+
+                    if (fullSequence.Length >= lookback + forecastHorizon)
+                    {
+                        // Full sequence available: use last forecastHorizon values as multi-step targets
+                        for (int h = 0; h < forecastHorizon; h++)
+                        {
+                            targets[h] = fullSequence[lookback + h];
+                        }
+                    }
+                    else
+                    {
+                        // Fallback: use y[i] for first target, pad with last known value
+                        targets[0] = y[i];
+                        T lastValue = y[i];
+                        for (int h = 1; h < forecastHorizon; h++)
+                        {
+                            targets[h] = lastValue;
+                        }
+                    }
+
+                    // Extract input portion (first lookback values)
+                    var input = new Vector<T>(inputLen);
+                    for (int t = 0; t < inputLen; t++)
+                    {
+                        input[t] = fullSequence[t];
+                    }
+
+                    var gradients = ComputeGradientsMultiStep(input, targets);
                     AccumulateGradients(gradients);
                 }
 
@@ -384,7 +420,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         }
     }
 
-    private Dictionary<string, Tensor<T>> ComputeGradients(Vector<T> input, T target)
+    private Dictionary<string, Tensor<T>> ComputeGradientsMultiStep(Vector<T> input, Vector<T> targets)
     {
         var gradients = new Dictionary<string, Tensor<T>>();
         int seqLen = Math.Min(input.Length, _options.LookbackWindow);
@@ -426,12 +462,14 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         var trendOutput = ComputeMovingAverageNode(embedded, _movingAvgKernel);
         var seasonalOutput = TensorOperations<T>.Subtract(embedded, trendOutput);
 
-        // 3. Process through encoder layers (simplified forward for gradient computation)
+        // 3. Process through encoder layers and collect parameter nodes for gradient collection
+        var allParamNodes = new List<ComputationNode<T>>();
         for (int i = 0; i < _encoderLayers.Count; i++)
         {
             var layerOutput = ProcessEncoderLayerAutodiff(seasonalOutput, trendOutput, i);
             seasonalOutput = layerOutput.seasonal;
             trendOutput = layerOutput.trend;
+            allParamNodes.AddRange(layerOutput.paramNodes);
         }
 
         // 4. Process through decoder layers
@@ -446,6 +484,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
             var layerOutput = ProcessDecoderLayerAutodiff(decoderSeasonal, decoderTrend, seasonalOutput, trendOutput, i);
             decoderSeasonal = layerOutput.seasonal;
             decoderTrend = layerOutput.trend;
+            allParamNodes.AddRange(layerOutput.paramNodes);
         }
 
         // 5. Output projection: output = seasonal @ seasonalProj + trend @ trendProj + bias
@@ -457,9 +496,12 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         var biasReshaped = TensorOperations<T>.Reshape(outputBiasNode, new[] { forecastHorizon, 1 });
         output = TensorOperations<T>.Add(output, biasReshaped);
 
-        // 6. Compute loss: MSE = mean((output - target)^2)
+        // 6. Compute loss: MSE = mean((output - targets)^2) over all forecast steps
         var targetTensor = new Tensor<T>(new[] { forecastHorizon, 1 });
-        targetTensor[0, 0] = target; // Single-step prediction target
+        for (int h = 0; h < forecastHorizon && h < targets.Length; h++)
+        {
+            targetTensor[h, 0] = targets[h];
+        }
         var targetNode = TensorOperations<T>.Variable(targetTensor, "target", requiresGradient: false);
 
         var diff = TensorOperations<T>.Subtract(output, targetNode);
@@ -503,6 +545,16 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
 
         if (decoderTrendInit.Gradient != null)
             gradients["decoderTrendInit"] = decoderTrendInit.Gradient;
+
+        // Collect gradients from all encoder/decoder layer parameters
+        foreach (var paramNode in allParamNodes)
+        {
+            string? nodeName = paramNode.Name;
+            if (paramNode.Gradient != null && nodeName != null && nodeName.Length > 0)
+            {
+                gradients[nodeName] = paramNode.Gradient;
+            }
+        }
 
         return gradients;
     }
@@ -588,16 +640,19 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         return node;
     }
 
-    private (ComputationNode<T> seasonal, ComputationNode<T> trend) ProcessEncoderLayerAutodiff(
+    private (ComputationNode<T> seasonal, ComputationNode<T> trend, List<ComputationNode<T>> paramNodes) ProcessEncoderLayerAutodiff(
         ComputationNode<T> seasonal, ComputationNode<T> trend, int layerIdx)
     {
         var layer = _encoderLayers[layerIdx];
+        string prefix = $"encoder_{layerIdx}_";
+        var paramNodes = new List<ComputationNode<T>>();
 
-        // Get layer parameters as computation nodes
-        var queryProj = TensorOperations<T>.Variable(layer.GetQueryProjection(), $"enc{layerIdx}_queryProj", requiresGradient: true);
-        var keyProj = TensorOperations<T>.Variable(layer.GetKeyProjection(), $"enc{layerIdx}_keyProj", requiresGradient: true);
-        var valueProj = TensorOperations<T>.Variable(layer.GetValueProjection(), $"enc{layerIdx}_valueProj", requiresGradient: true);
-        var outputProj = TensorOperations<T>.Variable(layer.GetOutputProjection(), $"enc{layerIdx}_outputProj", requiresGradient: true);
+        // Get layer parameters as computation nodes with correct naming for ApplyGradients
+        var queryProj = TensorOperations<T>.Variable(layer.GetQueryProjection(), $"{prefix}queryProj", requiresGradient: true);
+        var keyProj = TensorOperations<T>.Variable(layer.GetKeyProjection(), $"{prefix}keyProj", requiresGradient: true);
+        var valueProj = TensorOperations<T>.Variable(layer.GetValueProjection(), $"{prefix}valueProj", requiresGradient: true);
+        var outputProj = TensorOperations<T>.Variable(layer.GetOutputProjection(), $"{prefix}outputProj", requiresGradient: true);
+        paramNodes.AddRange(new[] { queryProj, keyProj, valueProj, outputProj });
 
         // Auto-correlation computation using autodiff
         var query = TensorOperations<T>.MatrixMultiply(seasonal, queryProj);
@@ -612,15 +667,17 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         var residual = TensorOperations<T>.Add(seasonal, projected);
 
         // Layer normalization
-        var gamma1 = TensorOperations<T>.Variable(layer.GetLayerNorm1Gamma(), $"enc{layerIdx}_ln1Gamma", requiresGradient: true);
-        var beta1 = TensorOperations<T>.Variable(layer.GetLayerNorm1Beta(), $"enc{layerIdx}_ln1Beta", requiresGradient: true);
+        var gamma1 = TensorOperations<T>.Variable(layer.GetLayerNorm1Gamma(), $"{prefix}ln1Gamma", requiresGradient: true);
+        var beta1 = TensorOperations<T>.Variable(layer.GetLayerNorm1Beta(), $"{prefix}ln1Beta", requiresGradient: true);
+        paramNodes.AddRange(new[] { gamma1, beta1 });
         var normalized = TensorOperations<T>.LayerNorm(residual, new[] { residual.Value.Shape[^1] }, gamma1, beta1);
 
         // Feed-forward network
-        var ff1W = TensorOperations<T>.Variable(layer.GetFF1Weight(), $"enc{layerIdx}_ff1W", requiresGradient: true);
-        var ff1B = TensorOperations<T>.Variable(layer.GetFF1Bias(), $"enc{layerIdx}_ff1B", requiresGradient: true);
-        var ff2W = TensorOperations<T>.Variable(layer.GetFF2Weight(), $"enc{layerIdx}_ff2W", requiresGradient: true);
-        var ff2B = TensorOperations<T>.Variable(layer.GetFF2Bias(), $"enc{layerIdx}_ff2B", requiresGradient: true);
+        var ff1W = TensorOperations<T>.Variable(layer.GetFF1Weight(), $"{prefix}ff1Weight", requiresGradient: true);
+        var ff1B = TensorOperations<T>.Variable(layer.GetFF1Bias(), $"{prefix}ff1Bias", requiresGradient: true);
+        var ff2W = TensorOperations<T>.Variable(layer.GetFF2Weight(), $"{prefix}ff2Weight", requiresGradient: true);
+        var ff2B = TensorOperations<T>.Variable(layer.GetFF2Bias(), $"{prefix}ff2Bias", requiresGradient: true);
+        paramNodes.AddRange(new[] { ff1W, ff1B, ff2W, ff2B });
 
         var ffHidden = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(normalized, ff1W), ff1B);
         var ffActivated = TensorOperations<T>.ReLU(ffHidden);
@@ -628,8 +685,9 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
 
         // Residual + LayerNorm
         var ffResidual = TensorOperations<T>.Add(normalized, ffOutput);
-        var gamma2 = TensorOperations<T>.Variable(layer.GetLayerNorm2Gamma(), $"enc{layerIdx}_ln2Gamma", requiresGradient: true);
-        var beta2 = TensorOperations<T>.Variable(layer.GetLayerNorm2Beta(), $"enc{layerIdx}_ln2Beta", requiresGradient: true);
+        var gamma2 = TensorOperations<T>.Variable(layer.GetLayerNorm2Gamma(), $"{prefix}ln2Gamma", requiresGradient: true);
+        var beta2 = TensorOperations<T>.Variable(layer.GetLayerNorm2Beta(), $"{prefix}ln2Beta", requiresGradient: true);
+        paramNodes.AddRange(new[] { gamma2, beta2 });
         var newSeasonal = TensorOperations<T>.LayerNorm(ffResidual, new[] { ffResidual.Value.Shape[^1] }, gamma2, beta2);
 
         // Series decomposition
@@ -639,20 +697,23 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         // Accumulate trend
         var combinedTrend = TensorOperations<T>.Add(trend, newTrend);
 
-        return (newSeasonal, combinedTrend);
+        return (newSeasonal, combinedTrend, paramNodes);
     }
 
-    private (ComputationNode<T> seasonal, ComputationNode<T> trend) ProcessDecoderLayerAutodiff(
+    private (ComputationNode<T> seasonal, ComputationNode<T> trend, List<ComputationNode<T>> paramNodes) ProcessDecoderLayerAutodiff(
         ComputationNode<T> decoderSeasonal, ComputationNode<T> decoderTrend,
         ComputationNode<T> encoderSeasonal, ComputationNode<T> encoderTrend, int layerIdx)
     {
         var layer = _decoderLayers[layerIdx];
+        string prefix = $"decoder_{layerIdx}_";
+        var paramNodes = new List<ComputationNode<T>>();
 
         // Self-attention projections
-        var selfQueryProj = TensorOperations<T>.Variable(layer.GetSelfQueryProjection(), $"dec{layerIdx}_selfQueryProj", requiresGradient: true);
-        var selfKeyProj = TensorOperations<T>.Variable(layer.GetSelfKeyProjection(), $"dec{layerIdx}_selfKeyProj", requiresGradient: true);
-        var selfValueProj = TensorOperations<T>.Variable(layer.GetSelfValueProjection(), $"dec{layerIdx}_selfValueProj", requiresGradient: true);
-        var selfOutputProj = TensorOperations<T>.Variable(layer.GetSelfOutputProjection(), $"dec{layerIdx}_selfOutputProj", requiresGradient: true);
+        var selfQueryProj = TensorOperations<T>.Variable(layer.GetSelfQueryProjection(), $"{prefix}selfQueryProj", requiresGradient: true);
+        var selfKeyProj = TensorOperations<T>.Variable(layer.GetSelfKeyProjection(), $"{prefix}selfKeyProj", requiresGradient: true);
+        var selfValueProj = TensorOperations<T>.Variable(layer.GetSelfValueProjection(), $"{prefix}selfValueProj", requiresGradient: true);
+        var selfOutputProj = TensorOperations<T>.Variable(layer.GetSelfOutputProjection(), $"{prefix}selfOutputProj", requiresGradient: true);
+        paramNodes.AddRange(new[] { selfQueryProj, selfKeyProj, selfValueProj, selfOutputProj });
 
         // Self-attention
         var selfQuery = TensorOperations<T>.MatrixMultiply(decoderSeasonal, selfQueryProj);
@@ -663,15 +724,17 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
 
         // Residual + LayerNorm
         var selfResidual = TensorOperations<T>.Add(decoderSeasonal, selfProjected);
-        var ln1Gamma = TensorOperations<T>.Variable(layer.GetLayerNorm1Gamma(), $"dec{layerIdx}_ln1Gamma", requiresGradient: true);
-        var ln1Beta = TensorOperations<T>.Variable(layer.GetLayerNorm1Beta(), $"dec{layerIdx}_ln1Beta", requiresGradient: true);
+        var ln1Gamma = TensorOperations<T>.Variable(layer.GetLayerNorm1Gamma(), $"{prefix}ln1Gamma", requiresGradient: true);
+        var ln1Beta = TensorOperations<T>.Variable(layer.GetLayerNorm1Beta(), $"{prefix}ln1Beta", requiresGradient: true);
+        paramNodes.AddRange(new[] { ln1Gamma, ln1Beta });
         var normalized1 = TensorOperations<T>.LayerNorm(selfResidual, new[] { selfResidual.Value.Shape[^1] }, ln1Gamma, ln1Beta);
 
         // Cross-attention with encoder
-        var crossQueryProj = TensorOperations<T>.Variable(layer.GetCrossQueryProjection(), $"dec{layerIdx}_crossQueryProj", requiresGradient: true);
-        var crossKeyProj = TensorOperations<T>.Variable(layer.GetCrossKeyProjection(), $"dec{layerIdx}_crossKeyProj", requiresGradient: true);
-        var crossValueProj = TensorOperations<T>.Variable(layer.GetCrossValueProjection(), $"dec{layerIdx}_crossValueProj", requiresGradient: true);
-        var crossOutputProj = TensorOperations<T>.Variable(layer.GetCrossOutputProjection(), $"dec{layerIdx}_crossOutputProj", requiresGradient: true);
+        var crossQueryProj = TensorOperations<T>.Variable(layer.GetCrossQueryProjection(), $"{prefix}crossQueryProj", requiresGradient: true);
+        var crossKeyProj = TensorOperations<T>.Variable(layer.GetCrossKeyProjection(), $"{prefix}crossKeyProj", requiresGradient: true);
+        var crossValueProj = TensorOperations<T>.Variable(layer.GetCrossValueProjection(), $"{prefix}crossValueProj", requiresGradient: true);
+        var crossOutputProj = TensorOperations<T>.Variable(layer.GetCrossOutputProjection(), $"{prefix}crossOutputProj", requiresGradient: true);
+        paramNodes.AddRange(new[] { crossQueryProj, crossKeyProj, crossValueProj, crossOutputProj });
 
         var crossQuery = TensorOperations<T>.MatrixMultiply(normalized1, crossQueryProj);
         var crossKey = TensorOperations<T>.MatrixMultiply(encoderSeasonal, crossKeyProj);
@@ -681,15 +744,17 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
 
         // Residual + LayerNorm
         var crossResidual = TensorOperations<T>.Add(normalized1, crossProjected);
-        var ln2Gamma = TensorOperations<T>.Variable(layer.GetLayerNorm2Gamma(), $"dec{layerIdx}_ln2Gamma", requiresGradient: true);
-        var ln2Beta = TensorOperations<T>.Variable(layer.GetLayerNorm2Beta(), $"dec{layerIdx}_ln2Beta", requiresGradient: true);
+        var ln2Gamma = TensorOperations<T>.Variable(layer.GetLayerNorm2Gamma(), $"{prefix}ln2Gamma", requiresGradient: true);
+        var ln2Beta = TensorOperations<T>.Variable(layer.GetLayerNorm2Beta(), $"{prefix}ln2Beta", requiresGradient: true);
+        paramNodes.AddRange(new[] { ln2Gamma, ln2Beta });
         var normalized2 = TensorOperations<T>.LayerNorm(crossResidual, new[] { crossResidual.Value.Shape[^1] }, ln2Gamma, ln2Beta);
 
         // Feed-forward network
-        var ff1W = TensorOperations<T>.Variable(layer.GetFF1Weight(), $"dec{layerIdx}_ff1W", requiresGradient: true);
-        var ff1B = TensorOperations<T>.Variable(layer.GetFF1Bias(), $"dec{layerIdx}_ff1B", requiresGradient: true);
-        var ff2W = TensorOperations<T>.Variable(layer.GetFF2Weight(), $"dec{layerIdx}_ff2W", requiresGradient: true);
-        var ff2B = TensorOperations<T>.Variable(layer.GetFF2Bias(), $"dec{layerIdx}_ff2B", requiresGradient: true);
+        var ff1W = TensorOperations<T>.Variable(layer.GetFF1Weight(), $"{prefix}ff1Weight", requiresGradient: true);
+        var ff1B = TensorOperations<T>.Variable(layer.GetFF1Bias(), $"{prefix}ff1Bias", requiresGradient: true);
+        var ff2W = TensorOperations<T>.Variable(layer.GetFF2Weight(), $"{prefix}ff2Weight", requiresGradient: true);
+        var ff2B = TensorOperations<T>.Variable(layer.GetFF2Bias(), $"{prefix}ff2Bias", requiresGradient: true);
+        paramNodes.AddRange(new[] { ff1W, ff1B, ff2W, ff2B });
 
         var ffHidden = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(normalized2, ff1W), ff1B);
         var ffActivated = TensorOperations<T>.ReLU(ffHidden);
@@ -697,8 +762,9 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
 
         // Residual + LayerNorm
         var ffResidual = TensorOperations<T>.Add(normalized2, ffOutput);
-        var ln3Gamma = TensorOperations<T>.Variable(layer.GetLayerNorm3Gamma(), $"dec{layerIdx}_ln3Gamma", requiresGradient: true);
-        var ln3Beta = TensorOperations<T>.Variable(layer.GetLayerNorm3Beta(), $"dec{layerIdx}_ln3Beta", requiresGradient: true);
+        var ln3Gamma = TensorOperations<T>.Variable(layer.GetLayerNorm3Gamma(), $"{prefix}ln3Gamma", requiresGradient: true);
+        var ln3Beta = TensorOperations<T>.Variable(layer.GetLayerNorm3Beta(), $"{prefix}ln3Beta", requiresGradient: true);
+        paramNodes.AddRange(new[] { ln3Gamma, ln3Beta });
         var newSeasonal = TensorOperations<T>.LayerNorm(ffResidual, new[] { ffResidual.Value.Shape[^1] }, ln3Gamma, ln3Beta);
 
         // Series decomposition
@@ -708,7 +774,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         // Accumulate trend
         var combinedTrend = TensorOperations<T>.Add(decoderTrend, newTrend);
 
-        return (newSeasonal, combinedTrend);
+        return (newSeasonal, combinedTrend, paramNodes);
     }
 
     private void AccumulateGradients(Dictionary<string, Tensor<T>> gradients)
@@ -844,6 +910,68 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
     {
         var (prediction, _) = ForwardWithCache(input);
         return prediction;
+    }
+
+    /// <summary>
+    /// Predicts multiple time steps ahead using the Autoformer architecture.
+    /// </summary>
+    /// <param name="input">Input sequence of historical values.</param>
+    /// <returns>Vector of predictions for the entire forecast horizon.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns predictions for all steps in the forecast horizon,
+    /// as Autoformer is designed for multi-horizon forecasting.
+    /// </para>
+    /// </remarks>
+    public Vector<T> PredictMultiple(Vector<T> input)
+    {
+        int forecastHorizon = _options.ForecastHorizon;
+        var predictions = new Vector<T>(forecastHorizon);
+
+        var (firstPrediction, cache) = ForwardWithCache(input);
+
+        // Extract predictions from the decoder output for each step in the forecast horizon
+        var seasonalOutput = cache.SeasonalOutput;
+        var trendOutput = cache.TrendOutput;
+
+        // If cache outputs are null, fall back to repeating the first prediction
+        if (seasonalOutput == null || trendOutput == null)
+        {
+            for (int h = 0; h < forecastHorizon; h++)
+            {
+                predictions[h] = firstPrediction;
+            }
+            return predictions;
+        }
+
+        int embDim = _options.EmbeddingDim;
+
+        for (int h = 0; h < forecastHorizon; h++)
+        {
+            var pred = _numOps.Zero;
+
+            // Combine seasonal and trend contributions for this step
+            for (int d = 0; d < embDim; d++)
+            {
+                int idx = Math.Min(h, seasonalOutput.Length / embDim - 1) * embDim + d;
+                if (idx >= 0 && idx < seasonalOutput.Length && idx < trendOutput.Length)
+                {
+                    var seasonalContrib = _numOps.Multiply(_seasonalProjection[d], seasonalOutput[idx]);
+                    var trendContrib = _numOps.Multiply(_trendProjection[d], trendOutput[idx]);
+                    pred = _numOps.Add(pred, _numOps.Add(seasonalContrib, trendContrib));
+                }
+            }
+
+            // Add bias for this step
+            if (h < _outputBias.Length)
+            {
+                pred = _numOps.Add(pred, _outputBias[h]);
+            }
+
+            predictions[h] = pred;
+        }
+
+        return predictions;
     }
 
     /// <inheritdoc/>
@@ -1336,6 +1464,10 @@ internal class AutoformerEncoderLayer<T>
         accumulators[$"{prefix}ff1Bias"] = new Tensor<T>(_ff1Bias.Shape);
         accumulators[$"{prefix}ff2Weight"] = new Tensor<T>(_ff2Weight.Shape);
         accumulators[$"{prefix}ff2Bias"] = new Tensor<T>(_ff2Bias.Shape);
+        accumulators[$"{prefix}ln1Gamma"] = new Tensor<T>(_layerNorm1Gamma.Shape);
+        accumulators[$"{prefix}ln1Beta"] = new Tensor<T>(_layerNorm1Beta.Shape);
+        accumulators[$"{prefix}ln2Gamma"] = new Tensor<T>(_layerNorm2Gamma.Shape);
+        accumulators[$"{prefix}ln2Beta"] = new Tensor<T>(_layerNorm2Beta.Shape);
     }
 
     // Getters for autodiff integration
@@ -1365,6 +1497,10 @@ internal class AutoformerEncoderLayer<T>
         ApplyGradientToParameter(ref _ff1Bias, accumulators, $"{prefix}ff1Bias", scale);
         ApplyGradientToParameter(ref _ff2Weight, accumulators, $"{prefix}ff2Weight", scale);
         ApplyGradientToParameter(ref _ff2Bias, accumulators, $"{prefix}ff2Bias", scale);
+        ApplyGradientToParameter(ref _layerNorm1Gamma, accumulators, $"{prefix}ln1Gamma", scale);
+        ApplyGradientToParameter(ref _layerNorm1Beta, accumulators, $"{prefix}ln1Beta", scale);
+        ApplyGradientToParameter(ref _layerNorm2Gamma, accumulators, $"{prefix}ln2Gamma", scale);
+        ApplyGradientToParameter(ref _layerNorm2Beta, accumulators, $"{prefix}ln2Beta", scale);
     }
 
     private void ApplyGradientToParameter(ref Tensor<T> param, Dictionary<string, Tensor<T>> accumulators, string key, T scale)
@@ -1551,37 +1687,40 @@ internal class AutoformerDecoderLayer<T>
         Tensor<T> encoderTrend, Tensor<T> encoderSeasonal,
         int topK)
     {
-        // Self auto-correlation on decoder seasonal
-        var selfOutput = decoderSeasonal.Clone();
+        // 1. Self auto-correlation on decoder seasonal
+        var selfAttnOutput = ApplySelfAutoCorrelation(decoderSeasonal, topK);
 
-        // Add & Norm
-        var normalized1 = LayerNorm(selfOutput, _layerNorm1Gamma, _layerNorm1Beta);
+        // Add residual + LayerNorm (Post-LN: residual first, then normalize)
+        var selfResidual = AddTensors(decoderSeasonal, selfAttnOutput);
+        var normalized1 = LayerNorm(selfResidual, _layerNorm1Gamma, _layerNorm1Beta);
 
-        // Series decomposition
+        // Series decomposition after self-attention
         var (selfTrend, selfSeasonal) = SeriesDecomposition(normalized1);
         for (int i = 0; i < decoderTrend.Length && i < selfTrend.Length; i++)
         {
             decoderTrend[i] = _numOps.Add(decoderTrend[i], selfTrend[i]);
         }
 
-        // Cross auto-correlation with encoder
-        var crossOutput = selfSeasonal.Clone();
+        // 2. Cross auto-correlation with encoder outputs
+        var crossAttnOutput = ApplyCrossAutoCorrelation(selfSeasonal, encoderSeasonal, topK);
 
-        // Add & Norm
-        var normalized2 = LayerNorm(crossOutput, _layerNorm2Gamma, _layerNorm2Beta);
+        // Add residual + LayerNorm
+        var crossResidual = AddTensors(selfSeasonal, crossAttnOutput);
+        var normalized2 = LayerNorm(crossResidual, _layerNorm2Gamma, _layerNorm2Beta);
 
-        // Series decomposition
+        // Series decomposition after cross-attention
         var (crossTrend, crossSeasonal) = SeriesDecomposition(normalized2);
         for (int i = 0; i < decoderTrend.Length && i < crossTrend.Length; i++)
         {
             decoderTrend[i] = _numOps.Add(decoderTrend[i], crossTrend[i]);
         }
 
-        // Feed-forward
+        // 3. Feed-forward network
         var ffOutput = FeedForward(crossSeasonal);
 
-        // Add & Norm
-        var normalized3 = LayerNorm(ffOutput, _layerNorm3Gamma, _layerNorm3Beta);
+        // Add residual + LayerNorm
+        var ffResidual = AddTensors(crossSeasonal, ffOutput);
+        var normalized3 = LayerNorm(ffResidual, _layerNorm3Gamma, _layerNorm3Beta);
 
         // Final decomposition
         var (finalTrend, finalSeasonal) = SeriesDecomposition(normalized3);
@@ -1591,6 +1730,218 @@ internal class AutoformerDecoderLayer<T>
         }
 
         return (decoderTrend, finalSeasonal);
+    }
+
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
+    {
+        var result = new Tensor<T>(a.Shape);
+        int len = Math.Min(a.Length, b.Length);
+        for (int i = 0; i < len; i++)
+        {
+            result[i] = _numOps.Add(a[i], b[i]);
+        }
+        return result;
+    }
+
+    private Tensor<T> ApplySelfAutoCorrelation(Tensor<T> x, int topK)
+    {
+        int seqLen = x.Shape[0];
+        int embDim = x.Shape[1];
+
+        // Project to Q, K, V
+        var query = ProjectTensor(x, _selfQueryProj);
+        var key = ProjectTensor(x, _selfKeyProj);
+        var value = ProjectTensor(x, _selfValueProj);
+
+        // Auto-correlation: compute correlations between query and shifted keys
+        var attnWeights = ComputeAutoCorrelationWeights(query, key, topK);
+        var attnOutput = AggregateWithCorrelation(value, attnWeights, topK);
+
+        // Project output
+        return ProjectTensor(attnOutput, _selfOutputProj);
+    }
+
+    private Tensor<T> ApplyCrossAutoCorrelation(Tensor<T> query, Tensor<T> encoderOutput, int topK)
+    {
+        int seqLen = query.Shape[0];
+        int embDim = query.Shape[1];
+
+        // Project decoder query and encoder key/value
+        var q = ProjectTensor(query, _crossQueryProj);
+        var k = ProjectTensor(encoderOutput, _crossKeyProj);
+        var v = ProjectTensor(encoderOutput, _crossValueProj);
+
+        // Cross-correlation attention
+        var attnWeights = ComputeCrossCorrelationWeights(q, k, topK);
+        var attnOutput = AggregateWithCrossCorrelation(v, attnWeights, topK);
+
+        // Project output
+        return ProjectTensor(attnOutput, _crossOutputProj);
+    }
+
+    private Tensor<T> ProjectTensor(Tensor<T> x, Tensor<T> weight)
+    {
+        int seqLen = x.Shape[0];
+        int inDim = x.Shape[1];
+        int outDim = weight.Shape[0];
+        var result = new Tensor<T>(new[] { seqLen, outDim });
+
+        for (int t = 0; t < seqLen; t++)
+        {
+            for (int o = 0; o < outDim; o++)
+            {
+                var sum = _numOps.Zero;
+                for (int i = 0; i < inDim; i++)
+                {
+                    sum = _numOps.Add(sum, _numOps.Multiply(x[t * inDim + i], weight[o * inDim + i]));
+                }
+                result[t * outDim + o] = sum;
+            }
+        }
+        return result;
+    }
+
+    private T[] ComputeAutoCorrelationWeights(Tensor<T> query, Tensor<T> key, int topK)
+    {
+        int seqLen = query.Shape[0];
+        int embDim = query.Shape[1];
+
+        // Compute correlation for each lag
+        var correlations = new T[seqLen];
+        for (int lag = 0; lag < seqLen; lag++)
+        {
+            var corr = _numOps.Zero;
+            int count = 0;
+            for (int t = 0; t < seqLen - lag; t++)
+            {
+                for (int d = 0; d < embDim; d++)
+                {
+                    var q = query[t * embDim + d];
+                    var k = key[(t + lag) * embDim + d];
+                    corr = _numOps.Add(corr, _numOps.Multiply(q, k));
+                    count++;
+                }
+            }
+            correlations[lag] = count > 0 ? _numOps.Divide(corr, _numOps.FromDouble(count)) : _numOps.Zero;
+        }
+
+        // Find top-k correlations and apply softmax
+        var indices = Enumerable.Range(0, seqLen)
+            .OrderByDescending(i => _numOps.ToDouble(correlations[i]))
+            .Take(topK)
+            .ToArray();
+
+        var weights = new T[topK];
+        var maxCorr = indices.Length > 0 ? _numOps.ToDouble(correlations[indices[0]]) : 0.0;
+        var expSum = _numOps.Zero;
+
+        for (int i = 0; i < topK && i < indices.Length; i++)
+        {
+            weights[i] = _numOps.FromDouble(Math.Exp(_numOps.ToDouble(correlations[indices[i]]) - maxCorr));
+            expSum = _numOps.Add(expSum, weights[i]);
+        }
+
+        if (_numOps.ToDouble(expSum) > 1e-10)
+        {
+            for (int i = 0; i < weights.Length; i++)
+            {
+                weights[i] = _numOps.Divide(weights[i], expSum);
+            }
+        }
+
+        return weights;
+    }
+
+    private T[] ComputeCrossCorrelationWeights(Tensor<T> query, Tensor<T> key, int topK)
+    {
+        int queryLen = query.Shape[0];
+        int keyLen = key.Shape[0];
+        int embDim = query.Shape[1];
+
+        // Compute attention scores between query and key positions
+        var scores = new T[keyLen];
+        for (int k = 0; k < keyLen; k++)
+        {
+            var score = _numOps.Zero;
+            for (int q = 0; q < queryLen; q++)
+            {
+                for (int d = 0; d < embDim; d++)
+                {
+                    score = _numOps.Add(score, _numOps.Multiply(query[q * embDim + d], key[k * embDim + d]));
+                }
+            }
+            scores[k] = _numOps.Divide(score, _numOps.FromDouble(Math.Sqrt(embDim)));
+        }
+
+        // Top-k softmax
+        var indices = Enumerable.Range(0, keyLen)
+            .OrderByDescending(i => _numOps.ToDouble(scores[i]))
+            .Take(topK)
+            .ToArray();
+
+        var weights = new T[topK];
+        var maxScore = indices.Length > 0 ? _numOps.ToDouble(scores[indices[0]]) : 0.0;
+        var expSum = _numOps.Zero;
+
+        for (int i = 0; i < topK && i < indices.Length; i++)
+        {
+            weights[i] = _numOps.FromDouble(Math.Exp(_numOps.ToDouble(scores[indices[i]]) - maxScore));
+            expSum = _numOps.Add(expSum, weights[i]);
+        }
+
+        if (_numOps.ToDouble(expSum) > 1e-10)
+        {
+            for (int i = 0; i < weights.Length; i++)
+            {
+                weights[i] = _numOps.Divide(weights[i], expSum);
+            }
+        }
+
+        return weights;
+    }
+
+    private Tensor<T> AggregateWithCorrelation(Tensor<T> value, T[] weights, int topK)
+    {
+        int seqLen = value.Shape[0];
+        int embDim = value.Shape[1];
+        var output = new Tensor<T>(new[] { seqLen, embDim });
+
+        for (int t = 0; t < seqLen; t++)
+        {
+            for (int d = 0; d < embDim; d++)
+            {
+                var sum = _numOps.Zero;
+                for (int k = 0; k < topK && k < weights.Length; k++)
+                {
+                    int srcIdx = (t + k) % seqLen;
+                    sum = _numOps.Add(sum, _numOps.Multiply(weights[k], value[srcIdx * embDim + d]));
+                }
+                output[t * embDim + d] = sum;
+            }
+        }
+        return output;
+    }
+
+    private Tensor<T> AggregateWithCrossCorrelation(Tensor<T> value, T[] weights, int topK)
+    {
+        int seqLen = value.Shape[0];
+        int embDim = value.Shape[1];
+        var output = new Tensor<T>(new[] { seqLen, embDim });
+
+        for (int t = 0; t < seqLen; t++)
+        {
+            for (int d = 0; d < embDim; d++)
+            {
+                var sum = _numOps.Zero;
+                for (int k = 0; k < topK && k < weights.Length; k++)
+                {
+                    int srcIdx = Math.Min(k, seqLen - 1);
+                    sum = _numOps.Add(sum, _numOps.Multiply(weights[k], value[srcIdx * embDim + d]));
+                }
+                output[t * embDim + d] = sum;
+            }
+        }
+        return output;
     }
 
     private (Tensor<T> trend, Tensor<T> seasonal) SeriesDecomposition(Tensor<T> input)
@@ -1707,6 +2058,12 @@ internal class AutoformerDecoderLayer<T>
         accumulators[$"{prefix}ff1Bias"] = new Tensor<T>(_ff1Bias.Shape);
         accumulators[$"{prefix}ff2Weight"] = new Tensor<T>(_ff2Weight.Shape);
         accumulators[$"{prefix}ff2Bias"] = new Tensor<T>(_ff2Bias.Shape);
+        accumulators[$"{prefix}ln1Gamma"] = new Tensor<T>(_layerNorm1Gamma.Shape);
+        accumulators[$"{prefix}ln1Beta"] = new Tensor<T>(_layerNorm1Beta.Shape);
+        accumulators[$"{prefix}ln2Gamma"] = new Tensor<T>(_layerNorm2Gamma.Shape);
+        accumulators[$"{prefix}ln2Beta"] = new Tensor<T>(_layerNorm2Beta.Shape);
+        accumulators[$"{prefix}ln3Gamma"] = new Tensor<T>(_layerNorm3Gamma.Shape);
+        accumulators[$"{prefix}ln3Beta"] = new Tensor<T>(_layerNorm3Beta.Shape);
     }
 
     // Getters for autodiff integration
@@ -1746,6 +2103,12 @@ internal class AutoformerDecoderLayer<T>
         ApplyGradientToParameter(ref _ff1Bias, accumulators, $"{prefix}ff1Bias", scale);
         ApplyGradientToParameter(ref _ff2Weight, accumulators, $"{prefix}ff2Weight", scale);
         ApplyGradientToParameter(ref _ff2Bias, accumulators, $"{prefix}ff2Bias", scale);
+        ApplyGradientToParameter(ref _layerNorm1Gamma, accumulators, $"{prefix}ln1Gamma", scale);
+        ApplyGradientToParameter(ref _layerNorm1Beta, accumulators, $"{prefix}ln1Beta", scale);
+        ApplyGradientToParameter(ref _layerNorm2Gamma, accumulators, $"{prefix}ln2Gamma", scale);
+        ApplyGradientToParameter(ref _layerNorm2Beta, accumulators, $"{prefix}ln2Beta", scale);
+        ApplyGradientToParameter(ref _layerNorm3Gamma, accumulators, $"{prefix}ln3Gamma", scale);
+        ApplyGradientToParameter(ref _layerNorm3Beta, accumulators, $"{prefix}ln3Beta", scale);
     }
 
     private void ApplyGradientToParameter(ref Tensor<T> param, Dictionary<string, Tensor<T>> accumulators, string key, T scale)

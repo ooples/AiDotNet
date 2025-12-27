@@ -80,10 +80,29 @@ public class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
         // Extract time series from input
         var timeSeries = x.Rows > 0 ? x.GetColumn(0) : y;
 
+        // Guard against too-short time series
+        int minRequiredLength = Math.Max(_options.LagFeatures, _options.RollingWindowSize) + 1;
+        if (timeSeries.Length < minRequiredLength)
+        {
+            throw new ArgumentException(
+                $"Time series is too short ({timeSeries.Length} points). " +
+                $"Minimum required length is {minRequiredLength} based on LagFeatures ({_options.LagFeatures}) " +
+                $"and RollingWindowSize ({_options.RollingWindowSize}).",
+                nameof(x));
+        }
+
         // Create feature matrix from time series
         var (features, validIndices) = CreateFeatureMatrix(timeSeries);
 
         int n = features.Rows;
+
+        // Additional safety check: ensure we have enough samples to build a forest
+        if (n == 0)
+        {
+            throw new InvalidOperationException(
+                "Feature matrix has zero rows. Time series may be too short for the configured options.");
+        }
+
         _effectiveSampleSize = _options.SampleSize ?? Math.Min(256, n);
         _effectiveMaxDepth = _options.MaxDepth ?? (int)Math.Ceiling(Math.Log(_effectiveSampleSize) / Math.Log(2));
 

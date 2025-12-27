@@ -6949,7 +6949,9 @@ public static class StatisticsHelper<T>
         if (n == 0) return _numOps.Zero;
 
         var totalCrps = _numOps.Zero;
-        var sqrtTwoOverPi = _numOps.FromDouble(Math.Sqrt(2.0 / Math.PI));
+        // Correct constant for Gaussian CRPS: 1/sqrt(pi) (not sqrt(2/pi))
+        // Reference: Gneiting & Raftery (2007), "Strictly Proper Scoring Rules, Prediction, and Estimation"
+        var oneOverSqrtPi = _numOps.FromDouble(1.0 / Math.Sqrt(Math.PI));
 
         for (int i = 0; i < n; i++)
         {
@@ -6977,7 +6979,7 @@ public static class StatisticsHelper<T>
                 // CRPS for Gaussian: sigma * (z * (2*Phi(z) - 1) + 2*phi(z) - 1/sqrt(pi))
                 var term1 = _numOps.Multiply(z, _numOps.Subtract(_numOps.Multiply(_numOps.FromDouble(2.0), phi), _numOps.One));
                 var term2 = _numOps.Multiply(_numOps.FromDouble(2.0), pdf);
-                var term3 = sqrtTwoOverPi;
+                var term3 = oneOverSqrtPi;
 
                 var crpsSingle = _numOps.Multiply(sigma, _numOps.Subtract(_numOps.Add(term1, term2), term3));
                 totalCrps = _numOps.Add(totalCrps, crpsSingle);
