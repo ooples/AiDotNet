@@ -424,15 +424,25 @@ namespace AiDotNet.WaveletFunctions
         /// </remarks>
         private void DecomposeChunk(Vector<T> input, Vector<T> approximation, Vector<T> detail, int start, int end)
         {
+            int lowPassLen = _decompositionLowPass.Length;
+            int highPassLen = _decompositionHighPass.Length;
+
             for (int i = start; i < end; i += 2)
             {
                 T approx = NumOps.Zero;
                 T det = NumOps.Zero;
 
-                for (int j = 0; j < _decompositionLowPass.Length; j++)
+                // Apply low-pass filter for approximation
+                for (int j = 0; j < lowPassLen; j++)
                 {
-                    int index = GetExtendedIndex(i + j - _decompositionLowPass.Length / 2 + 1, input.Length);
+                    int index = GetExtendedIndex(i + j - lowPassLen / 2 + 1, input.Length);
                     approx = NumOps.Add(approx, NumOps.Multiply(_decompositionLowPass[j], input[index]));
+                }
+
+                // Apply high-pass filter for detail (may have different length)
+                for (int j = 0; j < highPassLen; j++)
+                {
+                    int index = GetExtendedIndex(i + j - highPassLen / 2 + 1, input.Length);
                     det = NumOps.Add(det, NumOps.Multiply(_decompositionHighPass[j], input[index]));
                 }
 
@@ -468,7 +478,8 @@ namespace AiDotNet.WaveletFunctions
         /// </remarks>
         public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
         {
-            int n = (approximation.Length + detail.Length) * 2;
+            // Reconstructed signal has twice the length of the coefficient vectors
+            int n = approximation.Length * 2;
             var reconstructed = new Vector<T>(n);
 
             for (int i = 0; i < n; i += _chunkSize)
@@ -507,16 +518,36 @@ namespace AiDotNet.WaveletFunctions
         /// </remarks>
         private void ReconstructChunk(Vector<T> approximation, Vector<T> detail, Vector<T> reconstructed, int start, int end)
         {
+            int len = approximation.Length;
+            if (len == 0) return;
+
+            int lowPassLen = _reconstructionLowPass.Length;
+            int highPassLen = _reconstructionHighPass.Length;
+
             for (int i = start; i < end; i++)
             {
                 T value = NumOps.Zero;
 
-                for (int j = 0; j < _reconstructionLowPass.Length; j++)
+                // Apply low-pass reconstruction filter
+                for (int j = 0; j < lowPassLen; j++)
                 {
-                    int index = (i / 2 - j + _reconstructionLowPass.Length) % approximation.Length;
+                    int rawIndex = i / 2 - j + lowPassLen;
+                    int index = ((rawIndex % len) + len) % len;
+
                     if ((i - j) % 2 == 0)
                     {
                         value = NumOps.Add(value, NumOps.Multiply(_reconstructionLowPass[j], approximation[index]));
+                    }
+                }
+
+                // Apply high-pass reconstruction filter (may have different length)
+                for (int j = 0; j < highPassLen; j++)
+                {
+                    int rawIndex = i / 2 - j + highPassLen;
+                    int index = ((rawIndex % len) + len) % len;
+
+                    if ((i - j) % 2 == 0)
+                    {
                         value = NumOps.Add(value, NumOps.Multiply(_reconstructionHighPass[j], detail[index]));
                     }
                 }
@@ -684,20 +715,36 @@ namespace AiDotNet.WaveletFunctions
         /// </remarks>
         private int GetExtendedIndex(int index, int length)
         {
+            if (length <= 0)
+                return 0;
+
             switch (_boundaryMethod)
             {
                 case BoundaryHandlingMethod.Periodic:
-                    return (index % length + length) % length;
+                    return ((index % length) + length) % length;
+
                 case BoundaryHandlingMethod.Symmetric:
-                    if (index < 0)
-                        return -index - 1;
-                    if (index >= length)
-                        return 2 * length - index - 1;
-                    return index;
+                    // Handle symmetric reflection properly for any index value
+                    // Uses the half-sample symmetric extension
+                    if (length == 1)
+                        return 0;
+
+                    int period = 2 * length - 2;
+                    int normalizedIndex = ((index % period) + period) % period;
+
+                    if (normalizedIndex >= length)
+                        return period - normalizedIndex;
+                    return normalizedIndex;
+
                 case BoundaryHandlingMethod.ZeroPadding:
-                    if (index < 0 || index >= length)
-                        return -1;
+                    // Note: Despite the name, this method clamps indices to valid range
+                    // (boundary values get repeated). This prevents index out of range errors.
+                    if (index < 0)
+                        return 0;
+                    if (index >= length)
+                        return length - 1;
                     return index;
+
                 default:
                     throw new ArgumentException("Invalid boundary handling method");
             }
