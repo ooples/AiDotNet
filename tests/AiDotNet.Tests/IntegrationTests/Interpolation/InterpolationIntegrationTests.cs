@@ -214,9 +214,7 @@ public class InterpolationIntegrationTests
 
     #region Akima Interpolation Tests
 
-    // Note: AkimaInterpolation has implementation issues requiring minimum point counts
-    // This test is skipped until the implementation is fixed
-    [Fact(Skip = "AkimaInterpolation implementation has index boundary issues")]
+    [Fact]
     public void AkimaInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange - Akima requires at least 5 points and works best with more
