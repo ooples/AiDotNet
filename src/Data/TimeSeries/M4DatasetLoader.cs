@@ -45,6 +45,11 @@ public class M4DatasetLoader<T> : DataLoaderBase<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <summary>
+    /// Shared HttpClient instance to avoid socket exhaustion.
+    /// </summary>
+    private static readonly HttpClient SharedHttpClient = new() { Timeout = TimeSpan.FromMinutes(30) };
+
     private readonly M4Frequency _frequency;
     private readonly string _dataPath;
     private readonly bool _autoDownload;
@@ -55,27 +60,60 @@ public class M4DatasetLoader<T> : DataLoaderBase<T>
     /// <summary>
     /// M4 Competition download URLs.
     /// </summary>
-    private static readonly Dictionary<M4Frequency, (string train, string test)> DatasetUrls = new()
+    /// <remarks>
+    /// The base URL defaults to the official M4 GitHub repository but can be overridden
+    /// at runtime by setting the <c>M4_DATASET_BASE_URL</c> environment variable. This
+    /// allows users to point to a mirror or updated location if the upstream structure
+    /// changes.
+    /// </remarks>
+    private static readonly Dictionary<M4Frequency, (string train, string test)> DatasetUrls = BuildDatasetUrls();
+
+    /// <summary>
+    /// Builds the M4 dataset URLs from a configurable base URL.
+    /// </summary>
+    /// <remarks>
+    /// If the <c>M4_DATASET_BASE_URL</c> environment variable is set, its value is used
+    /// as the base URL (trailing slashes are trimmed). Otherwise, the original GitHub
+    /// <c>master</c>-branch URLs are used as defaults.
+    /// </remarks>
+    private static Dictionary<M4Frequency, (string train, string test)> BuildDatasetUrls()
     {
-        [M4Frequency.Yearly] = (
-            "https://github.com/Mcompetitions/M4-methods/raw/master/Dataset/Train/Yearly-train.csv",
-            "https://github.com/Mcompetitions/M4-methods/raw/master/Dataset/Test/Yearly-test.csv"),
-        [M4Frequency.Quarterly] = (
-            "https://github.com/Mcompetitions/M4-methods/raw/master/Dataset/Train/Quarterly-train.csv",
-            "https://github.com/Mcompetitions/M4-methods/raw/master/Dataset/Test/Quarterly-test.csv"),
-        [M4Frequency.Monthly] = (
-            "https://github.com/Mcompetitions/M4-methods/raw/master/Dataset/Train/Monthly-train.csv",
-            "https://github.com/Mcompetitions/M4-methods/raw/master/Dataset/Test/Monthly-test.csv"),
-        [M4Frequency.Weekly] = (
-            "https://github.com/Mcompetitions/M4-methods/raw/master/Dataset/Train/Weekly-train.csv",
-            "https://github.com/Mcompetitions/M4-methods/raw/master/Dataset/Test/Weekly-test.csv"),
-        [M4Frequency.Daily] = (
-            "https://github.com/Mcompetitions/M4-methods/raw/master/Dataset/Train/Daily-train.csv",
-            "https://github.com/Mcompetitions/M4-methods/raw/master/Dataset/Test/Daily-test.csv"),
-        [M4Frequency.Hourly] = (
-            "https://github.com/Mcompetitions/M4-methods/raw/master/Dataset/Train/Hourly-train.csv",
-            "https://github.com/Mcompetitions/M4-methods/raw/master/Dataset/Test/Hourly-test.csv")
-    };
+        // Default base points to the original M4 GitHub repository.
+        const string defaultBaseUrl = "https://github.com/Mcompetitions/M4-methods/raw/master";
+
+        var baseUrl = Environment.GetEnvironmentVariable("M4_DATASET_BASE_URL");
+        if (string.IsNullOrWhiteSpace(baseUrl))
+        {
+            baseUrl = defaultBaseUrl;
+        }
+        else
+        {
+            // Normalize: remove any trailing slash to avoid double slashes in paths.
+            baseUrl = baseUrl.TrimEnd('/');
+        }
+
+        return new Dictionary<M4Frequency, (string train, string test)>
+        {
+            [M4Frequency.Yearly] = (
+                $"{baseUrl}/Dataset/Train/Yearly-train.csv",
+                $"{baseUrl}/Dataset/Test/Yearly-test.csv"),
+            [M4Frequency.Quarterly] = (
+                $"{baseUrl}/Dataset/Train/Quarterly-train.csv",
+                $"{baseUrl}/Dataset/Test/Quarterly-test.csv"),
+            [M4Frequency.Monthly] = (
+                $"{baseUrl}/Dataset/Train/Monthly-train.csv",
+                $"{baseUrl}/Dataset/Test/Monthly-test.csv"),
+            [M4Frequency.Weekly] = (
+                $"{baseUrl}/Dataset/Train/Weekly-train.csv",
+                $"{baseUrl}/Dataset/Test/Weekly-test.csv"),
+            [M4Frequency.Daily] = (
+                $"{baseUrl}/Dataset/Train/Daily-train.csv",
+                $"{baseUrl}/Dataset/Test/Daily-test.csv"),
+            [M4Frequency.Hourly] = (
+                $"{baseUrl}/Dataset/Train/Hourly-train.csv",
+                $"{baseUrl}/Dataset/Test/Hourly-test.csv")
+        };
+    }
 
     /// <summary>
     /// M4 Competition statistics per frequency.
@@ -273,37 +311,83 @@ public class M4DatasetLoader<T> : DataLoaderBase<T>
     /// <summary>
     /// Downloads the dataset from the M4 Competition GitHub repository.
     /// </summary>
+    /// <remarks>
+    /// Downloads to temporary files first and only moves them to the final location
+    /// after successful download and basic validation to avoid partial files.
+    /// </remarks>
     private async Task DownloadDatasetAsync(string datasetDir, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(datasetDir);
 
         var (trainUrl, testUrl) = DatasetUrls[_frequency];
 
-        using var httpClient = new HttpClient();
-        httpClient.Timeout = TimeSpan.FromMinutes(30);
-
-        // Download training data
+        // Download training data with atomic write
         string trainFile = Path.Combine(datasetDir, $"{_frequency}-train.csv");
-        using (var response = await httpClient.GetAsync(trainUrl, cancellationToken))
-        {
-            response.EnsureSuccessStatusCode();
-            var content = await response.Content.ReadAsStringAsync();
-            await FilePolyfill.WriteAllTextAsync(trainFile, content, cancellationToken);
-        }
+        await DownloadFileAtomicAsync(trainUrl, trainFile, "training", cancellationToken);
 
-        // Download test data
+        // Download test data with atomic write
         string testFile = Path.Combine(datasetDir, $"{_frequency}-test.csv");
-        using (var response = await httpClient.GetAsync(testUrl, cancellationToken))
+        await DownloadFileAtomicAsync(testUrl, testFile, "test", cancellationToken);
+    }
+
+    /// <summary>
+    /// Downloads a file atomically by writing to a temp file first.
+    /// </summary>
+    private async Task DownloadFileAtomicAsync(string url, string targetPath, string dataType, CancellationToken cancellationToken)
+    {
+        string tempPath = targetPath + ".tmp";
+
+        try
         {
-            response.EnsureSuccessStatusCode();
+            using var response = await SharedHttpClient.GetAsync(url, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException(
+                    $"Failed to download M4 {dataType} data from {url}. " +
+                    $"HTTP status: {(int)response.StatusCode} {response.ReasonPhrase}. " +
+                    $"You can manually download the file to: {targetPath} or set " +
+                    $"M4_DATASET_BASE_URL environment variable to point to a mirror.");
+            }
+
             var content = await response.Content.ReadAsStringAsync();
-            await FilePolyfill.WriteAllTextAsync(testFile, content, cancellationToken);
+
+            // Basic validation - check we got CSV-like content
+            if (string.IsNullOrWhiteSpace(content) || !content.Contains(','))
+            {
+                throw new InvalidDataException(
+                    $"Downloaded M4 {dataType} data appears to be invalid (not CSV format). " +
+                    $"URL: {url}. You may need to download the data manually.");
+            }
+
+            // Write to temp file first
+            await FilePolyfill.WriteAllTextAsync(tempPath, content, cancellationToken);
+
+            // Atomically move to final location
+            if (File.Exists(targetPath))
+            {
+                File.Delete(targetPath);
+            }
+            File.Move(tempPath, targetPath);
+        }
+        finally
+        {
+            // Clean up temp file if it still exists (in case of error)
+            if (File.Exists(tempPath))
+            {
+                try { File.Delete(tempPath); } catch { /* Ignore cleanup errors */ }
+            }
         }
     }
 
     /// <summary>
     /// Parses an M4 Competition CSV file.
     /// </summary>
+    /// <remarks>
+    /// M4 CSV format has a simple structure with quoted series IDs and unquoted numeric values:
+    /// <c>"V1",12345,23456,...</c>
+    /// Values never contain commas or quotes, so simple Split(',') is appropriate here.
+    /// </remarks>
     private async Task<List<M4TimeSeries<T>>> ParseM4CsvAsync(string filePath, CancellationToken cancellationToken)
     {
         var series = new List<M4TimeSeries<T>>();
@@ -317,9 +401,11 @@ public class M4DatasetLoader<T> : DataLoaderBase<T>
             var line = lines[i];
             if (string.IsNullOrWhiteSpace(line)) continue;
 
+            // M4 format uses simple comma separation with quoted series ID
             var parts = line.Split(',');
             if (parts.Length < 2) continue;
 
+            // Remove quotes from series ID (e.g., "Y1" -> Y1)
             var seriesId = parts[0].Trim('"');
             var values = new List<T>();
 
