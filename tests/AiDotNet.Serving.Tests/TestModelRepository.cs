@@ -43,15 +43,6 @@ internal sealed class TestModelRepository : IModelRepository
         throw new NotSupportedException("Test repository does not support unloading models.");
     }
 
-    public List<ModelInfo> GetAllModelInfo() => _models.Values.ToList();
-
-    public ModelInfo? GetModelInfo(string name)
-    {
-        return _models.TryGetValue(name, out var info) ? info : null;
-    }
-
-    public bool ModelExists(string name) => _models.ContainsKey(name);
-
     public bool LoadMultimodalModel<T>(string name, IServableMultimodalModel<T> model, string? sourcePath = null)
     {
         throw new NotSupportedException("Test repository does not support loading models.");
@@ -61,5 +52,14 @@ internal sealed class TestModelRepository : IModelRepository
     {
         throw new NotSupportedException("Test repository does not support retrieving model instances.");
     }
+
+    public List<ModelInfo> GetAllModelInfo() => _models.Values.ToList();
+
+    public ModelInfo? GetModelInfo(string name)
+    {
+        return _models.TryGetValue(name, out var info) ? info : null;
+    }
+
+    public bool ModelExists(string name) => _models.ContainsKey(name);
 }
 
