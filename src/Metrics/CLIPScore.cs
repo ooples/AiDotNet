@@ -362,11 +362,13 @@ public class AestheticScore<T> where T : struct
     private readonly INumericOperations<T> _numOps;
     private readonly IMultimodalEmbedding<T> _clipModel;
     private readonly Vector<T>? _aestheticWeights;
+    private readonly string[] _positivePrompts;
+    private readonly string[] _negativePrompts;
 
     /// <summary>
-    /// Positive aesthetic prompts used for zero-shot aesthetic scoring.
+    /// Default positive aesthetic prompts used for zero-shot aesthetic scoring.
     /// </summary>
-    private static readonly string[] PositivePrompts = new[]
+    public static readonly string[] DefaultPositivePrompts = new[]
     {
         "a beautiful photograph",
         "an aesthetically pleasing image",
@@ -376,9 +378,9 @@ public class AestheticScore<T> where T : struct
     };
 
     /// <summary>
-    /// Negative aesthetic prompts used for zero-shot aesthetic scoring.
+    /// Default negative aesthetic prompts used for zero-shot aesthetic scoring.
     /// </summary>
-    private static readonly string[] NegativePrompts = new[]
+    public static readonly string[] DefaultNegativePrompts = new[]
     {
         "a low quality photograph",
         "an ugly image",
@@ -390,13 +392,21 @@ public class AestheticScore<T> where T : struct
     /// <summary>
     /// Initializes a new instance of AestheticScore calculator.
     /// </summary>
-    /// <param name="clipModel">A CLIP model for computing embeddings</param>
-    /// <param name="aestheticWeights">Pre-trained aesthetic prediction weights (optional)</param>
-    public AestheticScore(IMultimodalEmbedding<T> clipModel, Vector<T>? aestheticWeights = null)
+    /// <param name="clipModel">A CLIP model for computing embeddings.</param>
+    /// <param name="aestheticWeights">Pre-trained aesthetic prediction weights (optional).</param>
+    /// <param name="positivePrompts">Custom positive aesthetic prompts for zero-shot scoring (optional, uses defaults if null).</param>
+    /// <param name="negativePrompts">Custom negative aesthetic prompts for zero-shot scoring (optional, uses defaults if null).</param>
+    public AestheticScore(
+        IMultimodalEmbedding<T> clipModel,
+        Vector<T>? aestheticWeights = null,
+        string[]? positivePrompts = null,
+        string[]? negativePrompts = null)
     {
         _clipModel = clipModel ?? throw new ArgumentNullException(nameof(clipModel));
         _numOps = MathHelper.GetNumericOperations<T>();
         _aestheticWeights = aestheticWeights;
+        _positivePrompts = positivePrompts ?? DefaultPositivePrompts;
+        _negativePrompts = negativePrompts ?? DefaultNegativePrompts;
     }
 
     /// <summary>
@@ -445,23 +455,23 @@ public class AestheticScore<T> where T : struct
 
         // Compute similarity with positive prompts
         double positiveScore = 0.0;
-        foreach (string prompt in PositivePrompts)
+        foreach (string prompt in _positivePrompts)
         {
             var textEmbedding = _clipModel.EncodeText(prompt);
             T similarity = _clipModel.ComputeSimilarity(imageEmbedding, textEmbedding);
             positiveScore += _numOps.ToDouble(similarity);
         }
-        positiveScore /= PositivePrompts.Length;
+        positiveScore /= _positivePrompts.Length;
 
         // Compute similarity with negative prompts
         double negativeScore = 0.0;
-        foreach (string prompt in NegativePrompts)
+        foreach (string prompt in _negativePrompts)
         {
             var textEmbedding = _clipModel.EncodeText(prompt);
             T similarity = _clipModel.ComputeSimilarity(imageEmbedding, textEmbedding);
             negativeScore += _numOps.ToDouble(similarity);
         }
-        negativeScore /= NegativePrompts.Length;
+        negativeScore /= _negativePrompts.Length;
 
         // Compute relative aesthetic score
         // Higher positive similarity + lower negative similarity = higher aesthetic score
