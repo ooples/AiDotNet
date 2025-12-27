@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Tokenization.Interfaces;
@@ -86,9 +87,34 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         int imageSize = 224)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
-        _imageEncoderPath = imageEncoderPath ?? throw new ArgumentNullException(nameof(imageEncoderPath));
-        _textEncoderPath = textEncoderPath ?? throw new ArgumentNullException(nameof(textEncoderPath));
+        // Validate image encoder path (null/empty check first)
+        if (string.IsNullOrWhiteSpace(imageEncoderPath))
+        {
+            throw new ArgumentException("Image encoder path cannot be null or empty.", nameof(imageEncoderPath));
+        }
+
+        // Validate text encoder path (null/empty check before file existence checks)
+        if (string.IsNullOrWhiteSpace(textEncoderPath))
+        {
+            throw new ArgumentException("Text encoder path cannot be null or empty.", nameof(textEncoderPath));
+        }
+
+        // Validate tokenizer
         _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+
+        // Now check file existence for both paths
+        if (!File.Exists(imageEncoderPath))
+        {
+            throw new FileNotFoundException($"Image encoder model file not found: {imageEncoderPath}", imageEncoderPath);
+        }
+        if (!File.Exists(textEncoderPath))
+        {
+            throw new FileNotFoundException($"Text encoder model file not found: {textEncoderPath}", textEncoderPath);
+        }
+
+        // Store validated paths and parameters
+        _imageEncoderPath = imageEncoderPath;
+        _textEncoderPath = textEncoderPath;
         _embeddingDimension = embeddingDimension;
         _maxSequenceLength = maxSequenceLength;
         _imageSize = imageSize;
