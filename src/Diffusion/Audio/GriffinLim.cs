@@ -1,5 +1,5 @@
-using AiDotNet.Interfaces;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.WindowFunctions;
 
 namespace AiDotNet.Diffusion.Audio;
