@@ -101,9 +101,13 @@ public class BarlowTwins<T> : SSLMethodBase<T>
         // Compute Barlow Twins loss with gradients
         var (loss, gradZ1, gradZ2) = _loss.ComputeLossWithGradients(z1, z2);
 
-        // Backward pass
+        // Backward pass for first view
         var gradH1 = _projector.Backward(gradZ1);
         _encoder.Backpropagate(gradH1);
+
+        // Backward pass for second view (accumulates gradients)
+        var gradH2 = _projector.Backward(gradZ2);
+        _encoder.Backpropagate(gradH2);
 
         // Update parameters
         var learningRate = NumOps.FromDouble(GetEffectiveLearningRate());

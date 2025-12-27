@@ -109,14 +109,17 @@ public class DINO<T> : TeacherStudentSSL<T>
         // Compute DINO loss
         var loss = _loss.ComputeMultiCropLoss(studentOutputs, teacherOutputs);
 
-        // Backward pass through student (simplified - compute gradients for first student output)
-        if (studentOutputs.Count > 0 && teacherOutputs.Count > 0)
+        // Backward pass through student - accumulate gradients from all student/teacher pairs
+        for (int s = 0; s < studentOutputs.Count; s++)
         {
-            var (_, gradStudent) = _loss.ComputeLossWithGradients(
-                studentOutputs[0], teacherOutputs[0]);
+            for (int t = 0; t < teacherOutputs.Count; t++)
+            {
+                var (_, gradStudent) = _loss.ComputeLossWithGradients(
+                    studentOutputs[s], teacherOutputs[t]);
 
-            var gradH = _projector!.Backward(gradStudent);
-            _encoder.Backpropagate(gradH);
+                var gradH = _projector!.Backward(gradStudent);
+                _encoder.Backpropagate(gradH);
+            }
         }
 
         // Update networks

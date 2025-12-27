@@ -124,8 +124,7 @@ public class MoCo<T> : SSLMethodBase<T>
         else
         {
             // Fallback to in-batch negatives if queue is empty
-            loss = _loss.ComputeLossInBatch(query, key);
-            gradQuery = query; // Simplified gradient
+            (loss, gradQuery, _) = _loss.ComputeLossInBatchWithGradients(query, key);
         }
 
         // Backward pass through online encoder

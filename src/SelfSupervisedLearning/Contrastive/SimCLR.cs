@@ -105,9 +105,11 @@ public class SimCLR<T> : SSLMethodBase<T>
         var gradH1 = _projector.Backward(gradZ1);
         var gradH2 = _projector.Backward(gradZ2);
 
-        // Backward pass through encoder
-        // Note: In practice, we'd combine gradients from both views
-        _encoder.Backpropagate(gradH1);
+        // Combine gradients from both views (average)
+        var combinedGrad = CombineGradients(gradH1, gradH2);
+
+        // Backward pass through encoder with combined gradients
+        _encoder.Backpropagate(combinedGrad);
 
         // Update parameters with learning rate
         var learningRate = NumOps.FromDouble(GetEffectiveLearningRate());
@@ -173,6 +175,26 @@ public class SimCLR<T> : SSLMethodBase<T>
         }
 
         return NumOps.Divide(totalNorm, NumOps.FromDouble(batchSize));
+    }
+
+    private Tensor<T> CombineGradients(Tensor<T> grad1, Tensor<T> grad2)
+    {
+        var batchSize = grad1.Shape[0];
+        var dim = grad1.Shape[1];
+        var combined = new T[batchSize * dim];
+        var half = NumOps.FromDouble(0.5);
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            for (int j = 0; j < dim; j++)
+            {
+                // Average the gradients from both views
+                var sum = NumOps.Add(grad1[i, j], grad2[i, j]);
+                combined[i * dim + j] = NumOps.Multiply(sum, half);
+            }
+        }
+
+        return new Tensor<T>(combined, [batchSize, dim]);
     }
 
     /// <summary>

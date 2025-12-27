@@ -120,10 +120,15 @@ public class BYOL<T> : SSLMethodBase<T>
         // Symmetric loss: online(view1) predicts target(view2) and vice versa
         var loss = _loss.ComputeSymmetricLoss(p1, z2Target, p2, z1Target);
 
-        // Backward pass through online network
+        // Backward pass through online network - first path (p1 → z2Target)
         var (_, gradP1) = _loss.ComputeLossWithGradients(p1, z2Target);
         var gradZ1 = _onlineProjector.Backward(gradP1);
         _encoder.Backpropagate(gradZ1);
+
+        // Backward pass through online network - second path (p2 → z1Target)
+        var (_, gradP2) = _loss.ComputeLossWithGradients(p2, z1Target);
+        var gradZ2 = _onlineProjector.Backward(gradP2);
+        _encoder.Backpropagate(gradZ2);
 
         // Update online network parameters
         var learningRate = NumOps.FromDouble(GetEffectiveLearningRate());

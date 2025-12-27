@@ -169,6 +169,96 @@ public class InfoNCELoss<T>
     }
 
     /// <summary>
+    /// Computes InfoNCE loss with in-batch negatives and gradients.
+    /// </summary>
+    /// <param name="queries">Query embeddings [batch_size, dim].</param>
+    /// <param name="keys">Key embeddings [batch_size, dim].</param>
+    /// <returns>Tuple of (loss, gradQueries, gradKeys).</returns>
+    public (T loss, Tensor<T> gradQueries, Tensor<T> gradKeys) ComputeLossInBatchWithGradients(
+        Tensor<T> queries, Tensor<T> keys)
+    {
+        if (queries is null) throw new ArgumentNullException(nameof(queries));
+        if (keys is null) throw new ArgumentNullException(nameof(keys));
+
+        var batchSize = queries.Shape[0];
+        var dim = queries.Shape[1];
+
+        var q = _normalize ? L2Normalize(queries) : queries;
+        var k = _normalize ? L2Normalize(keys) : keys;
+
+        var gradQ = new T[batchSize * dim];
+        var gradK = new T[batchSize * dim];
+        T totalLoss = NumOps.Zero;
+
+        var invTemp = NumOps.FromDouble(1.0 / _temperature);
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            // Compute all logits: q_i · k_j / τ
+            var logits = new T[batchSize];
+            T maxLogit = NumOps.FromDouble(double.MinValue);
+
+            for (int j = 0; j < batchSize; j++)
+            {
+                T dot = NumOps.Zero;
+                for (int d = 0; d < dim; d++)
+                {
+                    dot = NumOps.Add(dot, NumOps.Multiply(q[i, d], k[j, d]));
+                }
+                logits[j] = NumOps.Multiply(dot, invTemp);
+
+                if (NumOps.GreaterThan(logits[j], maxLogit))
+                    maxLogit = logits[j];
+            }
+
+            // Compute softmax probabilities
+            T sumExp = NumOps.Zero;
+            var exps = new T[batchSize];
+            for (int j = 0; j < batchSize; j++)
+            {
+                exps[j] = NumOps.Exp(NumOps.Subtract(logits[j], maxLogit));
+                sumExp = NumOps.Add(sumExp, exps[j]);
+            }
+
+            // Positive is at index i (diagonal)
+            var logSumExp = NumOps.Add(maxLogit, NumOps.Log(sumExp));
+            var loss = NumOps.Subtract(logSumExp, logits[i]);
+            totalLoss = NumOps.Add(totalLoss, loss);
+
+            // Compute gradients
+            for (int j = 0; j < batchSize; j++)
+            {
+                var prob = NumOps.Divide(exps[j], sumExp);
+                var gradScale = j == i
+                    ? NumOps.Subtract(prob, NumOps.One)  // p_j - 1 for positive
+                    : prob;                               // p_j for negatives
+
+                for (int d = 0; d < dim; d++)
+                {
+                    // Gradient w.r.t. query_i from logit_j
+                    var gradFromLogit = NumOps.Multiply(NumOps.Multiply(gradScale, invTemp), k[j, d]);
+                    gradQ[i * dim + d] = NumOps.Add(gradQ[i * dim + d], gradFromLogit);
+
+                    // Gradient w.r.t. key_j from query_i's loss
+                    var gradToKey = NumOps.Multiply(NumOps.Multiply(gradScale, invTemp), q[i, d]);
+                    gradK[j * dim + d] = NumOps.Add(gradK[j * dim + d], gradToKey);
+                }
+            }
+        }
+
+        var avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+        var scale = NumOps.FromDouble(1.0 / batchSize);
+
+        for (int i = 0; i < gradQ.Length; i++)
+        {
+            gradQ[i] = NumOps.Multiply(gradQ[i], scale);
+            gradK[i] = NumOps.Multiply(gradK[i], scale);
+        }
+
+        return (avgLoss, new Tensor<T>(gradQ, [batchSize, dim]), new Tensor<T>(gradK, [batchSize, dim]));
+    }
+
+    /// <summary>
     /// Computes InfoNCE loss with gradients.
     /// </summary>
     public (T loss, Tensor<T> gradQueries, Tensor<T> gradPositiveKeys) ComputeLossWithGradients(
