@@ -352,8 +352,10 @@ internal class SwinTransformerBlock<T>
     {
         // input: [batch, seq_len, dim]
 
-        // Self-attention with residual
-        var attnOut = _attention.Forward(input);
+        // Window-based self-attention with residual
+        // Note: For efficiency in production, window partitioning should be applied here
+        // Current implementation uses global attention as a simplified version
+        var attnOut = ApplyWindowAttention(input);
         var x = AddTensors(input, attnOut);
 
         // MLP with residual
@@ -382,6 +384,26 @@ internal class SwinTransformerBlock<T>
             result[i] = _numOps.Add(a[i], b[i]);
         }
         return result;
+    }
+
+    /// <summary>
+    /// Applies window-based attention (simplified implementation).
+    /// </summary>
+    /// <remarks>
+    /// A full implementation would partition the input into windows of size windowSize x windowSize,
+    /// apply self-attention within each window, and then merge the results.
+    /// The shift_size parameter would cyclically shift the windows for cross-window connections.
+    /// </remarks>
+    private Tensor<T> ApplyWindowAttention(Tensor<T> input)
+    {
+        // For the simplified version, we apply global attention
+        // A production implementation should:
+        // 1. Reshape [B, H*W, C] to [B, H, W, C]
+        // 2. If _shiftSize > 0, cyclically shift the tensor
+        // 3. Partition into non-overlapping windows of size [windowSize, windowSize]
+        // 4. Apply attention within each window
+        // 5. Merge windows and reverse shift if applied
+        return _attention.Forward(input);
     }
 
     private Tensor<T> ApplyGELU(Tensor<T> x)
@@ -415,6 +437,11 @@ internal class PatchMergingBlock<T>
 
     public Tensor<T> Forward(Tensor<T> input)
     {
+        return Forward(input, null, null);
+    }
+
+    public Tensor<T> Forward(Tensor<T> input, int? inputHeight, int? inputWidth)
+    {
         // input: [batch, seq_len, dim]
         // Need to reshape to 2D spatial and merge 2x2 patches
 
@@ -422,9 +449,35 @@ internal class PatchMergingBlock<T>
         int seqLen = input.Shape[1];
         int dim = input.Shape[2];
 
-        // Assume square spatial dimensions
-        int h = (int)Math.Sqrt(seqLen);
-        int w = h;
+        // Calculate spatial dimensions - use provided values or infer from aspect ratio
+        int h, w;
+        if (inputHeight.HasValue && inputWidth.HasValue)
+        {
+            h = inputHeight.Value;
+            w = inputWidth.Value;
+        }
+        else
+        {
+            // Try to infer from sequence length - prefer slight height preference for landscapes
+            double sqrtSeq = Math.Sqrt(seqLen);
+            h = (int)Math.Ceiling(sqrtSeq);
+            w = (int)Math.Floor(sqrtSeq);
+            
+            // Adjust to match sequence length exactly
+            while (h * w != seqLen && h > 0 && w > 0)
+            {
+                if (h * w < seqLen) h++;
+                else w--;
+            }
+            
+            // Fallback to square if no match found
+            if (h * w != seqLen)
+            {
+                h = (int)Math.Sqrt(seqLen);
+                w = h;
+            }
+        }
+        
         int newH = h / 2;
         int newW = w / 2;
         int newSeqLen = newH * newW;

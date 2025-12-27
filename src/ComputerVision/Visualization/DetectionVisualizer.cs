@@ -39,6 +39,16 @@ public class DetectionVisualizer<T>
     /// <returns>Image with visualizations drawn.</returns>
     public Tensor<T> Visualize(Tensor<T> image, DetectionResult<T> result, string[]? classNames = null)
     {
+        ArgumentNullException.ThrowIfNull(image);
+        ArgumentNullException.ThrowIfNull(result);
+
+        if (image.Shape.Length != 4)
+        {
+            throw new ArgumentException(
+                $"Expected 4D image tensor [batch, channels, height, width], got shape [{string.Join(", ", image.Shape)}]",
+                nameof(image));
+        }
+
         // Clone image for drawing
         var output = CloneImage(image);
 

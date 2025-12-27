@@ -344,12 +344,14 @@ internal class RoIAlign<T>
     /// <summary>
     /// Extracts RoI features from feature maps.
     /// </summary>
-    /// <param name="features">Feature map [1, channels, height, width].</param>
+    /// <param name="features">Feature map [batch, channels, height, width].</param>
     /// <param name="rois">Region of interest boxes [num_rois, 4] as (x1, y1, x2, y2).</param>
     /// <param name="spatialScale">Ratio of feature map size to input image size.</param>
+    /// <param name="batchIndices">Optional batch index for each RoI. If null, all RoIs use batch 0.</param>
     /// <returns>Pooled features [num_rois, channels, outputSize, outputSize].</returns>
-    public Tensor<T> Forward(Tensor<T> features, Tensor<T> rois, double spatialScale = 1.0 / 16.0)
+    public Tensor<T> Forward(Tensor<T> features, Tensor<T> rois, double spatialScale = 1.0 / 16.0, int[]? batchIndices = null)
     {
+        int batchSize = features.Shape[0];
         int channels = features.Shape[1];
         int featureH = features.Shape[2];
         int featureW = features.Shape[3];
@@ -359,6 +361,11 @@ internal class RoIAlign<T>
 
         for (int roiIdx = 0; roiIdx < numRois; roiIdx++)
         {
+            // Get batch index for this RoI (default to 0 if not provided)
+            int batchIdx = batchIndices is not null && roiIdx < batchIndices.Length 
+                ? Math.Min(batchIndices[roiIdx], batchSize - 1) 
+                : 0;
+
             // Scale RoI to feature map coordinates
             double x1 = _numOps.ToDouble(rois[roiIdx, 0]) * spatialScale;
             double y1 = _numOps.ToDouble(rois[roiIdx, 1]) * spatialScale;
@@ -395,7 +402,7 @@ internal class RoIAlign<T>
                                 // Bilinear interpolation
                                 if (y >= 0 && y < featureH && x >= 0 && x < featureW)
                                 {
-                                    sum += BilinearInterpolate(features, 0, c, y, x, featureH, featureW);
+                                    sum += BilinearInterpolate(features, batchIdx, c, y, x, featureH, featureW);
                                     count++;
                                 }
                             }

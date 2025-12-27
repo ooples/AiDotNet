@@ -89,6 +89,8 @@ public enum TrackState
     Tentative,
     /// <summary>Confirmed active track.</summary>
     Confirmed,
+    /// <summary>Temporarily lost, can be reactivated.</summary>
+    Lost,
     /// <summary>Marked for deletion.</summary>
     Deleted
 }

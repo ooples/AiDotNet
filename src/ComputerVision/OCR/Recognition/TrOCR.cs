@@ -239,21 +239,38 @@ public class TrOCR<T> : OCRBase<T>
     private Tensor<T> CreateDecoderInput(List<int> tokens)
     {
         int seqLen = tokens.Count;
+        int vocabSize = VocabularySize + 2; // +2 for start/end tokens
 
-        // Create embedding (simplified - just use one-hot * projection)
-        var input = new Tensor<T>(new[] { 1, seqLen, _hiddenDim });
-
+        // Create one-hot representation for embedding lookup
+        var oneHot = new Tensor<T>(new[] { 1, seqLen, vocabSize });
         for (int t = 0; t < seqLen; t++)
         {
-            // Simple token embedding (could be learned)
+            int tokenId = Math.Clamp(tokens[t], 0, vocabSize - 1);
+            oneHot[0, t, tokenId] = NumOps.FromDouble(1.0);
+        }
+
+        // Apply learned token embedding projection
+        var embedded = new Tensor<T>(new[] { 1, seqLen, _hiddenDim });
+        for (int t = 0; t < seqLen; t++)
+        {
+            // Extract single token one-hot vector
+            var tokenOneHot = new Tensor<T>(new[] { 1, vocabSize });
+            for (int v = 0; v < vocabSize; v++)
+            {
+                tokenOneHot[0, v] = oneHot[0, t, v];
+            }
+
+            // Apply embedding projection
+            var tokenEmb = _tokenEmbedding.Forward(tokenOneHot);
+
+            // Copy to output
             for (int h = 0; h < _hiddenDim; h++)
             {
-                double val = Math.Sin((double)tokens[t] / Math.Pow(10000, 2.0 * h / _hiddenDim));
-                input[0, t, h] = NumOps.FromDouble(val);
+                embedded[0, t, h] = tokenEmb[0, h];
             }
         }
 
-        return input;
+        return embedded;
     }
 
     private Tensor<T> AddPositionalEncoding(Tensor<T> x)
@@ -370,8 +387,91 @@ public class TrOCR<T> : OCRBase<T>
         var loader = new WeightLoader();
         var weights = loader.LoadWeights(localPath);
 
-        // Weight mapping would be done here
-        // TrOCR weight names typically follow: encoder.layers.0.self_attn.*, decoder.layers.0.self_attn.*, etc.
+        // Map patch embedding weights
+        MapConvWeights(weights, "encoder.embeddings.patch_embeddings.projection", _patchEmbed);
+
+        // Map token embedding weights
+        MapDenseWeights(weights, "decoder.embed_tokens", _tokenEmbedding);
+
+        // Map encoder layer weights
+        for (int i = 0; i < _numLayers; i++)
+        {
+            MapEncoderLayerWeights(weights, $"encoder.layers.{i}", _encoderLayers[i]);
+        }
+
+        // Map decoder layer weights
+        for (int i = 0; i < _numLayers; i++)
+        {
+            MapDecoderLayerWeights(weights, $"decoder.layers.{i}", _decoderLayers[i]);
+        }
+
+        // Map output projection weights
+        MapDenseWeights(weights, "lm_head", _outputProjection);
+    }
+
+    private void MapConvWeights(Dictionary<string, Tensor<float>> weights, string prefix, Conv2D<T> conv)
+    {
+        if (weights.TryGetValue($"{prefix}.weight", out var weight))
+        {
+            CopyWeights(weight, conv.Weights);
+        }
+        if (weights.TryGetValue($"{prefix}.bias", out var bias) && conv.Bias is not null)
+        {
+            CopyWeights(bias, conv.Bias);
+        }
+    }
+
+    private void MapDenseWeights(Dictionary<string, Tensor<float>> weights, string prefix, Dense<T> dense)
+    {
+        if (weights.TryGetValue($"{prefix}.weight", out var weight))
+        {
+            CopyWeights(weight, dense.Weights);
+        }
+        if (weights.TryGetValue($"{prefix}.bias", out var bias))
+        {
+            CopyWeights(bias, dense.Bias);
+        }
+    }
+
+    private void MapEncoderLayerWeights(Dictionary<string, Tensor<float>> weights, string prefix, TrOCREncoderLayer<T> layer)
+    {
+        // Self-attention
+        MapDenseWeights(weights, $"{prefix}.self_attn.q_proj", layer.QueryProj);
+        MapDenseWeights(weights, $"{prefix}.self_attn.k_proj", layer.KeyProj);
+        MapDenseWeights(weights, $"{prefix}.self_attn.v_proj", layer.ValueProj);
+        MapDenseWeights(weights, $"{prefix}.self_attn.out_proj", layer.OutputProj);
+
+        // FFN
+        MapDenseWeights(weights, $"{prefix}.fc1", layer.FFN1);
+        MapDenseWeights(weights, $"{prefix}.fc2", layer.FFN2);
+    }
+
+    private void MapDecoderLayerWeights(Dictionary<string, Tensor<float>> weights, string prefix, TrOCRDecoderLayer<T> layer)
+    {
+        // Self-attention
+        MapDenseWeights(weights, $"{prefix}.self_attn.q_proj", layer.SelfQueryProj);
+        MapDenseWeights(weights, $"{prefix}.self_attn.k_proj", layer.SelfKeyProj);
+        MapDenseWeights(weights, $"{prefix}.self_attn.v_proj", layer.SelfValueProj);
+        MapDenseWeights(weights, $"{prefix}.self_attn.out_proj", layer.SelfOutputProj);
+
+        // Cross-attention
+        MapDenseWeights(weights, $"{prefix}.encoder_attn.q_proj", layer.CrossQueryProj);
+        MapDenseWeights(weights, $"{prefix}.encoder_attn.k_proj", layer.CrossKeyProj);
+        MapDenseWeights(weights, $"{prefix}.encoder_attn.v_proj", layer.CrossValueProj);
+        MapDenseWeights(weights, $"{prefix}.encoder_attn.out_proj", layer.CrossOutputProj);
+
+        // FFN
+        MapDenseWeights(weights, $"{prefix}.fc1", layer.FFN1);
+        MapDenseWeights(weights, $"{prefix}.fc2", layer.FFN2);
+    }
+
+    private void CopyWeights(Tensor<float> source, Tensor<T> dest)
+    {
+        int count = Math.Min(source.Length, dest.Length);
+        for (int i = 0; i < count; i++)
+        {
+            dest[i] = NumOps.FromDouble(source[i]);
+        }
     }
 
     /// <inheritdoc/>
@@ -402,6 +502,14 @@ internal class TrOCREncoderLayer<T>
     // Feed-forward network
     private readonly Dense<T> _ffn1;
     private readonly Dense<T> _ffn2;
+
+    // Public properties for weight loading
+    public Dense<T> QueryProj => _queryProj;
+    public Dense<T> KeyProj => _keyProj;
+    public Dense<T> ValueProj => _valueProj;
+    public Dense<T> OutputProj => _outputProj;
+    public Dense<T> FFN1 => _ffn1;
+    public Dense<T> FFN2 => _ffn2;
 
     public TrOCREncoderLayer(int hiddenDim, int numHeads)
     {
@@ -672,6 +780,22 @@ internal class TrOCRDecoderLayer<T>
     // Feed-forward network
     private readonly Dense<T> _ffn1;
     private readonly Dense<T> _ffn2;
+
+    // Public properties for weight loading - self-attention
+    public Dense<T> SelfQueryProj => _selfQueryProj;
+    public Dense<T> SelfKeyProj => _selfKeyProj;
+    public Dense<T> SelfValueProj => _selfValueProj;
+    public Dense<T> SelfOutputProj => _selfOutputProj;
+
+    // Public properties for weight loading - cross-attention
+    public Dense<T> CrossQueryProj => _crossQueryProj;
+    public Dense<T> CrossKeyProj => _crossKeyProj;
+    public Dense<T> CrossValueProj => _crossValueProj;
+    public Dense<T> CrossOutputProj => _crossOutputProj;
+
+    // Public properties for weight loading - FFN
+    public Dense<T> FFN1 => _ffn1;
+    public Dense<T> FFN2 => _ffn2;
 
     public TrOCRDecoderLayer(int hiddenDim, int numHeads)
     {

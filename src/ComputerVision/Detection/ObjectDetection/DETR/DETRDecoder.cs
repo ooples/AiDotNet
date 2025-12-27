@@ -97,15 +97,16 @@ internal class DETRDecoder<T>
     /// <summary>
     /// Decodes raw outputs into detections.
     /// </summary>
+    /// <remarks>
+    /// Returns one result tuple per batch item to maintain proper batch separation.
+    /// </remarks>
     public List<(float[] boxes, float[] scores, int[] classIds)> DecodeOutputs(
         Tensor<T> classLogits,
         Tensor<T> boxPreds,
         int imageHeight,
         int imageWidth)
     {
-        var allBoxes = new List<float>();
-        var allScores = new List<float>();
-        var allClassIds = new List<int>();
+        var results = new List<(float[] boxes, float[] scores, int[] classIds)>();
 
         int batch = classLogits.Shape[0];
         int numQueries = classLogits.Shape[1];
@@ -113,6 +114,10 @@ internal class DETRDecoder<T>
 
         for (int b = 0; b < batch; b++)
         {
+            var batchBoxes = new List<float>();
+            var batchScores = new List<float>();
+            var batchClassIds = new List<int>();
+
             for (int q = 0; q < numQueries; q++)
             {
                 // Get class scores via softmax
@@ -165,16 +170,15 @@ internal class DETRDecoder<T>
                 float x2 = (float)Math.Min(imageWidth, cx + w / 2);
                 float y2 = (float)Math.Min(imageHeight, cy + h / 2);
 
-                allBoxes.AddRange(new[] { x1, y1, x2, y2 });
-                allScores.Add((float)maxScore);
-                allClassIds.Add(maxClassId);
+                batchBoxes.AddRange(new[] { x1, y1, x2, y2 });
+                batchScores.Add((float)maxScore);
+                batchClassIds.Add(maxClassId);
             }
+
+            results.Add((batchBoxes.ToArray(), batchScores.ToArray(), batchClassIds.ToArray()));
         }
 
-        return new List<(float[] boxes, float[] scores, int[] classIds)>
-        {
-            (allBoxes.ToArray(), allScores.ToArray(), allClassIds.ToArray())
-        };
+        return results;
     }
 
     /// <summary>

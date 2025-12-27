@@ -151,6 +151,16 @@ public class DocumentReader<T>
 
         var result = new Tensor<T>(image.Shape);
 
+        // Detect pixel range by sampling a few values to determine if normalized [0,1] or [0,255]
+        double maxVal = 0;
+        for (int i = 0; i < Math.Min(100, image.Length); i++)
+        {
+            maxVal = Math.Max(maxVal, Math.Abs(_numOps.ToDouble(image[i])));
+        }
+        bool isNormalized = maxVal <= 1.0;
+        double midpoint = isNormalized ? 0.5 : 128.0;
+        double rangeMax = isNormalized ? 1.0 : 255.0;
+
         // Convert to grayscale-like processing and enhance
         for (int b = 0; b < batch; b++)
         {
@@ -162,9 +172,9 @@ public class DocumentReader<T>
                     {
                         double val = _numOps.ToDouble(image[b, c, h, w]);
 
-                        // Simple contrast enhancement
-                        val = (val - 128) * 1.2 + 128;
-                        val = MathHelper.Clamp(val, 0, 255);
+                        // Simple contrast enhancement (works with both [0,1] and [0,255] ranges)
+                        val = (val - midpoint) * 1.2 + midpoint;
+                        val = MathHelper.Clamp(val, 0, rangeMax);
 
                         result[b, c, h, w] = _numOps.FromDouble(val);
                     }
@@ -221,6 +231,12 @@ public class DocumentReader<T>
             double regionTop = _numOps.ToDouble(region.Box.Y1);
             double regionBottom = _numOps.ToDouble(region.Box.Y2);
             double regionHeight = regionBottom - regionTop;
+
+            // Skip degenerate regions with zero height
+            if (regionHeight <= 0)
+            {
+                continue;
+            }
 
             foreach (var line in lines)
             {
@@ -288,11 +304,18 @@ public class DocumentReader<T>
 
             foreach (var line in lines)
             {
+                // Use region center to determine column assignment (prevents duplicates)
                 var leftRegions = line.Where(r =>
-                    _numOps.ToDouble(r.Box.X2) < midPoint + imageWidth * 0.05).ToList();
+                {
+                    double centerX = (_numOps.ToDouble(r.Box.X1) + _numOps.ToDouble(r.Box.X2)) / 2;
+                    return centerX < midPoint;
+                }).ToList();
 
                 var rightRegions = line.Where(r =>
-                    _numOps.ToDouble(r.Box.X1) > midPoint - imageWidth * 0.05).ToList();
+                {
+                    double centerX = (_numOps.ToDouble(r.Box.X1) + _numOps.ToDouble(r.Box.X2)) / 2;
+                    return centerX >= midPoint;
+                }).ToList();
 
                 if (leftRegions.Count > 0)
                     leftLines.Add(leftRegions);

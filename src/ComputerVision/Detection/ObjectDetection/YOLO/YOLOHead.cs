@@ -87,9 +87,25 @@ internal class YOLOHead<T>
         int imageHeight,
         int imageWidth)
     {
-        var allBoxes = new List<float>();
-        var allScores = new List<float>();
-        var allClassIds = new List<int>();
+        if (outputs.Count == 0)
+        {
+            return new List<(float[] boxes, float[] scores, int[] classIds)>();
+        }
+
+        // Determine batch size from first output tensor
+        int batchSize = outputs[0].Shape[0];
+
+        // Initialize per-batch collections
+        var batchBoxes = new List<float>[batchSize];
+        var batchScores = new List<float>[batchSize];
+        var batchClassIds = new List<int>[batchSize];
+        for (int bi = 0; bi < batchSize; bi++)
+        {
+            batchBoxes[bi] = new List<float>();
+            batchScores[bi] = new List<float>();
+            batchClassIds[bi] = new List<int>();
+        }
+
 
         for (int levelIdx = 0; levelIdx < outputs.Count; levelIdx++)
         {
@@ -97,7 +113,6 @@ internal class YOLOHead<T>
             int stride = strides[levelIdx];
 
             int batch = output.Shape[0];
-            int channels = output.Shape[1];
             int featH = output.Shape[2];
             int featW = output.Shape[3];
 
@@ -146,19 +161,23 @@ internal class YOLOHead<T>
                             float x2 = (float)Math.Min(imageWidth, cx + bw / 2);
                             float y2 = (float)Math.Min(imageHeight, cy + bh / 2);
 
-                            allBoxes.AddRange(new[] { x1, y1, x2, y2 });
-                            allScores.Add((float)score);
-                            allClassIds.Add(maxClassId);
+                            // Add to this batch's collections
+                            batchBoxes[b].AddRange(new[] { x1, y1, x2, y2 });
+                            batchScores[b].Add((float)score);
+                            batchClassIds[b].Add(maxClassId);
                         }
                     }
                 }
             }
         }
 
-        return new List<(float[] boxes, float[] scores, int[] classIds)>
+        // Return one result per batch item
+        var results = new List<(float[] boxes, float[] scores, int[] classIds)>();
+        for (int b = 0; b < batchSize; b++)
         {
-            (allBoxes.ToArray(), allScores.ToArray(), allClassIds.ToArray())
-        };
+            results.Add((batchBoxes[b].ToArray(), batchScores[b].ToArray(), batchClassIds[b].ToArray()));
+        }
+        return results;
     }
 
     /// <summary>
@@ -271,9 +290,25 @@ internal class YOLOv8Head<T>
         int imageHeight,
         int imageWidth)
     {
-        var allBoxes = new List<float>();
-        var allScores = new List<float>();
-        var allClassIds = new List<int>();
+        if (clsOutputs.Count == 0)
+        {
+            return new List<(float[] boxes, float[] scores, int[] classIds)>();
+        }
+
+        // Determine batch size from first output tensor
+        int batchSize = clsOutputs[0].Shape[0];
+
+        // Initialize per-batch collections
+        var batchBoxes = new List<float>[batchSize];
+        var batchScores = new List<float>[batchSize];
+        var batchClassIds = new List<int>[batchSize];
+        for (int bi = 0; bi < batchSize; bi++)
+        {
+            batchBoxes[bi] = new List<float>();
+            batchScores[bi] = new List<float>();
+            batchClassIds[bi] = new List<int>();
+        }
+
 
         for (int levelIdx = 0; levelIdx < clsOutputs.Count; levelIdx++)
         {
@@ -320,18 +355,22 @@ internal class YOLOv8Head<T>
                         float x2 = (float)Math.Min(imageWidth, cx + right * stride);
                         float y2 = (float)Math.Min(imageHeight, cy + bottom * stride);
 
-                        allBoxes.AddRange(new[] { x1, y1, x2, y2 });
-                        allScores.Add((float)maxScore);
-                        allClassIds.Add(maxClassId);
+                        // Add to this batch's collections
+                        batchBoxes[b].AddRange(new[] { x1, y1, x2, y2 });
+                        batchScores[b].Add((float)maxScore);
+                        batchClassIds[b].Add(maxClassId);
                     }
                 }
             }
         }
 
-        return new List<(float[] boxes, float[] scores, int[] classIds)>
+        // Return one result per batch item
+        var results = new List<(float[] boxes, float[] scores, int[] classIds)>();
+        for (int b = 0; b < batchSize; b++)
         {
-            (allBoxes.ToArray(), allScores.ToArray(), allClassIds.ToArray())
-        };
+            results.Add((batchBoxes[b].ToArray(), batchScores[b].ToArray(), batchClassIds[b].ToArray()));
+        }
+        return results;
     }
 
     private double DecodeDistribution(Tensor<T> regOutput, int b, int side, int h, int w)

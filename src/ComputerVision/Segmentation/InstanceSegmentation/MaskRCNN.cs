@@ -92,8 +92,9 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
 
         foreach (var proposal in proposals.Take(Options.MaxDetections))
         {
-            // RoI Align on FPN features
-            var roiFeatures = RoIAlign(fpnFeatures[0], proposal, _roiPoolSize, _roiPoolSize);
+            // Select appropriate FPN level based on proposal size (standard FPN assignment)
+            var (fpnLevel, stride) = SelectFPNLevel(proposal, fpnFeatures.Count);
+            var roiFeatures = RoIAlign(fpnFeatures[fpnLevel], proposal, _roiPoolSize, _roiPoolSize, stride);
 
             // Flatten for FC layers
             var flattened = Flatten(roiFeatures);
@@ -115,6 +116,11 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
             // Resize mask to full image size
             int boxWidth = (int)(NumOps.ToDouble(proposal.X2) - NumOps.ToDouble(proposal.X1));
             int boxHeight = (int)(NumOps.ToDouble(proposal.Y2) - NumOps.ToDouble(proposal.Y1));
+            
+            // Skip degenerate boxes
+            if (boxWidth <= 0 || boxHeight <= 0)
+                continue;
+                
             var resizedMask = ResizeMask(mask, boxHeight, boxWidth);
 
             // Place mask in full image
@@ -146,10 +152,28 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
         var proposals = new List<(BoundingBox<T> box, double score)>();
 
         int numAnchors = anchors.Count;
+        
+        // Use actual feature map dimensions from objectness tensor
+        int featureH = objectness.Shape[2];
+        int featureW = objectness.Shape[3];
+        
+        // Guard against zero feature dimensions
+        if (featureH <= 0 || featureW <= 0)
+        {
+            return new List<BoundingBox<T>>();
+        }
 
         for (int i = 0; i < numAnchors && i < objectness.Length / 2; i++)
         {
-            double score = NumOps.ToDouble(objectness[0, 1, i / (imageWidth / 8), i % (imageWidth / 8)]);
+            // Use actual feature map dimensions for indexing
+            int h = i / featureW;
+            int w = i % featureW;
+            
+            // Guard against out of bounds access
+            if (h >= featureH || w >= featureW)
+                continue;
+                
+            double score = NumOps.ToDouble(objectness[0, 1, h, w]);
 
             if (score > 0.3) // Pre-NMS threshold
             {
@@ -202,7 +226,7 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
             .ToList();
     }
 
-    private Tensor<T> RoIAlign(Tensor<T> features, BoundingBox<T> box, int outputH, int outputW)
+    private Tensor<T> RoIAlign(Tensor<T> features, BoundingBox<T> box, int outputH, int outputW, double stride = 8.0)
     {
         int batch = 1;
         int channels = features.Shape[1];
@@ -211,15 +235,23 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
 
         var output = new Tensor<T>(new[] { batch, channels, outputH, outputW });
 
-        // Map box to feature space (assuming stride of 4 for P3)
-        double stride = 4.0;
+        // Map box to feature space using the provided stride (P3=8, P4=16, P5=32)
         double x1 = NumOps.ToDouble(box.X1) / stride;
         double y1 = NumOps.ToDouble(box.Y1) / stride;
         double x2 = NumOps.ToDouble(box.X2) / stride;
         double y2 = NumOps.ToDouble(box.Y2) / stride;
 
-        double binH = (y2 - y1) / outputH;
-        double binW = (x2 - x1) / outputW;
+        // Guard against zero or negative box dimensions
+        double boxH = y2 - y1;
+        double boxW = x2 - x1;
+        if (boxH <= 0 || boxW <= 0)
+        {
+            // Return zero-filled tensor for degenerate boxes
+            return output;
+        }
+
+        double binH = boxH / outputH;
+        double binW = boxW / outputW;
 
         for (int c = 0; c < channels; c++)
         {
@@ -268,6 +300,34 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Selects the appropriate FPN level and stride based on proposal size.
+    /// Uses the standard FPN level assignment formula: k = floor(k0 + log2(sqrt(area) / 224))
+    /// </summary>
+    private (int level, double stride) SelectFPNLevel(BoundingBox<T> proposal, int numLevels)
+    {
+        double w = NumOps.ToDouble(proposal.X2) - NumOps.ToDouble(proposal.X1);
+        double h = NumOps.ToDouble(proposal.Y2) - NumOps.ToDouble(proposal.Y1);
+        double area = Math.Max(1, w * h);
+
+        // Standard FPN assignment: k0=4 corresponds to P4 (stride=16) for 224x224 proposals
+        // k = floor(4 + log2(sqrt(area) / 224))
+        const int k0 = 4;
+        const double canonicalSize = 224.0;
+        double k = k0 + Math.Log2(Math.Sqrt(area) / canonicalSize);
+        int level = (int)Math.Floor(k);
+
+        // Clamp to valid FPN levels (P3=0, P4=1, P5=2, P6=3, etc.)
+        // Map from P-levels to array indices: P3->0, P4->1, P5->2
+        int fpnLevel = Math.Clamp(level - 3, 0, numLevels - 1);
+
+        // Strides for each FPN level: P3=8, P4=16, P5=32, P6=64
+        double[] strides = { 8.0, 16.0, 32.0, 64.0 };
+        double stride = strides[Math.Min(fpnLevel, strides.Length - 1)];
+
+        return (fpnLevel, stride);
     }
 
     private Tensor<T> Flatten(Tensor<T> input)

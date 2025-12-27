@@ -84,17 +84,24 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
         var gradient = new Vector<T>(predicted.Length);
         double eps = 1e-5;
 
+        // Create a copy for perturbation to avoid mutating the original input
+        var perturbedPredicted = new Vector<T>(predicted.Length);
+        for (int j = 0; j < predicted.Length; j++)
+        {
+            perturbedPredicted[j] = predicted[j];
+        }
+
         for (int i = 0; i < predicted.Length; i++)
         {
-            double original = NumOps.ToDouble(predicted[i]);
+            double original = NumOps.ToDouble(perturbedPredicted[i]);
 
-            predicted[i] = NumOps.FromDouble(original + eps);
-            double lossPlus = NumOps.ToDouble(CalculateLoss(predicted, actual));
+            perturbedPredicted[i] = NumOps.FromDouble(original + eps);
+            double lossPlus = NumOps.ToDouble(CalculateLoss(perturbedPredicted, actual));
 
-            predicted[i] = NumOps.FromDouble(original - eps);
-            double lossMinus = NumOps.ToDouble(CalculateLoss(predicted, actual));
+            perturbedPredicted[i] = NumOps.FromDouble(original - eps);
+            double lossMinus = NumOps.ToDouble(CalculateLoss(perturbedPredicted, actual));
 
-            predicted[i] = NumOps.FromDouble(original);
+            perturbedPredicted[i] = NumOps.FromDouble(original);
             gradient[i] = NumOps.FromDouble((lossPlus - lossMinus) / (2 * eps));
         }
 
@@ -155,17 +162,24 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
         var gradient = new Tensor<T>(predicted.Shape);
         double eps = 1e-5;
 
+        // Create a copy for perturbation to avoid mutating the original input
+        var perturbedPredicted = new Tensor<T>(predicted.Shape);
+        for (int j = 0; j < predicted.Length; j++)
+        {
+            perturbedPredicted[j] = predicted[j];
+        }
+
         for (int i = 0; i < predicted.Length; i++)
         {
-            double original = NumOps.ToDouble(predicted[i]);
+            double original = NumOps.ToDouble(perturbedPredicted[i]);
 
-            predicted[i] = NumOps.FromDouble(original + eps);
-            double lossPlus = NumOps.ToDouble(CalculateLoss(predicted, targets));
+            perturbedPredicted[i] = NumOps.FromDouble(original + eps);
+            double lossPlus = NumOps.ToDouble(CalculateLoss(perturbedPredicted, targets));
 
-            predicted[i] = NumOps.FromDouble(original - eps);
-            double lossMinus = NumOps.ToDouble(CalculateLoss(predicted, targets));
+            perturbedPredicted[i] = NumOps.FromDouble(original - eps);
+            double lossMinus = NumOps.ToDouble(CalculateLoss(perturbedPredicted, targets));
 
-            predicted[i] = NumOps.FromDouble(original);
+            perturbedPredicted[i] = NumOps.FromDouble(original);
             gradient[i] = NumOps.FromDouble((lossPlus - lossMinus) / (2 * eps));
         }
 

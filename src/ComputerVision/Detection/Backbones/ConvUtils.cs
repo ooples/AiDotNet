@@ -71,6 +71,13 @@ internal class Conv2D<T>
         int inHeight = input.Shape[2];
         int inWidth = input.Shape[3];
 
+        if (inChannels != _inChannels)
+        {
+            throw new ArgumentException(
+                $"Input has {inChannels} channels but layer expects {_inChannels} channels.",
+                nameof(input));
+        }
+
         int outHeight = (inHeight + 2 * _padding - _kernelSize) / _stride + 1;
         int outWidth = (inWidth + 2 * _padding - _kernelSize) / _stride + 1;
 
@@ -194,6 +201,14 @@ internal class Dense<T>
         // input: [batch, ..., inFeatures] - operates on last dimension
         int[] inputShape = input.Shape;
         int lastDim = inputShape[^1];
+
+        if (lastDim != _inFeatures)
+        {
+            throw new ArgumentException(
+                $"Input has {lastDim} features but layer expects {_inFeatures} features.",
+                nameof(input));
+        }
+
         int totalElements = input.Length / lastDim;
 
         // Flatten to [batch_total, inFeatures]
@@ -247,6 +262,13 @@ internal class MultiHeadSelfAttention<T>
 
     public MultiHeadSelfAttention(int dim, int numHeads)
     {
+        if (dim % numHeads != 0)
+        {
+            throw new ArgumentException(
+                $"Dimension {dim} must be divisible by number of heads {numHeads}.",
+                nameof(dim));
+        }
+
         _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         _dim = dim;
         _numHeads = numHeads;
@@ -270,69 +292,81 @@ internal class MultiHeadSelfAttention<T>
         var k = _keyProj.Forward(input);
         var v = _valueProj.Forward(input);
 
-        // Compute attention scores [batch, seq_len, seq_len]
-        var scores = new Tensor<T>(new[] { batch, seqLen, seqLen });
+        // Reshape for multi-head attention: [batch, seq_len, dim] -> [batch, numHeads, seq_len, headDim]
+        // Compute attention scores per head: [batch, numHeads, seq_len, seq_len]
+        var scores = new Tensor<T>(new[] { batch, _numHeads, seqLen, seqLen });
 
         for (int b = 0; b < batch; b++)
         {
-            for (int i = 0; i < seqLen; i++)
+            for (int h = 0; h < _numHeads; h++)
             {
-                for (int j = 0; j < seqLen; j++)
+                int headOffset = h * _headDim;
+                for (int i = 0; i < seqLen; i++)
                 {
-                    double dot = 0;
-                    for (int d = 0; d < _dim; d++)
+                    for (int j = 0; j < seqLen; j++)
                     {
-                        double qi = _numOps.ToDouble(q[b, i, d]);
-                        double kj = _numOps.ToDouble(k[b, j, d]);
-                        dot += qi * kj;
+                        double dot = 0;
+                        for (int d = 0; d < _headDim; d++)
+                        {
+                            double qi = _numOps.ToDouble(q[b, i, headOffset + d]);
+                            double kj = _numOps.ToDouble(k[b, j, headOffset + d]);
+                            dot += qi * kj;
+                        }
+                        scores[b, h, i, j] = _numOps.FromDouble(dot * _scale);
                     }
-                    scores[b, i, j] = _numOps.FromDouble(dot * _scale);
                 }
             }
         }
 
-        // Softmax over last dimension
+        // Softmax per head over last dimension
         for (int b = 0; b < batch; b++)
         {
-            for (int i = 0; i < seqLen; i++)
+            for (int h = 0; h < _numHeads; h++)
             {
-                double maxScore = double.NegativeInfinity;
-                for (int j = 0; j < seqLen; j++)
+                for (int i = 0; i < seqLen; i++)
                 {
-                    maxScore = Math.Max(maxScore, _numOps.ToDouble(scores[b, i, j]));
-                }
+                    double maxScore = double.NegativeInfinity;
+                    for (int j = 0; j < seqLen; j++)
+                    {
+                        maxScore = Math.Max(maxScore, _numOps.ToDouble(scores[b, h, i, j]));
+                    }
 
-                double sumExp = 0;
-                for (int j = 0; j < seqLen; j++)
-                {
-                    double exp = Math.Exp(_numOps.ToDouble(scores[b, i, j]) - maxScore);
-                    sumExp += exp;
-                }
+                    double sumExp = 0;
+                    for (int j = 0; j < seqLen; j++)
+                    {
+                        double exp = Math.Exp(_numOps.ToDouble(scores[b, h, i, j]) - maxScore);
+                        sumExp += exp;
+                    }
 
-                for (int j = 0; j < seqLen; j++)
-                {
-                    double exp = Math.Exp(_numOps.ToDouble(scores[b, i, j]) - maxScore);
-                    scores[b, i, j] = _numOps.FromDouble(exp / sumExp);
+                    for (int j = 0; j < seqLen; j++)
+                    {
+                        double exp = Math.Exp(_numOps.ToDouble(scores[b, h, i, j]) - maxScore);
+                        scores[b, h, i, j] = _numOps.FromDouble(exp / sumExp);
+                    }
                 }
             }
         }
 
-        // Apply attention to values
+        // Apply attention to values per head and concatenate
         var attnOut = new Tensor<T>(new[] { batch, seqLen, _dim });
         for (int b = 0; b < batch; b++)
         {
-            for (int i = 0; i < seqLen; i++)
+            for (int h = 0; h < _numHeads; h++)
             {
-                for (int d = 0; d < _dim; d++)
+                int headOffset = h * _headDim;
+                for (int i = 0; i < seqLen; i++)
                 {
-                    double sum = 0;
-                    for (int j = 0; j < seqLen; j++)
+                    for (int d = 0; d < _headDim; d++)
                     {
-                        double attn = _numOps.ToDouble(scores[b, i, j]);
-                        double vj = _numOps.ToDouble(v[b, j, d]);
-                        sum += attn * vj;
+                        double sum = 0;
+                        for (int j = 0; j < seqLen; j++)
+                        {
+                            double attn = _numOps.ToDouble(scores[b, h, i, j]);
+                            double vj = _numOps.ToDouble(v[b, j, headOffset + d]);
+                            sum += attn * vj;
+                        }
+                        attnOut[b, i, headOffset + d] = _numOps.FromDouble(sum);
                     }
-                    attnOut[b, i, d] = _numOps.FromDouble(sum);
                 }
             }
         }
@@ -343,6 +377,7 @@ internal class MultiHeadSelfAttention<T>
 
     public long GetParameterCount()
     {
-        return 4 * _dim * _dim; // Q, K, V, Out projections
+        // Each Dense layer has dim*dim weights plus dim bias terms
+        return 4 * (_dim * _dim + _dim); // Q, K, V, Out projections with biases
     }
 }

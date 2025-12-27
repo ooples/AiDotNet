@@ -30,10 +30,22 @@ public class CSPDarknet<T> : BackboneBase<T>
     public override string Name => $"CSPDarknet-{_widthMultiplier:0.0}x";
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Returns channel counts for P3, P4, P5 feature levels (stages 1, 2, 3).
+    /// Stage 0 (P2) is not extracted as it's typically not used in detection heads.
+    /// </remarks>
     public override int[] OutputChannels { get; }
 
+    /// <summary>
+    /// Internal channel configuration for all 4 stages (used during construction).
+    /// </summary>
+    private readonly int[] _stageChannels;
+
     /// <inheritdoc/>
-    public override int[] Strides => new[] { 4, 8, 16, 32 };
+    /// <remarks>
+    /// Returns strides for P3, P4, P5 feature levels: 8, 16, 32.
+    /// </remarks>
+    public override int[] Strides => new[] { 8, 16, 32 };
 
     /// <summary>
     /// Creates a new CSP-Darknet backbone.
@@ -48,13 +60,17 @@ public class CSPDarknet<T> : BackboneBase<T>
         _stages = new List<CSPBlock<T>>();
 
         // Calculate channel sizes based on width multiplier
+        // _stageChannels contains all 4 stage channels for building the network
         int[] baseChannels = { 64, 128, 256, 512 };
-        OutputChannels = baseChannels.Select(c => (int)(c * widthMultiplier)).ToArray();
+        _stageChannels = baseChannels.Select(c => (int)(c * widthMultiplier)).ToArray();
+        
+        // OutputChannels only reflects stages 1, 2, 3 (P3, P4, P5) which are actually extracted
+        OutputChannels = new[] { _stageChannels[1], _stageChannels[2], _stageChannels[3] };
 
         // Stem: Initial convolution (stride 2)
         _stem = new Conv2D<T>(
             inChannels: inChannels,
-            outChannels: OutputChannels[0] / 2,
+            outChannels: _stageChannels[0] / 2,
             kernelSize: 3,
             stride: 2,
             padding: 1,
@@ -62,10 +78,10 @@ public class CSPDarknet<T> : BackboneBase<T>
         );
 
         // Build stages
-        int currentChannels = OutputChannels[0] / 2;
+        int currentChannels = _stageChannels[0] / 2;
         for (int i = 0; i < 4; i++)
         {
-            int outChannels = OutputChannels[i];
+            int outChannels = _stageChannels[i];
             int numBlocks = GetBlockCount(i, _depth);
 
             var stage = new CSPBlock<T>(

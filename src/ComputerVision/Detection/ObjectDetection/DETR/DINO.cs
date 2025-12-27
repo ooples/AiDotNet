@@ -29,7 +29,7 @@ public class DINO<T> : ObjectDetectorBase<T>
 {
     private readonly DINOEncoder<T> _encoder;
     private readonly DINODecoder<T> _decoder;
-    private readonly Conv2D<T> _inputProj;
+    private readonly Dense<T> _inputProj;
     private readonly int _hiddenDim;
     private readonly int _numQueries;
     private readonly NMS<T> _nms;
@@ -51,9 +51,8 @@ public class DINO<T> : ObjectDetectorBase<T>
         Backbone = new ResNet<T>(ResNetVariant.ResNet50);
         Neck = new FPN<T>(Backbone.OutputChannels, outputChannels: hiddenDim);
 
-        // Project to hidden dimension (for each scale)
-        int backboneChannels = Backbone.OutputChannels[^1];
-        _inputProj = new Conv2D<T>(hiddenDim, hiddenDim, kernelSize: 1);
+        // Project features to hidden dimension (for sequence data)
+        _inputProj = new Dense<T>(hiddenDim, hiddenDim);
 
         // DINO encoder with deformable attention
         _encoder = new DINOEncoder<T>(hiddenDim, numHeads, numEncoderLayers, Neck.NumLevels);
@@ -242,7 +241,7 @@ public class DINO<T> : ObjectDetectorBase<T>
 
     private Tensor<T> ProjectFeatures(Tensor<T> features)
     {
-        // Apply 1x1 convolution-style projection
+        // Apply linear projection using Dense layer
         int batch = features.Shape[0];
         int seqLen = features.Shape[1];
 
@@ -258,10 +257,11 @@ public class DINO<T> : ObjectDetectorBase<T>
                     feat[0, d] = features[b, s, d];
                 }
 
-                // Simple projection (identity for now - would use _inputProj in full implementation)
+                // Apply projection
+                var projected = _inputProj.Forward(feat);
                 for (int d = 0; d < _hiddenDim; d++)
                 {
-                    result[b, s, d] = feat[0, d];
+                    result[b, s, d] = projected[0, d];
                 }
             }
         }
@@ -568,15 +568,22 @@ internal class DINODecoder<T>
         int imageHeight,
         int imageWidth)
     {
-        var allBoxes = new List<float>();
-        var allScores = new List<float>();
-        var allClassIds = new List<int>();
-
-        int batch = classLogits.Shape[0];
+        int batchSize = classLogits.Shape[0];
         int numQueries = classLogits.Shape[1];
         int numClasses = classLogits.Shape[2];
 
-        for (int b = 0; b < batch; b++)
+        // Initialize per-batch collections
+        var batchBoxes = new List<float>[batchSize];
+        var batchScores = new List<float>[batchSize];
+        var batchClassIds = new List<int>[batchSize];
+        for (int i = 0; i < batchSize; i++)
+        {
+            batchBoxes[i] = new List<float>();
+            batchScores[i] = new List<float>();
+            batchClassIds[i] = new List<int>();
+        }
+
+        for (int b = 0; b < batchSize; b++)
         {
             for (int q = 0; q < numQueries; q++)
             {
@@ -620,16 +627,20 @@ internal class DINODecoder<T>
                 float x2 = (float)Math.Min(imageWidth, cx + w / 2);
                 float y2 = (float)Math.Min(imageHeight, cy + h / 2);
 
-                allBoxes.AddRange(new[] { x1, y1, x2, y2 });
-                allScores.Add((float)maxScore);
-                allClassIds.Add(maxClassId);
+                // Add to this batch's collections
+                batchBoxes[b].AddRange(new[] { x1, y1, x2, y2 });
+                batchScores[b].Add((float)maxScore);
+                batchClassIds[b].Add(maxClassId);
             }
         }
 
-        return new List<(float[] boxes, float[] scores, int[] classIds)>
+        // Return one result per batch item
+        var results = new List<(float[] boxes, float[] scores, int[] classIds)>();
+        for (int b = 0; b < batchSize; b++)
         {
-            (allBoxes.ToArray(), allScores.ToArray(), allClassIds.ToArray())
-        };
+            results.Add((batchBoxes[b].ToArray(), batchScores[b].ToArray(), batchClassIds[b].ToArray()));
+        }
+        return results;
     }
 
     public long GetParameterCount()

@@ -294,14 +294,15 @@ public class ByteTrack<T> : ObjectTrackerBase<T>
         var newTracked = new List<STrack<T>>();
         foreach (var track in _trackedTracks)
         {
-            if (track.State == TrackState.Deleted)
+            if (track.State == TrackState.Lost)
             {
                 _lostTracks.Add(track);
             }
-            else
+            else if (track.State != TrackState.Deleted)
             {
                 newTracked.Add(track);
             }
+            // Deleted tracks are discarded
         }
         _trackedTracks.Clear();
         _trackedTracks.AddRange(newTracked);
@@ -425,7 +426,7 @@ internal class STrack<T>
 
     public void MarkLost()
     {
-        State = TrackState.Deleted;
+        State = TrackState.Lost;
     }
 
     public void MarkRemoved()

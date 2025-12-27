@@ -1,4 +1,5 @@
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.ComputerVision.Detection.Necks;
 
@@ -37,6 +38,11 @@ public class PANet<T> : NeckBase<T>
     private readonly List<Tensor<T>> _downsampleWeights;
     private readonly List<Tensor<T>> _downsampleBiases;
 
+    /// <summary>
+    /// Random number generator for weight initialization (created once, reused for all weights).
+    /// </summary>
+    private readonly Random _random;
+
     /// <inheritdoc/>
     public override string Name => "PANet";
 
@@ -65,6 +71,10 @@ public class PANet<T> : NeckBase<T>
         _bottomUpBiases = new List<Tensor<T>>();
         _downsampleWeights = new List<Tensor<T>>();
         _downsampleBiases = new List<Tensor<T>>();
+        
+        // Create random generator once for all weight initializations
+        // Using a seed for reproducibility, but the same RNG instance ensures different values
+        _random = RandomHelper.CreateSeededRandom(42);
 
         // Initialize top-down pathway weights
         for (int i = 0; i < _numLevels; i++)
@@ -114,11 +124,10 @@ public class PANet<T> : NeckBase<T>
     private void InitializeWeights(Tensor<T> weights)
     {
         double scale = Math.Sqrt(2.0 / weights.Shape[1]);
-        var random = new Random(42);
 
         for (int i = 0; i < weights.Length; i++)
         {
-            double val = random.NextDouble() * 2 * scale - scale;
+            double val = _random.NextDouble() * 2 * scale - scale;
             weights[i] = NumOps.FromDouble(val);
         }
     }

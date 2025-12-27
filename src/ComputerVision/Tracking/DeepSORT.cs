@@ -87,7 +87,7 @@ public class DeepSORT<T> : ObjectTrackerBase<T>
 
         // IoU matching for unconfirmed tracks
         var (matchedUnconfirmed, remainingDetections) = IoUMatching(
-            unconfirmedTracks, unmatchedDetections, filteredDetections, appearanceFeatures);
+            unconfirmedTracks, unmatchedDetections, filteredDetections);
 
         // Update matched tracks
         foreach (var (trackIdx, detIdx) in matchedConfirmed)
@@ -264,7 +264,7 @@ public class DeepSORT<T> : ObjectTrackerBase<T>
 
     private (List<(int trackIdx, int detIdx)> matched, List<int> unmatched) IoUMatching(
         List<DeepTrack<T>> tracks, List<int> detectionIndices,
-        List<Detection<T>> allDetections, List<Tensor<T>> features)
+        List<Detection<T>> allDetections)
     {
         var matched = new List<(int trackIdx, int detIdx)>();
 
@@ -562,8 +562,11 @@ internal class DeepTrack<T>
 
     private BoundingBox<T> StateToBox(double cx, double cy, double s, double r)
     {
-        double w = Math.Sqrt(Math.Max(1, s * r));
-        double h = r > 0 ? w / r : w;
+        // Use minimum aspect ratio threshold to prevent numerical instability
+        const double minAspectRatio = 1e-6;
+        double safeR = Math.Max(Math.Abs(r), minAspectRatio);
+        double w = Math.Sqrt(Math.Max(1, s * safeR));
+        double h = w / safeR;
 
         double x1 = cx - w / 2;
         double y1 = cy - h / 2;

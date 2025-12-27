@@ -532,20 +532,93 @@ public class CRNN<T> : OCRBase<T>
     private void MapLSTMWeights(Dictionary<string, Tensor<float>> weights, string prefix, int layer,
         LSTMLayer<T> forward, LSTMLayer<T> backward)
     {
-        // Forward direction
-        string fwPrefix = $"{prefix}.weight_ih_l{layer}";
-        string fwHhPrefix = $"{prefix}.weight_hh_l{layer}";
-        string fwBiasIh = $"{prefix}.bias_ih_l{layer}";
-        string fwBiasHh = $"{prefix}.bias_hh_l{layer}";
+        // Forward direction weights
+        MapLSTMDirection(weights, prefix, layer, string.Empty, forward);
 
-        // Backward direction (PyTorch adds "_reverse" suffix)
-        string bwPrefix = $"{prefix}.weight_ih_l{layer}_reverse";
-        string bwHhPrefix = $"{prefix}.weight_hh_l{layer}_reverse";
-        string bwBiasIh = $"{prefix}.bias_ih_l{layer}_reverse";
-        string bwBiasHh = $"{prefix}.bias_hh_l{layer}_reverse";
+        // Backward direction weights (PyTorch adds "_reverse" suffix)
+        MapLSTMDirection(weights, prefix, layer, "_reverse", backward);
+    }
 
-        // Note: LSTM weights need special handling - they're concatenated for i,f,g,o gates
-        // This is a simplified mapping; full implementation would split gates properly
+    private void MapLSTMDirection(Dictionary<string, Tensor<float>> weights, string prefix, int layer,
+        string suffix, LSTMLayer<T> lstm)
+    {
+        // PyTorch LSTM weights are concatenated for gates in order: i (input), f (forget), g (cell), o (output)
+        // Each gate has hidden_size rows, so total is 4*hidden_size x input_size for weight_ih
+        string weightIhKey = $"{prefix}.weight_ih_l{layer}{suffix}";
+        string weightHhKey = $"{prefix}.weight_hh_l{layer}{suffix}";
+        string biasIhKey = $"{prefix}.bias_ih_l{layer}{suffix}";
+        string biasHhKey = $"{prefix}.bias_hh_l{layer}{suffix}";
+
+        // Map input-hidden weights (split by gates)
+        if (weights.TryGetValue(weightIhKey, out var weightIh))
+        {
+            int hiddenSize = weightIh.Shape[0] / 4;
+            int inputSize = weightIh.Shape[1];
+
+            // Split into 4 gates: i, f, g, o (PyTorch order)
+            CopyWeightSlice(weightIh, lstm.WeightsIi, 0, hiddenSize, inputSize);
+            CopyWeightSlice(weightIh, lstm.WeightsFi, hiddenSize, hiddenSize, inputSize);
+            CopyWeightSlice(weightIh, lstm.WeightsCi, 2 * hiddenSize, hiddenSize, inputSize);
+            CopyWeightSlice(weightIh, lstm.WeightsOi, 3 * hiddenSize, hiddenSize, inputSize);
+        }
+
+        // Map hidden-hidden weights (split by gates)
+        if (weights.TryGetValue(weightHhKey, out var weightHh))
+        {
+            int hiddenSize = weightHh.Shape[0] / 4;
+
+            CopyWeightSlice(weightHh, lstm.WeightsIh, 0, hiddenSize, hiddenSize);
+            CopyWeightSlice(weightHh, lstm.WeightsFh, hiddenSize, hiddenSize, hiddenSize);
+            CopyWeightSlice(weightHh, lstm.WeightsCh, 2 * hiddenSize, hiddenSize, hiddenSize);
+            CopyWeightSlice(weightHh, lstm.WeightsOh, 3 * hiddenSize, hiddenSize, hiddenSize);
+        }
+
+        // Map biases (PyTorch has separate ih and hh biases, we combine them)
+        if (weights.TryGetValue(biasIhKey, out var biasIh) &&
+            weights.TryGetValue(biasHhKey, out var biasHh))
+        {
+            int hiddenSize = biasIh.Length / 4;
+
+            CopyBiasSlice(biasIh, biasHh, lstm.BiasI, 0, hiddenSize);
+            CopyBiasSlice(biasIh, biasHh, lstm.BiasF, hiddenSize, hiddenSize);
+            CopyBiasSlice(biasIh, biasHh, lstm.BiasC, 2 * hiddenSize, hiddenSize);
+            CopyBiasSlice(biasIh, biasHh, lstm.BiasO, 3 * hiddenSize, hiddenSize);
+        }
+    }
+
+    private void CopyWeightSlice(Tensor<float> source, Tensor<T> dest, int startRow, int numRows, int numCols)
+    {
+        int destRows = dest.Shape[0];
+        int destCols = dest.Shape[1];
+        int rows = Math.Min(numRows, destRows);
+        int cols = Math.Min(numCols, destCols);
+
+        for (int r = 0; r < rows; r++)
+        {
+            for (int c = 0; c < cols; c++)
+            {
+                int srcIdx = (startRow + r) * source.Shape[1] + c;
+                if (srcIdx < source.Length)
+                {
+                    dest[r, c] = NumOps.FromDouble(source[srcIdx]);
+                }
+            }
+        }
+    }
+
+    private void CopyBiasSlice(Tensor<float> biasIh, Tensor<float> biasHh, Tensor<T> dest, int start, int length)
+    {
+        int count = Math.Min(length, dest.Length);
+        for (int i = 0; i < count; i++)
+        {
+            // Combine ih and hh biases (standard LSTM convention)
+            double val = 0;
+            if (start + i < biasIh.Length)
+                val += biasIh[start + i];
+            if (start + i < biasHh.Length)
+                val += biasHh[start + i];
+            dest[i] = NumOps.FromDouble(val);
+        }
     }
 
     private void MapDenseWeights(Dictionary<string, Tensor<float>> weights, string prefix, Dense<T> dense)

@@ -324,8 +324,8 @@ public class BiFPN<T> : NeckBase<T>
             count += _outputChannels * _outputChannels + _outputChannels; // Conv
         }
 
-        // Multiply by number of repeats for repeated BiFPN blocks
-        return count * _numRepeats;
+        // Weights are shared across all repeat blocks, so no multiplication needed
+        return count;
     }
 
     private Tensor<T> ResizeToMatch(Tensor<T> source, Tensor<T> target)

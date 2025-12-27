@@ -273,7 +273,12 @@ internal class DETREncoder<T>
 
     public Tensor<T> Forward(Tensor<T> x, Tensor<T> posEncoding)
     {
-        var output = x;
+        // Create a copy of input to avoid mutating the original tensor
+        var output = new Tensor<T>(x.Shape);
+        for (int i = 0; i < x.Length; i++)
+        {
+            output[i] = x[i];
+        }
 
         // Add positional encoding
         for (int i = 0; i < x.Length; i++)
