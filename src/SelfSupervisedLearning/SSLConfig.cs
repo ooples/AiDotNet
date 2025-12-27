@@ -237,6 +237,29 @@ public class SSLConfig
     /// </summary>
     public int? Seed { get; set; }
 
+    // === Distributed Training Settings ===
+
+    /// <summary>
+    /// Gets or sets the distributed training configuration.
+    /// </summary>
+    /// <remarks>
+    /// <para>Default: <c>null</c> (single-GPU/CPU training)</para>
+    /// <para>When set, enables distributed data parallel (DDP) training across multiple GPUs/nodes.</para>
+    /// <para><b>For Beginners:</b> Distributed training allows you to use multiple GPUs to train faster.
+    /// Each GPU processes a different batch, and gradients are averaged across all GPUs. This is
+    /// especially important for SSL methods like SimCLR that benefit from very large effective batch sizes.</para>
+    /// </remarks>
+    public SSLDistributedConfig? Distributed { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optimizer type for SSL training.
+    /// </summary>
+    /// <remarks>
+    /// <para>Default: <c>SSLOptimizerType.LARS</c></para>
+    /// <para>LARS is recommended for large batch SSL training. LAMB is better for transformer-based encoders.</para>
+    /// </remarks>
+    public SSLOptimizerType? OptimizerType { get; set; }
+
     /// <summary>
     /// Creates a new SSL configuration with industry-standard defaults.
     /// </summary>
@@ -267,7 +290,191 @@ public class SSLConfig
         if (DINO is not null) config["dino"] = DINO.GetConfiguration();
         if (MAE is not null) config["mae"] = MAE.GetConfiguration();
         if (BarlowTwins is not null) config["barlowTwins"] = BarlowTwins.GetConfiguration();
+        if (Distributed is not null) config["distributed"] = Distributed.GetConfiguration();
+        if (OptimizerType.HasValue) config["optimizerType"] = OptimizerType.Value.ToString();
 
         return config;
     }
+}
+
+/// <summary>
+/// Configuration for distributed SSL training using DDP (Distributed Data Parallel).
+/// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> This configuration enables training across multiple GPUs or machines.
+/// DDP (Distributed Data Parallel) is the industry-standard approach used by PyTorch, TensorFlow,
+/// and JAX for distributed training.</para>
+///
+/// <para><b>How DDP works for SSL:</b></para>
+/// <list type="number">
+/// <item>Each GPU/worker processes its own batch of data</item>
+/// <item>Each worker computes local gradients</item>
+/// <item>Gradients are averaged across all workers (AllReduce)</item>
+/// <item>All workers apply the same averaged gradients</item>
+/// <item>All workers now have identical parameters</item>
+/// </list>
+///
+/// <para><b>SSL-specific benefits:</b></para>
+/// <list type="bullet">
+/// <item>Contrastive methods like SimCLR benefit from larger effective batch sizes</item>
+/// <item>DDP with 4 GPUs and batch_size=1024 gives effective batch size of 4096</item>
+/// <item>Memory bank methods like MoCo can share queue across workers</item>
+/// </list>
+/// </remarks>
+public class SSLDistributedConfig
+{
+    /// <summary>
+    /// Gets or sets whether distributed training is enabled.
+    /// </summary>
+    /// <remarks>
+    /// <para>Default: <c>false</c></para>
+    /// </remarks>
+    public bool Enabled { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the number of workers (GPUs/processes) for distributed training.
+    /// </summary>
+    /// <remarks>
+    /// <para>Default: <c>1</c></para>
+    /// <para>Set to the number of GPUs available for training.</para>
+    /// </remarks>
+    public int WorldSize { get; set; } = 1;
+
+    /// <summary>
+    /// Gets or sets the rank of this worker (0-indexed).
+    /// </summary>
+    /// <remarks>
+    /// <para>Default: <c>0</c></para>
+    /// <para>Each worker must have a unique rank from 0 to WorldSize-1.</para>
+    /// </remarks>
+    public int Rank { get; set; } = 0;
+
+    /// <summary>
+    /// Gets or sets whether to synchronize BatchNorm statistics across workers.
+    /// </summary>
+    /// <remarks>
+    /// <para>Default: <c>true</c></para>
+    /// <para>SyncBN is important for SSL methods where batch statistics affect training.</para>
+    /// </remarks>
+    public bool SyncBatchNorm { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the gradient synchronization frequency.
+    /// </summary>
+    /// <remarks>
+    /// <para>Default: <c>1</c> (sync every step)</para>
+    /// <para>Set to higher values for gradient accumulation across workers.</para>
+    /// </remarks>
+    public int GradientSyncFrequency { get; set; } = 1;
+
+    /// <summary>
+    /// Gets or sets whether to use gradient compression for communication.
+    /// </summary>
+    /// <remarks>
+    /// <para>Default: <c>false</c></para>
+    /// <para>Gradient compression reduces communication overhead but may affect convergence.</para>
+    /// </remarks>
+    public bool UseGradientCompression { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the communication backend type.
+    /// </summary>
+    /// <remarks>
+    /// <para>Default: <c>SSLCommunicationBackend.InMemory</c></para>
+    /// <para>Use NCCL for multi-GPU, MPI for multi-node training.</para>
+    /// </remarks>
+    public SSLCommunicationBackend Backend { get; set; } = SSLCommunicationBackend.InMemory;
+
+    /// <summary>
+    /// Gets or sets whether all workers share the same memory queue (for MoCo).
+    /// </summary>
+    /// <remarks>
+    /// <para>Default: <c>true</c></para>
+    /// <para>When true, the memory queue is synchronized across workers for MoCo methods.</para>
+    /// </remarks>
+    public bool SharedMemoryQueue { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to use find_unused_parameters behavior.
+    /// </summary>
+    /// <remarks>
+    /// <para>Default: <c>false</c></para>
+    /// <para>Enable if some parameters don't receive gradients (e.g., frozen layers).</para>
+    /// </remarks>
+    public bool FindUnusedParameters { get; set; } = false;
+
+    /// <summary>
+    /// Gets the configuration as a dictionary.
+    /// </summary>
+    public IDictionary<string, object> GetConfiguration()
+    {
+        return new Dictionary<string, object>
+        {
+            ["enabled"] = Enabled,
+            ["worldSize"] = WorldSize,
+            ["rank"] = Rank,
+            ["syncBatchNorm"] = SyncBatchNorm,
+            ["gradientSyncFrequency"] = GradientSyncFrequency,
+            ["useGradientCompression"] = UseGradientCompression,
+            ["backend"] = Backend.ToString(),
+            ["sharedMemoryQueue"] = SharedMemoryQueue
+        };
+    }
+}
+
+/// <summary>
+/// Optimizer types optimized for SSL training.
+/// </summary>
+public enum SSLOptimizerType
+{
+    /// <summary>
+    /// Standard SGD with momentum.
+    /// </summary>
+    SGD,
+
+    /// <summary>
+    /// Adam optimizer (good for small batches).
+    /// </summary>
+    Adam,
+
+    /// <summary>
+    /// AdamW with decoupled weight decay.
+    /// </summary>
+    AdamW,
+
+    /// <summary>
+    /// LARS (Layer-wise Adaptive Rate Scaling) - recommended for large batch SSL.
+    /// </summary>
+    LARS,
+
+    /// <summary>
+    /// LAMB (Layer-wise Adaptive Moments for Batch training) - good for transformers.
+    /// </summary>
+    LAMB
+}
+
+/// <summary>
+/// Communication backends for distributed SSL training.
+/// </summary>
+public enum SSLCommunicationBackend
+{
+    /// <summary>
+    /// In-memory communication (single machine, testing).
+    /// </summary>
+    InMemory,
+
+    /// <summary>
+    /// NCCL backend (NVIDIA GPUs, best for multi-GPU).
+    /// </summary>
+    NCCL,
+
+    /// <summary>
+    /// MPI backend (multi-node, HPC clusters).
+    /// </summary>
+    MPI,
+
+    /// <summary>
+    /// Gloo backend (CPU or fallback).
+    /// </summary>
+    Gloo
 }

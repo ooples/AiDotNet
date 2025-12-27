@@ -1,6 +1,8 @@
+using AiDotNet.DistributedTraining;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.SelfSupervisedLearning.Evaluation;
 using JsonSerializer = System.Text.Json.JsonSerializer;
 
@@ -32,6 +34,13 @@ public class SSLSession<T>
     // Storage for k-NN evaluation
     private Tensor<T>? _cachedTrainingFeatures;
     private int[]? _cachedTrainingLabels;
+
+    // Distributed training support
+    private ICommunicationBackend<T>? _communicationBackend;
+    private readonly bool _isDistributed;
+    private readonly int _worldSize;
+    private readonly int _rank;
+    private int _localStepCounter;
 
     /// <summary>
     /// Event raised at the start of each epoch.
@@ -84,7 +93,53 @@ public class SSLSession<T>
         _config = config ?? new SSLConfig();
         _metrics = new SSLMetrics<T>();
         _history = new SSLTrainingHistory<T>();
+
+        // Initialize distributed training if configured
+        var distConfig = _config.Distributed;
+        if (distConfig is not null && distConfig.Enabled)
+        {
+            _isDistributed = true;
+            _worldSize = distConfig.WorldSize;
+            _rank = distConfig.Rank;
+            _communicationBackend = CreateCommunicationBackend(distConfig);
+        }
+        else
+        {
+            _isDistributed = false;
+            _worldSize = 1;
+            _rank = 0;
+        }
     }
+
+    /// <summary>
+    /// Creates the communication backend based on configuration.
+    /// </summary>
+    private ICommunicationBackend<T> CreateCommunicationBackend(SSLDistributedConfig distConfig)
+    {
+        return distConfig.Backend switch
+        {
+            SSLCommunicationBackend.InMemory => new InMemoryCommunicationBackend<T>(distConfig.WorldSize, distConfig.Rank),
+            SSLCommunicationBackend.NCCL => new NCCLCommunicationBackend<T>(distConfig.WorldSize, distConfig.Rank),
+            SSLCommunicationBackend.MPI => new MPICommunicationBackend<T>(distConfig.WorldSize, distConfig.Rank),
+            SSLCommunicationBackend.Gloo => new GlooCommunicationBackend<T>(distConfig.WorldSize, distConfig.Rank),
+            _ => new InMemoryCommunicationBackend<T>(distConfig.WorldSize, distConfig.Rank)
+        };
+    }
+
+    /// <summary>
+    /// Gets whether this session is using distributed training.
+    /// </summary>
+    public bool IsDistributed => _isDistributed;
+
+    /// <summary>
+    /// Gets the world size (number of workers) for distributed training.
+    /// </summary>
+    public int WorldSize => _worldSize;
+
+    /// <summary>
+    /// Gets the rank of this worker in distributed training.
+    /// </summary>
+    public int Rank => _rank;
 
     /// <summary>
     /// Trains the SSL method for the specified number of epochs.
@@ -101,12 +156,25 @@ public class SSLSession<T>
         var totalEpochs = _config.PretrainingEpochs ?? 100;
         _startTime = DateTime.Now;
         _isTraining = true;
+        _localStepCounter = 0;
+
+        // Distributed: barrier to ensure all workers start together
+        if (_isDistributed && _communicationBackend is not null)
+        {
+            _communicationBackend.Barrier();
+        }
 
         try
         {
             for (_currentEpoch = 0; _currentEpoch < totalEpochs && _isTraining; _currentEpoch++)
             {
                 TrainEpoch(dataLoader, validationData, validationLabels);
+            }
+
+            // Distributed: final barrier before returning result
+            if (_isDistributed && _communicationBackend is not null)
+            {
+                _communicationBackend.Barrier();
             }
 
             return CreateResult();
@@ -135,17 +203,30 @@ public class SSLSession<T>
         T epochLoss = default!;
         int stepCount = 0;
 
+        // Get gradient sync frequency for DDP
+        var gradientSyncFreq = _config.Distributed?.GradientSyncFrequency ?? 1;
+
         foreach (var batch in dataLoader())
         {
             var result = _method.TrainStep(batch);
             epochLoss = result.Loss;
             stepCount++;
             _globalStep++;
+            _localStepCounter++;
+
+            // DDP: Synchronize gradients across workers
+            if (_isDistributed && _communicationBackend is not null)
+            {
+                if (_localStepCounter % gradientSyncFreq == 0)
+                {
+                    SynchronizeGradients();
+                }
+            }
 
             OnStepComplete?.Invoke(_globalStep, result);
 
-            // Check for collapse periodically
-            if (_globalStep % 100 == 0)
+            // Check for collapse periodically (only on rank 0 to avoid duplicate warnings)
+            if (_globalStep % 100 == 0 && _rank == 0)
             {
                 // Get representations for collapse detection
                 var representations = _method.Encode(batch);
@@ -173,8 +254,72 @@ public class SSLSession<T>
             _method is SSLMethodBase<T> baseMethod ? baseMethod.GetEffectiveLearningRate() : 0,
             0);
 
+        // DDP: Epoch-end barrier to synchronize all workers
+        if (_isDistributed && _communicationBackend is not null)
+        {
+            _communicationBackend.Barrier();
+        }
+
         _method.OnEpochEnd(_currentEpoch);
         OnEpochEnd?.Invoke(_currentEpoch, epochLoss);
+    }
+
+    /// <summary>
+    /// Synchronizes gradients across all distributed workers using AllReduce.
+    /// </summary>
+    /// <remarks>
+    /// <para>This is the core of DDP: after each worker computes local gradients,
+    /// they are averaged across all workers using AllReduce. All workers then
+    /// have identical gradients and will apply the same parameter update.</para>
+    /// </remarks>
+    private void SynchronizeGradients()
+    {
+        if (_communicationBackend is null) return;
+
+        // Get encoder parameters and their gradients
+        var encoder = _method.GetEncoder();
+        var gradients = encoder.GetParameterGradients();
+
+        if (gradients.Length == 0) return;
+
+        // AllReduce to average gradients across all workers
+        _communicationBackend.AllReduce(gradients, ReductionOperation.Average);
+
+        // The encoder will use these averaged gradients in its next update
+        // Note: This requires the SSLMethod to properly apply gradients after this sync
+    }
+
+    /// <summary>
+    /// Synchronizes model parameters across all distributed workers.
+    /// </summary>
+    /// <remarks>
+    /// <para>Call this method to ensure all workers have identical parameters.
+    /// This is useful at initialization or after loading checkpoints.</para>
+    /// </remarks>
+    public void SynchronizeParameters()
+    {
+        if (!_isDistributed || _communicationBackend is null) return;
+
+        var encoder = _method.GetEncoder();
+        var parameters = encoder.GetParameters();
+
+        // Broadcast from rank 0 to ensure all workers start with identical parameters
+        var syncedParameters = _communicationBackend.Broadcast(parameters, root: 0);
+
+        encoder.UpdateParameters(syncedParameters);
+    }
+
+    /// <summary>
+    /// Gets the effective batch size considering distributed training.
+    /// </summary>
+    /// <remarks>
+    /// <para>For DDP, the effective batch size is local_batch_size * world_size.
+    /// This is important for correctly scaling the learning rate.</para>
+    /// </remarks>
+    public int GetEffectiveBatchSize()
+    {
+        var localBatchSize = _config.BatchSize ?? 256;
+        return localBatchSize * _worldSize;
     }
 
     /// <summary>
