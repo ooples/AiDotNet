@@ -1,11 +1,11 @@
-using AiDotNet.NeuralNetworks.Diffusion;
 using AiDotNet.ActivationFunctions;
-using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks.Diffusion;
+using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.Diffusion.Models;

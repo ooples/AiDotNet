@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.TimeSeries;
 
@@ -124,6 +125,26 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     private Vector<T> _regressors;
 
     /// <summary>
+    /// The anomaly detection threshold computed during training.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This value determines when a prediction error is large enough
+    /// to be considered an anomaly. It's computed from the training data residuals.
+    /// </para>
+    /// </remarks>
+    private T _anomalyThreshold;
+
+    /// <summary>
+    /// The standard deviation of residuals computed during training.
+    /// </summary>
+    private T _residualStdDev;
+
+    /// <summary>
+    /// The mean of residuals computed during training.
+    /// </summary>
+    private T _residualMean;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ProphetModel{T}"/> class.
     /// </summary>
     /// <param name="options">The options for configuring the Prophet model. If null, default options are used.</param>
@@ -150,6 +171,11 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         _holidayComponents = new Vector<T>(_prophetOptions.Holidays.Count);
         _changepoint = NumOps.FromDouble(_prophetOptions.InitialChangepointValue);
         _regressors = new Vector<T>(_prophetOptions.RegressorCount);
+
+        // Initialize anomaly detection components
+        _anomalyThreshold = NumOps.Zero;
+        _residualStdDev = NumOps.Zero;
+        _residualMean = NumOps.Zero;
     }
 
     /// <summary>
@@ -982,6 +1008,75 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
 
         // Store final state for future reference
         states.SetRow(n - 1, GetCurrentState());
+
+        // Compute residual statistics if anomaly detection or prediction intervals are enabled
+        // _residualStdDev is needed for both features
+        if (_prophetOptions.EnableAnomalyDetection || _prophetOptions.ComputePredictionIntervals)
+        {
+            ComputeAnomalyThresholdFromTraining(x, y);
+        }
+    }
+
+    /// <summary>
+    /// Computes the anomaly detection threshold from training data residuals.
+    /// </summary>
+    /// <param name="x">The training input matrix.</param>
+    /// <param name="y">The training target vector.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method calculates what counts as "normal" variation in your data
+    /// by looking at how far off the model's predictions were during training. The threshold is computed
+    /// so that only unusually large prediction errors get flagged as anomalies.
+    /// </para>
+    /// </remarks>
+    private void ComputeAnomalyThresholdFromTraining(Matrix<T> x, Vector<T> y)
+    {
+        // Compute predictions for training data
+        Vector<T> predictions = Predict(x);
+
+        // Compute residuals (absolute errors)
+        List<T> absResiduals = new List<T>();
+        for (int i = 0; i < y.Length; i++)
+        {
+            T residual = NumOps.Abs(NumOps.Subtract(y[i], predictions[i]));
+            absResiduals.Add(residual);
+        }
+
+        if (absResiduals.Count == 0)
+        {
+            _residualMean = NumOps.Zero;
+            _residualStdDev = NumOps.One;
+            _anomalyThreshold = NumOps.FromDouble(_prophetOptions.AnomalyThresholdSigma);
+            return;
+        }
+
+        // Compute mean of absolute residuals
+        T sum = NumOps.Zero;
+        for (int i = 0; i < absResiduals.Count; i++)
+        {
+            sum = NumOps.Add(sum, absResiduals[i]);
+        }
+        _residualMean = NumOps.Divide(sum, NumOps.FromDouble(absResiduals.Count));
+
+        // Compute standard deviation of absolute residuals
+        T sumSquaredDiff = NumOps.Zero;
+        for (int i = 0; i < absResiduals.Count; i++)
+        {
+            T diff = NumOps.Subtract(absResiduals[i], _residualMean);
+            sumSquaredDiff = NumOps.Add(sumSquaredDiff, NumOps.Multiply(diff, diff));
+        }
+        _residualStdDev = NumOps.Sqrt(NumOps.Divide(sumSquaredDiff, NumOps.FromDouble(absResiduals.Count)));
+
+        // If std dev is zero (all residuals are the same), use a small default
+        if (NumOps.Equals(_residualStdDev, NumOps.Zero))
+        {
+            _residualStdDev = NumOps.FromDouble(0.001);
+        }
+
+        // Threshold = mean + (sigma * stddev)
+        _anomalyThreshold = NumOps.Add(
+            _residualMean,
+            NumOps.Multiply(NumOps.FromDouble(_prophetOptions.AnomalyThresholdSigma), _residualStdDev)
+        );
     }
 
     private void SyncModelParametersFromState()
@@ -1355,5 +1450,251 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         // For JIT, we approximate using the trend changepoint value
         // This represents the cumulative effect of changepoints at an average time
         return NumOps.Multiply(_changepoint, NumOps.FromDouble(0.5));
+    }
+
+    /// <summary>
+    /// Detects anomalies in a time series by comparing predictions to actual values.
+    /// </summary>
+    /// <param name="x">The input matrix containing time indices and any regressors.</param>
+    /// <param name="y">The actual time series values.</param>
+    /// <returns>A boolean array where true indicates an anomaly at that position.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses the Prophet model to predict each point in the time series based on
+    /// trend, seasonality, holidays, and regressors, then flags points where the prediction error
+    /// exceeds the anomaly threshold computed during training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method identifies unusual data points by comparing
+    /// what actually happened to what the model predicted should happen, accounting for trends,
+    /// seasons, and holidays.
+    ///
+    /// Prophet is particularly good at detecting contextual anomalies - values that are unusual
+    /// given the current context. For example:
+    /// - A high sales value in July that would be normal in December might be flagged
+    /// - A normal weekday value occurring on a holiday might be flagged
+    ///
+    /// The result tells you which points are unusual enough to warrant investigation.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the model hasn't been trained or anomaly detection wasn't enabled.
+    /// </exception>
+    public bool[] DetectAnomalies(Matrix<T> x, Vector<T> y)
+    {
+        if (!IsTrained)
+        {
+            throw new InvalidOperationException("Model must be trained before detecting anomalies.");
+        }
+
+        if (!_prophetOptions.EnableAnomalyDetection)
+        {
+            throw new InvalidOperationException("Anomaly detection was not enabled during training. " +
+                "Set EnableAnomalyDetection = true in ProphetOptions and retrain the model.");
+        }
+
+        var scores = ComputeAnomalyScores(x, y);
+        bool[] anomalies = new bool[scores.Length];
+
+        for (int i = 0; i < scores.Length; i++)
+        {
+            anomalies[i] = NumOps.GreaterThan(scores[i], _anomalyThreshold);
+        }
+
+        return anomalies;
+    }
+
+    /// <summary>
+    /// Computes anomaly scores for each point in a time series.
+    /// </summary>
+    /// <param name="x">The input matrix containing time indices and any regressors.</param>
+    /// <param name="y">The actual time series values.</param>
+    /// <returns>A vector of anomaly scores (absolute prediction errors) for each point.</returns>
+    /// <remarks>
+    /// <para>
+    /// The anomaly score is the absolute difference between the actual value and the predicted value.
+    /// The predicted value accounts for trend, seasonality, holidays, and regressor effects,
+    /// so the score represents how much the actual value deviates from the contextual expectation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method tells you exactly how unusual each point is,
+    /// considering all the patterns Prophet has learned:
+    /// - A score of 0 means the value matched the prediction perfectly
+    /// - Higher scores mean the value was more unexpected
+    ///
+    /// Unlike simple anomaly detection that just looks at absolute values, Prophet considers:
+    /// - Is this value unusual for this time of year?
+    /// - Is this value unusual for this day of the week?
+    /// - Is this value unusual given the overall trend?
+    /// - Is this value unusual for a holiday/non-holiday?
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when the model hasn't been trained.</exception>
+    public Vector<T> ComputeAnomalyScores(Matrix<T> x, Vector<T> y)
+    {
+        if (!IsTrained)
+        {
+            throw new InvalidOperationException("Model must be trained before computing anomaly scores.");
+        }
+
+        if (x.Rows != y.Length)
+        {
+            throw new ArgumentException($"Input rows ({x.Rows}) must match target length ({y.Length}).");
+        }
+
+        // Get predictions for all points
+        Vector<T> predictions = Predict(x);
+        Vector<T> scores = new Vector<T>(y.Length);
+
+        for (int i = 0; i < y.Length; i++)
+        {
+            scores[i] = NumOps.Abs(NumOps.Subtract(y[i], predictions[i]));
+        }
+
+        return scores;
+    }
+
+    /// <summary>
+    /// Detects anomalies and returns detailed information about each detected anomaly.
+    /// </summary>
+    /// <param name="x">The input matrix containing time indices and any regressors.</param>
+    /// <param name="y">The actual time series values.</param>
+    /// <returns>A list of tuples containing (index, actual value, predicted value, score) for each anomaly.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method not only tells you which points are anomalies,
+    /// but also provides context to help you understand why:
+    /// - Index: The position of the anomaly in the time series
+    /// - Actual: What the value actually was
+    /// - Predicted: What Prophet expected based on trends, seasons, and holidays
+    /// - Score: How far off the prediction was
+    ///
+    /// The difference between Actual and Predicted tells you the direction of the anomaly:
+    /// - Actual > Predicted: Unexpectedly high value
+    /// - Actual < Predicted: Unexpectedly low value
+    /// </para>
+    /// </remarks>
+    public List<(int Index, T Actual, T Predicted, T Score)> DetectAnomaliesDetailed(Matrix<T> x, Vector<T> y)
+    {
+        if (!IsTrained)
+        {
+            throw new InvalidOperationException("Model must be trained before detecting anomalies.");
+        }
+
+        if (!_prophetOptions.EnableAnomalyDetection)
+        {
+            throw new InvalidOperationException("Anomaly detection was not enabled during training.");
+        }
+
+        Vector<T> predictions = Predict(x);
+        var anomalies = new List<(int Index, T Actual, T Predicted, T Score)>();
+
+        for (int i = 0; i < y.Length; i++)
+        {
+            T prediction = predictions[i];
+            T actual = y[i];
+            T score = NumOps.Abs(NumOps.Subtract(actual, prediction));
+
+            if (NumOps.GreaterThan(score, _anomalyThreshold))
+            {
+                anomalies.Add((i, actual, prediction, score));
+            }
+        }
+
+        return anomalies;
+    }
+
+    /// <summary>
+    /// Gets the current anomaly detection threshold.
+    /// </summary>
+    /// <returns>The anomaly threshold computed during training.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This tells you the cutoff value used to decide whether
+    /// a prediction error is large enough to be an anomaly. Values with scores above this
+    /// threshold are considered anomalies.
+    /// </para>
+    /// </remarks>
+    public T GetAnomalyThreshold()
+    {
+        if (!_prophetOptions.EnableAnomalyDetection)
+        {
+            throw new InvalidOperationException("Anomaly detection was not enabled during training.");
+        }
+        return _anomalyThreshold;
+    }
+
+    /// <summary>
+    /// Sets a custom anomaly detection threshold.
+    /// </summary>
+    /// <param name="threshold">The new threshold value.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> If the automatic threshold is flagging too many or too few
+    /// anomalies, you can set your own:
+    /// - Higher threshold = fewer anomalies detected (only extreme values)
+    /// - Lower threshold = more anomalies detected (more sensitive)
+    ///
+    /// Tip: Look at the scores from ComputeAnomalyScores to decide on a good threshold
+    /// for your specific use case.
+    /// </para>
+    /// </remarks>
+    public void SetAnomalyThreshold(T threshold)
+    {
+        _anomalyThreshold = threshold;
+    }
+
+    /// <summary>
+    /// Computes prediction intervals for future forecasts.
+    /// </summary>
+    /// <param name="x">The input matrix for forecasting.</param>
+    /// <returns>A tuple containing (predictions, lower bounds, upper bounds).</returns>
+    /// <remarks>
+    /// <para>
+    /// Prediction intervals provide uncertainty bounds around the point predictions.
+    /// Points outside these intervals are likely anomalies. The width of the interval
+    /// is controlled by the PredictionIntervalWidth option.
+    /// </para>
+    /// <para><b>For Beginners:</b> Instead of just getting a single predicted value,
+    /// this method gives you a range where the actual value is likely to fall:
+    /// - Lower bound: The low end of the expected range
+    /// - Upper bound: The high end of the expected range
+    ///
+    /// If an actual value falls outside this range, it's probably an anomaly.
+    /// For example, if the predicted range for sales is $800-$1200 and actual sales were $2000,
+    /// that's clearly unusual.
+    /// </para>
+    /// </remarks>
+    public (Vector<T> Predictions, Vector<T> LowerBound, Vector<T> UpperBound) PredictWithIntervals(Matrix<T> x)
+    {
+        if (!IsTrained)
+        {
+            throw new InvalidOperationException("Model must be trained before making predictions.");
+        }
+
+        // Check that residual statistics were computed during training
+        if (NumOps.Equals(_residualStdDev, NumOps.Zero))
+        {
+            throw new InvalidOperationException(
+                "Prediction intervals require residual statistics. " +
+                "Enable ComputePredictionIntervals or EnableAnomalyDetection in ProphetOptions before training.");
+        }
+
+        Vector<T> predictions = Predict(x);
+        Vector<T> lowerBound = new Vector<T>(predictions.Length);
+        Vector<T> upperBound = new Vector<T>(predictions.Length);
+
+        // Calculate z-score from confidence level using inverse normal CDF
+        // For confidence level c, z = Φ^(-1)((1 + c) / 2)
+        // Examples: 95% → 1.96, 90% → 1.645, 80% → 1.28
+        T probability = NumOps.Divide(
+            NumOps.Add(NumOps.One, NumOps.FromDouble(_prophetOptions.PredictionIntervalWidth)),
+            NumOps.FromDouble(2.0));
+        T zScore = StatisticsHelper<T>.CalculateInverseNormalCDF(probability);
+
+        T halfWidth = NumOps.Multiply(zScore, _residualStdDev);
+
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            lowerBound[i] = NumOps.Subtract(predictions[i], halfWidth);
+            upperBound[i] = NumOps.Add(predictions[i], halfWidth);
+        }
+
+        return (predictions, lowerBound, upperBound);
     }
 }

@@ -6907,6 +6907,150 @@ public static class StatisticsHelper<T>
     }
 
     /// <summary>
+    /// Calculates the Continuous Ranked Probability Score (CRPS) for probabilistic forecasts.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <param name="actual">The actual observed values.</param>
+    /// <param name="predictedMean">The predicted mean values (point forecasts).</param>
+    /// <param name="predictedStdDev">The predicted standard deviations (uncertainty estimates).</param>
+    /// <returns>The average CRPS value across all observations. Lower values indicate better probabilistic forecasts.</returns>
+    /// <remarks>
+    /// <para>
+    /// The Continuous Ranked Probability Score (CRPS) is a proper scoring rule that measures the accuracy
+    /// of probabilistic predictions. It compares the predicted cumulative distribution function (CDF)
+    /// with the observed value, rewarding forecasts that assign high probability to what actually happens.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> CRPS evaluates how well a probabilistic forecast (one that includes uncertainty)
+    /// matches reality. Unlike MAE which only looks at point predictions, CRPS considers the entire
+    /// predicted probability distribution.
+    ///
+    /// Imagine a weather forecast that says "temperature will be 20°C ± 3°C" (mean=20, std=3).
+    /// If the actual temperature is 20°C, that's a good forecast.
+    /// If the actual temperature is 25°C, that's outside the predicted range - not as good.
+    /// CRPS quantifies this, penalizing forecasts that are both inaccurate and overconfident.
+    ///
+    /// Key properties:
+    /// - Lower CRPS is better (like MAE)
+    /// - When predictions have zero uncertainty, CRPS equals MAE
+    /// - CRPS rewards well-calibrated uncertainty estimates
+    /// - Units are the same as the predicted variable
+    ///
+    /// This implementation assumes Gaussian (normal) predictive distributions, which is appropriate
+    /// for most time series forecasting models like DeepAR, TFT, and Chronos.
+    /// </para>
+    /// </remarks>
+    public static T CalculateCRPS(Vector<T> actual, Vector<T> predictedMean, Vector<T> predictedStdDev)
+    {
+        if (actual.Length != predictedMean.Length || actual.Length != predictedStdDev.Length)
+            throw new ArgumentException("All input vectors must have the same length.");
+
+        var n = actual.Length;
+        if (n == 0) return _numOps.Zero;
+
+        var totalCrps = _numOps.Zero;
+        // Correct constant for Gaussian CRPS: 1/sqrt(pi) (not sqrt(2/pi))
+        // Reference: Gneiting & Raftery (2007), "Strictly Proper Scoring Rules, Prediction, and Estimation"
+        var oneOverSqrtPi = _numOps.FromDouble(1.0 / Math.Sqrt(Math.PI));
+
+        for (int i = 0; i < n; i++)
+        {
+            var y = actual[i];
+            var mu = predictedMean[i];
+            var sigma = predictedStdDev[i];
+
+            // Handle case where sigma is zero or very small (deterministic prediction)
+            if (_numOps.ToDouble(sigma) < 1e-10)
+            {
+                // CRPS reduces to absolute error for deterministic predictions
+                totalCrps = _numOps.Add(totalCrps, _numOps.Abs(_numOps.Subtract(y, mu)));
+            }
+            else
+            {
+                // Standardized observation: z = (y - mu) / sigma
+                var z = _numOps.Divide(_numOps.Subtract(y, mu), sigma);
+
+                // Standard normal CDF at z: Phi(z)
+                var phi = _numOps.FromDouble(NormalCDF(_numOps.ToDouble(z)));
+
+                // Standard normal PDF at z: phi(z)
+                var pdf = _numOps.FromDouble(NormalPDF(_numOps.ToDouble(z)));
+
+                // CRPS for Gaussian: sigma * (z * (2*Phi(z) - 1) + 2*phi(z) - 1/sqrt(pi))
+                var term1 = _numOps.Multiply(z, _numOps.Subtract(_numOps.Multiply(_numOps.FromDouble(2.0), phi), _numOps.One));
+                var term2 = _numOps.Multiply(_numOps.FromDouble(2.0), pdf);
+                var term3 = oneOverSqrtPi;
+
+                var crpsSingle = _numOps.Multiply(sigma, _numOps.Subtract(_numOps.Add(term1, term2), term3));
+                totalCrps = _numOps.Add(totalCrps, crpsSingle);
+            }
+        }
+
+        return _numOps.Divide(totalCrps, _numOps.FromDouble(n));
+    }
+
+    /// <summary>
+    /// Calculates the CRPS for point predictions (assumes zero uncertainty).
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <param name="actual">The actual observed values.</param>
+    /// <param name="predicted">The predicted values (point forecasts without uncertainty).</param>
+    /// <returns>The average CRPS value, which equals MAE for deterministic predictions.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This overload is for deterministic predictions (no uncertainty estimates).
+    /// In this case, CRPS is equivalent to Mean Absolute Error (MAE).
+    /// Use the overload with predictedStdDev for probabilistic forecasts.
+    /// </para>
+    /// </remarks>
+    public static T CalculateCRPS(Vector<T> actual, Vector<T> predicted)
+    {
+        // For deterministic predictions, CRPS equals MAE
+        return CalculateMeanAbsoluteError(actual, predicted);
+    }
+
+    /// <summary>
+    /// Standard normal cumulative distribution function.
+    /// </summary>
+    private static double NormalCDF(double x)
+    {
+        // Approximation using error function
+        return 0.5 * (1 + Erf(x / Math.Sqrt(2)));
+    }
+
+    /// <summary>
+    /// Standard normal probability density function.
+    /// </summary>
+    private static double NormalPDF(double x)
+    {
+        return Math.Exp(-0.5 * x * x) / Math.Sqrt(2 * Math.PI);
+    }
+
+    /// <summary>
+    /// Error function approximation (Abramowitz and Stegun).
+    /// </summary>
+    private static double Erf(double x)
+    {
+        // Constants for approximation
+        double a1 = 0.254829592;
+        double a2 = -0.284496736;
+        double a3 = 1.421413741;
+        double a4 = -1.453152027;
+        double a5 = 1.061405429;
+        double p = 0.3275911;
+
+        // Save the sign of x
+        int sign = x < 0 ? -1 : 1;
+        x = Math.Abs(x);
+
+        // Abramowitz and Stegun formula 7.1.26
+        double t = 1.0 / (1.0 + p * x);
+        double y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.Exp(-x * x);
+
+        return sign * y;
+    }
+
+    /// <summary>
     /// Calculates the Dynamic Time Warping (DTW) distance between two time series.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
