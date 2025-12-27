@@ -301,8 +301,8 @@ public class MemoryManagementTests
         var shard = new ModelShard<float>(Array.Empty<ILayer<float>>(), numDevices: 2);
 
         // Assert
-        Assert.Equal(0, shard.GetDeviceLayers(0).Count);
-        Assert.Equal(0, shard.GetDeviceLayers(1).Count);
+        Assert.Empty(shard.GetDeviceLayers(0));
+        Assert.Empty(shard.GetDeviceLayers(1));
     }
 
     [Fact]

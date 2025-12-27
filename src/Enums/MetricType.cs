@@ -1316,6 +1316,32 @@ public enum MetricType
     /// Common thresholds (δ < 1.25^n) are also often reported.
     /// </para>
     /// </remarks>
-    AbsoluteRelativeError
+    AbsoluteRelativeError,
+
+    /// <summary>
+    /// Continuous Ranked Probability Score for probabilistic forecasts.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> CRPS measures how well a probabilistic forecast matches actual observations.
+    /// Unlike point forecast metrics (MAE, RMSE), CRPS evaluates the entire predicted probability distribution.
+    ///
+    /// Think of it this way:
+    /// - A weather forecast that says "30% chance of rain" can't be evaluated with just MAE
+    /// - CRPS rewards forecasts that assign high probability to what actually happens
+    /// - Lower CRPS values indicate better probabilistic predictions
+    ///
+    /// CRPS generalizes MAE to probabilistic forecasts. When the forecast is deterministic (a single point),
+    /// CRPS equals MAE. This makes it ideal for evaluating models like DeepAR, TFT, and other
+    /// probabilistic time series forecasters.
+    ///
+    /// The metric is commonly used in:
+    /// - Weather forecasting evaluation
+    /// - Energy demand prediction
+    /// - Financial risk assessment
+    /// - Any scenario where uncertainty quantification matters
+    /// </para>
+    /// </remarks>
+    CRPS
 }
 

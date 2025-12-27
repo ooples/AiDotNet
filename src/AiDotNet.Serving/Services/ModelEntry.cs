@@ -14,5 +14,10 @@ internal sealed class ModelEntry
     public bool IsFromRegistry { get; set; }
     public int? RegistryVersion { get; set; }
     public string? RegistryStage { get; set; }
+
+    /// <summary>
+    /// Indicates whether this model supports multimodal operations (text and image encoding).
+    /// </summary>
+    public bool IsMultimodal { get; set; }
 }
 

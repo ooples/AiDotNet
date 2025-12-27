@@ -179,6 +179,58 @@ public class NeuralNetworkArchitecture<T>
     public int InputDepth { get; }
 
     /// <summary>
+    /// Gets the dimensionality of image embeddings for multimodal networks.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property specifies the output dimension of the image encoder in multimodal architectures
+    /// like CLIP. Common values are 768 (ViT-B/32) or 1024 (ViT-L/14). This dimension represents
+    /// the size of the feature vector produced by the vision transformer or CNN backbone.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the size of the "description" vector that represents an image.
+    ///
+    /// When a multimodal model (like CLIP) processes an image:
+    /// - The image encoder converts the image into a vector of numbers
+    /// - This vector captures the "meaning" or "content" of the image
+    /// - ImageEmbeddingDim specifies how many numbers are in this vector
+    ///
+    /// For example:
+    /// - ImageEmbeddingDim = 768 means images become 768-dimensional vectors
+    /// - Larger dimensions can capture more detail but need more computation
+    ///
+    /// This is only used for multimodal networks that process both images and text.
+    /// For standard image classifiers, use InputHeight/InputWidth instead.
+    /// </para>
+    /// </remarks>
+    public int ImageEmbeddingDim { get; }
+
+    /// <summary>
+    /// Gets the dimensionality of text embeddings for multimodal networks.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property specifies the output dimension of the text encoder in multimodal architectures
+    /// like CLIP. Common values are 512 or 768. This dimension represents the size of the feature
+    /// vector produced by the text transformer.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the size of the "description" vector that represents text.
+    ///
+    /// When a multimodal model (like CLIP) processes text:
+    /// - The text encoder converts words/sentences into a vector of numbers
+    /// - This vector captures the "meaning" or "semantics" of the text
+    /// - TextEmbeddingDim specifies how many numbers are in this vector
+    ///
+    /// For example:
+    /// - TextEmbeddingDim = 512 means text becomes 512-dimensional vectors
+    /// - This vector can then be compared with image embeddings
+    ///
+    /// For CLIP-style models, text and image embeddings are projected to the same space,
+    /// allowing direct comparison between text descriptions and images.
+    /// </para>
+    /// </remarks>
+    public int TextEmbeddingDim { get; }
+
+    /// <summary>
     /// Gets the type of task the neural network is designed to perform.
     /// </summary>
     /// <remarks>
@@ -346,6 +398,8 @@ public class NeuralNetworkArchitecture<T>
     /// <param name="outputSize">The size of the output vector. Default is 0.</param>
     /// <param name="layers">Optional predefined layers for the neural network. Default is null.</param>
     /// <param name="rbmLayers">Optional RBM layers for pre-training. Default is null.</param>
+    /// <param name="imageEmbeddingDim">The dimensionality of image embeddings for multimodal networks. Default is 0 (not multimodal).</param>
+    /// <param name="textEmbeddingDim">The dimensionality of text embeddings for multimodal networks. Default is 0 (not multimodal).</param>
     /// <exception cref="ArgumentException">Thrown when the input dimensions are invalid or inconsistent.</exception>
     /// <remarks>
     /// <para>
@@ -389,7 +443,9 @@ public class NeuralNetworkArchitecture<T>
         int inputDepth = 1,
         int outputSize = 0,
         List<ILayer<T>>? layers = null,
-        bool shouldReturnFullSequence = false)
+        bool shouldReturnFullSequence = false,
+        int imageEmbeddingDim = 0,
+        int textEmbeddingDim = 0)
     {
         InputType = inputType;
         TaskType = taskType;
@@ -400,6 +456,8 @@ public class NeuralNetworkArchitecture<T>
         InputDepth = inputDepth;
         ShouldReturnFullSequence = shouldReturnFullSequence;
         Layers = layers;
+        ImageEmbeddingDim = imageEmbeddingDim;
+        TextEmbeddingDim = textEmbeddingDim;
         OutputSize = outputSize;
 
         ValidateInputDimensions();

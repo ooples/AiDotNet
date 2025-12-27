@@ -2,6 +2,8 @@ using System.Text.RegularExpressions;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 
+// ReSharper disable once UnusedMember.Local
+
 /// <summary>
 /// Extracts key terms and phrases from queries for focused retrieval.
 /// </summary>
@@ -26,6 +28,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 /// </remarks>
 public class KeywordExtractionQueryProcessor : QueryProcessorBase
 {
+    /// <summary>
+    /// Timeout for regex operations to prevent ReDoS attacks.
+    /// </summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
     private readonly HashSet<string> _stopWords;
     private readonly int _minWordLength;
 
@@ -47,7 +54,7 @@ public class KeywordExtractionQueryProcessor : QueryProcessorBase
         if (string.IsNullOrWhiteSpace(query))
             return query;
 
-        var words = Regex.Split(query.ToLowerInvariant(), @"\W+")
+        var words = Regex.Split(query.ToLowerInvariant(), @"\W+", RegexOptions.None, RegexTimeout)
             .Where(w => !string.IsNullOrWhiteSpace(w))
             .Where(w => w.Length >= _minWordLength)
             .Where(w => !_stopWords.Contains(w))
