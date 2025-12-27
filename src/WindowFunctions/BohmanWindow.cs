@@ -79,6 +79,14 @@ public class BohmanWindow<T> : IWindowFunction<T>
     public Vector<T> Create(int windowSize)
     {
         Vector<T> window = new Vector<T>(windowSize);
+
+        // Handle edge case: window of size 1 has a single element with value 1.0
+        if (windowSize == 1)
+        {
+            window[0] = _numOps.One;
+            return window;
+        }
+
         for (int n = 0; n < windowSize; n++)
         {
             // Bohman formula: w(n) = (1 - |x|) * cos(π|x|) + (1/π) * sin(π|x|)
