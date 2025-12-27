@@ -346,8 +346,8 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         _imageEncoderPath = null;
         _textEncoderPath = null;
 
-        // Initialize native layers
-        InitializeLayers();
+        // Initialize layers using private non-virtual method to avoid virtual call in constructor
+        InitializeLayersCore();
     }
 
     /// <summary>
@@ -451,10 +451,8 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
             tempImageEncoder = null;
             tempTextEncoder = null;
 
-            // Note: InitializeLayers is called from base class via overridden method pattern.
-            // While this triggers a virtual call warning, it is intentional as part of the
-            // template method pattern for neural network initialization.
-            InitializeLayers();
+            // Initialize layers using private non-virtual method to avoid virtual call in constructor
+            InitializeLayersCore();
         }
         catch
         {
@@ -486,6 +484,14 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
     /// </para>
     /// </remarks>
     protected override void InitializeLayers()
+    {
+        InitializeLayersCore();
+    }
+
+    /// <summary>
+    /// Private non-virtual method for layer initialization to avoid virtual call in constructor.
+    /// </summary>
+    private void InitializeLayersCore()
     {
         if (_useNativeMode)
         {
@@ -915,7 +921,6 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
 
         // Prepare CLS token as tensor [1, 1, hiddenDim] for concatenation
         int batchSize = patchEmbeddings.Shape[0];
-        int numPatches = patchEmbeddings.Shape[1];
 
         // Create CLS token tensor and broadcast to batch
         var clsTokenTensor = new Tensor<T>(new[] { batchSize, 1, _hiddenDim });
@@ -1374,10 +1379,7 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
             }
 
             // Add layer parameters
-            foreach (var layer in Layers)
-            {
-                count += layer.ParameterCount;
-            }
+            count += Layers.Sum(layer => layer.ParameterCount);
 
             return count;
         }

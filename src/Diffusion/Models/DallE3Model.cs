@@ -711,24 +711,19 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
     /// <inheritdoc/>
     public override IDiffusionModel<T> Clone()
     {
-        var clonedUnet = new UNetNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            outputChannels: LATENT_CHANNELS,
-            baseChannels: 320,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocks: 2,
-            attentionResolutions: [4, 2, 1],
-            contextDim: _conditioner?.EmbeddingDimension ?? 768,
-            numHeads: 8);
-        clonedUnet.SetParameters(_unet.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(LATENT_CHANNELS, VAE_SCALE_FACTOR);
-        clonedVae.SetParameters(_vae.GetParameters());
-
-        return new DallE3Model<T>(
+        // Create a new DallE3Model with the same conditioner
+        var cloned = new DallE3Model<T>(
             options: null,
             scheduler: null,
             conditioner: _conditioner);
+
+        // Copy UNet parameters to the cloned model's UNet
+        cloned._unet.SetParameters(_unet.GetParameters());
+
+        // Copy VAE parameters to the cloned model's VAE
+        cloned._vae.SetParameters(_vae.GetParameters());
+
+        return cloned;
     }
 
     #endregion

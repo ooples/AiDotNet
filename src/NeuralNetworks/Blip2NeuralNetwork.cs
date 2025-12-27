@@ -1701,77 +1701,30 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
+    public override void UpdateParameters(Vector<T> gradients)
     {
         int expectedCount = ParameterCount;
-        if (parameters.Length != expectedCount)
+        if (gradients.Length != expectedCount)
         {
             throw new ArgumentException(
-                $"Expected {expectedCount} parameters, but got {parameters.Length}",
-                nameof(parameters));
+                $"Expected {expectedCount} gradients, but got {gradients.Length}",
+                nameof(gradients));
         }
 
         if (!_useNativeMode) return;
 
-        int index = 0;
+        // Get current parameters
+        var currentParams = GetParameters();
 
-        // Update query tokens
-        if (_queryTokens is not null)
+        // Apply gradient descent update: params = params - learning_rate * gradients
+        T learningRate = NumOps.FromDouble(0.001); // Default learning rate
+        for (int i = 0; i < currentParams.Length; i++)
         {
-            for (int i = 0; i < _queryTokens.Rows; i++)
-            {
-                for (int j = 0; j < _queryTokens.Columns; j++)
-                {
-                    _queryTokens[i, j] = parameters[index++];
-                }
-            }
+            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
         }
 
-        // Update query positional embeddings
-        if (_queryPositionalEmbeddings is not null)
-        {
-            for (int i = 0; i < _queryPositionalEmbeddings.Rows; i++)
-            {
-                for (int j = 0; j < _queryPositionalEmbeddings.Columns; j++)
-                {
-                    _queryPositionalEmbeddings[i, j] = parameters[index++];
-                }
-            }
-        }
-
-        // Only update Q-Former parameters (vision encoder and LLM are frozen)
-        foreach (var layer in _qformerSelfAttentionLayers)
-        {
-            int layerParamCount = layer.ParameterCount;
-            var layerParams = new Vector<T>(layerParamCount);
-            for (int i = 0; i < layerParamCount; i++)
-            {
-                layerParams[i] = parameters[index++];
-            }
-            layer.SetParameters(layerParams);
-        }
-
-        foreach (var layer in _qformerCrossAttentionLayers)
-        {
-            int layerParamCount = layer.ParameterCount;
-            var layerParams = new Vector<T>(layerParamCount);
-            for (int i = 0; i < layerParamCount; i++)
-            {
-                layerParams[i] = parameters[index++];
-            }
-            layer.SetParameters(layerParams);
-        }
-
-        foreach (var layer in _qformerFeedForwardLayers)
-        {
-            int layerParamCount = layer.ParameterCount;
-            var layerParams = new Vector<T>(layerParamCount);
-            for (int i = 0; i < layerParamCount; i++)
-            {
-                layerParams[i] = parameters[index++];
-            }
-            layer.SetParameters(layerParams);
-        }
+        // Set the updated parameters
+        SetParameters(currentParams);
     }
 
     /// <inheritdoc/>
@@ -1818,6 +1771,30 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     {
         var parameters = new List<T>();
 
+        // Add query tokens (trainable)
+        if (_queryTokens is not null)
+        {
+            for (int i = 0; i < _queryTokens.Rows; i++)
+            {
+                for (int j = 0; j < _queryTokens.Columns; j++)
+                {
+                    parameters.Add(_queryTokens[i, j]);
+                }
+            }
+        }
+
+        // Add query positional embeddings (trainable)
+        if (_queryPositionalEmbeddings is not null)
+        {
+            for (int i = 0; i < _queryPositionalEmbeddings.Rows; i++)
+            {
+                for (int j = 0; j < _queryPositionalEmbeddings.Columns; j++)
+                {
+                    parameters.Add(_queryPositionalEmbeddings[i, j]);
+                }
+            }
+        }
+
         // Add Q-Former layer parameters
         foreach (var layer in _qformerSelfAttentionLayers)
         {
@@ -1846,6 +1823,34 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             }
         }
 
+        // Add projection head parameters
+        if (_itmHead is not null)
+        {
+            var headParams = _itmHead.GetParameters();
+            for (int i = 0; i < headParams.Length; i++)
+            {
+                parameters.Add(headParams[i]);
+            }
+        }
+
+        if (_itcProjection is not null)
+        {
+            var projParams = _itcProjection.GetParameters();
+            for (int i = 0; i < projParams.Length; i++)
+            {
+                parameters.Add(projParams[i]);
+            }
+        }
+
+        if (_languageModelProjection is not null)
+        {
+            var lmProjParams = _languageModelProjection.GetParameters();
+            for (int i = 0; i < lmProjParams.Length; i++)
+            {
+                parameters.Add(lmProjParams[i]);
+            }
+        }
+
         return new Vector<T>([.. parameters]);
     }
 
@@ -1854,6 +1859,31 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     {
         int offset = 0;
 
+        // Set query tokens
+        if (_queryTokens is not null)
+        {
+            for (int i = 0; i < _queryTokens.Rows; i++)
+            {
+                for (int j = 0; j < _queryTokens.Columns; j++)
+                {
+                    _queryTokens[i, j] = parameters[offset++];
+                }
+            }
+        }
+
+        // Set query positional embeddings
+        if (_queryPositionalEmbeddings is not null)
+        {
+            for (int i = 0; i < _queryPositionalEmbeddings.Rows; i++)
+            {
+                for (int j = 0; j < _queryPositionalEmbeddings.Columns; j++)
+                {
+                    _queryPositionalEmbeddings[i, j] = parameters[offset++];
+                }
+            }
+        }
+
+        // Set Q-Former layer parameters
         foreach (var layer in _qformerSelfAttentionLayers)
         {
             int layerParamCount = layer.ParameterCount;
@@ -1889,6 +1919,43 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             layer.SetParameters(layerParams);
             offset += layerParamCount;
         }
+
+        // Set projection head parameters
+        if (_itmHead is not null)
+        {
+            int paramCount = _itmHead.ParameterCount;
+            var headParams = new Vector<T>(paramCount);
+            for (int i = 0; i < paramCount; i++)
+            {
+                headParams[i] = parameters[offset + i];
+            }
+            _itmHead.SetParameters(headParams);
+            offset += paramCount;
+        }
+
+        if (_itcProjection is not null)
+        {
+            int paramCount = _itcProjection.ParameterCount;
+            var projParams = new Vector<T>(paramCount);
+            for (int i = 0; i < paramCount; i++)
+            {
+                projParams[i] = parameters[offset + i];
+            }
+            _itcProjection.SetParameters(projParams);
+            offset += paramCount;
+        }
+
+        if (_languageModelProjection is not null)
+        {
+            int paramCount = _languageModelProjection.ParameterCount;
+            var lmProjParams = new Vector<T>(paramCount);
+            for (int i = 0; i < paramCount; i++)
+            {
+                lmProjParams[i] = parameters[offset + i];
+            }
+            _languageModelProjection.SetParameters(lmProjParams);
+            offset += paramCount;
+        }
     }
 
     /// <inheritdoc/>
@@ -1907,17 +1974,102 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         // Compute loss (simplified: contrastive loss)
         LastLoss = LossFunction.CalculateLoss(imageOutput.ToVector(), expectedOutput.ToVector());
 
-        // Backward pass
+        // Backward pass - compute gradients
         var lossGradient = LossFunction.CalculateDerivative(imageOutput.ToVector(), expectedOutput.ToVector());
         var gradient = Tensor<T>.FromVector(lossGradient);
         Backward(gradient);
 
-        // Get parameters, apply optimizer update, set back
-        var currentParams = GetParameters();
-        // Simplified update: just add gradient (in practice, use optimizer)
-        UpdateParameters(currentParams);
+        // Apply gradient descent update using the computed gradients
+        // The Backward pass accumulates gradients in layers
+        var paramGradients = GetBlip2ParameterGradients();
+        UpdateParameters(paramGradients);
 
         SetTrainingMode(false);
+    }
+
+    /// <summary>
+    /// Gets the gradients for all BLIP-2 trainable parameters.
+    /// </summary>
+    private Vector<T> GetBlip2ParameterGradients()
+    {
+        var gradients = new List<T>();
+
+        // Gradients for query tokens (accumulated during backward)
+        if (_queryTokens is not null)
+        {
+            // For now, use zero gradients for query tokens as they don't have layer-based gradient tracking
+            for (int i = 0; i < _queryTokens.Rows * _queryTokens.Columns; i++)
+            {
+                gradients.Add(NumOps.Zero);
+            }
+        }
+
+        // Gradients for query positional embeddings
+        if (_queryPositionalEmbeddings is not null)
+        {
+            for (int i = 0; i < _queryPositionalEmbeddings.Rows * _queryPositionalEmbeddings.Columns; i++)
+            {
+                gradients.Add(NumOps.Zero);
+            }
+        }
+
+        // Get layer gradients
+        foreach (var layer in _qformerSelfAttentionLayers)
+        {
+            var layerGrads = layer.GetParameterGradients();
+            for (int i = 0; i < layerGrads.Length; i++)
+            {
+                gradients.Add(layerGrads[i]);
+            }
+        }
+
+        foreach (var layer in _qformerCrossAttentionLayers)
+        {
+            var layerGrads = layer.GetParameterGradients();
+            for (int i = 0; i < layerGrads.Length; i++)
+            {
+                gradients.Add(layerGrads[i]);
+            }
+        }
+
+        foreach (var layer in _qformerFeedForwardLayers)
+        {
+            var layerGrads = layer.GetParameterGradients();
+            for (int i = 0; i < layerGrads.Length; i++)
+            {
+                gradients.Add(layerGrads[i]);
+            }
+        }
+
+        // Get projection head gradients
+        if (_itmHead is not null)
+        {
+            var headGrads = _itmHead.GetParameterGradients();
+            for (int i = 0; i < headGrads.Length; i++)
+            {
+                gradients.Add(headGrads[i]);
+            }
+        }
+
+        if (_itcProjection is not null)
+        {
+            var projGrads = _itcProjection.GetParameterGradients();
+            for (int i = 0; i < projGrads.Length; i++)
+            {
+                gradients.Add(projGrads[i]);
+            }
+        }
+
+        if (_languageModelProjection is not null)
+        {
+            var lmProjGrads = _languageModelProjection.GetParameterGradients();
+            for (int i = 0; i < lmProjGrads.Length; i++)
+            {
+                gradients.Add(lmProjGrads[i]);
+            }
+        }
+
+        return new Vector<T>([.. gradients]);
     }
 
     /// <inheritdoc/>

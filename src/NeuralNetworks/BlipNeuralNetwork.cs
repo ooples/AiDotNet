@@ -146,6 +146,11 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     /// </summary>
     private ILayer<T>? _patchEmbedding;
 
+    /// <summary>
+    /// Language model head - projects hidden states to vocabulary logits.
+    /// </summary>
+    private ILayer<T>? _lmHead;
+
     #endregion
 
     #region Shared Fields
@@ -461,6 +466,9 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
 
         // ITM head: binary classification
         _itmHead = new DenseLayer<T>(_hiddenDim, 2, (IActivationFunction<T>?)null);
+
+        // LM head: project hidden states to vocabulary logits for caption generation
+        _lmHead = new DenseLayer<T>(_hiddenDim, _vocabularySize, (IActivationFunction<T>?)null);
 
         // Initialize learnable tokens
         _visionClsToken = Matrix<T>.CreateDefault(1, _hiddenDim, NumOps.Zero);
@@ -1164,8 +1172,23 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
             hidden = layer.Forward(hidden);
         }
 
-        // Project to vocabulary
-        // For now, return the hidden states - in full implementation would project to vocab
+        // Project hidden states to vocabulary logits using the language model head
+        if (_lmHead is not null)
+        {
+            // Reshape for dense layer: [batch, seq_len, hidden_dim] -> [batch * seq_len, hidden_dim]
+            int batchSize = hidden.Shape[0];
+            int seqLen = hidden.Shape[1];
+            int hiddenDim = hidden.Shape[2];
+
+            var flatHidden = Engine.Reshape(hidden, [batchSize * seqLen, hiddenDim]);
+            var logits = _lmHead.Forward(flatHidden);
+
+            // Reshape back: [batch * seq_len, vocab_size] -> [batch, seq_len, vocab_size]
+            int vocabSize = logits.Shape[1];
+            return Engine.Reshape(logits, [batchSize, seqLen, vocabSize]);
+        }
+
+        // Fallback: return hidden states (won't produce valid tokens)
         return hidden;
     }
 

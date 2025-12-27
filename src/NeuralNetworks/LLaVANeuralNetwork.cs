@@ -372,8 +372,11 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     /// <inheritdoc/>
     public T ComputeSimilarity(Vector<T> textEmbedding, Vector<T> imageEmbedding)
     {
+        // Use the minimum length to avoid out-of-range access when embeddings have different dimensions
+        int length = Math.Min(textEmbedding.Length, imageEmbedding.Length);
+
         T similarity = NumOps.Zero;
-        for (int i = 0; i < textEmbedding.Length; i++)
+        for (int i = 0; i < length; i++)
         {
             similarity = NumOps.Add(similarity,
                 NumOps.Multiply(textEmbedding[i], imageEmbedding[i]));

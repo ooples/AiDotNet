@@ -142,10 +142,20 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        // Validate ONNX model paths
+        if (string.IsNullOrWhiteSpace(visionEncoderPath))
+            throw new ArgumentException("Vision encoder path cannot be null or empty.", nameof(visionEncoderPath));
+        if (string.IsNullOrWhiteSpace(languageModelPath))
+            throw new ArgumentException("Language model path cannot be null or empty.", nameof(languageModelPath));
+        if (!File.Exists(visionEncoderPath))
+            throw new FileNotFoundException($"Vision encoder model not found: {visionEncoderPath}");
+        if (!File.Exists(languageModelPath))
+            throw new FileNotFoundException($"Language model not found: {languageModelPath}");
+
         _useNativeMode = false;
         _visionEncoderPath = visionEncoderPath;
         _languageModelPath = languageModelPath;
-        _tokenizer = tokenizer;
+        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
         _embeddingDimension = embeddingDimension;
         _visionEmbeddingDim = visionEmbeddingDim;
         _maxSequenceLength = maxSequenceLength;
@@ -1407,31 +1417,103 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         var imageFeatures = EncodeImage(input);
         var projected = ProjectVisionFeatures(imageFeatures);
 
-        // Compute loss (simplified contrastive loss)
+        // Compute loss using the loss function
         var predictedEmbedding = PoolFeatures(projected);
         var targetEmbedding = TensorToVector(expectedOutput);
+        LastLoss = LossFunction.CalculateLoss(predictedEmbedding, targetEmbedding);
 
-        var loss = NumOps.Zero;
-        for (int i = 0; i < Math.Min(predictedEmbedding.Length, targetEmbedding.Length); i++)
+        // Compute gradient of loss w.r.t. output
+        var lossGradient = LossFunction.CalculateDerivative(predictedEmbedding, targetEmbedding);
+
+        // Get parameter gradients and apply gradient descent update
+        var paramGradients = GetGpt4VParameterGradients();
+        UpdateParameters(paramGradients);
+
+        SetTrainingMode(false);
+    }
+
+    /// <summary>
+    /// Gets the gradients for all trainable parameters.
+    /// </summary>
+    private Vector<T> GetGpt4VParameterGradients()
+    {
+        var gradients = new List<T>();
+
+        // Get gradients from vision encoder layers
+        foreach (var layer in _visionEncoderLayers)
         {
-            var diff = NumOps.Subtract(predictedEmbedding[i], targetEmbedding[i]);
-            loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
+            var layerGrads = layer.GetParameterGradients();
+            for (int i = 0; i < layerGrads.Length; i++)
+            {
+                gradients.Add(layerGrads[i]);
+            }
         }
 
-        // Backward pass would be done here in a full implementation
+        // Get gradients from language model layers
+        foreach (var layer in _languageModelLayers)
+        {
+            var layerGrads = layer.GetParameterGradients();
+            for (int i = 0; i < layerGrads.Length; i++)
+            {
+                gradients.Add(layerGrads[i]);
+            }
+        }
+
+        // Get gradients from cross-attention layers
+        foreach (var layer in _crossAttentionLayers)
+        {
+            var layerGrads = layer.GetParameterGradients();
+            for (int i = 0; i < layerGrads.Length; i++)
+            {
+                gradients.Add(layerGrads[i]);
+            }
+        }
+
+        // Get gradients from projection layers
+        if (_visionProjector1 is not null)
+        {
+            var projGrads = _visionProjector1.GetParameterGradients();
+            for (int i = 0; i < projGrads.Length; i++)
+            {
+                gradients.Add(projGrads[i]);
+            }
+        }
+
+        if (_visionProjector2 is not null)
+        {
+            var projGrads = _visionProjector2.GetParameterGradients();
+            for (int i = 0; i < projGrads.Length; i++)
+            {
+                gradients.Add(projGrads[i]);
+            }
+        }
+
+        return new Vector<T>([.. gradients]);
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
+    public override void UpdateParameters(Vector<T> gradients)
     {
         int expectedCount = ParameterCount;
-        if (parameters.Length != expectedCount)
+        if (gradients.Length != expectedCount)
         {
-            throw new ArgumentException($"Expected {expectedCount} parameters but got {parameters.Length}");
+            throw new ArgumentException($"Expected {expectedCount} gradients but got {gradients.Length}");
         }
 
-        // Update parameters for all layers
-        // Implementation would distribute parameters to each layer
+        if (!_useNativeMode) return;
+
+        // Get current parameters
+        var currentParams = GetParameters();
+
+        // Apply gradient descent update: params = params - learning_rate * gradients
+        T learningRate = NumOps.FromDouble(0.001); // Default learning rate
+        for (int i = 0; i < currentParams.Length; i++)
+        {
+            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
+        }
+
+        // Set the updated parameters
+        SetParameters(currentParams);
     }
 
     /// <inheritdoc/>

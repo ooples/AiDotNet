@@ -1062,12 +1062,35 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
 
         foreach (var word in words)
         {
-            int hash = Math.Abs(word.GetHashCode()) % _embeddingDimension;
+            // Use deterministic FNV-1a hash instead of string.GetHashCode()
+            // which is not deterministic across .NET versions or processes
+            int hash = Math.Abs(GetDeterministicHashCode(word)) % _embeddingDimension;
             result[hash] = _numOps.Add(result[hash], _numOps.One);
         }
 
         // L2 normalize
         return NormalizeVector(result);
+    }
+
+    /// <summary>
+    /// Computes a deterministic hash code using the FNV-1a algorithm.
+    /// Unlike string.GetHashCode(), this produces consistent results across runs.
+    /// </summary>
+    private static int GetDeterministicHashCode(string str)
+    {
+        unchecked
+        {
+            const int FNV_OFFSET_BASIS = unchecked((int)2166136261);
+            const int FNV_PRIME = 16777619;
+
+            int hash = FNV_OFFSET_BASIS;
+            foreach (char c in str)
+            {
+                hash ^= c;
+                hash *= FNV_PRIME;
+            }
+            return hash;
+        }
     }
 
     private T ComputeCosineSimilarity(Vector<T> a, Vector<T> b)
@@ -1154,9 +1177,9 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
 
     private Tensor<T> SoftmaxTensor(Tensor<T> tensor, int axis)
     {
-        var data = tensor.ToVector();
-        var softmaxed = Softmax(data);
-        return Tensor<T>.FromVector(softmaxed);
+        // Use the Engine's vectorized Softmax implementation which handles
+        // arbitrary tensor ranks and axis parameters efficiently
+        return Engine.Softmax(tensor, axis);
     }
 
     private T ComputeSyncQuality(Vector<T> audioFeatures, Vector<T> visualFeatures)
@@ -1322,7 +1345,25 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> gradients)
     {
-        SetParameters(gradients);
+        if (gradients.Length != ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Gradient vector length ({gradients.Length}) must match parameter count ({ParameterCount}).",
+                nameof(gradients));
+        }
+
+        // Get current parameters
+        var currentParams = GetParameters();
+
+        // Apply gradient descent update: params = params - learning_rate * gradients
+        T learningRate = NumOps.FromDouble(0.001); // Default learning rate
+        for (int i = 0; i < currentParams.Length; i++)
+        {
+            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
+        }
+
+        // Set the updated parameters
+        SetParameters(currentParams);
     }
 
     /// <inheritdoc/>
@@ -1354,14 +1395,40 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // Fields are readonly, would need constructor-based deserialization
-        _ = reader.ReadInt32(); // embeddingDimension
-        _ = reader.ReadDouble(); // temporalResolution
-        _ = reader.ReadInt32(); // numEncoderLayers
+        // Read serialized values
+        int embDim = reader.ReadInt32();
+        double tempRes = reader.ReadDouble();
+        int numLayers = reader.ReadInt32();
         int categoryCount = reader.ReadInt32();
+        var categories = new List<string>();
         for (int i = 0; i < categoryCount; i++)
         {
-            _ = reader.ReadString();
+            categories.Add(reader.ReadString());
+        }
+
+        // Validate that loaded values match current instance configuration
+        if (embDim != _embeddingDimension)
+        {
+            throw new InvalidOperationException(
+                $"Loaded embedding dimension ({embDim}) doesn't match current ({_embeddingDimension}).");
+        }
+
+        if (Math.Abs(tempRes - _temporalResolution) > 0.0001)
+        {
+            throw new InvalidOperationException(
+                $"Loaded temporal resolution ({tempRes}) doesn't match current ({_temporalResolution}).");
+        }
+
+        if (numLayers != _numEncoderLayers)
+        {
+            throw new InvalidOperationException(
+                $"Loaded encoder layers ({numLayers}) doesn't match current ({_numEncoderLayers}).");
+        }
+
+        if (categoryCount != _supportedCategories.Count)
+        {
+            throw new InvalidOperationException(
+                $"Loaded category count ({categoryCount}) doesn't match current ({_supportedCategories.Count}).");
         }
     }
 

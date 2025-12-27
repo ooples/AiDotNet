@@ -1205,25 +1205,52 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     /// <inheritdoc/>
     protected override NeuralNetworkBase<T> CreateNewInstance()
     {
-        return new FlamingoNeuralNetwork<T>(
-            Architecture,
-            _embeddingDimension,
-            _maxSequenceLength,
-            _imageSize,
-            3,
-            _numPerceiverTokens,
-            _maxImagesInContext,
-            _visionHiddenDim,
-            _lmHiddenDim,
-            _numVisionLayers,
-            _numLmLayers,
-            _numHeads,
-            _vocabularySize,
-            _languageModelType,
-            _numPerceiverLayers,
-            _tokenizer,
-            _optimizer,
-            _lossFunction);
+        // Create a fresh optimizer instance to avoid state sharing between models
+        var freshOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        if (_useNativeMode)
+        {
+            return new FlamingoNeuralNetwork<T>(
+                Architecture,
+                _embeddingDimension,
+                _maxSequenceLength,
+                _imageSize,
+                3,
+                _numPerceiverTokens,
+                _maxImagesInContext,
+                _visionHiddenDim,
+                _lmHiddenDim,
+                _numVisionLayers,
+                _numLmLayers,
+                _numHeads,
+                _vocabularySize,
+                _languageModelType,
+                _numPerceiverLayers,
+                _tokenizer,
+                freshOptimizer,
+                _lossFunction);
+        }
+        else
+        {
+            // ONNX mode - use the stored paths
+            if (string.IsNullOrEmpty(_visionEncoderPath) || string.IsNullOrEmpty(_languageModelPath))
+            {
+                throw new InvalidOperationException("Cannot clone ONNX mode instance without valid model paths.");
+            }
+
+            return new FlamingoNeuralNetwork<T>(
+                Architecture,
+                _visionEncoderPath,
+                _languageModelPath,
+                _tokenizer,
+                _embeddingDimension,
+                _maxSequenceLength,
+                _imageSize,
+                _numPerceiverTokens,
+                _maxImagesInContext,
+                freshOptimizer,
+                _lossFunction);
+        }
     }
 
     #endregion

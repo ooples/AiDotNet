@@ -548,6 +548,13 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
         IEnumerable<string> classLabels)
     {
         var labels = classLabels.ToList();
+
+        // Handle empty label set
+        if (labels.Count == 0)
+        {
+            return new Dictionary<string, T>();
+        }
+
         var dataEmbedding = GetEmbedding(modality, data);
         var textEmbeddings = labels.Select(l => GetTextEmbedding($"a photo of {l}")).ToList();
 
@@ -574,8 +581,15 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
         object queryData,
         IEnumerable<(ModalityType Modality, object Data)> candidates)
     {
-        var queryEmbedding = GetEmbedding(queryModality, queryData);
         var candidateList = candidates.ToList();
+
+        // Handle empty candidates set
+        if (candidateList.Count == 0)
+        {
+            throw new ArgumentException("Candidates collection cannot be empty.", nameof(candidates));
+        }
+
+        var queryEmbedding = GetEmbedding(queryModality, queryData);
 
         T bestScore = NumOps.FromDouble(double.MinValue);
         int bestIndex = 0;

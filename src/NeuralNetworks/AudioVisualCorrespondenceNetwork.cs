@@ -955,7 +955,25 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> gradients)
     {
-        SetParameters(gradients);
+        if (gradients.Length != ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Gradient vector length ({gradients.Length}) must match parameter count ({ParameterCount}).",
+                nameof(gradients));
+        }
+
+        // Get current parameters
+        var currentParams = GetParameters();
+
+        // Apply gradient descent update: params = params - learning_rate * gradients
+        T learningRate = NumOps.FromDouble(0.001); // Default learning rate
+        for (int i = 0; i < currentParams.Length; i++)
+        {
+            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
+        }
+
+        // Set the updated parameters
+        SetParameters(currentParams);
     }
 
     /// <inheritdoc/>
@@ -990,11 +1008,36 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // Read values but they're readonly, so this is just for validation
+        // Read serialized values
         var embDim = reader.ReadInt32();
         var sampleRate = reader.ReadInt32();
         var frameRate = reader.ReadDouble();
         var numLayers = reader.ReadInt32();
+
+        // Validate that loaded values match current instance configuration
+        if (embDim != _embeddingDimension)
+        {
+            throw new InvalidOperationException(
+                $"Loaded embedding dimension ({embDim}) doesn't match current ({_embeddingDimension}).");
+        }
+
+        if (sampleRate != _audioSampleRate)
+        {
+            throw new InvalidOperationException(
+                $"Loaded audio sample rate ({sampleRate}) doesn't match current ({_audioSampleRate}).");
+        }
+
+        if (Math.Abs(frameRate - _videoFrameRate) > 0.001)
+        {
+            throw new InvalidOperationException(
+                $"Loaded video frame rate ({frameRate}) doesn't match current ({_videoFrameRate}).");
+        }
+
+        if (numLayers != _numEncoderLayers)
+        {
+            throw new InvalidOperationException(
+                $"Loaded encoder layers ({numLayers}) doesn't match current ({_numEncoderLayers}).");
+        }
     }
 
     /// <inheritdoc/>
