@@ -230,10 +230,18 @@ jobs:
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net8.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.MetaLearning|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.MixedPrecision|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.ModelCompression'
-          - name: AiDotNet.Tests - Unit - 10 NN/Optimizers/RAG
+          - name: AiDotNet.Tests - Unit - 10a NeuralNetworks
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net8.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Optimizers|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.RAG'
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks'
+          - name: AiDotNet.Tests - Unit - 10b Optimizers
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Optimizers'
+          - name: AiDotNet.Tests - Unit - 10c RAG
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.RAG'
           - name: AiDotNet.Tests - Unit - 11 Regularization/RL/RAG2
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net8.0
@@ -436,12 +444,32 @@ jobs:
         run: |
           ${{ runner.temp }}\scanner\dotnet-sonarscanner end /d:sonar.token="$env:SONAR_TOKEN"
 
-  # Run additional tests after build completes (net471)
-  test-net471:
-    name: Run Tests (net471)
+  # Sharded net471 test execution for parallel, faster feedback
+  # Note: Coverage not collected here as SonarCloud analysis uses only net8.0 coverage
+  # Only run AiDotNet.Tests as AiDotNet.Serving.Tests only targets net8.0
+  test-net471-sharded:
+    name: Tests (net471) - ${{ matrix.shard.name }}
     runs-on: windows-latest
     needs: build-windows
-    timeout-minutes: 30
+    timeout-minutes: 20
+    if: github.event.pull_request.draft != true
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - name: Unit 01-04
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.UnitTests.ActivationFunctions|FullyQualifiedName~AiDotNet.Tests.UnitTests.Attention|FullyQualifiedName~AiDotNet.Tests.UnitTests.Autodiff|FullyQualifiedName~AiDotNet.Tests.UnitTests.AutoML|FullyQualifiedName~AiDotNet.Tests.UnitTests.Data|FullyQualifiedName~AiDotNet.Tests.UnitTests.Diagnostics|FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion|FullyQualifiedName~AiDotNet.Tests.UnitTests.Encoding)'
+          - name: Unit 05-08
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.UnitTests.FeatureSelectors|FullyQualifiedName~AiDotNet.Tests.UnitTests.FitDetectors|FullyQualifiedName~AiDotNet.Tests.UnitTests.FitnessCalculators|FullyQualifiedName~AiDotNet.Tests.UnitTests.Genetics|FullyQualifiedName~AiDotNet.Tests.UnitTests.Helpers|FullyQualifiedName~AiDotNet.Tests.UnitTests.Inference|FullyQualifiedName~AiDotNet.Tests.UnitTests.Interpretability|FullyQualifiedName~AiDotNet.Tests.UnitTests.JitCompiler|FullyQualifiedName~AiDotNet.Tests.UnitTests.KnowledgeDistillation|FullyQualifiedName~AiDotNet.Tests.UnitTests.LearningRateSchedulers|FullyQualifiedName~AiDotNet.Tests.UnitTests.LinearAlgebra|FullyQualifiedName~AiDotNet.Tests.UnitTests.Logging|FullyQualifiedName~AiDotNet.Tests.UnitTests.LossFunctions)'
+          - name: Unit 09-10a Meta-NN
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.UnitTests.MetaLearning|FullyQualifiedName~AiDotNet.Tests.UnitTests.MixedPrecision|FullyQualifiedName~AiDotNet.Tests.UnitTests.ModelCompression|FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks)'
+          - name: Unit 10b-12 Opt-RAG-Reg
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.UnitTests.Optimizers|FullyQualifiedName~AiDotNet.Tests.UnitTests.RAG|FullyQualifiedName~AiDotNet.Tests.UnitTests.Regularization|FullyQualifiedName~AiDotNet.Tests.UnitTests.ReinforcementLearning|FullyQualifiedName~AiDotNet.Tests.UnitTests.RetrievalAugmentedGeneration|FullyQualifiedName~AiDotNet.Tests.UnitTests.Serving|FullyQualifiedName~AiDotNet.Tests.UnitTests.TimeSeries|FullyQualifiedName~AiDotNet.Tests.UnitTests.Tokenization|FullyQualifiedName~AiDotNet.Tests.UnitTests.TransferLearning)'
+          - name: Unit 13+ PS-Reason-Other
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.UnitTests.ProgramSynthesis|FullyQualifiedName~AiDotNet.Tests.UnitTests.Reasoning|FullyQualifiedName~AiDotNet.Tests.UnitTests.HyperparameterOptimization|FullyQualifiedName~AiDotNet.Tests.UnitTests.NestedLearning|FullyQualifiedName~AiDotNet.Tests.UnitTests.TrainingInfrastructure|FullyQualifiedName~AiDotNet.Tests.InferenceOptimization|FullyQualifiedName~AiDotNet.Tests.PromptEngineering|FullyQualifiedName~AiDotNet.Tests.Recovery|FullyQualifiedName~AiDotNet.Tests.Concurrency)'
+          - name: Tensors.Tests
+            project_override: tests/AiDotNet.Tensors.Tests/AiDotNet.Tensors.Tests.csproj
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress'
 
     steps:
       - name: Checkout code
@@ -466,22 +494,31 @@ jobs:
           name: build-output-${{ github.sha }}
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore ${{ matrix.shard.project_override || 'tests/AiDotNet.Tests/AiDotNetTests.csproj' }}
 
-      # Run tests on net471 (Windows can run .NET Framework)
-      # Note: Coverage not collected here as SonarCloud analysis has already completed
-      # Only net8.0 coverage is included in SonarCloud analysis (primary target)
-      # Only run AiDotNet.Tests as AiDotNet.Serving.Tests only targets net8.0
-      - name: Run tests (net471)
+      - name: Run tests (net471, sharded)
+        shell: powershell
         run: |
-          dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj --no-build -c Release --framework net471 --filter "Category!=GPU&Category!=Integration&Category!=Stress" --logger "trx;LogFileName=test-results-net471.trx" --results-directory ./TestResults
+          $project = "${{ matrix.shard.project_override || 'tests/AiDotNet.Tests/AiDotNetTests.csproj' }}"
+          $shardName = "${{ matrix.shard.name }}"
+          $sanitizedShardName = $shardName -replace '[\/:*?"<>|\s-]+', '_'
+          $results = Join-Path "TestResults" "net471-$sanitizedShardName"
+          New-Item -Path $results -ItemType Directory -Force | Out-Null
+          dotnet test $project --no-build -c Release --framework net471 --filter "${{ matrix.shard.filter }}" --logger "trx;LogFileName=test-results.trx" --results-directory $results
+
+      - name: Set artifact name
+        if: always()
+        shell: powershell
+        run: |
+          $slug = "${{ matrix.shard.name }}" -replace '[\/:*?"<>|\s-]+', '_'
+          echo "ARTIFACT_NAME=test-results-net471-$slug" >> $env:GITHUB_ENV
 
       - name: Upload test results
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         if: always()
         with:
-          name: test-results-net471
-          path: ./TestResults/*.trx
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ./TestResults/**/*.trx
           if-no-files-found: ignore
 
   # Artifact size analysis
