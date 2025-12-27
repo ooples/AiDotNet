@@ -336,7 +336,14 @@ namespace System.IO
             cancellationToken.ThrowIfCancellationRequested();
             using (var writer = new StreamWriter(path, false))
             {
-                await writer.WriteAsync(contents);
+                var buffer = contents.ToCharArray();
+                const int ChunkSize = 81920;
+                for (int index = 0; index < buffer.Length; index += ChunkSize)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    int count = Math.Min(ChunkSize, buffer.Length - index);
+                    await writer.WriteAsync(buffer, index, count);
+                }
             }
 #endif
         }
