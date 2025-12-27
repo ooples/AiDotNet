@@ -1,3 +1,4 @@
+using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
@@ -40,6 +41,11 @@ public abstract class NoiseSchedulerBase<T> : INoiseScheduler<T>
     /// </para>
     /// </remarks>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>
+    /// Gets the compute engine for GPU-accelerated vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// Gets the configuration options for the scheduler.
@@ -278,15 +284,10 @@ public abstract class NoiseSchedulerBase<T> : INoiseScheduler<T>
         var sqrtAlphaCumprod = NumOps.Sqrt(alphaCumprod);
         var sqrtOneMinusAlphaCumprod = NumOps.Sqrt(NumOps.Subtract(NumOps.One, alphaCumprod));
 
-        var result = new Vector<T>(originalSample.Length);
-        for (int i = 0; i < originalSample.Length; i++)
-        {
-            var signalPart = NumOps.Multiply(sqrtAlphaCumprod, originalSample[i]);
-            var noisePart = NumOps.Multiply(sqrtOneMinusAlphaCumprod, noise[i]);
-            result[i] = NumOps.Add(signalPart, noisePart);
-        }
-
-        return result;
+        // Vectorized operations using IEngine for GPU acceleration
+        var signalPart = Engine.Multiply(originalSample, sqrtAlphaCumprod);
+        var noisePart = Engine.Multiply(noise, sqrtOneMinusAlphaCumprod);
+        return Engine.Add(signalPart, noisePart);
     }
 
     /// <inheritdoc />
@@ -344,14 +345,8 @@ public abstract class NoiseSchedulerBase<T> : INoiseScheduler<T>
         if (!Config.ClipSample)
             return sample;
 
-        var result = new Vector<T>(sample.Length);
+        // Vectorized clamp using IEngine for GPU acceleration
         var negOne = NumOps.Negate(NumOps.One);
-
-        for (int i = 0; i < sample.Length; i++)
-        {
-            result[i] = MathHelper.Clamp(sample[i], negOne, NumOps.One);
-        }
-
-        return result;
+        return Engine.Clamp(sample, negOne, NumOps.One);
     }
 }

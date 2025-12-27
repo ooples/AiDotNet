@@ -13,7 +13,7 @@ public class SimplicialComplexTests
 
         Assert.Equal(3, complex.GetSimplices(0).Count);
         Assert.Equal(3, complex.GetSimplices(1).Count);
-        Assert.Equal(1, complex.GetSimplices(2).Count);
+        Assert.Single(complex.GetSimplices(2));
     }
 
     [Fact]

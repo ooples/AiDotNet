@@ -35,7 +35,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var customOptions = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                InitialLearningRate =0.001,
+                InitialLearningRate = 0.001,
                 Beta1 = 0.95,
                 Beta2 = 0.999,
                 WeightDecay = 0.01
@@ -64,7 +64,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                InitialLearningRate =0.1,
+                InitialLearningRate = 0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.99,
                 WeightDecay = 0.0
@@ -89,7 +89,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                InitialLearningRate =0.1,
+                InitialLearningRate = 0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.99,
                 WeightDecay = 0.0
@@ -114,7 +114,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                InitialLearningRate =0.1,
+                InitialLearningRate = 0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.99,
                 WeightDecay = 0.0
@@ -138,7 +138,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                InitialLearningRate =0.1,
+                InitialLearningRate = 0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.99,
                 WeightDecay = 0.01
@@ -163,7 +163,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                InitialLearningRate =0.1,
+                InitialLearningRate = 0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.99,
                 WeightDecay = 0.0
@@ -197,7 +197,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                InitialLearningRate =0.1,
+                InitialLearningRate = 0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.99,
                 WeightDecay = 0.0
@@ -224,7 +224,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                InitialLearningRate =0.1,
+                InitialLearningRate = 0.1,
                 Beta1 = 0.0, // No interpolation to isolate sign effect
                 Beta2 = 0.0,
                 WeightDecay = 0.0
@@ -254,7 +254,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                InitialLearningRate =0.1,
+                InitialLearningRate = 0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.99
             };
@@ -282,7 +282,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                InitialLearningRate =0.001,
+                InitialLearningRate = 0.001,
                 Beta1 = 0.95,
                 Beta2 = 0.999,
                 WeightDecay = 0.01
@@ -324,13 +324,13 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var initialOptions = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                InitialLearningRate =0.001
+                InitialLearningRate = 0.001
             };
             var optimizer = new LionOptimizer<double, Vector<double>, Vector<double>>(null, initialOptions);
 
             var newOptions = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                InitialLearningRate =0.01
+                InitialLearningRate = 0.01
             };
 
             // Act
@@ -356,7 +356,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<float, Vector<float>, Vector<float>>
             {
-                InitialLearningRate =0.1,
+                InitialLearningRate = 0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.99,
                 WeightDecay = 0.0
@@ -380,7 +380,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<float, Vector<float>, Vector<float>>
             {
-                InitialLearningRate =0.1f,
+                InitialLearningRate = 0.1f,
                 Beta1 = 0.9,
                 Beta2 = 0.99,
                 WeightDecay = 0.0
@@ -414,14 +414,14 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var optionsLowBeta1 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                InitialLearningRate =0.1,
+                InitialLearningRate = 0.1,
                 Beta1 = 0.1,
                 Beta2 = 0.99,
                 WeightDecay = 0.0
             };
             var optionsHighBeta1 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                InitialLearningRate =0.1,
+                InitialLearningRate = 0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.99,
                 WeightDecay = 0.0
@@ -449,14 +449,14 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var optionsLowBeta2 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                InitialLearningRate =0.1,
+                InitialLearningRate = 0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.1,
                 WeightDecay = 0.0
             };
             var optionsHighBeta2 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                InitialLearningRate =0.1,
+                InitialLearningRate = 0.1,
                 Beta1 = 0.9,
                 Beta2 = 0.9,
                 WeightDecay = 0.0
@@ -483,7 +483,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange
             var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
-                InitialLearningRate =0.002,
+                InitialLearningRate = 0.002,
                 Beta1 = 0.85,
                 Beta2 = 0.98
             };

@@ -1,4 +1,5 @@
 using AiDotNet.Agents;
+using AiDotNet.Augmentation;
 using AiDotNet.Benchmarking.Models;
 using AiDotNet.CheckpointManagement;
 using AiDotNet.Configuration;
@@ -579,6 +580,33 @@ public class PredictionModelResultOptions<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
+
+    // ============================================================================
+    // Augmentation Properties
+    // ============================================================================
+
+    /// <summary>
+    /// Gets or sets the unified augmentation configuration.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This configuration covers both training-time augmentation and Test-Time
+    /// Augmentation (TTA) for improved inference accuracy. It includes:
+    /// - Core settings (enabled, probability, seed)
+    /// - TTA settings (enabled by default, aggregation method)
+    /// - Modality-specific settings (image, tabular, audio, text, video)
+    /// </para>
+    /// <para><b>For Beginners:</b> Augmentation creates variations of your data:
+    /// - During training: Helps the model learn to recognize objects regardless of orientation, lighting, etc.
+    /// - During inference (TTA): Makes predictions on multiple variations and combines them for better accuracy.
+    ///
+    /// Example use cases:
+    /// - Image classification: Train on flipped, rotated versions; predict on multiple views
+    /// - Tabular data: Add noise, apply MixUp for regularization
+    /// - Audio: Apply time stretch, pitch shift for robustness
+    /// </para>
+    /// </remarks>
+    public AugmentationConfig? AugmentationConfig { get; set; }
 
     // ============================================================================
     // Safety & Robustness Properties

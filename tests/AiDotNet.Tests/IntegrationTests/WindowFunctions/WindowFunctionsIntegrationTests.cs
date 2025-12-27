@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.WindowFunctions;
@@ -603,6 +604,286 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(64, result.Length);
     }
 
+    [Fact]
+    public void LanczosWindow_Create_Symmetric()
+    {
+        // Arrange
+        var window = new LanczosWindow<double>();
+
+        // Act
+        var result = window.Create(64);
+
+        // Assert
+        for (int i = 0; i < 32; i++)
+        {
+            Assert.Equal(result[i], result[63 - i], Tolerance);
+        }
+    }
+
+    #endregion
+
+    #region BartlettHann Window Tests
+
+    [Fact]
+    public void BartlettHannWindow_Create_ReturnsCorrectSize()
+    {
+        // Arrange
+        var window = new BartlettHannWindow<double>();
+
+        // Act
+        var result = window.Create(64);
+
+        // Assert
+        Assert.Equal(64, result.Length);
+    }
+
+    [Fact]
+    public void BartlettHannWindow_Create_Symmetric()
+    {
+        // Arrange
+        var window = new BartlettHannWindow<double>();
+
+        // Act
+        var result = window.Create(64);
+
+        // Assert
+        for (int i = 0; i < 32; i++)
+        {
+            Assert.Equal(result[i], result[63 - i], Tolerance);
+        }
+    }
+
+    [Fact]
+    public void BartlettHannWindow_Create_ValuesInValidRange()
+    {
+        // Arrange
+        var window = new BartlettHannWindow<double>();
+
+        // Act
+        var result = window.Create(64);
+
+        // Assert
+        for (int i = 0; i < result.Length; i++)
+        {
+            Assert.True(result[i] >= 0.0);
+            Assert.True(result[i] <= 1.01);
+        }
+    }
+
+    #endregion
+
+    #region BlackmanNuttall Window Tests
+
+    [Fact]
+    public void BlackmanNuttallWindow_Create_ReturnsCorrectSize()
+    {
+        // Arrange
+        var window = new BlackmanNuttallWindow<double>();
+
+        // Act
+        var result = window.Create(64);
+
+        // Assert
+        Assert.Equal(64, result.Length);
+    }
+
+    [Fact]
+    public void BlackmanNuttallWindow_Create_Symmetric()
+    {
+        // Arrange
+        var window = new BlackmanNuttallWindow<double>();
+
+        // Act
+        var result = window.Create(64);
+
+        // Assert
+        for (int i = 0; i < 32; i++)
+        {
+            Assert.Equal(result[i], result[63 - i], Tolerance);
+        }
+    }
+
+    [Fact]
+    public void BlackmanNuttallWindow_Create_ValuesInValidRange()
+    {
+        // Arrange
+        var window = new BlackmanNuttallWindow<double>();
+
+        // Act
+        var result = window.Create(64);
+
+        // Assert
+        for (int i = 0; i < result.Length; i++)
+        {
+            Assert.True(result[i] >= -0.01);
+            Assert.True(result[i] <= 1.01);
+        }
+    }
+
+    #endregion
+
+    #region Bohman Window Tests
+
+    [Fact]
+    public void BohmanWindow_Create_ReturnsCorrectSize()
+    {
+        // Arrange
+        var window = new BohmanWindow<double>();
+
+        // Act
+        var result = window.Create(64);
+
+        // Assert
+        Assert.Equal(64, result.Length);
+    }
+
+    [Fact]
+    public void BohmanWindow_Create_Symmetric()
+    {
+        // Arrange
+        var window = new BohmanWindow<double>();
+
+        // Act
+        var result = window.Create(64);
+
+        // Assert
+        for (int i = 0; i < 32; i++)
+        {
+            Assert.Equal(result[i], result[63 - i], Tolerance);
+        }
+    }
+
+    [Fact]
+    public void BohmanWindow_Create_EdgesAreZero()
+    {
+        // Arrange
+        var window = new BohmanWindow<double>();
+
+        // Act
+        var result = window.Create(64);
+
+        // Assert - Bohman window should be zero at edges
+        Assert.True(result[0] < 0.01);
+        Assert.True(result[63] < 0.01);
+    }
+
+    #endregion
+
+    #region Cosine Window Tests
+
+    [Fact]
+    public void CosineWindow_Create_ReturnsCorrectSize()
+    {
+        // Arrange
+        var window = new CosineWindow<double>();
+
+        // Act
+        var result = window.Create(64);
+
+        // Assert
+        Assert.Equal(64, result.Length);
+    }
+
+    [Fact]
+    public void CosineWindow_Create_Symmetric()
+    {
+        // Arrange
+        var window = new CosineWindow<double>();
+
+        // Act
+        var result = window.Create(64);
+
+        // Assert
+        for (int i = 0; i < 32; i++)
+        {
+            Assert.Equal(result[i], result[63 - i], Tolerance);
+        }
+    }
+
+    [Fact]
+    public void CosineWindow_Create_CenterIsMaximum()
+    {
+        // Arrange
+        var window = new CosineWindow<double>();
+
+        // Act
+        var result = window.Create(65);
+
+        // Assert - Center should be maximum (close to 1.0)
+        double max = double.MinValue;
+        int maxIndex = 0;
+        for (int i = 0; i < result.Length; i++)
+        {
+            if (result[i] > max)
+            {
+                max = result[i];
+                maxIndex = i;
+            }
+        }
+        Assert.Equal(32, maxIndex);
+    }
+
+    #endregion
+
+    #region Poisson Window Tests
+
+    [Fact]
+    public void PoissonWindow_Create_ReturnsCorrectSize()
+    {
+        // Arrange
+        var window = new PoissonWindow<double>(alpha: 2.0);
+
+        // Act
+        var result = window.Create(64);
+
+        // Assert
+        Assert.Equal(64, result.Length);
+    }
+
+    [Fact]
+    public void PoissonWindow_Create_Symmetric()
+    {
+        // Arrange
+        var window = new PoissonWindow<double>(alpha: 2.0);
+
+        // Act
+        var result = window.Create(64);
+
+        // Assert
+        for (int i = 0; i < 32; i++)
+        {
+            Assert.Equal(result[i], result[63 - i], Tolerance);
+        }
+    }
+
+    [Fact]
+    public void PoissonWindow_Create_CenterIsMaximum()
+    {
+        // Arrange
+        var window = new PoissonWindow<double>(alpha: 2.0);
+
+        // Act
+        var result = window.Create(65);
+
+        // Assert - Center should have maximum value (1.0)
+        Assert.Equal(1.0, result[32], Tolerance);
+    }
+
+    [Fact]
+    public void PoissonWindow_DifferentAlpha_ProducesDifferentWindows()
+    {
+        // Arrange
+        var window1 = new PoissonWindow<double>(alpha: 1.0);
+        var window2 = new PoissonWindow<double>(alpha: 4.0);
+
+        // Act
+        var result1 = window1.Create(64);
+        var result2 = window2.Create(64);
+
+        // Assert - Different alpha should give different values at edges
+        Assert.NotEqual(result1[0], result2[0], Tolerance);
+    }
+
     #endregion
 
     #region Integration Tests
@@ -627,7 +908,12 @@ public class WindowFunctionsIntegrationTests
             new TukeyWindow<double>(alpha: 0.5),
             new WelchWindow<double>(),
             new ParzenWindow<double>(),
-            new LanczosWindow<double>()
+            new LanczosWindow<double>(),
+            new BartlettHannWindow<double>(),
+            new BlackmanNuttallWindow<double>(),
+            new BohmanWindow<double>(),
+            new CosineWindow<double>(),
+            new PoissonWindow<double>(alpha: 2.0)
         };
 
         // Act & Assert
@@ -694,6 +980,150 @@ public class WindowFunctionsIntegrationTests
         Assert.Equal(8192, result.Length);
         Assert.False(double.IsNaN(result[0]));
         Assert.False(double.IsNaN(result[8191]));
+    }
+
+    #endregion
+
+    #region GetWindowFunctionType Tests
+
+    [Fact]
+    public void RectangularWindow_GetWindowFunctionType_ReturnsCorrectType()
+    {
+        var window = new RectangularWindow<double>();
+        Assert.Equal(WindowFunctionType.Rectangular, window.GetWindowFunctionType());
+    }
+
+    [Fact]
+    public void HammingWindow_GetWindowFunctionType_ReturnsCorrectType()
+    {
+        var window = new HammingWindow<double>();
+        Assert.Equal(WindowFunctionType.Hamming, window.GetWindowFunctionType());
+    }
+
+    [Fact]
+    public void HanningWindow_GetWindowFunctionType_ReturnsCorrectType()
+    {
+        var window = new HanningWindow<double>();
+        Assert.Equal(WindowFunctionType.Hanning, window.GetWindowFunctionType());
+    }
+
+    [Fact]
+    public void BlackmanWindow_GetWindowFunctionType_ReturnsCorrectType()
+    {
+        var window = new BlackmanWindow<double>();
+        Assert.Equal(WindowFunctionType.Blackman, window.GetWindowFunctionType());
+    }
+
+    [Fact]
+    public void BartlettWindow_GetWindowFunctionType_ReturnsCorrectType()
+    {
+        var window = new BartlettWindow<double>();
+        Assert.Equal(WindowFunctionType.Bartlett, window.GetWindowFunctionType());
+    }
+
+    [Fact]
+    public void TriangularWindow_GetWindowFunctionType_ReturnsCorrectType()
+    {
+        var window = new TriangularWindow<double>();
+        Assert.Equal(WindowFunctionType.Triangular, window.GetWindowFunctionType());
+    }
+
+    [Fact]
+    public void GaussianWindow_GetWindowFunctionType_ReturnsCorrectType()
+    {
+        var window = new GaussianWindow<double>(sigma: 0.4);
+        Assert.Equal(WindowFunctionType.Gaussian, window.GetWindowFunctionType());
+    }
+
+    [Fact]
+    public void KaiserWindow_GetWindowFunctionType_ReturnsCorrectType()
+    {
+        var window = new KaiserWindow<double>(beta: 5.0);
+        Assert.Equal(WindowFunctionType.Kaiser, window.GetWindowFunctionType());
+    }
+
+    [Fact]
+    public void BlackmanHarrisWindow_GetWindowFunctionType_ReturnsCorrectType()
+    {
+        var window = new BlackmanHarrisWindow<double>();
+        Assert.Equal(WindowFunctionType.BlackmanHarris, window.GetWindowFunctionType());
+    }
+
+    [Fact]
+    public void FlatTopWindow_GetWindowFunctionType_ReturnsCorrectType()
+    {
+        var window = new FlatTopWindow<double>();
+        Assert.Equal(WindowFunctionType.FlatTop, window.GetWindowFunctionType());
+    }
+
+    [Fact]
+    public void NuttallWindow_GetWindowFunctionType_ReturnsCorrectType()
+    {
+        var window = new NuttallWindow<double>();
+        Assert.Equal(WindowFunctionType.Nuttall, window.GetWindowFunctionType());
+    }
+
+    [Fact]
+    public void TukeyWindow_GetWindowFunctionType_ReturnsCorrectType()
+    {
+        var window = new TukeyWindow<double>(alpha: 0.5);
+        Assert.Equal(WindowFunctionType.Tukey, window.GetWindowFunctionType());
+    }
+
+    [Fact]
+    public void WelchWindow_GetWindowFunctionType_ReturnsCorrectType()
+    {
+        var window = new WelchWindow<double>();
+        Assert.Equal(WindowFunctionType.Welch, window.GetWindowFunctionType());
+    }
+
+    [Fact]
+    public void ParzenWindow_GetWindowFunctionType_ReturnsCorrectType()
+    {
+        var window = new ParzenWindow<double>();
+        Assert.Equal(WindowFunctionType.Parzen, window.GetWindowFunctionType());
+    }
+
+    [Fact]
+    public void LanczosWindow_GetWindowFunctionType_ReturnsCorrectType()
+    {
+        var window = new LanczosWindow<double>();
+        Assert.Equal(WindowFunctionType.Lanczos, window.GetWindowFunctionType());
+    }
+
+    [Fact]
+    public void BartlettHannWindow_GetWindowFunctionType_ReturnsCorrectType()
+    {
+        var window = new BartlettHannWindow<double>();
+        Assert.Equal(WindowFunctionType.BartlettHann, window.GetWindowFunctionType());
+    }
+
+    [Fact]
+    public void BlackmanNuttallWindow_GetWindowFunctionType_ReturnsCorrectType()
+    {
+        var window = new BlackmanNuttallWindow<double>();
+        Assert.Equal(WindowFunctionType.BlackmanNuttall, window.GetWindowFunctionType());
+    }
+
+    [Fact]
+    public void BohmanWindow_GetWindowFunctionType_ReturnsCorrectType()
+    {
+        var window = new BohmanWindow<double>();
+        Assert.Equal(WindowFunctionType.Bohman, window.GetWindowFunctionType());
+    }
+
+    [Fact]
+    public void CosineWindow_GetWindowFunctionType_ReturnsCorrectType()
+    {
+        var window = new CosineWindow<double>();
+        Assert.Equal(WindowFunctionType.Cosine, window.GetWindowFunctionType());
+    }
+
+    [Fact]
+    public void PoissonWindow_GetWindowFunctionType_ReturnsCorrectType()
+    {
+        var window = new PoissonWindow<double>(alpha: 2.0);
+        Assert.Equal(WindowFunctionType.Poisson, window.GetWindowFunctionType());
     }
 
     #endregion

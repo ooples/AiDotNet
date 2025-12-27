@@ -18,7 +18,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             pipeline.Add(new StandardScaler<double>());
 
             // Assert - pipeline should have one step
-            Assert.Equal(1, pipeline.Steps.Count);
+            Assert.Single(pipeline.Steps);
         }
 
         [Fact]
@@ -31,7 +31,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             pipeline.Add("scaler", new StandardScaler<double>());
 
             // Assert
-            Assert.Equal(1, pipeline.Steps.Count);
+            Assert.Single(pipeline.Steps);
             Assert.Equal("scaler", pipeline.Steps[0].Name);
         }
 
@@ -79,7 +79,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
 
             // Assert
             Assert.True(pipeline.IsFitted);
-            Assert.Equal(1, pipeline.Steps.Count);
+            Assert.Single(pipeline.Steps);
         }
 
         [Fact]

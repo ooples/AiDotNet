@@ -1,5 +1,5 @@
-using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Diffusion.Schedulers;

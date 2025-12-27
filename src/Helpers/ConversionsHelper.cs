@@ -444,13 +444,13 @@ public static class ConversionsHelper
     }
 
     /// <summary>
-    /// Converts a Vector to the generic TInput type (Vector or Tensor) without requiring a reference input.
+    /// Converts a Vector to the generic TInput type (Vector, Tensor, Matrix, T[], or scalar T) without requiring a reference input.
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations.</typeparam>
-    /// <typeparam name="TInput">The target type (Vector&lt;T&gt; or Tensor&lt;T&gt;).</typeparam>
+    /// <typeparam name="TInput">The target type (Vector&lt;T&gt;, Tensor&lt;T&gt;, Matrix&lt;T&gt;, T[], or scalar T).</typeparam>
     /// <param name="vector">The vector to convert.</param>
     /// <returns>The vector converted to TInput type with inferred shape.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when conversion is not supported or requires shape information.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when conversion is not supported.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method converts a flat vector to the target type without needing
     /// a reference sample. It infers reasonable default shapes based on the target type.</para>
@@ -463,7 +463,9 @@ public static class ConversionsHelper
     /// <list type="bullet">
     /// <item><description>For Vector&lt;T&gt;: Returns the vector as-is</description></item>
     /// <item><description>For Tensor&lt;T&gt;: Creates a batch-size-1 tensor with shape [1, vector.Length]</description></item>
-    /// <item><description>For Matrix&lt;T&gt;: Throws exception (requires explicit shape information)</description></item>
+    /// <item><description>For Matrix&lt;T&gt;: Creates a row matrix with shape [1, vector.Length]</description></item>
+    /// <item><description>For T[]: Converts vector to array</description></item>
+    /// <item><description>For scalar T: Returns the first element (for single-output models)</description></item>
     /// </list>
     ///
     /// <para><b>Example Usage:</b></para>
@@ -488,21 +490,35 @@ public static class ConversionsHelper
             // This is the standard shape for passing activations in neural networks and pipelines
             return (TInput)(object)Tensor<T>.FromVector(vector, new[] { 1, vector.Length });
         }
+        else if (typeof(TInput) == typeof(T[]))
+        {
+            // Vector to T[]: Convert vector to array
+            return (TInput)(object)vector.ToArray();
+        }
+        else if (typeof(TInput) == typeof(T))
+        {
+            // Vector to scalar T: Return first element
+            // This is used for single-output models (e.g., binary classification, regression)
+            if (vector.Length == 0)
+            {
+                throw new InvalidOperationException("Cannot convert empty vector to scalar.");
+            }
+            // T is constrained to numeric types (double, float, etc.) which are non-nullable value types
+            // The boxing/unboxing here is safe because numeric types cannot be null
+            object boxedValue = vector[0] ?? throw new InvalidOperationException("Unexpected null value in vector.");
+            return (TInput)boxedValue;
+        }
         else if (typeof(TInput) == typeof(Matrix<T>))
         {
-            // Vector to Matrix: Cannot infer 2D shape from 1D vector without additional information
-            // For example, a 12-element vector could be 3x4, 4x3, 2x6, 6x2, 1x12, or 12x1
-            throw new InvalidOperationException(
-                $"Cannot convert Vector<T> (length {vector.Length}) to Matrix<T> without explicit shape information. " +
-                $"Matrix dimensions are ambiguous - use ConvertVectorToInput with a reference Matrix instead, " +
-                $"or consider using Tensor<T> which supports flexible reshaping.");
+            // Vector to Matrix: Create a row matrix (1 x n) as the default shape
+            // This is consistent with batch-first convention used in neural networks
+            return (TInput)(object)TensorToMatrix(Tensor<T>.FromVector(vector, new[] { 1, vector.Length }), 1, vector.Length);
         }
         else
         {
             throw new InvalidOperationException(
                 $"Cannot convert Vector<T> to {typeof(TInput).Name} without reference input. " +
-                $"Supported types for shape-free conversion: Vector<T>, Tensor<T>. " +
-                $"For Matrix<T>, use ConvertVectorToInput(vector, referenceMatrix) instead.");
+                $"Supported types for shape-free conversion: Vector<T>, Tensor<T>, T[], scalar T, Matrix<T>.");
         }
     }
 
