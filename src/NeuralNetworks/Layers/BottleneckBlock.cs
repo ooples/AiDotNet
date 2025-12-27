@@ -287,12 +287,9 @@ public class BottleneckBlock<T> : LayerBase<T>
         allParams.AddRange(_bn2.GetParameters().ToArray());
         allParams.AddRange(_conv3.GetParameters().ToArray());
         allParams.AddRange(_bn3.GetParameters().ToArray());
-        if (_downsampleConv is not null)
+        if (_downsampleConv is not null && _downsampleBn is not null)
         {
             allParams.AddRange(_downsampleConv.GetParameters().ToArray());
-        }
-        if (_downsampleBn is not null)
-        {
             allParams.AddRange(_downsampleBn.GetParameters().ToArray());
         }
         return new Vector<T>([.. allParams]);
