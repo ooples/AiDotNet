@@ -1,11 +1,11 @@
 using AiDotNet.Diffusion.NoisePredictors;
-using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.NeuralNetworks.Diffusion;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks.Diffusion;
+using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.Models;
 

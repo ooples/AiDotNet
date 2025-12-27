@@ -8,12 +8,12 @@ using System.Threading.Tasks;
 using AiDotNet.Diffusion;
 using AiDotNet.Diffusion.Models;
 using AiDotNet.Diffusion.NoisePredictors;
-using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
+using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.AutoML

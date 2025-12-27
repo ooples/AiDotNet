@@ -701,4 +701,87 @@ public class ProphetOptions<T, TInput, TOutput> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public Func<T, T> TransformPrediction { get; set; } = (x) => x;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether to enable anomaly detection during and after training.
+    /// </summary>
+    /// <value>True to enable anomaly detection, defaulting to false.</value>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the model will compute prediction residuals during training and use them
+    /// to establish an anomaly threshold based on the statistical properties of the residuals.
+    /// Prophet's anomaly detection leverages its decomposition of the time series into trend,
+    /// seasonality, and holiday components to identify contextual anomalies.
+    /// </para>
+    /// <para><b>For Beginners:</b> Setting this to true tells Prophet to identify unusual data points (anomalies).
+    /// Prophet is particularly good at detecting contextual anomalies - values that are unusual given the
+    /// current trend, season, or holiday context. For example, a sales value that would be normal in December
+    /// might be flagged as an anomaly in July because Prophet understands the seasonal context.
+    /// </para>
+    /// </remarks>
+    public bool EnableAnomalyDetection { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the number of standard deviations from the mean residual to use as the anomaly threshold.
+    /// </summary>
+    /// <value>The anomaly threshold in standard deviations, defaulting to 3.0.</value>
+    /// <remarks>
+    /// <para>
+    /// This parameter controls how sensitive the anomaly detection is. A value of 3.0 means that
+    /// data points with residuals (actual - predicted) more than 3 standard deviations from the mean
+    /// are flagged as anomalies. The residuals account for trend, seasonality, and holiday effects,
+    /// making this a contextual anomaly threshold.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how unusual a value needs to be before it's flagged as an anomaly.
+    /// Unlike simpler models, Prophet considers what's normal for the current context:
+    /// - High sales on Black Friday? Normal, not an anomaly.
+    /// - High sales on a random Tuesday in February? Potentially an anomaly.
+    ///
+    /// Adjust this value based on your needs:
+    /// - Lower values (like 2.0) flag more points as anomalies (more sensitive)
+    /// - Higher values (like 4.0) only flag extreme deviations (less sensitive)
+    ///
+    /// Start with the default of 3.0 and adjust based on whether you're seeing too many false positives
+    /// or missing actual anomalies.
+    /// </para>
+    /// </remarks>
+    public double AnomalyThresholdSigma { get; set; } = 3.0;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether to compute prediction intervals.
+    /// </summary>
+    /// <value>True to compute prediction intervals, defaulting to false.</value>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the model will compute upper and lower bounds for predictions based on
+    /// the historical residual distribution. This is useful for both uncertainty quantification
+    /// and anomaly detection (points outside the interval are anomalies).
+    /// </para>
+    /// <para><b>For Beginners:</b> Instead of just predicting a single value, Prophet can also
+    /// tell you the range where the actual value is likely to fall. For example, instead of
+    /// predicting "sales will be $1000", it might say "sales will be between $900 and $1100".
+    /// This is useful because:
+    /// - You know how confident the model is in its predictions
+    /// - Values outside the range are likely anomalies
+    /// </para>
+    /// </remarks>
+    public bool ComputePredictionIntervals { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the confidence level for prediction intervals.
+    /// </summary>
+    /// <value>The confidence level (0-1), defaulting to 0.95 (95% confidence).</value>
+    /// <remarks>
+    /// <para>
+    /// This parameter sets the width of the prediction intervals. A value of 0.95 means that
+    /// 95% of actual values should fall within the prediction interval (assuming the model is well-calibrated).
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how wide the prediction "range" is:
+    /// - 0.95 (95% confidence): Wider interval, more values fall inside
+    /// - 0.80 (80% confidence): Narrower interval, more values flagged as unusual
+    ///
+    /// Think of it like a fishing net - a wider net (higher confidence) catches more fish (includes more values).
+    /// </para>
+    /// </remarks>
+    public double PredictionIntervalWidth { get; set; } = 0.95;
 }

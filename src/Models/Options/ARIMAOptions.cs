@@ -184,4 +184,44 @@ public class ARIMAOptions<T> : TimeSeriesRegressionOptions<T>
     /// your data doesn't naturally center around zero.</para>
     /// </remarks>
     public bool FitIntercept { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether to enable anomaly detection during and after training.
+    /// </summary>
+    /// <value>True to enable anomaly detection, defaulting to false.</value>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the model will compute prediction residuals during training and use them
+    /// to establish an anomaly threshold based on statistical properties of the residuals.
+    /// </para>
+    /// <para><b>For Beginners:</b> Setting this to true tells the model to not just predict values,
+    /// but also identify unusual data points (anomalies). An anomaly is a value that deviates
+    /// significantly from what the model would expect based on the historical patterns it has learned.
+    /// For example, a sudden spike or drop that doesn't fit the usual pattern would be flagged as an anomaly.
+    /// </para>
+    /// </remarks>
+    public bool EnableAnomalyDetection { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the number of standard deviations from the mean residual to use as the anomaly threshold.
+    /// </summary>
+    /// <value>The anomaly threshold in standard deviations, defaulting to 3.0.</value>
+    /// <remarks>
+    /// <para>
+    /// This parameter controls how sensitive the anomaly detection is. A value of 3.0 means that
+    /// data points with residuals more than 3 standard deviations from the mean are flagged as anomalies.
+    /// Lower values (like 2.0) will flag more points as anomalies, while higher values (like 4.0) will
+    /// only flag the most extreme deviations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how unusual a value needs to be before it's flagged as an anomaly.
+    /// Think of it like a "weirdness threshold":
+    /// - A value of 2.0 is lenient - flags anything moderately unusual (about 5% of normal values might be flagged)
+    /// - A value of 3.0 (default) is standard - flags clearly unusual values (about 0.3% of normal values)
+    /// - A value of 4.0 is strict - only flags extreme outliers (about 0.01% of normal values)
+    ///
+    /// If you're seeing too many false positives (normal values flagged as anomalies), increase this value.
+    /// If you're missing real anomalies, decrease this value.
+    /// </para>
+    /// </remarks>
+    public double AnomalyThresholdSigma { get; set; } = 3.0;
 }
