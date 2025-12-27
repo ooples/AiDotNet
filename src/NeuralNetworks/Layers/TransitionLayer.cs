@@ -166,7 +166,7 @@ public class TransitionLayer<T> : LayerBase<T>
         int stride = 2;
 
         var inputGrad = new Tensor<T>(inputShape);
-        var divisor = NumOps.FromDouble((double)poolSize * poolSize);
+        var divisor = NumOps.FromDouble((double)poolSize * (double)poolSize);
 
         for (int n = 0; n < batch; n++)
         {
