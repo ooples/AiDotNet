@@ -132,6 +132,12 @@ public sealed class InferenceControllerTests
 
         public bool LoadModelFromRegistry<T>(string name, IServableModel<T> model, int registryVersion, string registryStage, string? sourcePath = null)
             => throw new NotSupportedException();
+
+        public bool LoadMultimodalModel<T>(string name, IServableMultimodalModel<T> model, string? sourcePath = null)
+            => throw new NotSupportedException();
+
+        public IServableMultimodalModel<T>? GetMultimodalModel<T>(string name)
+            => throw new NotSupportedException();
     }
 
     private sealed class FakeRequestBatcher : IRequestBatcher
