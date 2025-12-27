@@ -183,7 +183,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     private Augmentation.AugmentationConfig? _augmentationConfig;
 
     // Self-supervised learning configuration
-    private SelfSupervisedLearning.Core.SSLConfig? _sslConfig;
+    private SelfSupervisedLearning.SSLConfig? _sslConfig;
 
     // Federated learning configuration (facade-first: orchestration is internal)
     private FederatedLearningOptions? _federatedLearningOptions;
@@ -4060,9 +4060,9 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </code>
     /// </remarks>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureSelfSupervisedLearning(
-        Action<SelfSupervisedLearning.Core.SSLConfig>? configure = null)
+        Action<SelfSupervisedLearning.SSLConfig>? configure = null)
     {
-        _sslConfig = new SelfSupervisedLearning.Core.SSLConfig();
+        _sslConfig = new SelfSupervisedLearning.SSLConfig();
         configure?.Invoke(_sslConfig);
         return this;
     }

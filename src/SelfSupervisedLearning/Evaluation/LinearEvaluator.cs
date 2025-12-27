@@ -1,6 +1,5 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.SelfSupervisedLearning.Core.Interfaces;
 
 namespace AiDotNet.SelfSupervisedLearning.Evaluation;
 
