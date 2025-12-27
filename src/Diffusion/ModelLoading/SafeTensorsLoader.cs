@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
+using AiDotNet.Interfaces;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using AiDotNet.Interfaces;
 
 namespace AiDotNet.Diffusion.ModelLoading;
 
