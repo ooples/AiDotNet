@@ -383,18 +383,10 @@ public class AutoTuningPass : IOptimizationPass
         var tileSize = (int)Math.Sqrt(targetElements);
 
         // Round to power of 2
-#if NET5_0_OR_GREATER
-        tileSize = 1 << (int)Math.Log2(tileSize);
-#else
         tileSize = 1 << (int)MathPolyfill.Log2(tileSize);
-#endif
 
         // Clamp to reasonable range
-#if NET5_0_OR_GREATER
-        return Math.Clamp(tileSize, 16, 256);
-#else
         return MathPolyfill.Clamp(tileSize, 16, 256);
-#endif
     }
 
     /// <summary>

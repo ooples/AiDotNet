@@ -1,3 +1,4 @@
+using AiDotNet.Polyfills;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Serving.Padding;
@@ -40,7 +41,7 @@ public class BucketPaddingStrategy : IPaddingStrategy
         }
 
         // If larger than all buckets, return the next power of 2
-        return (int)Math.Pow(2, Math.Ceiling(Math.Log2(length)));
+        return (int)Math.Pow(2, Math.Ceiling(MathPolyfill.Log2(length)));
     }
 
     public Matrix<T> PadBatch<T>(Vector<T>[] vectors, out Matrix<T>? attentionMask)
