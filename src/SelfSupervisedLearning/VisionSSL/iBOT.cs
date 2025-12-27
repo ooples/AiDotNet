@@ -118,10 +118,7 @@ public class iBOT<T> : TeacherStudentSSL<T>
         var mask1 = GenerateMask(batchSize, numPatches);
         var mask2 = GenerateMask(batchSize, numPatches);
 
-        // Student forward pass
-        // NOTE: Full iBOT would apply mask tokens to replace masked patches before encoding.
-        // This simplified implementation computes the full forward pass and applies masking
-        // to the loss computation instead, which approximates the iBOT objective.
+        // Student forward pass (full views - masking applied at loss level)
         var studentOut1 = ForwardStudent(view1);
         var studentOut2 = ForwardStudent(view2);
 
@@ -187,21 +184,79 @@ public class iBOT<T> : TeacherStudentSSL<T>
 
     private T ComputeMaskedPatchLoss(Tensor<T> studentOut, Tensor<T> teacherOut, Tensor<T> mask)
     {
-        // Compute loss weighted by mask to approximate computing loss only on masked positions
         var batchSize = studentOut.Shape[0];
-        var dim = studentOut.Shape[1];
         var numPatches = mask.Shape[1];
 
-        // Compute base DINO-style loss
+        // For sequence outputs [batch, seq_len, dim], extract and compute loss on masked positions
+        if (studentOut.Shape.Length == 3 && studentOut.Shape[1] > 1)
+        {
+            var seqLen = studentOut.Shape[1];
+            var dim = studentOut.Shape[2];
+
+            // Skip CLS token (position 0), patches start at position 1
+            var patchStartIdx = 1;
+            var numPatchTokens = Math.Min(seqLen - patchStartIdx, numPatches);
+
+            if (numPatchTokens <= 0)
+            {
+                return NumOps.Zero;
+            }
+
+            // Compute loss only on masked positions
+            T totalLoss = NumOps.Zero;
+            int maskedCount = 0;
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int p = 0; p < numPatchTokens; p++)
+                {
+                    // Check if this patch is masked
+                    if (NumOps.GreaterThan(mask[b, p], NumOps.FromDouble(0.5)))
+                    {
+                        var patchIdx = patchStartIdx + p;
+
+                        // Compute MSE loss between student and teacher at this position
+                        T patchLoss = NumOps.Zero;
+                        for (int d = 0; d < dim; d++)
+                        {
+                            var diff = NumOps.Subtract(studentOut[b, patchIdx, d], teacherOut[b, patchIdx, d]);
+                            patchLoss = NumOps.Add(patchLoss, NumOps.Multiply(diff, diff));
+                        }
+
+                        totalLoss = NumOps.Add(totalLoss, patchLoss);
+                        maskedCount++;
+                    }
+                }
+            }
+
+            // Average over masked patches
+            if (maskedCount > 0)
+            {
+                return NumOps.Divide(totalLoss, NumOps.FromDouble(maskedCount * studentOut.Shape[2]));
+            }
+
+            return NumOps.Zero;
+        }
+
+        // For 2D outputs [batch, dim], use DINO-style loss weighted by mask ratio
+        // This handles the case where encoder outputs only CLS tokens
+        var numMasked = 0;
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int p = 0; p < numPatches; p++)
+            {
+                if (NumOps.GreaterThan(mask[b, p], NumOps.FromDouble(0.5)))
+                {
+                    numMasked++;
+                }
+            }
+        }
+
         var baseLoss = _patchLoss.ComputeLoss(studentOut, teacherOut);
 
-        // Scale by mask ratio to account for only computing loss on masked patches
-        // In full implementation, we would extract patch tokens and only compute
-        // loss on positions where mask == 1
-        var numMasked = (int)(numPatches * _maskRatio);
-        var maskScale = numMasked > 0 ? (double)numPatches / numMasked : 1.0;
-
-        return NumOps.Multiply(baseLoss, NumOps.FromDouble(1.0 / maskScale));
+        // Weight loss by proportion of masked patches
+        var maskWeight = numMasked > 0 ? (double)numMasked / (batchSize * numPatches) : 0.0;
+        return NumOps.Multiply(baseLoss, NumOps.FromDouble(maskWeight));
     }
 
     private Tensor<T> GenerateMask(int batchSize, int numPatches)
