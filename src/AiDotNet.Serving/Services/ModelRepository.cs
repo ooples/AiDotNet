@@ -132,7 +132,7 @@ public class ModelRepository : IModelRepository
             enableBatching = inferenceOptions.EnableBatching;
         }
 
-        return new ModelInfo
+        var modelInfo = new ModelInfo
         {
             Name = name,
             NumericType = entry.NumericType,
@@ -143,8 +143,23 @@ public class ModelRepository : IModelRepository
             IsFromRegistry = entry.IsFromRegistry,
             RegistryVersion = entry.RegistryVersion,
             RegistryStage = entry.RegistryStage,
-            EnableBatching = enableBatching
+            EnableBatching = enableBatching,
+            IsMultimodal = entry.IsMultimodal
         };
+
+        // For multimodal models, extract additional properties
+        if (entry.IsMultimodal)
+        {
+            var embeddingDimProperty = modelType.GetProperty("EmbeddingDimension");
+            var maxSeqLengthProperty = modelType.GetProperty("MaxSequenceLength");
+            var imageSizeProperty = modelType.GetProperty("ImageSize");
+
+            modelInfo.EmbeddingDimension = embeddingDimProperty?.GetValue(entry.Model) as int?;
+            modelInfo.MaxSequenceLength = maxSeqLengthProperty?.GetValue(entry.Model) as int?;
+            modelInfo.ImageSize = imageSizeProperty?.GetValue(entry.Model) as int?;
+        }
+
+        return modelInfo;
     }
 
     /// <summary>

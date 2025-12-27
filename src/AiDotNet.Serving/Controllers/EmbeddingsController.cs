@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -8,24 +9,9 @@ namespace AiDotNet.Serving.Controllers;
 
 /// <summary>
 /// Controller for multimodal embedding operations.
-/// Handles text and image encoding, similarity computation, and zero-shot classification.
+/// Handles text and image encoding, similarity computation, and zero-shot classification
+/// for multimodal models like CLIP.
 /// </summary>
-/// <remarks>
-/// <para>
-/// This controller provides REST endpoints for CLIP-style multimodal models that can
-/// encode both text and images into a shared embedding space for similarity comparison.
-/// </para>
-/// <para><b>For Beginners:</b> This controller lets you:
-///
-/// 1. **Encode text**: Convert text descriptions to vectors
-/// 2. **Encode images**: Convert images to vectors
-/// 3. **Compare**: Find how similar text and images are
-/// 4. **Classify**: Label images using text descriptions
-///
-/// Example: Search for "sunset over mountains" in a photo collection by encoding
-/// the text and finding images with similar embeddings.
-/// </para>
-/// </remarks>
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
@@ -37,6 +23,8 @@ public class EmbeddingsController : ControllerBase
     /// <summary>
     /// Initializes a new instance of the EmbeddingsController.
     /// </summary>
+    /// <param name="modelRepository">The model repository service.</param>
+    /// <param name="logger">Logger for diagnostics.</param>
     public EmbeddingsController(
         IModelRepository modelRepository,
         ILogger<EmbeddingsController> logger)
@@ -46,18 +34,20 @@ public class EmbeddingsController : ControllerBase
     }
 
     /// <summary>
-    /// Encodes text into embedding vectors using a multimodal model.
+    /// Encodes text into an embedding vector using a multimodal model.
     /// </summary>
     /// <param name="modelName">The name of the multimodal model to use.</param>
-    /// <param name="request">The text encoding request.</param>
-    /// <returns>Embedding vectors for the input texts.</returns>
-    /// <response code="200">Encoding completed successfully.</response>
+    /// <param name="request">The text embedding request.</param>
+    /// <returns>The embedding vector for the text.</returns>
+    /// <response code="200">Text encoded successfully.</response>
     /// <response code="400">Invalid request format.</response>
-    /// <response code="404">Model not found or does not support text encoding.</response>
+    /// <response code="404">Model not found or does not support multimodal.</response>
+    /// <response code="500">Error during encoding.</response>
     [HttpPost("text/{modelName}")]
     [ProducesResponseType(typeof(TextEmbeddingResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public IActionResult EncodeText(string modelName, [FromBody] TextEmbeddingRequest request)
     {
         var sw = Stopwatch.StartNew();
@@ -66,63 +56,82 @@ public class EmbeddingsController : ControllerBase
         {
             _logger.LogDebug("Received text embedding request for model '{ModelName}'", modelName);
 
+            // Validate request
             if (request.Texts == null || request.Texts.Length == 0)
             {
-                return BadRequest(new { error = "Texts array is required and cannot be empty." });
+                return BadRequest(new { error = "Texts array is required and cannot be empty" });
             }
 
+            // Check if model exists and is multimodal
             var modelInfo = _modelRepository.GetModelInfo(modelName);
             if (modelInfo == null)
             {
-                return NotFound(new { error = $"Model '{modelName}' not found." });
+                _logger.LogWarning("Model '{ModelName}' not found", modelName);
+                return NotFound(new { error = $"Model '{modelName}' not found" });
             }
 
-            // Get the multimodal model
-            var model = _modelRepository.GetMultimodalModel<float>(modelName);
-            if (model == null)
+            if (!modelInfo.IsMultimodal)
             {
-                return NotFound(new { error = $"Model '{modelName}' does not support multimodal embeddings." });
+                _logger.LogWarning("Model '{ModelName}' does not support multimodal operations", modelName);
+                return BadRequest(new { error = $"Model '{modelName}' is not a multimodal model" });
             }
 
-            // Encode texts
-            var embeddings = new List<double[]>();
-            foreach (var text in request.Texts)
+            // Process based on numeric type
+            double[][] embeddings;
+            switch (modelInfo.NumericType)
             {
-                var embedding = model.EncodeText(text);
-                embeddings.Add(ConvertToDoubleArray(embedding));
+                case NumericType.Double:
+                    embeddings = EncodeTextWithType<double>(modelName, request.Texts);
+                    break;
+                case NumericType.Float:
+                    embeddings = EncodeTextWithType<float>(modelName, request.Texts);
+                    break;
+                case NumericType.Decimal:
+                    embeddings = EncodeTextWithType<decimal>(modelName, request.Texts);
+                    break;
+                default:
+                    return BadRequest(new { error = "Unsupported numeric type." });
             }
 
             sw.Stop();
 
-            return Ok(new TextEmbeddingResponse
+            var response = new TextEmbeddingResponse
             {
-                Embeddings = embeddings.ToArray(),
-                ModelName = modelName,
-                EmbeddingDimension = model.EmbeddingDimension,
+                Embeddings = embeddings,
+                RequestId = request.RequestId,
                 ProcessingTimeMs = sw.ElapsedMilliseconds,
-                RequestId = request.RequestId
-            });
+                EmbeddingDimension = embeddings.Length > 0 ? embeddings[0].Length : 0
+            };
+
+            _logger.LogInformation(
+                "Text embedding completed for model '{ModelName}' in {ElapsedMs}ms (batch size: {BatchSize})",
+                modelName, sw.ElapsedMilliseconds, request.Texts.Length);
+
+            return Ok(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error encoding text for model '{ModelName}'", modelName);
-            return StatusCode(500, new { error = "An unexpected error occurred during text encoding." });
+            _logger.LogError(ex, "Unexpected error during text embedding for model '{ModelName}'", modelName);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { error = "An unexpected error occurred during text embedding." });
         }
     }
 
     /// <summary>
-    /// Encodes images into embedding vectors using a multimodal model.
+    /// Encodes an image into an embedding vector using a multimodal model.
     /// </summary>
     /// <param name="modelName">The name of the multimodal model to use.</param>
-    /// <param name="request">The image encoding request.</param>
-    /// <returns>Embedding vectors for the input images.</returns>
-    /// <response code="200">Encoding completed successfully.</response>
+    /// <param name="request">The image embedding request.</param>
+    /// <returns>The embedding vector for the image.</returns>
+    /// <response code="200">Image encoded successfully.</response>
     /// <response code="400">Invalid request format.</response>
-    /// <response code="404">Model not found or does not support image encoding.</response>
+    /// <response code="404">Model not found or does not support multimodal.</response>
+    /// <response code="500">Error during encoding.</response>
     [HttpPost("image/{modelName}")]
     [ProducesResponseType(typeof(ImageEmbeddingResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public IActionResult EncodeImage(string modelName, [FromBody] ImageEmbeddingRequest request)
     {
         var sw = Stopwatch.StartNew();
@@ -131,61 +140,64 @@ public class EmbeddingsController : ControllerBase
         {
             _logger.LogDebug("Received image embedding request for model '{ModelName}'", modelName);
 
+            // Validate request
             if (request.Images == null || request.Images.Length == 0)
             {
-                return BadRequest(new { error = "Images array is required and cannot be empty." });
+                return BadRequest(new { error = "Images array is required and cannot be empty" });
             }
 
+            // Check if model exists and is multimodal
             var modelInfo = _modelRepository.GetModelInfo(modelName);
             if (modelInfo == null)
             {
-                return NotFound(new { error = $"Model '{modelName}' not found." });
+                _logger.LogWarning("Model '{ModelName}' not found", modelName);
+                return NotFound(new { error = $"Model '{modelName}' not found" });
             }
 
-            var model = _modelRepository.GetMultimodalModel<float>(modelName);
-            if (model == null)
+            if (!modelInfo.IsMultimodal)
             {
-                return NotFound(new { error = $"Model '{modelName}' does not support multimodal embeddings." });
+                _logger.LogWarning("Model '{ModelName}' does not support multimodal operations", modelName);
+                return BadRequest(new { error = $"Model '{modelName}' is not a multimodal model" });
             }
 
-            // Validate image dimensions
-            var expectedSize = model.ImageSize * model.ImageSize * 3;
-            foreach (var image in request.Images)
+            // Process based on numeric type
+            double[][] embeddings;
+            switch (modelInfo.NumericType)
             {
-                if (image.Length != expectedSize)
-                {
-                    return BadRequest(new
-                    {
-                        error = $"Image data must have {expectedSize} values " +
-                               $"(3 channels × {model.ImageSize} × {model.ImageSize}). Got {image.Length}."
-                    });
-                }
-            }
-
-            // Encode images
-            var embeddings = new List<double[]>();
-            foreach (var image in request.Images)
-            {
-                var embedding = model.EncodeImage(image);
-                embeddings.Add(ConvertToDoubleArray(embedding));
+                case NumericType.Double:
+                    embeddings = EncodeImageWithType<double>(modelName, request.Images);
+                    break;
+                case NumericType.Float:
+                    embeddings = EncodeImageWithType<float>(modelName, request.Images);
+                    break;
+                case NumericType.Decimal:
+                    embeddings = EncodeImageWithType<decimal>(modelName, request.Images);
+                    break;
+                default:
+                    return BadRequest(new { error = "Unsupported numeric type." });
             }
 
             sw.Stop();
 
-            return Ok(new ImageEmbeddingResponse
+            var response = new ImageEmbeddingResponse
             {
-                Embeddings = embeddings.ToArray(),
-                ModelName = modelName,
-                EmbeddingDimension = model.EmbeddingDimension,
-                ImageSize = model.ImageSize,
+                Embeddings = embeddings,
+                RequestId = request.RequestId,
                 ProcessingTimeMs = sw.ElapsedMilliseconds,
-                RequestId = request.RequestId
-            });
+                EmbeddingDimension = embeddings.Length > 0 ? embeddings[0].Length : 0
+            };
+
+            _logger.LogInformation(
+                "Image embedding completed for model '{ModelName}' in {ElapsedMs}ms (batch size: {BatchSize})",
+                modelName, sw.ElapsedMilliseconds, request.Images.Length);
+
+            return Ok(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error encoding images for model '{ModelName}'", modelName);
-            return StatusCode(500, new { error = "An unexpected error occurred during image encoding." });
+            _logger.LogError(ex, "Unexpected error during image embedding for model '{ModelName}'", modelName);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { error = "An unexpected error occurred during image embedding." });
         }
     }
 
@@ -193,145 +205,301 @@ public class EmbeddingsController : ControllerBase
     /// Computes similarity between text and image embeddings.
     /// </summary>
     /// <param name="modelName">The name of the multimodal model to use.</param>
-    /// <param name="request">The similarity request.</param>
-    /// <returns>Similarity scores between texts and images.</returns>
+    /// <param name="request">The similarity computation request.</param>
+    /// <returns>Similarity scores between text and image embeddings.</returns>
+    /// <response code="200">Similarity computed successfully.</response>
+    /// <response code="400">Invalid request format.</response>
+    /// <response code="404">Model not found or does not support multimodal.</response>
+    /// <response code="500">Error during computation.</response>
     [HttpPost("similarity/{modelName}")]
     [ProducesResponseType(typeof(SimilarityResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public IActionResult ComputeSimilarity(string modelName, [FromBody] SimilarityRequest request)
     {
         var sw = Stopwatch.StartNew();
 
         try
         {
-            if (request.Texts == null || request.Texts.Length == 0)
+            _logger.LogDebug("Received similarity request for model '{ModelName}'", modelName);
+
+            // Validate request
+            if (request.TextEmbeddings == null || request.TextEmbeddings.Length == 0)
             {
-                return BadRequest(new { error = "Texts array is required." });
+                return BadRequest(new { error = "TextEmbeddings array is required and cannot be empty" });
             }
 
-            if (request.Images == null || request.Images.Length == 0)
+            if (request.ImageEmbeddings == null || request.ImageEmbeddings.Length == 0)
             {
-                return BadRequest(new { error = "Images array is required." });
+                return BadRequest(new { error = "ImageEmbeddings array is required and cannot be empty" });
             }
 
-            var model = _modelRepository.GetMultimodalModel<float>(modelName);
-            if (model == null)
+            // Check if model exists and is multimodal
+            var modelInfo = _modelRepository.GetModelInfo(modelName);
+            if (modelInfo == null)
             {
-                return NotFound(new { error = $"Model '{modelName}' not found or does not support multimodal embeddings." });
+                _logger.LogWarning("Model '{ModelName}' not found", modelName);
+                return NotFound(new { error = $"Model '{modelName}' not found" });
             }
 
-            // Encode all texts and images
-            var textEmbeddings = request.Texts.Select(t => model.EncodeText(t)).ToList();
-            var imageEmbeddings = request.Images.Select(i => model.EncodeImage(i)).ToList();
-
-            // Compute similarity matrix [texts × images]
-            var similarities = new double[request.Texts.Length][];
-            for (int t = 0; t < textEmbeddings.Count; t++)
+            if (!modelInfo.IsMultimodal)
             {
-                similarities[t] = new double[imageEmbeddings.Count];
-                for (int i = 0; i < imageEmbeddings.Count; i++)
-                {
-                    similarities[t][i] = Convert.ToDouble(model.ComputeSimilarity(textEmbeddings[t], imageEmbeddings[i]));
-                }
+                _logger.LogWarning("Model '{ModelName}' does not support multimodal operations", modelName);
+                return BadRequest(new { error = $"Model '{modelName}' is not a multimodal model" });
+            }
+
+            // Process based on numeric type
+            double[][] similarities;
+            switch (modelInfo.NumericType)
+            {
+                case NumericType.Double:
+                    similarities = ComputeSimilarityWithType<double>(
+                        modelName, request.TextEmbeddings, request.ImageEmbeddings);
+                    break;
+                case NumericType.Float:
+                    similarities = ComputeSimilarityWithType<float>(
+                        modelName, request.TextEmbeddings, request.ImageEmbeddings);
+                    break;
+                case NumericType.Decimal:
+                    similarities = ComputeSimilarityWithType<decimal>(
+                        modelName, request.TextEmbeddings, request.ImageEmbeddings);
+                    break;
+                default:
+                    return BadRequest(new { error = "Unsupported numeric type." });
             }
 
             sw.Stop();
 
-            return Ok(new SimilarityResponse
+            var response = new SimilarityResponse
             {
                 Similarities = similarities,
-                TextCount = request.Texts.Length,
-                ImageCount = request.Images.Length,
-                ProcessingTimeMs = sw.ElapsedMilliseconds,
-                RequestId = request.RequestId
-            });
+                RequestId = request.RequestId,
+                ProcessingTimeMs = sw.ElapsedMilliseconds
+            };
+
+            _logger.LogInformation(
+                "Similarity computed for model '{ModelName}' in {ElapsedMs}ms",
+                modelName, sw.ElapsedMilliseconds);
+
+            return Ok(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error computing similarity for model '{ModelName}'", modelName);
-            return StatusCode(500, new { error = "An unexpected error occurred during similarity computation." });
+            _logger.LogError(ex, "Unexpected error during similarity computation for model '{ModelName}'", modelName);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { error = "An unexpected error occurred during similarity computation." });
         }
     }
 
     /// <summary>
-    /// Performs zero-shot image classification.
+    /// Performs zero-shot image classification using a multimodal model.
     /// </summary>
     /// <param name="modelName">The name of the multimodal model to use.</param>
-    /// <param name="request">The classification request.</param>
-    /// <returns>Classification probabilities for each label.</returns>
+    /// <param name="request">The zero-shot classification request.</param>
+    /// <returns>Classification results with probabilities for each label.</returns>
+    /// <response code="200">Classification completed successfully.</response>
+    /// <response code="400">Invalid request format.</response>
+    /// <response code="404">Model not found or does not support multimodal.</response>
+    /// <response code="500">Error during classification.</response>
     [HttpPost("classify/{modelName}")]
     [ProducesResponseType(typeof(ZeroShotClassifyResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public IActionResult ZeroShotClassify(string modelName, [FromBody] ZeroShotClassifyRequest request)
     {
         var sw = Stopwatch.StartNew();
 
         try
         {
-            if (request.Image == null || request.Image.Length == 0)
+            _logger.LogDebug("Received zero-shot classification request for model '{ModelName}'", modelName);
+
+            // Validate request
+            if (request.ImageData == null || request.ImageData.Length == 0)
             {
-                return BadRequest(new { error = "Image data is required." });
+                return BadRequest(new { error = "ImageData is required and cannot be empty" });
             }
 
-            if (request.Labels == null || request.Labels.Length == 0)
+            if (request.ClassLabels == null || request.ClassLabels.Length == 0)
             {
-                return BadRequest(new { error = "At least one class label is required." });
+                return BadRequest(new { error = "ClassLabels array is required and cannot be empty" });
             }
 
-            var model = _modelRepository.GetMultimodalModel<float>(modelName);
-            if (model == null)
+            // Check if model exists and is multimodal
+            var modelInfo = _modelRepository.GetModelInfo(modelName);
+            if (modelInfo == null)
             {
-                return NotFound(new { error = $"Model '{modelName}' not found or does not support multimodal embeddings." });
+                _logger.LogWarning("Model '{ModelName}' not found", modelName);
+                return NotFound(new { error = $"Model '{modelName}' not found" });
             }
 
-            var classifications = model.ZeroShotClassify(request.Image, request.Labels);
+            if (!modelInfo.IsMultimodal)
+            {
+                _logger.LogWarning("Model '{ModelName}' does not support multimodal operations", modelName);
+                return BadRequest(new { error = $"Model '{modelName}' is not a multimodal model" });
+            }
+
+            // Process based on numeric type
+            Dictionary<string, double> predictions;
+            switch (modelInfo.NumericType)
+            {
+                case NumericType.Double:
+                    predictions = ZeroShotClassifyWithType<double>(
+                        modelName, request.ImageData, request.ClassLabels);
+                    break;
+                case NumericType.Float:
+                    predictions = ZeroShotClassifyWithType<float>(
+                        modelName, request.ImageData, request.ClassLabels);
+                    break;
+                case NumericType.Decimal:
+                    predictions = ZeroShotClassifyWithType<decimal>(
+                        modelName, request.ImageData, request.ClassLabels);
+                    break;
+                default:
+                    return BadRequest(new { error = "Unsupported numeric type." });
+            }
 
             sw.Stop();
 
-            return Ok(new ZeroShotClassifyResponse
+            var response = new ZeroShotClassifyResponse
             {
-                Classifications = classifications.ToDictionary(kv => kv.Key, kv => Convert.ToDouble(kv.Value)),
-                TopLabel = classifications.OrderByDescending(kv => Convert.ToDouble(kv.Value)).First().Key,
+                Predictions = predictions,
+                RequestId = request.RequestId,
                 ProcessingTimeMs = sw.ElapsedMilliseconds,
-                RequestId = request.RequestId
-            });
+                TopLabel = predictions.OrderByDescending(p => p.Value).First().Key
+            };
+
+            _logger.LogInformation(
+                "Zero-shot classification completed for model '{ModelName}' in {ElapsedMs}ms (labels: {LabelCount})",
+                modelName, sw.ElapsedMilliseconds, request.ClassLabels.Length);
+
+            return Ok(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error classifying image for model '{ModelName}'", modelName);
-            return StatusCode(500, new { error = "An unexpected error occurred during classification." });
+            _logger.LogError(ex, "Unexpected error during zero-shot classification for model '{ModelName}'", modelName);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { error = "An unexpected error occurred during zero-shot classification." });
         }
     }
 
     /// <summary>
-    /// Gets information about multimodal model capabilities.
+    /// Gets information about a multimodal model including its capabilities.
     /// </summary>
     /// <param name="modelName">The name of the model.</param>
-    /// <returns>Model capabilities and configuration.</returns>
+    /// <returns>Model information and multimodal capabilities.</returns>
+    /// <response code="200">Model information retrieved successfully.</response>
+    /// <response code="404">Model not found.</response>
     [HttpGet("info/{modelName}")]
-    [ProducesResponseType(typeof(MultimodalModelInfoResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MultimodalModelInfo), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public IActionResult GetModelInfo(string modelName)
     {
-        var model = _modelRepository.GetMultimodalModel<float>(modelName);
-        if (model == null)
+        var modelInfo = _modelRepository.GetModelInfo(modelName);
+        if (modelInfo == null)
         {
-            return NotFound(new { error = $"Model '{modelName}' not found or does not support multimodal embeddings." });
+            return NotFound(new { error = $"Model '{modelName}' not found" });
         }
 
-        return Ok(new MultimodalModelInfoResponse
+        var response = new MultimodalModelInfo
         {
-            ModelName = modelName,
-            EmbeddingDimension = model.EmbeddingDimension,
-            MaxSequenceLength = model.MaxSequenceLength,
-            ImageSize = model.ImageSize,
-            SupportedModalities = model.SupportedModalities.Select(m => m.ToString()).ToArray()
-        });
+            Name = modelInfo.Name,
+            IsMultimodal = modelInfo.IsMultimodal,
+            EmbeddingDimension = modelInfo.EmbeddingDimension,
+            MaxSequenceLength = modelInfo.MaxSequenceLength,
+            ImageSize = modelInfo.ImageSize,
+            LoadedAt = modelInfo.LoadedAt,
+            SourcePath = modelInfo.SourcePath
+        };
+
+        return Ok(response);
     }
 
-    private static double[] ConvertToDoubleArray<T>(Vector<T> vector)
+    private double[][] EncodeTextWithType<T>(string modelName, string[] texts)
+    {
+        var model = _modelRepository.GetMultimodalModel<T>(modelName);
+        if (model == null)
+        {
+            throw new InvalidOperationException($"Multimodal model '{modelName}' not found or type mismatch");
+        }
+
+        if (texts.Length == 1)
+        {
+            var embedding = model.EncodeText(texts[0]);
+            return new[] { ConvertFromVector(embedding) };
+        }
+
+        var embeddings = model.EncodeTextBatch(texts);
+        return ConvertFromMatrix(embeddings);
+    }
+
+    private double[][] EncodeImageWithType<T>(string modelName, double[][] images)
+    {
+        var model = _modelRepository.GetMultimodalModel<T>(modelName);
+        if (model == null)
+        {
+            throw new InvalidOperationException($"Multimodal model '{modelName}' not found or type mismatch");
+        }
+
+        if (images.Length == 1)
+        {
+            var embedding = model.EncodeImage(images[0]);
+            return new[] { ConvertFromVector(embedding) };
+        }
+
+        var embeddings = model.EncodeImageBatch(images);
+        return ConvertFromMatrix(embeddings);
+    }
+
+    private double[][] ComputeSimilarityWithType<T>(string modelName, double[][] textEmbeddings, double[][] imageEmbeddings)
+    {
+        var model = _modelRepository.GetMultimodalModel<T>(modelName);
+        if (model == null)
+        {
+            throw new InvalidOperationException($"Multimodal model '{modelName}' not found or type mismatch");
+        }
+
+        var similarities = new double[textEmbeddings.Length][];
+        for (int i = 0; i < textEmbeddings.Length; i++)
+        {
+            similarities[i] = new double[imageEmbeddings.Length];
+            var textVec = ConvertToVector<T>(textEmbeddings[i]);
+
+            for (int j = 0; j < imageEmbeddings.Length; j++)
+            {
+                var imageVec = ConvertToVector<T>(imageEmbeddings[j]);
+                var similarity = model.ComputeSimilarity(textVec, imageVec);
+                similarities[i][j] = Convert.ToDouble(similarity);
+            }
+        }
+
+        return similarities;
+    }
+
+    private Dictionary<string, double> ZeroShotClassifyWithType<T>(string modelName, double[] imageData, string[] classLabels)
+    {
+        var model = _modelRepository.GetMultimodalModel<T>(modelName);
+        if (model == null)
+        {
+            throw new InvalidOperationException($"Multimodal model '{modelName}' not found or type mismatch");
+        }
+
+        var result = model.ZeroShotClassify(imageData, classLabels);
+        return result.ToDictionary(kvp => kvp.Key, kvp => Convert.ToDouble(kvp.Value));
+    }
+
+    private static Vector<T> ConvertToVector<T>(double[] values)
+    {
+        var result = new Vector<T>(values.Length);
+        for (int i = 0; i < values.Length; i++)
+        {
+            result[i] = (T)Convert.ChangeType(values[i], typeof(T));
+        }
+        return result;
+    }
+
+    private static double[] ConvertFromVector<T>(Vector<T> vector)
     {
         var result = new double[vector.Length];
         for (int i = 0; i < vector.Length; i++)
@@ -340,12 +508,26 @@ public class EmbeddingsController : ControllerBase
         }
         return result;
     }
+
+    private static double[][] ConvertFromMatrix<T>(Matrix<T> matrix)
+    {
+        var result = new double[matrix.Rows][];
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            result[i] = new double[matrix.Columns];
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                result[i][j] = Convert.ToDouble(matrix[i, j]);
+            }
+        }
+        return result;
+    }
 }
 
 #region Request/Response DTOs
 
 /// <summary>
-/// Request for text embedding generation.
+/// Request for encoding text into embeddings.
 /// </summary>
 public class TextEmbeddingRequest
 {
@@ -371,14 +553,9 @@ public class TextEmbeddingResponse
     public double[][] Embeddings { get; set; } = Array.Empty<double[]>();
 
     /// <summary>
-    /// The model used for encoding.
+    /// The request identifier if provided.
     /// </summary>
-    public string ModelName { get; set; } = string.Empty;
-
-    /// <summary>
-    /// The dimension of each embedding vector.
-    /// </summary>
-    public int EmbeddingDimension { get; set; }
+    public string? RequestId { get; set; }
 
     /// <summary>
     /// Processing time in milliseconds.
@@ -386,19 +563,19 @@ public class TextEmbeddingResponse
     public long ProcessingTimeMs { get; set; }
 
     /// <summary>
-    /// The request identifier if provided.
+    /// The dimension of each embedding vector.
     /// </summary>
-    public string? RequestId { get; set; }
+    public int EmbeddingDimension { get; set; }
 }
 
 /// <summary>
-/// Request for image embedding generation.
+/// Request for encoding images into embeddings.
 /// </summary>
 public class ImageEmbeddingRequest
 {
     /// <summary>
     /// The preprocessed image data as flattened arrays.
-    /// Each array should have size: 3 × ImageSize × ImageSize.
+    /// Each inner array should be [channels * height * width] in CHW format.
     /// </summary>
     public double[][] Images { get; set; } = Array.Empty<double[]>();
 
@@ -419,19 +596,9 @@ public class ImageEmbeddingResponse
     public double[][] Embeddings { get; set; } = Array.Empty<double[]>();
 
     /// <summary>
-    /// The model used for encoding.
+    /// The request identifier if provided.
     /// </summary>
-    public string ModelName { get; set; } = string.Empty;
-
-    /// <summary>
-    /// The dimension of each embedding vector.
-    /// </summary>
-    public int EmbeddingDimension { get; set; }
-
-    /// <summary>
-    /// The expected image size.
-    /// </summary>
-    public int ImageSize { get; set; }
+    public string? RequestId { get; set; }
 
     /// <summary>
     /// Processing time in milliseconds.
@@ -439,25 +606,25 @@ public class ImageEmbeddingResponse
     public long ProcessingTimeMs { get; set; }
 
     /// <summary>
-    /// The request identifier if provided.
+    /// The dimension of each embedding vector.
     /// </summary>
-    public string? RequestId { get; set; }
+    public int EmbeddingDimension { get; set; }
 }
 
 /// <summary>
-/// Request for computing text-image similarity.
+/// Request for computing similarity between text and image embeddings.
 /// </summary>
 public class SimilarityRequest
 {
     /// <summary>
-    /// The texts to compare.
+    /// The text embeddings to compare.
     /// </summary>
-    public string[] Texts { get; set; } = Array.Empty<string>();
+    public double[][] TextEmbeddings { get; set; } = Array.Empty<double[]>();
 
     /// <summary>
-    /// The preprocessed images to compare.
+    /// The image embeddings to compare.
     /// </summary>
-    public double[][] Images { get; set; } = Array.Empty<double[]>();
+    public double[][] ImageEmbeddings { get; set; } = Array.Empty<double[]>();
 
     /// <summary>
     /// Optional request identifier for tracking.
@@ -471,29 +638,20 @@ public class SimilarityRequest
 public class SimilarityResponse
 {
     /// <summary>
-    /// Similarity matrix [texts × images].
+    /// Similarity matrix where [i,j] is the similarity between text i and image j.
+    /// Values range from -1 to 1 for normalized embeddings.
     /// </summary>
     public double[][] Similarities { get; set; } = Array.Empty<double[]>();
-
-    /// <summary>
-    /// Number of texts compared.
-    /// </summary>
-    public int TextCount { get; set; }
-
-    /// <summary>
-    /// Number of images compared.
-    /// </summary>
-    public int ImageCount { get; set; }
-
-    /// <summary>
-    /// Processing time in milliseconds.
-    /// </summary>
-    public long ProcessingTimeMs { get; set; }
 
     /// <summary>
     /// The request identifier if provided.
     /// </summary>
     public string? RequestId { get; set; }
+
+    /// <summary>
+    /// Processing time in milliseconds.
+    /// </summary>
+    public long ProcessingTimeMs { get; set; }
 }
 
 /// <summary>
@@ -502,14 +660,14 @@ public class SimilarityResponse
 public class ZeroShotClassifyRequest
 {
     /// <summary>
-    /// The preprocessed image data.
+    /// The preprocessed image data as a flattened array.
     /// </summary>
-    public double[] Image { get; set; } = Array.Empty<double>();
+    public double[] ImageData { get; set; } = Array.Empty<double>();
 
     /// <summary>
-    /// The candidate class labels.
+    /// The candidate class labels for classification.
     /// </summary>
-    public string[] Labels { get; set; } = Array.Empty<string>();
+    public string[] ClassLabels { get; set; } = Array.Empty<string>();
 
     /// <summary>
     /// Optional request identifier for tracking.
@@ -518,60 +676,70 @@ public class ZeroShotClassifyRequest
 }
 
 /// <summary>
-/// Response containing classification results.
+/// Response containing zero-shot classification results.
 /// </summary>
 public class ZeroShotClassifyResponse
 {
     /// <summary>
-    /// The classification probabilities for each label.
+    /// Probability scores for each class label.
     /// </summary>
-    public Dictionary<string, double> Classifications { get; set; } = new();
+    public Dictionary<string, double> Predictions { get; set; } = new();
 
     /// <summary>
-    /// The label with the highest probability.
+    /// The class label with the highest probability.
     /// </summary>
     public string TopLabel { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Processing time in milliseconds.
-    /// </summary>
-    public long ProcessingTimeMs { get; set; }
 
     /// <summary>
     /// The request identifier if provided.
     /// </summary>
     public string? RequestId { get; set; }
+
+    /// <summary>
+    /// Processing time in milliseconds.
+    /// </summary>
+    public long ProcessingTimeMs { get; set; }
 }
 
 /// <summary>
-/// Response containing multimodal model information.
+/// Information about a multimodal model.
 /// </summary>
-public class MultimodalModelInfoResponse
+public class MultimodalModelInfo
 {
     /// <summary>
     /// The model name.
     /// </summary>
-    public string ModelName { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
 
     /// <summary>
-    /// The embedding dimension.
+    /// Whether the model supports multimodal operations.
     /// </summary>
-    public int EmbeddingDimension { get; set; }
+    public bool IsMultimodal { get; set; }
 
     /// <summary>
-    /// The maximum text sequence length.
+    /// The embedding dimension (null if not a multimodal model).
     /// </summary>
-    public int MaxSequenceLength { get; set; }
+    public int? EmbeddingDimension { get; set; }
 
     /// <summary>
-    /// The expected image size.
+    /// The maximum sequence length for text (null if not a multimodal model).
     /// </summary>
-    public int ImageSize { get; set; }
+    public int? MaxSequenceLength { get; set; }
 
     /// <summary>
-    /// The supported modalities.
+    /// The expected image size in pixels (null if not a multimodal model).
     /// </summary>
-    public string[] SupportedModalities { get; set; } = Array.Empty<string>();
+    public int? ImageSize { get; set; }
+
+    /// <summary>
+    /// When the model was loaded.
+    /// </summary>
+    public DateTime LoadedAt { get; set; }
+
+    /// <summary>
+    /// The source path of the model (if applicable).
+    /// </summary>
+    public string? SourcePath { get; set; }
 }
 
 #endregion

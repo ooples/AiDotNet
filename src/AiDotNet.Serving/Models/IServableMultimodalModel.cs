@@ -16,8 +16,8 @@ namespace AiDotNet.Serving.Models;
 /// </para>
 /// <para><b>For Beginners:</b> Multimodal models understand multiple types of data:
 ///
-/// - **Text**: "A photo of a cat" → [0.2, 0.5, 0.1, ...]
-/// - **Image**: (cat.jpg) → [0.21, 0.48, 0.12, ...]
+/// - **Text**: "A photo of a cat" -> [0.2, 0.5, 0.1, ...]
+/// - **Image**: (cat.jpg) -> [0.21, 0.48, 0.12, ...]
 ///
 /// Because both outputs are in the same "space", you can compare them directly:
 /// - High similarity = text describes the image well

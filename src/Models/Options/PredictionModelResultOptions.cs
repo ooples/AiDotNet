@@ -1,4 +1,5 @@
 using AiDotNet.Agents;
+using AiDotNet.Augmentation;
 using AiDotNet.Benchmarking.Models;
 using AiDotNet.CheckpointManagement;
 using AiDotNet.Configuration;
@@ -20,7 +21,6 @@ using AiDotNet.RetrievalAugmentedGeneration.Graph;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization.Configuration;
 using AiDotNet.Tokenization.Interfaces;
-using AiDotNet.Augmentation;
 using AiDotNet.TrainingMonitoring;
 using AiDotNet.TrainingMonitoring.ExperimentTracking;
 
