@@ -60,6 +60,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion;
 /// </remarks>
 public class SubQueryExpansion : QueryExpansionBase
 {
+    /// <summary>
+    /// Timeout for regex operations to prevent ReDoS attacks.
+    /// </summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
     private readonly string _llmEndpoint;
     private readonly string _llmApiKey;
     private readonly int _maxSubQueries;
@@ -121,7 +126,7 @@ public class SubQueryExpansion : QueryExpansionBase
         var subQueries = new List<string>();
 
         // Split on common conjunctions and separators
-        var parts = Regex.Split(query, @"\s+(?:and|or|also|as well as|furthermore|moreover|additionally)\s+", RegexOptions.IgnoreCase)
+        var parts = Regex.Split(query, @"\s+(?:and|or|also|as well as|furthermore|moreover|additionally)\s+", RegexOptions.IgnoreCase, RegexTimeout)
             .Concat(query.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
             .Select(p => p.Trim())
             .Where(p => p.Length > 10)
@@ -178,7 +183,7 @@ public class SubQueryExpansion : QueryExpansionBase
             "where", "who", "which"
         };
 
-        var words = Regex.Split(query.ToLower(), @"\W+")
+        var words = Regex.Split(query.ToLower(), @"\W+", RegexOptions.None, RegexTimeout)
             .Where(w => w.Length > 3 && !stopWords.Contains(w))
             .ToList();
 

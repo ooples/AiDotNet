@@ -444,11 +444,13 @@ public class EmbeddingsController : ControllerBase
 
         if (images.Length == 1)
         {
-            var embedding = model.EncodeImage(images[0]);
+            var imageVector = ConvertToVector<T>(images[0]);
+            var embedding = model.EncodeImage(imageVector);
             return new[] { ConvertFromVector(embedding) };
         }
 
-        var embeddings = model.EncodeImageBatch(images);
+        var imageVectors = images.Select(ConvertToVector<T>);
+        var embeddings = model.EncodeImageBatch(imageVectors);
         return ConvertFromMatrix(embeddings);
     }
 
@@ -485,7 +487,8 @@ public class EmbeddingsController : ControllerBase
             throw new InvalidOperationException($"Multimodal model '{modelName}' not found or type mismatch");
         }
 
-        var result = model.ZeroShotClassify(imageData, classLabels);
+        var imageVector = ConvertToVector<T>(imageData);
+        var result = model.ZeroShotClassify(imageVector, classLabels);
         return result.ToDictionary(kvp => kvp.Key, kvp => Convert.ToDouble(kvp.Value));
     }
 

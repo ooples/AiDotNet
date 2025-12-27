@@ -2,6 +2,8 @@ using System.Text.RegularExpressions;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 
+// ReSharper disable once UnusedMember.Local
+
 /// <summary>
 /// Removes common stop words from queries to improve retrieval precision.
 /// </summary>
@@ -24,6 +26,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 /// </remarks>
 public class StopWordRemovalQueryProcessor : QueryProcessorBase
 {
+    /// <summary>
+    /// Timeout for regex operations to prevent ReDoS attacks.
+    /// </summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
     private readonly HashSet<string> _stopWords;
     private readonly bool _preserveFirstWord;
 
@@ -45,7 +52,7 @@ public class StopWordRemovalQueryProcessor : QueryProcessorBase
         if (string.IsNullOrWhiteSpace(query))
             return query;
 
-        var words = Regex.Split(query, @"(\s+)")
+        var words = Regex.Split(query, @"(\s+)", RegexOptions.None, RegexTimeout)
             .Where(w => !string.IsNullOrWhiteSpace(w) || w == " ")
             .ToList();
 

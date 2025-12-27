@@ -1022,6 +1022,62 @@ public enum ModelType
 
     SiameseNetwork,
 
+    Clip,
+
+    /// <summary>
+    /// BLIP (Bootstrapped Language-Image Pre-training) for vision-language tasks.
+    /// </summary>
+    Blip,
+
+    /// <summary>
+    /// BLIP-2 (Bootstrapped Language-Image Pre-training 2) with Q-Former architecture.
+    /// </summary>
+    Blip2,
+
+    /// <summary>
+    /// LLaVA (Large Language and Vision Assistant) for visual instruction following.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> LLaVA connects a vision encoder with a large language model,
+    /// enabling conversational AI about images. Think of it as giving ChatGPT the ability to see!
+    /// </para>
+    /// </remarks>
+    LLaVA,
+
+    /// <summary>
+    /// Flamingo model for in-context visual learning with few-shot capabilities.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Flamingo can learn new visual tasks from just a few examples.
+    /// Show it a few image-text pairs, and it learns the pattern to apply to new images.
+    /// </para>
+    /// </remarks>
+    Flamingo,
+
+    /// <summary>
+    /// VideoCLIP for video-text understanding and retrieval.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> VideoCLIP extends CLIP to understand videos, not just images.
+    /// It can match videos with text descriptions, recognize actions, and caption videos.
+    /// </para>
+    /// </remarks>
+    VideoCLIP,
+
+    /// <summary>
+    /// ImageBind for binding 6+ modalities (image, text, audio, video, thermal, depth, IMU).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ImageBind connects ALL types of data in a shared space.
+    /// Search audio by text, match thermal images to photos, or find videos from motion data!
+    /// </para>
+    /// </remarks>
+    ImageBind,
+
     InterventionAnalysisModel,
 
     TBATSModel,
