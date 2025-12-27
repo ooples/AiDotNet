@@ -5,9 +5,9 @@ namespace AiDotNet.WindowFunctions;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The Blackman-Nuttall window is a high-performance window function that provides excellent side lobe 
+/// The Blackman-Nuttall window is a high-performance window function that provides excellent side lobe
 /// suppression, making it ideal for spectral analysis. It uses a weighted cosine series with four terms:
-/// w(n) = 0.3635819 - 0.4891775 * cos(2pn/(N-1)) + 0.1365995 * cos(4pn/(N-1)) - 0.0106411 * cos(6pn/(N-1))
+/// w(n) = 0.3635819 - 0.4891775 * cos(2πn/(N-1)) + 0.1365995 * cos(4πn/(N-1)) - 0.0106411 * cos(6πn/(N-1))
 /// where n is the sample index and N is the window size.
 /// </para>
 /// <para><b>For Beginners:</b> A window function is like a special lens that helps focus on specific parts of your data.
@@ -57,7 +57,7 @@ public class BlackmanNuttallWindow<T> : IWindowFunction<T>
     /// <remarks>
     /// <para>
     /// This method implements the Blackman-Nuttall window function formula:
-    /// w(n) = 0.3635819 - 0.4891775 * cos(2pn/(N-1)) + 0.1365995 * cos(4pn/(N-1)) - 0.0106411 * cos(6pn/(N-1))
+    /// w(n) = 0.3635819 - 0.4891775 * cos(2πn/(N-1)) + 0.1365995 * cos(4πn/(N-1)) - 0.0106411 * cos(6πn/(N-1))
     /// It calculates the window function value for each point from 0 to windowSize-1.
     /// </para>
     /// <para><b>For Beginners:</b> This method creates the actual window values based on the size you specify.
