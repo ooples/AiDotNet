@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.CompilerServices;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Operators;
 using TensorPrimitives = System.Numerics.Tensors.TensorPrimitives;
@@ -3579,9 +3580,38 @@ public class CpuEngine : IEngine
     {
         if (a == null) throw new ArgumentNullException(nameof(a));
         if (b == null) throw new ArgumentNullException(nameof(b));
-        if (a.Rank != 2 || b.Rank != 2)
-            throw new ArgumentException($"TensorMatMul requires 2D tensors. Got ranks {a.Rank} and {b.Rank}.");
+        if (a.Rank < 2) throw new ArgumentException($"TensorMatMul requires tensors of rank >= 2. Got rank {a.Rank} for first tensor.");
+        if (b.Rank < 2) throw new ArgumentException($"TensorMatMul requires tensors of rank >= 2. Got rank {b.Rank} for second tensor.");
 
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Standard 2D x 2D case
+        if (a.Rank == 2 && b.Rank == 2)
+        {
+            return TensorMatMul2D(a, b, numOps);
+        }
+
+        // ND x 2D case: broadcast 2D weights over batch dimensions
+        // This is the common transformer pattern: [batch, seq, features] @ [features, output]
+        if (b.Rank == 2)
+        {
+            return TensorMatMulBatched(a, b, numOps);
+        }
+
+        // 3D x 3D or ND x ND: full batched matmul (batch dimensions must match)
+        if (a.Rank == b.Rank)
+        {
+            return TensorMatMulFullBatched(a, b, numOps);
+        }
+
+        throw new ArgumentException($"Unsupported TensorMatMul combination: ranks {a.Rank} and {b.Rank}. Supported: 2Dx2D, NDx2D, NDxND (same rank).");
+    }
+
+    /// <summary>
+    /// Standard 2D matrix multiplication: [M, N] @ [N, P] = [M, P]
+    /// </summary>
+    private Tensor<T> TensorMatMul2D<T>(Tensor<T> a, Tensor<T> b, INumericOperations<T> numOps)
+    {
         int m = a.Shape[0];
         int n = a.Shape[1];
         int p = b.Shape[1];
@@ -3589,7 +3619,6 @@ public class CpuEngine : IEngine
         if (n != b.Shape[0])
             throw new ArgumentException($"Matrix dimensions incompatible: [{m},{n}] x [{b.Shape[0]},{p}]");
 
-        var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Tensor<T>([m, p]);
 
         Parallel.For(0, m, i =>
@@ -3606,6 +3635,141 @@ public class CpuEngine : IEngine
         });
 
         return result;
+    }
+
+    /// <summary>
+    /// Batched matmul: [..., M, N] @ [N, P] = [..., M, P]
+    /// Weights (b) are broadcasted over all batch dimensions of a.
+    /// </summary>
+    private Tensor<T> TensorMatMulBatched<T>(Tensor<T> a, Tensor<T> b, INumericOperations<T> numOps)
+    {
+        int aRank = a.Rank;
+        int m = a.Shape[aRank - 2];  // Second to last dim
+        int n = a.Shape[aRank - 1];  // Last dim
+        int p = b.Shape[1];          // Output features
+
+        if (n != b.Shape[0])
+            throw new ArgumentException($"Matrix dimensions incompatible for batched matmul: last dim of a is {n}, first dim of b is {b.Shape[0]}");
+
+        // Calculate batch size (product of all dimensions except last 2)
+        int batchSize = 1;
+        var batchShape = new int[aRank - 2];
+        for (int i = 0; i < aRank - 2; i++)
+        {
+            batchSize *= a.Shape[i];
+            batchShape[i] = a.Shape[i];
+        }
+
+        // Output shape: [...batch dims..., m, p]
+        var outputShape = new int[aRank];
+        for (int i = 0; i < aRank - 2; i++)
+        {
+            outputShape[i] = a.Shape[i];
+        }
+        outputShape[aRank - 2] = m;
+        outputShape[aRank - 1] = p;
+
+        var result = new Tensor<T>(outputShape);
+        var aData = a.ToArray();
+        var bData = b.ToArray();
+        var resultData = result.ToArray();
+
+        int matrixSizeA = m * n;
+        int matrixSizeResult = m * p;
+
+        Parallel.For(0, batchSize, batch =>
+        {
+            int aOffset = batch * matrixSizeA;
+            int resultOffset = batch * matrixSizeResult;
+
+            for (int i = 0; i < m; i++)
+            {
+                for (int j = 0; j < p; j++)
+                {
+                    T sum = numOps.Zero;
+                    for (int k = 0; k < n; k++)
+                    {
+                        T aVal = aData[aOffset + i * n + k];
+                        T bVal = bData[k * p + j];
+                        sum = numOps.Add(sum, numOps.Multiply(aVal, bVal));
+                    }
+                    resultData[resultOffset + i * p + j] = sum;
+                }
+            }
+        });
+
+        return new Tensor<T>(outputShape, new Vector<T>(resultData));
+    }
+
+    /// <summary>
+    /// Full batched matmul: [..., M, N] @ [..., N, P] = [..., M, P]
+    /// Batch dimensions must match.
+    /// </summary>
+    private Tensor<T> TensorMatMulFullBatched<T>(Tensor<T> a, Tensor<T> b, INumericOperations<T> numOps)
+    {
+        int rank = a.Rank;
+        int m = a.Shape[rank - 2];
+        int n = a.Shape[rank - 1];
+        int p = b.Shape[rank - 1];
+
+        if (n != b.Shape[rank - 2])
+            throw new ArgumentException($"Matrix dimensions incompatible for batched matmul: [{m},{n}] x [{b.Shape[rank - 2]},{p}]");
+
+        // Verify batch dimensions match
+        for (int i = 0; i < rank - 2; i++)
+        {
+            if (a.Shape[i] != b.Shape[i])
+                throw new ArgumentException($"Batch dimensions must match. Got {a.Shape[i]} vs {b.Shape[i]} at dimension {i}");
+        }
+
+        // Calculate batch size
+        int batchSize = 1;
+        for (int i = 0; i < rank - 2; i++)
+        {
+            batchSize *= a.Shape[i];
+        }
+
+        // Output shape
+        var outputShape = new int[rank];
+        for (int i = 0; i < rank - 2; i++)
+        {
+            outputShape[i] = a.Shape[i];
+        }
+        outputShape[rank - 2] = m;
+        outputShape[rank - 1] = p;
+
+        var result = new Tensor<T>(outputShape);
+        var aData = a.ToArray();
+        var bData = b.ToArray();
+        var resultData = result.ToArray();
+
+        int matrixSizeA = m * n;
+        int matrixSizeB = n * p;
+        int matrixSizeResult = m * p;
+
+        Parallel.For(0, batchSize, batch =>
+        {
+            int aOffset = batch * matrixSizeA;
+            int bOffset = batch * matrixSizeB;
+            int resultOffset = batch * matrixSizeResult;
+
+            for (int i = 0; i < m; i++)
+            {
+                for (int j = 0; j < p; j++)
+                {
+                    T sum = numOps.Zero;
+                    for (int k = 0; k < n; k++)
+                    {
+                        T aVal = aData[aOffset + i * n + k];
+                        T bVal = bData[bOffset + k * p + j];
+                        sum = numOps.Add(sum, numOps.Multiply(aVal, bVal));
+                    }
+                    resultData[resultOffset + i * p + j] = sum;
+                }
+            }
+        });
+
+        return new Tensor<T>(outputShape, new Vector<T>(resultData));
     }
 
     /// <inheritdoc/>
@@ -6573,53 +6737,92 @@ public class CpuEngine : IEngine
         var numOps = MathHelper.GetNumericOperations<T>();
         T eps = numOps.FromDouble(epsilon);
 
-        int batch = input.Shape[0];
-        int features = input.Shape[1];
+        // Determine normalized dimensions from gamma shape
+        // gamma.Shape defines which trailing dimensions to normalize over
+        int normalizedDims = gamma.Shape.Length;
+        int inputRank = input.Shape.Length;
+        
+        if (normalizedDims > inputRank)
+        {
+            throw new ArgumentException($"Gamma shape ({string.Join(", ", gamma.Shape)}) has more dimensions than input shape ({string.Join(", ", input.Shape)})");
+        }
+
+        // Verify that gamma shape matches the last N dimensions of input
+        for (int i = 0; i < normalizedDims; i++)
+        {
+            int inputDimIdx = inputRank - normalizedDims + i;
+            if (gamma.Shape[i] != input.Shape[inputDimIdx])
+            {
+                throw new ArgumentException($"Gamma shape ({string.Join(", ", gamma.Shape)}) does not match the last {normalizedDims} dimensions of input shape ({string.Join(", ", input.Shape)})");
+            }
+        }
+
+        // Calculate batch size (product of non-normalized dimensions)
+        // and feature size (product of normalized dimensions)
+        int batchSize = 1;
+        int batchDims = inputRank - normalizedDims;
+        var batchShape = new int[Math.Max(1, batchDims)];
+        
+        for (int i = 0; i < batchDims; i++)
+        {
+            batchSize *= input.Shape[i];
+            batchShape[i] = input.Shape[i];
+        }
+        
+        // Handle case where all dimensions are normalized (batchDims = 0)
+        if (batchDims == 0)
+        {
+            batchSize = 1;
+            batchShape = new int[] { 1 };
+        }
+
+        int featureSize = gamma.Length; // product of normalized dimensions
 
         var inputData = input.ToArray();
         var gammaData = gamma.ToArray();
         var betaData = beta.ToArray();
 
-        var meanData = new T[batch];
-        var varData = new T[batch];
-        var outputData = new T[batch * features];
+        var meanData = new T[batchSize];
+        var varData = new T[batchSize];
+        var outputData = new T[batchSize * featureSize];
 
-        // Compute mean per sample
-        for (int b = 0; b < batch; b++)
+        // Compute mean per batch position
+        for (int b = 0; b < batchSize; b++)
         {
             T sum = numOps.Zero;
-            for (int f = 0; f < features; f++)
+            for (int f = 0; f < featureSize; f++)
             {
-                sum = numOps.Add(sum, inputData[b * features + f]);
+                sum = numOps.Add(sum, inputData[b * featureSize + f]);
             }
-            meanData[b] = numOps.Divide(sum, numOps.FromDouble(features));
+            meanData[b] = numOps.Divide(sum, numOps.FromDouble(featureSize));
         }
 
-        // Compute variance per sample
-        for (int b = 0; b < batch; b++)
+        // Compute variance per batch position
+        for (int b = 0; b < batchSize; b++)
         {
             T sumSq = numOps.Zero;
-            for (int f = 0; f < features; f++)
+            for (int f = 0; f < featureSize; f++)
             {
-                T diff = numOps.Subtract(inputData[b * features + f], meanData[b]);
+                T diff = numOps.Subtract(inputData[b * featureSize + f], meanData[b]);
                 sumSq = numOps.Add(sumSq, numOps.Multiply(diff, diff));
             }
-            varData[b] = numOps.Divide(sumSq, numOps.FromDouble(features));
+            varData[b] = numOps.Divide(sumSq, numOps.FromDouble(featureSize));
         }
 
         // Normalize and scale
-        Parallel.For(0, batch, b =>
+        Parallel.For(0, batchSize, b =>
         {
             T invStd = numOps.Divide(numOps.One, numOps.Sqrt(numOps.Add(varData[b], eps)));
-            for (int f = 0; f < features; f++)
+            for (int f = 0; f < featureSize; f++)
             {
-                T normalized = numOps.Multiply(numOps.Subtract(inputData[b * features + f], meanData[b]), invStd);
-                outputData[b * features + f] = numOps.Add(numOps.Multiply(gammaData[f], normalized), betaData[f]);
+                T normalized = numOps.Multiply(numOps.Subtract(inputData[b * featureSize + f], meanData[b]), invStd);
+                outputData[b * featureSize + f] = numOps.Add(numOps.Multiply(gammaData[f], normalized), betaData[f]);
             }
         });
 
-        mean = new Tensor<T>([batch], new Vector<T>(meanData));
-        variance = new Tensor<T>([batch], new Vector<T>(varData));
+        // Create mean and variance tensors with batch shape
+        mean = new Tensor<T>(batchShape, new Vector<T>(meanData));
+        variance = new Tensor<T>(batchShape, new Vector<T>(varData));
         return new Tensor<T>(input.Shape, new Vector<T>(outputData));
     }
 
@@ -6632,9 +6835,21 @@ public class CpuEngine : IEngine
         var numOps = MathHelper.GetNumericOperations<T>();
         T eps = numOps.FromDouble(epsilon);
 
-        int batch = input.Shape[0];
-        int features = input.Shape[1];
-        T featuresT = numOps.FromDouble(features);
+        // Determine normalized dimensions from gamma shape (same as forward pass)
+        int normalizedDims = gamma.Shape.Length;
+        int inputRank = input.Shape.Length;
+        int batchDims = inputRank - normalizedDims;
+
+        // Calculate batch size and feature size
+        int batchSize = 1;
+        for (int i = 0; i < batchDims; i++)
+        {
+            batchSize *= input.Shape[i];
+        }
+        if (batchDims == 0) batchSize = 1;
+
+        int featureSize = gamma.Length;
+        T featureSizeT = numOps.FromDouble(featureSize);
 
         var gradOutputData = gradOutput.ToArray();
         var inputData = input.ToArray();
@@ -6642,24 +6857,24 @@ public class CpuEngine : IEngine
         var meanData = mean.ToArray();
         var varData = variance.ToArray();
 
-        var gradGammaData = new T[features];
-        var gradBetaData = new T[features];
-        var gradInputData = new T[batch * features];
+        var gradGammaData = new T[featureSize];
+        var gradBetaData = new T[featureSize];
+        var gradInputData = new T[batchSize * featureSize];
 
         // Initialize gradGamma and gradBeta to zero
-        for (int f = 0; f < features; f++)
+        for (int f = 0; f < featureSize; f++)
         {
             gradGammaData[f] = numOps.Zero;
             gradBetaData[f] = numOps.Zero;
         }
 
         // Compute gradGamma and gradBeta
-        for (int b = 0; b < batch; b++)
+        for (int b = 0; b < batchSize; b++)
         {
             T invStd = numOps.Divide(numOps.One, numOps.Sqrt(numOps.Add(varData[b], eps)));
-            for (int f = 0; f < features; f++)
+            for (int f = 0; f < featureSize; f++)
             {
-                int idx = b * features + f;
+                int idx = b * featureSize + f;
                 T normalized = numOps.Multiply(numOps.Subtract(inputData[idx], meanData[b]), invStd);
                 gradGammaData[f] = numOps.Add(gradGammaData[f], numOps.Multiply(gradOutputData[idx], normalized));
                 gradBetaData[f] = numOps.Add(gradBetaData[f], gradOutputData[idx]);
@@ -6667,34 +6882,34 @@ public class CpuEngine : IEngine
         }
 
         // Compute gradInput
-        Parallel.For(0, batch, b =>
+        Parallel.For(0, batchSize, b =>
         {
             T invStd = numOps.Divide(numOps.One, numOps.Sqrt(numOps.Add(varData[b], eps)));
             T sumGrad = numOps.Zero;
             T sumGradX = numOps.Zero;
 
-            for (int f = 0; f < features; f++)
+            for (int f = 0; f < featureSize; f++)
             {
-                int idx = b * features + f;
+                int idx = b * featureSize + f;
                 T scaledGrad = numOps.Multiply(gammaData[f], gradOutputData[idx]);
                 sumGrad = numOps.Add(sumGrad, scaledGrad);
                 sumGradX = numOps.Add(sumGradX, numOps.Multiply(scaledGrad, numOps.Subtract(inputData[idx], meanData[b])));
             }
 
-            for (int f = 0; f < features; f++)
+            for (int f = 0; f < featureSize; f++)
             {
-                int idx = b * features + f;
+                int idx = b * featureSize + f;
                 T normalized = numOps.Multiply(numOps.Subtract(inputData[idx], meanData[b]), invStd);
                 T gradNorm = numOps.Multiply(gammaData[f], gradOutputData[idx]);
-                T term1 = numOps.Multiply(featuresT, gradNorm);
+                T term1 = numOps.Multiply(featureSizeT, gradNorm);
                 T term2 = sumGrad;
                 T term3 = numOps.Multiply(normalized, numOps.Multiply(invStd, sumGradX));
-                gradInputData[idx] = numOps.Multiply(numOps.Divide(invStd, featuresT), numOps.Subtract(numOps.Subtract(term1, term2), term3));
+                gradInputData[idx] = numOps.Multiply(numOps.Divide(invStd, featureSizeT), numOps.Subtract(numOps.Subtract(term1, term2), term3));
             }
         });
 
-        gradGamma = new Tensor<T>([features], new Vector<T>(gradGammaData));
-        gradBeta = new Tensor<T>([features], new Vector<T>(gradBetaData));
+        gradGamma = new Tensor<T>(gamma.Shape, new Vector<T>(gradGammaData));
+        gradBeta = new Tensor<T>(gamma.Shape, new Vector<T>(gradBetaData));
         return new Tensor<T>(input.Shape, new Vector<T>(gradInputData));
     }
 

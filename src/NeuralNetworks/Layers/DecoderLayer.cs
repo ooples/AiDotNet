@@ -36,7 +36,8 @@ public class DecoderLayer<T> : LayerBase<T>
     /// <summary>
     /// The feed-forward neural network component of the decoder layer.
     /// </summary>
-    private readonly FeedForwardLayer<T> _feedForward;
+    private readonly FeedForwardLayer<T> _feedForward1;
+    private readonly FeedForwardLayer<T> _feedForward2;
 
     /// <summary>
     /// Layer normalization applied after self-attention.
@@ -79,6 +80,11 @@ public class DecoderLayer<T> : LayerBase<T>
     private Tensor<T>? _lastEncoderOutputGradient;
 
     /// <summary>
+    /// Tracks whether the last input was originally 2D (and thus reshaped to 3D).
+    /// </summary>
+    private bool _inputWas2D = false;
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
@@ -96,7 +102,11 @@ public class DecoderLayer<T> : LayerBase<T>
     {
         _selfAttention = new AttentionLayer<T>(inputSize, attentionSize, activation);
         _crossAttention = new AttentionLayer<T>(inputSize, attentionSize, activation);
-        _feedForward = new FeedForwardLayer<T>(inputSize, feedForwardSize, activation);
+        
+        // Standard transformer FFN: Linear(input -> ff) + activation + Linear(ff -> input)
+        _feedForward1 = new FeedForwardLayer<T>(inputSize, feedForwardSize, activation);
+        _feedForward2 = new FeedForwardLayer<T>(feedForwardSize, inputSize, (IActivationFunction<T>?)null);
+        
         InputSize = inputSize;
 
         _norm1 = new LayerNormalizationLayer<T>(inputSize);
@@ -117,7 +127,11 @@ public class DecoderLayer<T> : LayerBase<T>
     {
         _selfAttention = new AttentionLayer<T>(inputSize, attentionSize, activation);
         _crossAttention = new AttentionLayer<T>(inputSize, attentionSize, activation);
-        _feedForward = new FeedForwardLayer<T>(inputSize, feedForwardSize, activation);
+        
+        // Standard transformer FFN: Linear(input -> ff) + activation + Linear(ff -> input)
+        _feedForward1 = new FeedForwardLayer<T>(inputSize, feedForwardSize, activation);
+        _feedForward2 = new FeedForwardLayer<T>(feedForwardSize, inputSize, (IVectorActivationFunction<T>?)null);
+        
         InputSize = inputSize;
 
         _norm1 = new LayerNormalizationLayer<T>(inputSize);
@@ -146,16 +160,39 @@ public class DecoderLayer<T> : LayerBase<T>
         var encoderOutput = inputs[1];
         Tensor<T>? attentionMask = inputs.Length == 3 ? inputs[2] : null;
 
-        if (decoderInput.Shape.Length != 2 || decoderInput.Shape[1] != InputSize)
-            throw new ArgumentException("Decoder input tensor must have shape [batch_size, input_size].");
+        // Handle both 2D [batch, features] and 3D [batch, seq, features] input
+        _inputWas2D = decoderInput.Shape.Length == 2;
+        Tensor<T> input3D, encoderOutput3D;
 
-        if (encoderOutput.Shape.Length != 2 || encoderOutput.Shape[1] != InputSize)
-            throw new ArgumentException("Encoder output tensor must have shape [batch_size, input_size].");
+        if (_inputWas2D)
+        {
+            // 2D input: [batch, features] -> [batch, 1, features]
+            if (decoderInput.Shape[1] != InputSize)
+                throw new ArgumentException($"Decoder input dimension {decoderInput.Shape[1]} does not match expected InputSize {InputSize}.");
+            if (encoderOutput.Shape[1] != InputSize)
+                throw new ArgumentException($"Encoder output dimension {encoderOutput.Shape[1]} does not match expected InputSize {InputSize}.");
 
-        if (attentionMask != null && (attentionMask.Shape.Length != 2 || attentionMask.Shape[0] != decoderInput.Shape[0]))
-            throw new ArgumentException("Attention mask tensor must have shape [batch_size, sequence_length] and match the batch size of the input.");
+            int batchSize = decoderInput.Shape[0];
+            input3D = decoderInput.Reshape(batchSize, 1, InputSize);
+            encoderOutput3D = encoderOutput.Reshape(encoderOutput.Shape[0], 1, InputSize);
+        }
+        else if (decoderInput.Shape.Length == 3)
+        {
+            // 3D input: validate shape
+            if (decoderInput.Shape[2] != InputSize)
+                throw new ArgumentException($"Decoder input dimension {decoderInput.Shape[2]} does not match expected InputSize {InputSize}.");
+            if (encoderOutput.Shape.Length != 3 || encoderOutput.Shape[2] != InputSize)
+                throw new ArgumentException($"Encoder output must be 3D with last dimension matching InputSize {InputSize}.");
 
-        return ForwardInternal(decoderInput, encoderOutput, attentionMask);
+            input3D = decoderInput;
+            encoderOutput3D = encoderOutput;
+        }
+        else
+        {
+            throw new ArgumentException($"Decoder input must be 2D or 3D. Got tensor with rank {decoderInput.Shape.Length}.");
+        }
+
+        return ForwardInternal(input3D, encoderOutput3D, attentionMask);
     }
 
     /// <summary>
@@ -175,7 +212,11 @@ public class DecoderLayer<T> : LayerBase<T>
     {
         _lastInput = input;
         _lastEncoderOutput = encoderOutput;
-        Tensor<T> mask = attentionMask ?? Tensor<T>.CreateDefault(input.Shape, NumOps.One); // Default to all ones if no mask is provided
+        
+        // For 3D input, create appropriate mask shape
+        int batchSize = input.Shape[0];
+        int seqLen = input.Shape[1];
+        Tensor<T> mask = attentionMask ?? Tensor<T>.CreateDefault([batchSize, seqLen, seqLen], NumOps.Zero);
 
         // Self-attention (now with optional mask)
         var selfAttentionOutput = _selfAttention.Forward(input, mask);
@@ -185,9 +226,16 @@ public class DecoderLayer<T> : LayerBase<T>
         var crossAttentionOutput = _crossAttention.Forward(normalized1, encoderOutput, mask);
         var normalized2 = _norm2.Forward(normalized1.Add(crossAttentionOutput));
 
-        // Feed-forward (unchanged)
-        var feedForwardOutput = _feedForward.Forward(normalized2);
+        // Standard transformer FFN: Linear(input -> ff) + activation + Linear(ff -> input)
+        var ffExpanded = _feedForward1.Forward(normalized2);
+        var feedForwardOutput = _feedForward2.Forward(ffExpanded);
         var output = _norm3.Forward(normalized2.Add(feedForwardOutput));
+
+        // If input was originally 2D, reshape output back to 2D
+        if (_inputWas2D)
+        {
+            output = output.Reshape(batchSize, output.Shape[2]);
+        }
 
         return output;
     }
@@ -290,7 +338,9 @@ public class DecoderLayer<T> : LayerBase<T>
     /// </remarks>
     private (Tensor<T> inputGradient, Tensor<T> encoderOutputGradient) BackwardInternal(Tensor<T> outputGradient)
     {
-        var dNormalized2 = _feedForward.Backward(outputGradient);
+        // Backward through FFN (reverse order: projection then expansion)
+        var dFF2 = _feedForward2.Backward(outputGradient);
+        var dNormalized2 = _feedForward1.Backward(dFF2);
         dNormalized2 = dNormalized2.Add(outputGradient);
         var dNorm2 = _norm2.Backward(dNormalized2);
 
@@ -320,7 +370,8 @@ public class DecoderLayer<T> : LayerBase<T>
     {
         _selfAttention.UpdateParameters(learningRate);
         _crossAttention.UpdateParameters(learningRate);
-        _feedForward.UpdateParameters(learningRate);
+        _feedForward1.UpdateParameters(learningRate);
+        _feedForward2.UpdateParameters(learningRate);
         _norm1.UpdateParameters(learningRate);
         _norm2.UpdateParameters(learningRate);
         _norm3.UpdateParameters(learningRate);
@@ -341,15 +392,18 @@ public class DecoderLayer<T> : LayerBase<T>
         // Use Vector<T>.Concatenate for efficient parameter collection
         var selfAttnParams = _selfAttention.GetParameters();
         var crossAttnParams = _crossAttention.GetParameters();
-        var ffParams = _feedForward.GetParameters();
+        var ff1Params = _feedForward1.GetParameters();
+        var ff2Params = _feedForward2.GetParameters();
         var norm1Params = _norm1.GetParameters();
         var norm2Params = _norm2.GetParameters();
         var norm3Params = _norm3.GetParameters();
 
         return Vector<T>.Concatenate(
             Vector<T>.Concatenate(
-                Vector<T>.Concatenate(selfAttnParams, crossAttnParams),
-                Vector<T>.Concatenate(ffParams, norm1Params)),
+                Vector<T>.Concatenate(
+                    Vector<T>.Concatenate(selfAttnParams, crossAttnParams),
+                    Vector<T>.Concatenate(ff1Params, ff2Params)),
+                norm1Params),
             Vector<T>.Concatenate(norm2Params, norm3Params));
     }
 
@@ -367,7 +421,8 @@ public class DecoderLayer<T> : LayerBase<T>
         int index = 0;
         index = UpdateComponentParameters(_selfAttention, parameters, index);
         index = UpdateComponentParameters(_crossAttention, parameters, index);
-        index = UpdateComponentParameters(_feedForward, parameters, index);
+        index = UpdateComponentParameters(_feedForward1, parameters, index);
+        index = UpdateComponentParameters(_feedForward2, parameters, index);
         index = UpdateComponentParameters(_norm1, parameters, index);
         index = UpdateComponentParameters(_norm2, parameters, index);
         UpdateComponentParameters(_norm3, parameters, index);
@@ -413,7 +468,8 @@ public class DecoderLayer<T> : LayerBase<T>
         _lastEncoderOutput = null;
         _selfAttention.ResetState();
         _crossAttention.ResetState();
-        _feedForward.ResetState();
+        _feedForward1.ResetState();
+        _feedForward2.ResetState();
         _norm1.ResetState();
         _norm2.ResetState();
         _norm3.ResetState();
@@ -448,7 +504,7 @@ public class DecoderLayer<T> : LayerBase<T>
     public override int ParameterCount =>
         _selfAttention.ParameterCount +
         _crossAttention.ParameterCount +
-        _feedForward.ParameterCount +
+        _feedForward1.ParameterCount + _feedForward2.ParameterCount +
         _norm1.ParameterCount +
         _norm2.ParameterCount +
         _norm3.ParameterCount;
@@ -481,7 +537,8 @@ public class DecoderLayer<T> : LayerBase<T>
         var normalized2 = _norm2.ExportComputationGraph([residual2]);
 
         // Feed-forward network
-        var feedForwardOutput = _feedForward.ExportComputationGraph([normalized2]);
+        var ffExpanded = _feedForward1.ExportComputationGraph([normalized2]);
+        var feedForwardOutput = _feedForward2.ExportComputationGraph([ffExpanded]);
         var residual3 = TensorOperations<T>.Add(normalized2, feedForwardOutput);
         var output = _norm3.ExportComputationGraph([residual3]);
 

@@ -243,15 +243,52 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        if (input.Shape[0] > maxSequenceLength)
+        // Handle both 2D [seq, embed] and 3D [batch, seq, embed] input
+        bool is3D = input.Shape.Length == 3;
+        int seqLength = is3D ? input.Shape[1] : input.Shape[0];
+        int inputEmbedDim = is3D ? input.Shape[2] : input.Shape[1];
+
+        if (seqLength > maxSequenceLength)
         {
-            throw new ArgumentException($"Input sequence length {input.Shape[0]} exceeds maximum sequence length {maxSequenceLength}");
+            throw new ArgumentException(
+                $"Input sequence length {seqLength} exceeds maximum sequence length {maxSequenceLength}");
         }
 
-        var slicedEncodings = encodings.Slice(0, 0, input.Shape[0], embeddingSize);
+        if (inputEmbedDim != embeddingSize)
+        {
+            throw new ArgumentException(
+                $"Input embedding dimension {inputEmbedDim} does not match expected dimension {embeddingSize}");
+        }
 
-        // Use GPU-accelerated addition
-        return Engine.TensorAdd(input, slicedEncodings);
+        // Slice encodings to match input sequence length: [seq, embed]
+        var slicedEncodings = encodings.Slice(0, 0, seqLength, embeddingSize);
+
+        if (is3D)
+        {
+            // For 3D input [batch, seq, embed], broadcast encodings across batch dimension
+            int batchSize = input.Shape[0];
+
+            // Expand sliced encodings to [batch, seq, embed] by repeating for each batch
+            var broadcastedEncodings = new Tensor<T>([batchSize, seqLength, embeddingSize]);
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int s = 0; s < seqLength; s++)
+                {
+                    for (int e = 0; e < embeddingSize; e++)
+                    {
+                        broadcastedEncodings[b, s, e] = slicedEncodings[s, e];
+                    }
+                }
+            }
+
+            // Use GPU-accelerated addition
+            return Engine.TensorAdd(input, broadcastedEncodings);
+        }
+        else
+        {
+            // For 2D input [seq, embed], add directly
+            return Engine.TensorAdd(input, slicedEncodings);
+        }
     }
 
     /// <summary>
@@ -308,10 +345,33 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         // Create computation nodes
         var inputNode = Autodiff.TensorOperations<T>.Variable(inputTensor, "input", requiresGradient: true);
 
-        // Slice encodings to match input sequence length
-        var sequenceLength = outputGradient.Shape[0];
+        // Handle both 2D [seq, embed] and 3D [batch, seq, embed] gradients
+        bool is3D = outputGradient.Shape.Length == 3;
+        var sequenceLength = is3D ? outputGradient.Shape[1] : outputGradient.Shape[0];
         var slicedEncodings = encodings.Slice(0, 0, sequenceLength, embeddingSize);
-        var encodingsNode = Autodiff.TensorOperations<T>.Constant(slicedEncodings, "positional_encodings");
+        
+        Tensor<T> encodingsForGraph;
+        if (is3D)
+        {
+            // Broadcast encodings to match 3D shape
+            int batchSize = outputGradient.Shape[0];
+            encodingsForGraph = new Tensor<T>([batchSize, sequenceLength, embeddingSize]);
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int s = 0; s < sequenceLength; s++)
+                {
+                    for (int e = 0; e < embeddingSize; e++)
+                    {
+                        encodingsForGraph[b, s, e] = slicedEncodings[s, e];
+                    }
+                }
+            }
+        }
+        else
+        {
+            encodingsForGraph = slicedEncodings;
+        }
+        var encodingsNode = Autodiff.TensorOperations<T>.Constant(encodingsForGraph, "positional_encodings");
 
         // Forward: output = input + positional_encodings
         var outputNode = Autodiff.TensorOperations<T>.Add(inputNode, encodingsNode);

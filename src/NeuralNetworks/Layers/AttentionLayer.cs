@@ -90,7 +90,15 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
     private Tensor<T>? _lastQueryInput;
     private Tensor<T>? _lastKeyInput;
+        /// <summary>
+    /// The cached value input from the last forward pass.
+    /// </summary>
     private Tensor<T>? _lastValueInput;
+
+    /// <summary>
+    /// Tracks whether the last input was originally 2D (and thus reshaped to 3D).
+    /// </summary>
+    private bool _inputWas2D = false;
     private Tensor<T>? _lastMask;
 
     /// <summary>
@@ -281,46 +289,68 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Validate input tensor shape: must be 3D [Batch, Seq, InputSize]
+        // Validate input tensor
         if (input == null)
         {
             throw new ArgumentNullException(nameof(input), "Input tensor cannot be null.");
         }
-        if (input.Shape.Length != 3)
+
+        // Handle both 2D [Batch, InputSize] and 3D [Batch, Seq, InputSize] input
+        _inputWas2D = input.Shape.Length == 2;
+        Tensor<T> input3D;
+
+        if (_inputWas2D)
         {
-            throw new ArgumentException(
-                $"AttentionLayer requires a 3D tensor with shape [Batch, Seq, InputSize]. " +
-                $"Got tensor with rank {input.Shape.Length}.",
-                nameof(input));
+            // 2D input: [Batch, InputSize] -> [Batch, 1, InputSize]
+            if (input.Shape[1] != _inputSize)
+            {
+                throw new ArgumentException(
+                    $"AttentionLayer input size mismatch. Expected InputSize={_inputSize}, " +
+                    $"but got {input.Shape[1]} in 2D shape [{input.Shape[0]}, {input.Shape[1]}].",
+                    nameof(input));
+            }
+            int batchSize2D = input.Shape[0];
+            input3D = input.Reshape(batchSize2D, 1, _inputSize);
         }
-        if (input.Shape[0] <= 0 || input.Shape[1] <= 0)
+        else if (input.Shape.Length == 3)
         {
-            throw new ArgumentException(
-                $"AttentionLayer requires positive batch size and sequence length. " +
-                $"Got shape [{input.Shape[0]}, {input.Shape[1]}, {input.Shape[2]}].",
-                nameof(input));
+            // 3D input: validate shape
+            if (input.Shape[0] <= 0 || input.Shape[1] <= 0)
+            {
+                throw new ArgumentException(
+                    $"AttentionLayer requires positive batch size and sequence length. " +
+                    $"Got shape [{input.Shape[0]}, {input.Shape[1]}, {input.Shape[2]}].",
+                    nameof(input));
+            }
+            if (input.Shape[2] != _inputSize)
+            {
+                throw new ArgumentException(
+                    $"AttentionLayer input size mismatch. Expected InputSize={_inputSize}, " +
+                    $"but got {input.Shape[2]} in shape [{input.Shape[0]}, {input.Shape[1]}, {input.Shape[2]}].",
+                    nameof(input));
+            }
+            input3D = input;
         }
-        if (input.Shape[2] != _inputSize)
+        else
         {
             throw new ArgumentException(
-                $"AttentionLayer input size mismatch. Expected InputSize={_inputSize}, " +
-                $"but got {input.Shape[2]} in shape [{input.Shape[0]}, {input.Shape[1]}, {input.Shape[2]}].",
+                $"AttentionLayer requires a 2D or 3D tensor. Got tensor with rank {input.Shape.Length}.",
                 nameof(input));
         }
 
         _lastInput = input;
-        _lastQueryInput = input;
-        _lastKeyInput = input;
+        _lastQueryInput = input3D;
+        _lastKeyInput = input3D;
         _lastWasCrossAttention = false;
         _lastUsedMask = false;
         _lastMask = null;
 
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape[1];
+        int batchSize = input3D.Shape[0];
+        int seqLen = input3D.Shape[1];
 
         // 1. Project Input to Q, K, V
         // Reshape input to 2D [Batch*Seq, InputSize] for efficient MatrixMultiply
-        var input2D = input.Reshape(batchSize * seqLen, _inputSize);
+        var input2D = input3D.Reshape(batchSize * seqLen, _inputSize);
 
         // Transpose weights to [InputSize, AttSize] using Engine 2D transpose
         var WqT = Engine.TensorTranspose(_Wq);
@@ -354,6 +384,12 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // 5. Output: Weights @ V
         // [B, S, S] @ [B, S, A] -> [B, S, A]
         var output = Engine.BatchMatMul(_lastAttentionWeights, V);
+
+        // If input was 2D, reshape output back to 2D [Batch, AttentionSize]
+        if (_inputWas2D)
+        {
+            output = output.Reshape(batchSize, _attentionSize);
+        }
 
         return output;
     }
@@ -402,8 +438,15 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             var primaryInput = inputs[0];
             var secondInput = inputs[1];
 
-            // Check if the second input could be a mask (typically has a different shape)
-            if (primaryInput.Shape[1] == secondInput.Shape[1] && secondInput.Shape.Length == primaryInput.Shape.Length)
+            // Detect mask vs cross-attention key/value tensor:
+            // - Mask shape: [batch, seqLen, seqLen] (last two dims equal, typically != _inputSize)
+            // - Cross-attention K/V: [batch, seqLen, inputSize] (last dim == _inputSize)
+            bool looksLikeMask = secondInput.Rank >= 2 && 
+                                 secondInput.Shape[secondInput.Rank - 1] == secondInput.Shape[secondInput.Rank - 2];
+            bool looksLikeCrossAttn = secondInput.Rank >= 2 && 
+                                      secondInput.Shape[secondInput.Rank - 1] == _inputSize;
+
+            if (looksLikeCrossAttn && !looksLikeMask)
             {
                 // This appears to be cross-attention (query from primaryInput, key/value from secondInput)
                 return ForwardCrossAttention(primaryInput, secondInput, null);
@@ -442,16 +485,31 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T> ForwardMaskedAttention(Tensor<T> input, Tensor<T> mask)
     {
         _lastInput = input;
-        _lastQueryInput = input;
-        _lastKeyInput = input;
-        _lastValueInput = input;
         _lastMask = mask;
 
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape[1];
+        // Handle 2D [Batch, InputSize] or 3D [Batch, Seq, InputSize] input
+        _inputWas2D = input.Shape.Length == 2;
+        Tensor<T> input3D;
+
+        if (_inputWas2D)
+        {
+            int batchSize2D = input.Shape[0];
+            input3D = input.Reshape(batchSize2D, 1, _inputSize);
+        }
+        else
+        {
+            input3D = input;
+        }
+
+        _lastQueryInput = input3D;
+        _lastKeyInput = input3D;
+        _lastValueInput = input3D;
+
+        int batchSize = input3D.Shape[0];
+        int seqLen = input3D.Shape[1];
 
         // 1. Project Input to Q, K, V
-        var input2D = input.Reshape(batchSize * seqLen, _inputSize);
+        var input2D = input3D.Reshape(batchSize * seqLen, _inputSize);
         var WqT = Engine.TensorTranspose(_Wq);
         var WkT = Engine.TensorTranspose(_Wk);
         var WvT = Engine.TensorTranspose(_Wv);
@@ -480,6 +538,13 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // 6. Output: Weights @ V
         var output = Engine.BatchMatMul(_lastAttentionWeights, V);
+
+        // If input was 2D, reshape output back to 2D
+        if (_inputWas2D)
+        {
+            output = output.Reshape(batchSize, _attentionSize);
+        }
+
         return output;
     }
 
@@ -497,26 +562,51 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastUsedMask = mask != null;
         _lastMask = mask;
         _lastInput = queryInput;
-        _lastQueryInput = queryInput;
-        _lastKeyInput = keyValueInput;
-        _lastValueInput = keyValueInput;
 
-        int batchSize = queryInput.Shape[0];
-        int seqLenQ = queryInput.Shape[1];
-        int seqLenKV = keyValueInput.Shape[1];
+        // Handle 2D [Batch, InputSize] or 3D [Batch, Seq, InputSize] input
+        _inputWas2D = queryInput.Shape.Length == 2;
+        Tensor<T> query3D, keyValue3D;
+
+        if (_inputWas2D)
+        {
+            int batchSize2D = queryInput.Shape[0];
+            query3D = queryInput.Reshape(batchSize2D, 1, _inputSize);
+            // KeyValue input should match query dimensionality
+            if (keyValueInput.Shape.Length == 2)
+            {
+                keyValue3D = keyValueInput.Reshape(keyValueInput.Shape[0], 1, _inputSize);
+            }
+            else
+            {
+                keyValue3D = keyValueInput;
+            }
+        }
+        else
+        {
+            query3D = queryInput;
+            keyValue3D = keyValueInput;
+        }
+
+        _lastQueryInput = query3D;
+        _lastKeyInput = keyValue3D;
+        _lastValueInput = keyValue3D;
+
+        int batchSize = query3D.Shape[0];
+        int seqLenQ = query3D.Shape[1];
+        int seqLenKV = keyValue3D.Shape[1];
 
         // Project Q
-        var query2D = queryInput.Reshape(batchSize * seqLenQ, _inputSize);
+        var queryFlat = query3D.Reshape(batchSize * seqLenQ, _inputSize);
         var WqT = Engine.TensorTranspose(_Wq);
-        var Q_flat = Engine.TensorMatMul(query2D, WqT);
+        var Q_flat = Engine.TensorMatMul(queryFlat, WqT);
         var Q = Q_flat.Reshape(batchSize, seqLenQ, _attentionSize);
 
         // Project K, V
-        var kv2D = keyValueInput.Reshape(batchSize * seqLenKV, _inputSize);
+        var kvFlat = keyValue3D.Reshape(batchSize * seqLenKV, _inputSize);
         var WkT = Engine.TensorTranspose(_Wk);
         var WvT = Engine.TensorTranspose(_Wv);
-        var K_flat = Engine.TensorMatMul(kv2D, WkT);
-        var V_flat = Engine.TensorMatMul(kv2D, WvT);
+        var K_flat = Engine.TensorMatMul(kvFlat, WkT);
+        var V_flat = Engine.TensorMatMul(kvFlat, WvT);
         var K = K_flat.Reshape(batchSize, seqLenKV, _attentionSize);
         var V = V_flat.Reshape(batchSize, seqLenKV, _attentionSize);
 
@@ -538,6 +628,13 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Output
         var output = Engine.BatchMatMul(_lastAttentionWeights, V);
+
+        // If input was 2D, reshape output back to 2D
+        if (_inputWas2D)
+        {
+            output = output.Reshape(batchSize, _attentionSize);
+        }
+
         return output;
     }
 
