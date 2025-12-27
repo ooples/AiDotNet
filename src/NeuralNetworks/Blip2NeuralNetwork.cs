@@ -1207,12 +1207,43 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         using var results = _qformer.Run(inputs);
         var output = results.First().AsTensor<float>();
 
-        // Extract embedding
+        // Extract embedding from Q-Former output
+        // Q-Former outputs shape: [batch_size, num_query_tokens, hidden_size]
+        // We use mean pooling over query tokens for the embedding
         var embedding = new Vector<T>(_embeddingDimension);
-        int embDim = Math.Min(_embeddingDimension, (int)output.Length);
-        for (int i = 0; i < embDim; i++)
+
+        if (output.Rank == 3)
         {
-            embedding[i] = NumOps.FromDouble(output[0, i]);
+            // 3D tensor: [batch, num_query_tokens, hidden_size]
+            int numQueryTokens = (int)output.Dimensions[1];
+            int hiddenSize = (int)output.Dimensions[2];
+            int embDim = Math.Min(_embeddingDimension, hiddenSize);
+
+            // Mean pool over query tokens
+            for (int i = 0; i < embDim; i++)
+            {
+                double sum = 0;
+                for (int q = 0; q < numQueryTokens; q++)
+                {
+                    sum += output[0, q, i];
+                }
+                embedding[i] = NumOps.FromDouble(sum / numQueryTokens);
+            }
+        }
+        else if (output.Rank == 2)
+        {
+            // 2D tensor: [batch, hidden_size] - direct extraction
+            int hiddenSize = (int)output.Dimensions[1];
+            int embDim = Math.Min(_embeddingDimension, hiddenSize);
+            for (int i = 0; i < embDim; i++)
+            {
+                embedding[i] = NumOps.FromDouble(output[0, i]);
+            }
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                $"Unexpected Q-Former output rank: {output.Rank}. Expected 2 or 3 dimensions.");
         }
 
         return NormalizeVector(embedding);

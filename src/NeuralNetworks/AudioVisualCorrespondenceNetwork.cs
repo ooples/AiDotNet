@@ -68,9 +68,8 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     // Separation network components
     private readonly ILayer<T> _separationMaskPredictor;
 
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
-    private readonly Random _randomGenerator;
 
     // Scene labels for classification
     private readonly List<string> _sceneLabels;
@@ -100,18 +99,16 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     /// <param name="audioSampleRate">Expected audio sample rate.</param>
     /// <param name="videoFrameRate">Expected video frame rate.</param>
     /// <param name="numEncoderLayers">Number of encoder layers per modality.</param>
-    /// <param name="optimizer">Optimizer for training.</param>
+    /// <param name="optimizer">Gradient-based optimizer for training.</param>
     /// <param name="lossFunction">Loss function for training.</param>
-    /// <param name="seed">Random seed for reproducibility.</param>
     public AudioVisualCorrespondenceNetwork(
         NeuralNetworkArchitecture<T> architecture,
         int embeddingDimension = DEFAULT_EMBEDDING_DIM,
         int audioSampleRate = DEFAULT_SAMPLE_RATE,
         double videoFrameRate = DEFAULT_FRAME_RATE,
         int numEncoderLayers = 6,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        int? seed = null)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new ContrastiveLoss<T>(), 1.0)
     {
         _embeddingDimension = embeddingDimension;
@@ -120,11 +117,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         _numEncoderLayers = numEncoderLayers;
         _hiddenDim = embeddingDimension * 4;
 
-        _randomGenerator = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
-            : RandomHelper.CreateSeededRandom(Environment.TickCount);
-
-        _optimizer = optimizer ?? new Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new ContrastiveLoss<T>();
 
         _sceneLabels = new List<string>();
@@ -477,32 +470,145 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
         if (audioList.Count != visualList.Count)
         {
-            throw new ArgumentException("Audio and visual samples must have matching counts.");
+            throw new ArgumentException(
+                $"Number of audio samples ({audioList.Count}) must match number of visual sample groups ({visualList.Count}).",
+                nameof(visualSamples));
+        }
+
+        if (audioList.Count == 0)
+        {
+            throw new ArgumentException("At least one sample pair is required for training.", nameof(audioSamples));
         }
 
         SetTrainingMode(true);
 
-        for (int epoch = 0; epoch < epochs; epoch++)
+        try
         {
-            var totalLoss = NumOps.Zero;
-
-            for (int i = 0; i < audioList.Count; i++)
+            for (int epoch = 0; epoch < epochs; epoch++)
             {
-                var audioEmb = GetAudioEmbedding(audioList[i], _audioSampleRate);
-                var visualEmb = GetVisualEmbedding(visualList[i]);
+                T epochLoss = NumOps.Zero;
+                int sampleCount = 0;
 
-                // Compute contrastive loss
-                var similarity = ComputeCosineSimilarity(audioEmb, visualEmb);
-                var target = NumOps.FromDouble(1.0);
-                var loss = ComputeContrastiveLoss(similarity, target);
+                for (int i = 0; i < audioList.Count; i++)
+                {
+                    var audio = audioList[i];
+                    var frames = visualList[i];
 
-                totalLoss = NumOps.Add(totalLoss, loss);
+                    if (frames.Count == 0) continue;
 
-                // Backward pass would go here in full implementation
+                    // Forward pass: compute embeddings
+                    var audioEmb = GetAudioEmbedding(audio, _audioSampleRate);
+                    var visualEmb = GetVisualEmbedding(frames);
+
+                    // Compute contrastive loss using vectorized cosine similarity
+                    T similarity = Engine.CosineSimilarity(audioEmb, visualEmb);
+
+                    // Target is 1.0 for matched pairs (positive pairs)
+                    T target = NumOps.One;
+                    T loss = _lossFunction.CalculateLoss(
+                        new Vector<T>(1) { [0] = similarity },
+                        new Vector<T>(1) { [0] = target });
+
+                    // Backward pass: compute gradients for contrastive loss
+                    var outputGrad = _lossFunction.CalculateDerivative(
+                        new Vector<T>(1) { [0] = similarity },
+                        new Vector<T>(1) { [0] = target });
+
+                    // Propagate gradient through embedding layers
+                    // For cosine similarity d(sim)/d(a) = (b - sim*a) / (||a|| * ||b||)
+                    var audioNorm = ComputeVectorMagnitude(audioEmb);
+                    var visualNorm = ComputeVectorMagnitude(visualEmb);
+                    T normProduct = NumOps.Multiply(audioNorm, visualNorm);
+
+                    if (NumOps.ToDouble(normProduct) > 1e-8)
+                    {
+                        // Gradient w.r.t. audio embedding
+                        var audioGrad = new Vector<T>(_embeddingDimension);
+                        var visualGrad = new Vector<T>(_embeddingDimension);
+                        T gradScale = NumOps.Divide(outputGrad[0], normProduct);
+
+                        for (int j = 0; j < _embeddingDimension; j++)
+                        {
+                            // d(cos)/d(a_j) = (b_j - sim * a_j) / (||a|| * ||b||)
+                            audioGrad[j] = NumOps.Multiply(gradScale,
+                                NumOps.Subtract(visualEmb[j], NumOps.Multiply(similarity, audioEmb[j])));
+                            // d(cos)/d(b_j) = (a_j - sim * b_j) / (||a|| * ||b||)
+                            visualGrad[j] = NumOps.Multiply(gradScale,
+                                NumOps.Subtract(audioEmb[j], NumOps.Multiply(similarity, visualEmb[j])));
+                        }
+
+                        // Backpropagate through audio encoder
+                        var audioGradTensor = Tensor<T>.FromVector(audioGrad);
+                        BackpropagateAudioEncoder(audioGradTensor);
+
+                        // Backpropagate through visual encoder
+                        var visualGradTensor = Tensor<T>.FromVector(visualGrad);
+                        BackpropagateVisualEncoder(visualGradTensor);
+
+                        // Update parameters using optimizer
+                        _optimizer.UpdateParameters(Layers);
+                    }
+
+                    epochLoss = NumOps.Add(epochLoss, loss);
+                    sampleCount++;
+                }
+
+                if (sampleCount > 0)
+                {
+                    LastLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(sampleCount));
+                }
+            }
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>
+    /// Backpropagates gradients through the audio encoder layers.
+    /// </summary>
+    private void BackpropagateAudioEncoder(Tensor<T> gradient)
+    {
+        // Backprop through output projection
+        var current = _audioOutputProjection.Backward(gradient);
+
+        // Backprop through encoder layers in reverse (3 layers per block)
+        for (int i = _audioEncoderLayers.Count - 1; i >= 0; i -= 3)
+        {
+            if (i >= 2)
+            {
+                current = _audioEncoderLayers[i].Backward(current);     // FFN2
+                current = _audioEncoderLayers[i - 1].Backward(current); // FFN1
+                current = _audioEncoderLayers[i - 2].Backward(current); // Attention
             }
         }
 
-        SetTrainingMode(false);
+        // Backprop through input projection
+        _audioInputProjection.Backward(current);
+    }
+
+    /// <summary>
+    /// Backpropagates gradients through the visual encoder layers.
+    /// </summary>
+    private void BackpropagateVisualEncoder(Tensor<T> gradient)
+    {
+        // Backprop through output projection
+        var current = _visualOutputProjection.Backward(gradient);
+
+        // Backprop through encoder layers in reverse (3 layers per block)
+        for (int i = _visualEncoderLayers.Count - 1; i >= 0; i -= 3)
+        {
+            if (i >= 2)
+            {
+                current = _visualEncoderLayers[i].Backward(current);     // FFN2
+                current = _visualEncoderLayers[i - 1].Backward(current); // FFN1
+                current = _visualEncoderLayers[i - 2].Backward(current); // Attention
+            }
+        }
+
+        // Backprop through input projection
+        _visualInputProjection.Backward(current);
     }
 
     #endregion
@@ -536,6 +642,14 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
     private Tensor<T> ApplyAudioEncoder(Tensor<T> spectrogram)
     {
+        // Validate layer count is a multiple of 3 (attention + 2 FFN layers per block)
+        if (_audioEncoderLayers.Count % 3 != 0)
+        {
+            throw new InvalidOperationException(
+                $"Audio encoder layer count ({_audioEncoderLayers.Count}) must be a multiple of 3 " +
+                "(each block contains attention + 2 FFN layers).");
+        }
+
         var projected = _audioInputProjection.Forward(spectrogram);
 
         // Add positional embeddings
@@ -571,6 +685,14 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
     private Tensor<T> ApplyVisualEncoder(Tensor<T> frame)
     {
+        // Validate layer count is a multiple of 3 (attention + 2 FFN layers per block)
+        if (_visualEncoderLayers.Count % 3 != 0)
+        {
+            throw new InvalidOperationException(
+                $"Visual encoder layer count ({_visualEncoderLayers.Count}) must be a multiple of 3 " +
+                "(each block contains attention + 2 FFN layers).");
+        }
+
         // Flatten spatial dimensions for transformer
         var flattened = FlattenToPatches(frame);
         var projected = _visualInputProjection.Forward(flattened);
@@ -618,6 +740,17 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         var width = frame.Shape[^1];
 
         const int patchSize = 16;
+
+        // Validate dimensions are divisible by patch size
+        if (height % patchSize != 0 || width % patchSize != 0)
+        {
+            throw new ArgumentException(
+                $"Image dimensions ({height}x{width}) must be divisible by patch size ({patchSize}). " +
+                $"Remainder pixels would be truncated: height remainder={height % patchSize}, " +
+                $"width remainder={width % patchSize}. Consider resizing the input image.",
+                nameof(frame));
+        }
+
         var numPatchesH = height / patchSize;
         var numPatchesW = width / patchSize;
         var numPatches = numPatchesH * numPatchesW;
@@ -723,20 +856,20 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
     private Vector<T> GlobalAveragePool(Tensor<T> features)
     {
-        var embedding = new Vector<T>(_embeddingDimension);
         var seqLen = features.Shape[0];
+        var embedding = new Vector<T>(_embeddingDimension);
 
+        // Build vectors for each embedding dimension and use vectorized sum
         for (int j = 0; j < _embeddingDimension; j++)
         {
-            var sum = NumOps.Zero;
+            var columnVector = new Vector<T>(seqLen);
             for (int i = 0; i < seqLen; i++)
             {
                 var idx = i * _embeddingDimension + j;
-                if (idx < features.Length)
-                {
-                    sum = NumOps.Add(sum, features.Data[idx]);
-                }
+                columnVector[i] = idx < features.Length ? features.Data[idx] : NumOps.Zero;
             }
+            // Use IEngine vectorized sum
+            T sum = Engine.Sum(columnVector);
             embedding[j] = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
         }
 
@@ -745,7 +878,8 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
     private Vector<T> NormalizeVector(Vector<T> vector)
     {
-        var magnitude = ComputeVectorMagnitude(vector);
+        // Use IEngine vectorized operations for L2 normalization
+        T magnitude = ComputeVectorMagnitude(vector);
         var magValue = NumOps.ToDouble(magnitude);
 
         if (magValue < 1e-8)
@@ -753,23 +887,14 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
             return vector;
         }
 
-        var normalized = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            normalized[i] = NumOps.Divide(vector[i], magnitude);
-        }
-
-        return normalized;
+        // Vectorized division by scalar
+        return Engine.Divide(vector, magnitude);
     }
 
     private T ComputeVectorMagnitude(Vector<T> vector)
     {
-        var sumSq = NumOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(vector[i], vector[i]));
-        }
-
+        // Use IEngine vectorized dot product for sum of squares
+        T sumSq = Engine.DotProduct(vector, vector);
         return NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sumSq)));
     }
 
@@ -780,27 +905,8 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
             return NumOps.Zero;
         }
 
-        var dot = NumOps.Zero;
-        var magA = NumOps.Zero;
-        var magB = NumOps.Zero;
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            dot = NumOps.Add(dot, NumOps.Multiply(a[i], b[i]));
-            magA = NumOps.Add(magA, NumOps.Multiply(a[i], a[i]));
-            magB = NumOps.Add(magB, NumOps.Multiply(b[i], b[i]));
-        }
-
-        var magProduct = NumOps.Multiply(
-            NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(magA))),
-            NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(magB))));
-
-        if (NumOps.ToDouble(magProduct) < 1e-8)
-        {
-            return NumOps.Zero;
-        }
-
-        return NumOps.Divide(dot, magProduct);
+        // Use IEngine vectorized cosine similarity
+        return Engine.CosineSimilarity(a, b);
     }
 
     private Vector<T> ConcatenateVectors(Vector<T> a, Vector<T> b)
@@ -822,59 +928,40 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
     private Tensor<T> ApplyGelu(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            var x = NumOps.ToDouble(input.Data[i]);
-            var gelu = 0.5 * x * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (x + 0.044715 * x * x * x)));
-            output.Data[i] = NumOps.FromDouble(gelu);
-        }
-
-        return output;
+        // Use IEngine vectorized GELU activation
+        return Engine.GELU(input);
     }
 
     private Tensor<T> ApplySigmoid(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            var x = NumOps.ToDouble(input.Data[i]);
-            output.Data[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-x)));
-        }
-
-        return output;
+        // Use IEngine vectorized Sigmoid activation
+        return Engine.Sigmoid(input);
     }
 
     private Tensor<T> AddResidual(Tensor<T> residual, Tensor<T> output)
     {
-        var result = new Tensor<T>(output.Shape);
-        var minLength = Math.Min(residual.Length, output.Length);
-
-        for (int i = 0; i < minLength; i++)
-        {
-            result.Data[i] = NumOps.Add(residual.Data[i], output.Data[i]);
-        }
-
-        return result;
+        // Use IEngine vectorized tensor addition
+        return Engine.TensorAdd(residual, output);
     }
 
     private Tensor<T> ApplyMask(Tensor<T> spectrogram, Tensor<T> mask)
     {
-        var result = new Tensor<T>(spectrogram.Shape);
         var numFrames = spectrogram.Shape[0];
         var numBins = spectrogram.Shape[1];
 
+        // Broadcast mask across all frames for vectorized multiplication
+        var broadcastedMask = new Tensor<T>([numFrames, numBins]);
         for (int frame = 0; frame < numFrames; frame++)
         {
             for (int bin = 0; bin < numBins; bin++)
             {
-                var specIdx = frame * numBins + bin;
                 var maskIdx = bin < mask.Length ? bin : mask.Length - 1;
-                result.Data[specIdx] = NumOps.Multiply(spectrogram.Data[specIdx], mask.Data[maskIdx]);
+                broadcastedMask.Data[frame * numBins + bin] = mask.Data[maskIdx];
             }
         }
 
-        return result;
+        // Use IEngine vectorized tensor multiplication
+        return Engine.TensorMultiply(spectrogram, broadcastedMask);
     }
 
     private Tensor<T> ReconstructAudio(Tensor<T> maskedSpectrogram)
@@ -946,10 +1033,32 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-        var prediction = Predict(input);
-        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        LastLoss = loss;
-        SetTrainingMode(false);
+
+        try
+        {
+            // Forward pass: compute audio embedding from input
+            var prediction = Predict(input);
+
+            // Calculate loss
+            var predictionVec = prediction.ToVector();
+            var expectedVec = expectedOutput.ToVector();
+            var loss = _lossFunction.CalculateLoss(predictionVec, expectedVec);
+            LastLoss = loss;
+
+            // Backward pass: compute gradients
+            var outputGradient = _lossFunction.CalculateDerivative(predictionVec, expectedVec);
+
+            // Convert gradient to tensor and backpropagate through audio encoder
+            var gradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
+            BackpropagateAudioEncoder(gradientTensor);
+
+            // Update parameters using the optimizer
+            _optimizer.UpdateParameters(Layers);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>
@@ -1151,14 +1260,14 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     /// <inheritdoc/>
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
+        // Create a new instance without passing optimizer/loss to get fresh instances
+        // Passing the same optimizer would share mutable state (momentum, etc.)
         var copy = new AudioVisualCorrespondenceNetwork<T>(
             Architecture,
             _embeddingDimension,
             _audioSampleRate,
             _videoFrameRate,
-            _numEncoderLayers,
-            _optimizer,
-            _lossFunction);
+            _numEncoderLayers);
 
         copy.SetParameters(GetParameters());
         return copy;
