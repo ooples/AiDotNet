@@ -51,5 +51,15 @@ internal sealed class TestModelRepository : IModelRepository
     }
 
     public bool ModelExists(string name) => _models.ContainsKey(name);
+
+    public bool LoadMultimodalModel<T>(string name, IServableMultimodalModel<T> model, string? sourcePath = null)
+    {
+        throw new NotSupportedException("Test repository does not support loading models.");
+    }
+
+    public IServableMultimodalModel<T>? GetMultimodalModel<T>(string name)
+    {
+        throw new NotSupportedException("Test repository does not support retrieving model instances.");
+    }
 }
 
