@@ -789,17 +789,18 @@ public class InterpolationIntegrationTests
 
         var interp = new NearestNeighborInterpolation<double>(x, y);
 
-        // Just below midpoint should go to lower
-        Assert.True(Math.Abs(interp.Interpolate(0.49) - 10.0) < Tolerance ||
-                    Math.Abs(interp.Interpolate(0.49) - 20.0) < Tolerance);
+        // Just below midpoint should go to lower neighbor (0.49 is closer to 0.0 than to 1.0)
+        Assert.True(Math.Abs(interp.Interpolate(0.49) - 10.0) < Tolerance,
+            "At x=0.49, nearest neighbor should be x=0.0 with value 10.0");
 
-        // Just above midpoint should go to upper
-        Assert.True(Math.Abs(interp.Interpolate(0.51) - 10.0) < Tolerance ||
-                    Math.Abs(interp.Interpolate(0.51) - 20.0) < Tolerance);
+        // Just above midpoint should go to upper neighbor (0.51 is closer to 1.0 than to 0.0)
+        Assert.True(Math.Abs(interp.Interpolate(0.51) - 20.0) < Tolerance,
+            "At x=0.51, nearest neighbor should be x=1.0 with value 20.0");
 
-        // At exact midpoint
+        // At exact midpoint (equidistant), implementation uses tie-break to lower index
         double mid = interp.Interpolate(0.5);
-        Assert.True(Math.Abs(mid - 10.0) < Tolerance || Math.Abs(mid - 20.0) < Tolerance);
+        Assert.True(Math.Abs(mid - 10.0) < Tolerance,
+            "At x=0.5, equidistant tie-break goes to first/lower index (value 10.0)");
     }
 
     /// <summary>
