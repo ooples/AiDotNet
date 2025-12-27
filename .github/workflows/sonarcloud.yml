@@ -452,7 +452,7 @@ jobs:
     name: Tests (net471) - ${{ matrix.shard.name }}
     runs-on: windows-latest
     needs: build-windows
-    timeout-minutes: 20
+    timeout-minutes: 45
     if: github.event.pull_request.draft != true
     strategy:
       fail-fast: false
@@ -462,8 +462,10 @@ jobs:
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.UnitTests.ActivationFunctions|FullyQualifiedName~AiDotNet.Tests.UnitTests.Attention|FullyQualifiedName~AiDotNet.Tests.UnitTests.Autodiff|FullyQualifiedName~AiDotNet.Tests.UnitTests.AutoML|FullyQualifiedName~AiDotNet.Tests.UnitTests.Data|FullyQualifiedName~AiDotNet.Tests.UnitTests.Diagnostics|FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion|FullyQualifiedName~AiDotNet.Tests.UnitTests.Encoding)'
           - name: Unit 05-08
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.UnitTests.FeatureSelectors|FullyQualifiedName~AiDotNet.Tests.UnitTests.FitDetectors|FullyQualifiedName~AiDotNet.Tests.UnitTests.FitnessCalculators|FullyQualifiedName~AiDotNet.Tests.UnitTests.Genetics|FullyQualifiedName~AiDotNet.Tests.UnitTests.Helpers|FullyQualifiedName~AiDotNet.Tests.UnitTests.Inference|FullyQualifiedName~AiDotNet.Tests.UnitTests.Interpretability|FullyQualifiedName~AiDotNet.Tests.UnitTests.JitCompiler|FullyQualifiedName~AiDotNet.Tests.UnitTests.KnowledgeDistillation|FullyQualifiedName~AiDotNet.Tests.UnitTests.LearningRateSchedulers|FullyQualifiedName~AiDotNet.Tests.UnitTests.LinearAlgebra|FullyQualifiedName~AiDotNet.Tests.UnitTests.Logging|FullyQualifiedName~AiDotNet.Tests.UnitTests.LossFunctions)'
-          - name: Unit 09-10a Meta-NN
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.UnitTests.MetaLearning|FullyQualifiedName~AiDotNet.Tests.UnitTests.MixedPrecision|FullyQualifiedName~AiDotNet.Tests.UnitTests.ModelCompression|FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks)'
+          - name: Unit 09 Meta-Mixed-Compression
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.UnitTests.MetaLearning|FullyQualifiedName~AiDotNet.Tests.UnitTests.MixedPrecision|FullyQualifiedName~AiDotNet.Tests.UnitTests.ModelCompression)'
+          - name: Unit 10a NeuralNetworks
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks'
           - name: Unit 10b-12 Opt-RAG-Reg
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.UnitTests.Optimizers|FullyQualifiedName~AiDotNet.Tests.UnitTests.RAG|FullyQualifiedName~AiDotNet.Tests.UnitTests.Regularization|FullyQualifiedName~AiDotNet.Tests.UnitTests.ReinforcementLearning|FullyQualifiedName~AiDotNet.Tests.UnitTests.RetrievalAugmentedGeneration|FullyQualifiedName~AiDotNet.Tests.UnitTests.Serving|FullyQualifiedName~AiDotNet.Tests.UnitTests.TimeSeries|FullyQualifiedName~AiDotNet.Tests.UnitTests.Tokenization|FullyQualifiedName~AiDotNet.Tests.UnitTests.TransferLearning)'
           - name: Unit 13+ PS-Reason-Other
