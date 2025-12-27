@@ -143,6 +143,19 @@ internal class Dense<T>
         InitializeWeights();
     }
 
+    /// <summary>
+    /// Gets the output feature dimension.
+    /// </summary>
+    public int OutputSize => _outFeatures;
+
+    /// <summary>
+    /// Gets the total parameter count for this layer.
+    /// </summary>
+    public long GetParameterCount()
+    {
+        return (long)_inFeatures * _outFeatures + _outFeatures; // weights + bias
+    }
+
     private void InitializeWeights()
     {
         // He initialization
