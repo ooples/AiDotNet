@@ -230,10 +230,19 @@ jobs:
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net8.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.MetaLearning|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.MixedPrecision|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.ModelCompression'
-          - name: AiDotNet.Tests - Unit - 10a NeuralNetworks
+          # NeuralNetworks split into 3 shards to avoid timeouts (was taking 45+ min)
+          - name: AiDotNet.Tests - Unit - 10a1 NN-Classic
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net8.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks'
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~ResNetNetworkTests|FullyQualifiedName~VGGNetworkTests|FullyQualifiedName~DenseNetTests)'
+          - name: AiDotNet.Tests - Unit - 10a2 NN-Efficient
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~MobileNetTests|FullyQualifiedName~EfficientNetTests)'
+          - name: AiDotNet.Tests - Unit - 10a3 NN-VLM-Other
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~BlipNeuralNetworkTests|FullyQualifiedName~Blip2NeuralNetworkTests|FullyQualifiedName~ClipNeuralNetworkTests|FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
           - name: AiDotNet.Tests - Unit - 10b Optimizers
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net8.0
@@ -308,7 +317,50 @@ jobs:
           $sanitizedShardName = $shardName -replace '[\\/:*?"<>|\s-]+', '_'
           $results = Join-Path "TestResults" $sanitizedShardName
           New-Item -Path $results -ItemType Directory -Force | Out-Null
-          dotnet test ${{ matrix.shard.project }} -c Release --framework ${{ matrix.shard.framework }} --no-restore --filter "${{ matrix.shard.filter }}" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger "trx;LogFileName=test-results.trx" --results-directory $results
+          dotnet test ${{ matrix.shard.project }} -c Release --framework ${{ matrix.shard.framework }} --no-restore --filter "${{ matrix.shard.filter }}" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=normal" --results-directory $results
+
+      - name: Report slow tests
+        if: always()
+        shell: powershell
+        run: |
+          Write-Host "=== SLOW TEST REPORT (tests > 10 seconds) ===" -ForegroundColor Cyan
+          $trxFiles = Get-ChildItem -Path "TestResults" -Recurse -Filter "*.trx" -ErrorAction SilentlyContinue
+          if ($trxFiles.Count -eq 0) {
+            Write-Host "No TRX files found"
+            exit 0
+          }
+          $slowTests = @()
+          foreach ($trx in $trxFiles) {
+            [xml]$xml = Get-Content $trx.FullName
+            $ns = @{t = "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
+            $results = Select-Xml -Xml $xml -XPath "//t:UnitTestResult" -Namespace $ns
+            foreach ($result in $results) {
+              $duration = $result.Node.duration
+              if ($duration) {
+                $ts = [TimeSpan]::Parse($duration)
+                if ($ts.TotalSeconds -gt 10) {
+                  $slowTests += [PSCustomObject]@{
+                    Name = $result.Node.testName
+                    Duration = $ts.TotalSeconds
+                    Outcome = $result.Node.outcome
+                  }
+                }
+              }
+            }
+          }
+          if ($slowTests.Count -gt 0) {
+            Write-Host ""
+            Write-Host "Found $($slowTests.Count) slow tests:" -ForegroundColor Yellow
+            $slowTests | Sort-Object Duration -Descending | ForEach-Object {
+              $color = if ($_.Duration -gt 60) { "Red" } elseif ($_.Duration -gt 30) { "Yellow" } else { "White" }
+              Write-Host ("  [{0,7:N1}s] {1} ({2})" -f $_.Duration, $_.Name, $_.Outcome) -ForegroundColor $color
+            }
+            Write-Host ""
+            $total = ($slowTests | Measure-Object -Property Duration -Sum).Sum
+            Write-Host ("Total time in slow tests: {0:N1} seconds ({1:N1} minutes)" -f $total, ($total / 60)) -ForegroundColor Cyan
+          } else {
+            Write-Host "No tests took longer than 10 seconds - excellent!" -ForegroundColor Green
+          }
 
       - name: Set artifact name
         if: always()
@@ -464,8 +516,13 @@ jobs:
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.UnitTests.FeatureSelectors|FullyQualifiedName~AiDotNet.Tests.UnitTests.FitDetectors|FullyQualifiedName~AiDotNet.Tests.UnitTests.FitnessCalculators|FullyQualifiedName~AiDotNet.Tests.UnitTests.Genetics|FullyQualifiedName~AiDotNet.Tests.UnitTests.Helpers|FullyQualifiedName~AiDotNet.Tests.UnitTests.Inference|FullyQualifiedName~AiDotNet.Tests.UnitTests.Interpretability|FullyQualifiedName~AiDotNet.Tests.UnitTests.JitCompiler|FullyQualifiedName~AiDotNet.Tests.UnitTests.KnowledgeDistillation|FullyQualifiedName~AiDotNet.Tests.UnitTests.LearningRateSchedulers|FullyQualifiedName~AiDotNet.Tests.UnitTests.LinearAlgebra|FullyQualifiedName~AiDotNet.Tests.UnitTests.Logging|FullyQualifiedName~AiDotNet.Tests.UnitTests.LossFunctions)'
           - name: Unit 09 Meta-Mixed-Compression
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.UnitTests.MetaLearning|FullyQualifiedName~AiDotNet.Tests.UnitTests.MixedPrecision|FullyQualifiedName~AiDotNet.Tests.UnitTests.ModelCompression)'
-          - name: Unit 10a NeuralNetworks
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks'
+          # NeuralNetworks split into 3 shards to avoid timeouts (was taking 40+ min)
+          - name: Unit 10a1 NN-Classic
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~ResNetNetworkTests|FullyQualifiedName~VGGNetworkTests|FullyQualifiedName~DenseNetTests)'
+          - name: Unit 10a2 NN-Efficient
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~MobileNetTests|FullyQualifiedName~EfficientNetTests)'
+          - name: Unit 10a3 NN-VLM-Other
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~BlipNeuralNetworkTests|FullyQualifiedName~Blip2NeuralNetworkTests|FullyQualifiedName~ClipNeuralNetworkTests|FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
           - name: Unit 10b-12 Opt-RAG-Reg
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.UnitTests.Optimizers|FullyQualifiedName~AiDotNet.Tests.UnitTests.RAG|FullyQualifiedName~AiDotNet.Tests.UnitTests.Regularization|FullyQualifiedName~AiDotNet.Tests.UnitTests.ReinforcementLearning|FullyQualifiedName~AiDotNet.Tests.UnitTests.RetrievalAugmentedGeneration|FullyQualifiedName~AiDotNet.Tests.UnitTests.Serving|FullyQualifiedName~AiDotNet.Tests.UnitTests.TimeSeries|FullyQualifiedName~AiDotNet.Tests.UnitTests.Tokenization|FullyQualifiedName~AiDotNet.Tests.UnitTests.TransferLearning)'
           - name: Unit 13+ PS-Reason-Other
@@ -507,7 +564,50 @@ jobs:
           $sanitizedShardName = $shardName -replace '[\/:*?"<>|\s-]+', '_'
           $results = Join-Path "TestResults" "net471-$sanitizedShardName"
           New-Item -Path $results -ItemType Directory -Force | Out-Null
-          dotnet test $project --no-build -c Release --framework net471 --filter "${{ matrix.shard.filter }}" --logger "trx;LogFileName=test-results.trx" --results-directory $results
+          dotnet test $project --no-build -c Release --framework net471 --filter "${{ matrix.shard.filter }}" --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=normal" --results-directory $results
+
+      - name: Report slow tests
+        if: always()
+        shell: powershell
+        run: |
+          Write-Host "=== SLOW TEST REPORT (tests > 10 seconds) ===" -ForegroundColor Cyan
+          $trxFiles = Get-ChildItem -Path "TestResults" -Recurse -Filter "*.trx" -ErrorAction SilentlyContinue
+          if ($trxFiles.Count -eq 0) {
+            Write-Host "No TRX files found"
+            exit 0
+          }
+          $slowTests = @()
+          foreach ($trx in $trxFiles) {
+            [xml]$xml = Get-Content $trx.FullName
+            $ns = @{t = "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
+            $results = Select-Xml -Xml $xml -XPath "//t:UnitTestResult" -Namespace $ns
+            foreach ($result in $results) {
+              $duration = $result.Node.duration
+              if ($duration) {
+                $ts = [TimeSpan]::Parse($duration)
+                if ($ts.TotalSeconds -gt 10) {
+                  $slowTests += [PSCustomObject]@{
+                    Name = $result.Node.testName
+                    Duration = $ts.TotalSeconds
+                    Outcome = $result.Node.outcome
+                  }
+                }
+              }
+            }
+          }
+          if ($slowTests.Count -gt 0) {
+            Write-Host ""
+            Write-Host "Found $($slowTests.Count) slow tests:" -ForegroundColor Yellow
+            $slowTests | Sort-Object Duration -Descending | ForEach-Object {
+              $color = if ($_.Duration -gt 60) { "Red" } elseif ($_.Duration -gt 30) { "Yellow" } else { "White" }
+              Write-Host ("  [{0,7:N1}s] {1} ({2})" -f $_.Duration, $_.Name, $_.Outcome) -ForegroundColor $color
+            }
+            Write-Host ""
+            $total = ($slowTests | Measure-Object -Property Duration -Sum).Sum
+            Write-Host ("Total time in slow tests: {0:N1} seconds ({1:N1} minutes)" -f $total, ($total / 60)) -ForegroundColor Cyan
+          } else {
+            Write-Host "No tests took longer than 10 seconds - excellent!" -ForegroundColor Green
+          }
 
       - name: Set artifact name
         if: always()
