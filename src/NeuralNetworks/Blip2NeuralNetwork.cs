@@ -114,24 +114,49 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     private ILayer<T>? _languageModelProjection;
 
     /// <summary>
+    /// Language model decoder layers for text generation (native mode).
+    /// </summary>
+    private readonly List<TransformerDecoderLayer<T>> _lmDecoderLayers = [];
+
+    /// <summary>
+    /// Language model head for projecting decoder output to vocabulary logits.
+    /// </summary>
+    private ILayer<T>? _lmHead;
+
+    /// <summary>
+    /// Number of LM decoder layers.
+    /// </summary>
+    private readonly int _numLmDecoderLayers;
+
+    /// <summary>
+    /// Gradient storage for query tokens.
+    /// </summary>
+    private Tensor<T>? _queryTokensGradients;
+
+    /// <summary>
+    /// Gradient storage for positional embeddings.
+    /// </summary>
+    private Tensor<T>? _queryPositionalEmbeddingsGradients;
+
+    /// <summary>
     /// Learnable query tokens for Q-Former.
     /// </summary>
-    private Matrix<T>? _queryTokens;
+    private Tensor<T>? _queryTokens;
 
     /// <summary>
     /// Vision CLS token.
     /// </summary>
-    private Matrix<T>? _visionClsToken;
+    private Tensor<T>? _visionClsToken;
 
     /// <summary>
     /// Vision positional embeddings.
     /// </summary>
-    private Matrix<T>? _visionPositionalEmbeddings;
+    private Tensor<T>? _visionPositionalEmbeddings;
 
     /// <summary>
     /// Query positional embeddings.
     /// </summary>
-    private Matrix<T>? _queryPositionalEmbeddings;
+    private Tensor<T>? _queryPositionalEmbeddings;
 
     /// <summary>
     /// Text token embeddings for Q-Former text encoder.
@@ -375,6 +400,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     /// <param name="numQformerLayers">Number of Q-Former layers.</param>
     /// <param name="numQueryTokens">Number of learnable query tokens.</param>
     /// <param name="numHeads">Number of attention heads.</param>
+    /// <param name="numLmDecoderLayers">Number of language model decoder layers for text generation.</param>
     /// <param name="languageModelType">Type of LLM backend.</param>
     /// <param name="tokenizer">Optional tokenizer for text processing.</param>
     /// <param name="optimizer">Optional optimizer for training.</param>
@@ -393,6 +419,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         int numQformerLayers = 12,
         int numQueryTokens = 32,
         int numHeads = 12,
+        int numLmDecoderLayers = 6,
         string languageModelType = "opt",
         ITokenizer? tokenizer = null,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
@@ -413,6 +440,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         _numQueryTokens = numQueryTokens;
         _patchSize = patchSize;
         _vocabularySize = vocabularySize;
+        _numLmDecoderLayers = numLmDecoderLayers;
         _languageModelType = languageModelType.ToLowerInvariant();
 
         _tokenizer = tokenizer ?? Tokenization.ClipTokenizerFactory.CreateSimple();
@@ -446,12 +474,16 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             _imageSize, _imageSize, channels, _patchSize, _visionHiddenDim);
 
         // Vision CLS token and positional embeddings
-        _visionClsToken = Matrix<T>.CreateDefault(1, _visionHiddenDim, NumOps.Zero);
-        _visionPositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _visionHiddenDim, NumOps.Zero);
+        _visionClsToken = Tensor<T>.CreateDefault([1, _visionHiddenDim], NumOps.Zero);
+        _visionPositionalEmbeddings = Tensor<T>.CreateDefault([numPatches + 1, _visionHiddenDim], NumOps.Zero);
 
         // Learnable query tokens
-        _queryTokens = Matrix<T>.CreateDefault(_numQueryTokens, _qformerHiddenDim, NumOps.Zero);
-        _queryPositionalEmbeddings = Matrix<T>.CreateDefault(_numQueryTokens, _qformerHiddenDim, NumOps.Zero);
+        _queryTokens = Tensor<T>.CreateDefault([_numQueryTokens, _qformerHiddenDim], NumOps.Zero);
+        _queryPositionalEmbeddings = Tensor<T>.CreateDefault([_numQueryTokens, _qformerHiddenDim], NumOps.Zero);
+
+        // Gradient storage for query tokens and positional embeddings
+        _queryTokensGradients = Tensor<T>.CreateDefault([_numQueryTokens, _qformerHiddenDim], NumOps.Zero);
+        _queryPositionalEmbeddingsGradients = Tensor<T>.CreateDefault([_numQueryTokens, _qformerHiddenDim], NumOps.Zero);
 
         // Q-Former layers
         int feedForwardDim = _qformerHiddenDim * 4;
@@ -481,6 +513,23 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         // LM projection (project Q-Former output to LLM dimension)
         _languageModelProjection = new DenseLayer<T>(_qformerHiddenDim, _lmHiddenDim, (IActivationFunction<T>?)null);
 
+        // LM Decoder layers for text generation
+        int lmFeedForwardDim = _lmHiddenDim * 4;
+        int lmNumHeads = Math.Max(8, _lmHiddenDim / 64); // Scale heads with hidden dimension
+        var geluActivation = new GELUActivation<T>();
+        for (int i = 0; i < _numLmDecoderLayers; i++)
+        {
+            _lmDecoderLayers.Add(new TransformerDecoderLayer<T>(
+                embeddingSize: _lmHiddenDim,
+                numHeads: lmNumHeads,
+                feedForwardDim: lmFeedForwardDim,
+                sequenceLength: _maxSequenceLength,
+                ffnActivation: geluActivation));
+        }
+
+        // LM Head: Projects decoder output to vocabulary logits
+        _lmHead = new DenseLayer<T>(_lmHiddenDim, _vocabularySize, (IActivationFunction<T>?)null);
+
         // Initialize with small random values
         InitializeWeights();
     }
@@ -496,9 +545,9 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         // Initialize query tokens
         if (_queryTokens is not null)
         {
-            for (int i = 0; i < _queryTokens.Rows; i++)
+            for (int i = 0; i < _queryTokens.Shape[0]; i++)
             {
-                for (int j = 0; j < _queryTokens.Columns; j++)
+                for (int j = 0; j < _queryTokens.Shape[1]; j++)
                 {
                     _queryTokens[i, j] = NumOps.FromDouble(random.NextDouble() * scale - scale / 2);
                 }
@@ -508,7 +557,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         // Initialize CLS token
         if (_visionClsToken is not null)
         {
-            for (int j = 0; j < _visionClsToken.Columns; j++)
+            for (int j = 0; j < _visionClsToken.Shape[1]; j++)
             {
                 _visionClsToken[0, j] = NumOps.FromDouble(random.NextDouble() * scale - scale / 2);
             }
@@ -517,9 +566,9 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         // Initialize positional embeddings
         if (_visionPositionalEmbeddings is not null)
         {
-            for (int i = 0; i < _visionPositionalEmbeddings.Rows; i++)
+            for (int i = 0; i < _visionPositionalEmbeddings.Shape[0]; i++)
             {
-                for (int j = 0; j < _visionPositionalEmbeddings.Columns; j++)
+                for (int j = 0; j < _visionPositionalEmbeddings.Shape[1]; j++)
                 {
                     _visionPositionalEmbeddings[i, j] = NumOps.FromDouble(random.NextDouble() * scale - scale / 2);
                 }
@@ -528,9 +577,9 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
 
         if (_queryPositionalEmbeddings is not null)
         {
-            for (int i = 0; i < _queryPositionalEmbeddings.Rows; i++)
+            for (int i = 0; i < _queryPositionalEmbeddings.Shape[0]; i++)
             {
-                for (int j = 0; j < _queryPositionalEmbeddings.Columns; j++)
+                for (int j = 0; j < _queryPositionalEmbeddings.Shape[1]; j++)
                 {
                     _queryPositionalEmbeddings[i, j] = NumOps.FromDouble(random.NextDouble() * scale - scale / 2);
                 }
@@ -956,7 +1005,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         }
 
         // Add positional embeddings
-        int posLen = Math.Min(withCls.Shape[0], _visionPositionalEmbeddings.Rows);
+        int posLen = Math.Min(withCls.Shape[0], _visionPositionalEmbeddings.Shape[0]);
         for (int i = 0; i < posLen; i++)
         {
             for (int j = 0; j < _visionHiddenDim; j++)
@@ -1393,54 +1442,155 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     }
 
     /// <summary>
-    /// Generates text using native layers.
+    /// Generates text using native layers with autoregressive decoding.
     /// </summary>
+    /// <remarks>
+    /// Uses the LM decoder layers and LM head to generate text autoregressively.
+    /// The visual features from Q-Former are used as encoder output for cross-attention
+    /// in the decoder layers.
+    /// </remarks>
     private string GenerateNative(Tensor<T> features, string? prompt, int maxLength, double temperature)
     {
-        var generatedTokens = new List<int>();
+        if (_lmDecoderLayers.Count == 0 || _lmHead is null || _textTokenEmbedding is null)
+        {
+            throw new InvalidOperationException("LM decoder layers and head must be initialized for native text generation.");
+        }
 
-        // Start with BOS token or prompt tokens
+        // Clamp temperature to valid range
+        temperature = Math.Max(0.1, Math.Min(temperature, 2.0));
+
+        // Initialize generated tokens with BOS token or prompt tokens
+        List<int> generatedTokens;
         if (prompt is not null && prompt.Length > 0)
         {
             var encoded = _tokenizer.Encode(prompt);
-            generatedTokens.AddRange(encoded.TokenIds);
+            generatedTokens = new List<int>(encoded.TokenIds);
         }
         else
         {
-            // Add BOS token
-            var specialTokens = _tokenizer.SpecialTokens;
-            var bosTokenStr = specialTokens?.BosToken ?? "[CLS]";
-            var bosEncoded = _tokenizer.Encode(bosTokenStr);
-            if (bosEncoded.TokenIds.Count > 0)
-            {
-                generatedTokens.Add(bosEncoded.TokenIds[0]);
-            }
+            // Start with BOS token (usually token ID 1 for BERT-style tokenizers)
+            generatedTokens = [1];
         }
 
-        // Autoregressive generation (simplified)
-        var random = new Random();
+        // Special token IDs
+        int eosTokenId = 2;  // EOS token
+        int padTokenId = 0;  // PAD token
+
+        // Autoregressive generation loop
+        var random = Tensors.Helpers.RandomHelper.CreateSeededRandom(
+            Tensors.Helpers.RandomHelper.ThreadSafeRandom.Next());
+
         for (int step = 0; step < maxLength && generatedTokens.Count < _maxSequenceLength; step++)
         {
-            // In a full implementation, this would:
-            // 1. Run decoder on current tokens with visual features
-            // 2. Get logits for next token
-            // 3. Sample from distribution
+            // Create input tensor for current sequence
+            var inputTensor = Tensor<T>.CreateDefault([generatedTokens.Count], NumOps.Zero);
+            for (int i = 0; i < generatedTokens.Count; i++)
+            {
+                inputTensor[i] = NumOps.FromDouble(generatedTokens[i]);
+            }
 
-            // Simplified: generate placeholder tokens
-            int nextToken = random.Next(1000, _vocabularySize);
-            generatedTokens.Add(nextToken);
+            // Get token embeddings
+            var embeddings = _textTokenEmbedding.Forward(inputTensor);
 
-            // Check for EOS
-            var specialTokens = _tokenizer.SpecialTokens;
-            var eosTokenStr = specialTokens?.EosToken ?? "[SEP]";
-            var eosEncoded = _tokenizer.Encode(eosTokenStr);
-            if (eosEncoded.TokenIds.Count > 0 && nextToken == eosEncoded.TokenIds[0])
+            // Reshape embeddings to [seqLen, hiddenDim] for decoder
+            int seqLen = generatedTokens.Count;
+            var decoderInput = Tensor<T>.CreateDefault([seqLen, _lmHiddenDim], NumOps.Zero);
+
+            // Project embeddings to LM hidden dimension if needed
+            int embDim = embeddings.Shape.Length > 1 ? embeddings.Shape[1] : _qformerHiddenDim;
+            for (int i = 0; i < seqLen; i++)
+            {
+                // Simple projection: pad or truncate to match _lmHiddenDim
+                for (int j = 0; j < _lmHiddenDim; j++)
+                {
+                    if (j < embDim)
+                    {
+                        decoderInput[i, j] = embeddings.Shape.Length > 1 ? embeddings[i, j] : embeddings[i];
+                    }
+                    else
+                    {
+                        decoderInput[i, j] = NumOps.Zero;
+                    }
+                }
+            }
+
+            // Pass through decoder layers with visual features as encoder output
+            var decoderOutput = decoderInput;
+            foreach (var decoderLayer in _lmDecoderLayers)
+            {
+                decoderOutput = decoderLayer.Forward(decoderOutput, features);
+            }
+
+            // Get logits for last position only
+            var lastPositionHidden = Tensor<T>.CreateDefault([_lmHiddenDim], NumOps.Zero);
+            for (int j = 0; j < _lmHiddenDim; j++)
+            {
+                lastPositionHidden[j] = decoderOutput[seqLen - 1, j];
+            }
+
+            // Project to vocabulary via LM head
+            var logits = _lmHead.Forward(lastPositionHidden);
+
+            // Apply temperature scaling
+            var scaledLogits = new T[_vocabularySize];
+            for (int i = 0; i < _vocabularySize; i++)
+            {
+                scaledLogits[i] = NumOps.Divide(logits[i], NumOps.FromDouble(temperature));
+            }
+
+            // Compute softmax probabilities
+            T maxLogit = scaledLogits[0];
+            for (int i = 1; i < _vocabularySize; i++)
+            {
+                if (NumOps.ToDouble(scaledLogits[i]) > NumOps.ToDouble(maxLogit))
+                {
+                    maxLogit = scaledLogits[i];
+                }
+            }
+
+            T sumExp = NumOps.Zero;
+            var probs = new T[_vocabularySize];
+            for (int i = 0; i < _vocabularySize; i++)
+            {
+                probs[i] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit))));
+                sumExp = NumOps.Add(sumExp, probs[i]);
+            }
+
+            for (int i = 0; i < _vocabularySize; i++)
+            {
+                probs[i] = NumOps.Divide(probs[i], sumExp);
+            }
+
+            // Sample from distribution
+            double randVal = random.NextDouble();
+            double cumSum = 0.0;
+            int nextToken = 0;
+            for (int i = 0; i < _vocabularySize; i++)
+            {
+                cumSum += NumOps.ToDouble(probs[i]);
+                if (randVal <= cumSum)
+                {
+                    nextToken = i;
+                    break;
+                }
+            }
+
+            // Check for EOS token
+            if (nextToken == eosTokenId)
             {
                 break;
             }
+
+            // Skip PAD tokens
+            if (nextToken == padTokenId)
+            {
+                continue;
+            }
+
+            generatedTokens.Add(nextToken);
         }
 
-        // Decode tokens to text
+        // Decode generated tokens to text
         return _tokenizer.Decode(generatedTokens);
     }
 
@@ -1728,7 +1878,38 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             }
         }
 
+        // Accumulate gradients for query tokens and positional embeddings
+        // The gradient at this point flows back to the input query tokens
+        AccumulateQueryTokenGradients(currentGradient);
+
         return currentGradient;
+    }
+
+    /// <summary>
+    /// Accumulates gradients for query tokens and positional embeddings from the backward pass.
+    /// </summary>
+    private void AccumulateQueryTokenGradients(Tensor<T> gradient)
+    {
+        if (_queryTokensGradients is null || _queryPositionalEmbeddingsGradients is null)
+            return;
+
+        // The gradient shape should be [numQueryTokens, hiddenDim] or compatible
+        int rows = Math.Min(gradient.Shape[0], _numQueryTokens);
+        int cols = gradient.Shape.Length > 1 ? Math.Min(gradient.Shape[1], _qformerHiddenDim) : _qformerHiddenDim;
+
+        // Accumulate gradients to query tokens
+        // Since query tokens are added with positional embeddings, both receive the same gradient
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                T gradValue = gradient.Shape.Length > 1 ? gradient[i, j] : gradient[i];
+
+                // Accumulate (add to existing gradients for mini-batch accumulation)
+                _queryTokensGradients[i, j] = NumOps.Add(_queryTokensGradients[i, j], gradValue);
+                _queryPositionalEmbeddingsGradients[i, j] = NumOps.Add(_queryPositionalEmbeddingsGradients[i, j], gradValue);
+            }
+        }
     }
 
     /// <inheritdoc/>
@@ -1793,6 +1974,16 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             if (_languageModelProjection is not null)
                 count += _languageModelProjection.ParameterCount;
 
+            // LM Decoder layers
+            foreach (var layer in _lmDecoderLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            // LM Head
+            if (_lmHead is not null)
+                count += _lmHead.ParameterCount;
+
             return count;
         }
     }
@@ -1805,9 +1996,9 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         // Add query tokens (trainable)
         if (_queryTokens is not null)
         {
-            for (int i = 0; i < _queryTokens.Rows; i++)
+            for (int i = 0; i < _queryTokens.Shape[0]; i++)
             {
-                for (int j = 0; j < _queryTokens.Columns; j++)
+                for (int j = 0; j < _queryTokens.Shape[1]; j++)
                 {
                     parameters.Add(_queryTokens[i, j]);
                 }
@@ -1817,9 +2008,9 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         // Add query positional embeddings (trainable)
         if (_queryPositionalEmbeddings is not null)
         {
-            for (int i = 0; i < _queryPositionalEmbeddings.Rows; i++)
+            for (int i = 0; i < _queryPositionalEmbeddings.Shape[0]; i++)
             {
-                for (int j = 0; j < _queryPositionalEmbeddings.Columns; j++)
+                for (int j = 0; j < _queryPositionalEmbeddings.Shape[1]; j++)
                 {
                     parameters.Add(_queryPositionalEmbeddings[i, j]);
                 }
@@ -1882,6 +2073,26 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             }
         }
 
+        // Add LM decoder layer parameters
+        foreach (var layer in _lmDecoderLayers)
+        {
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
+            {
+                parameters.Add(layerParams[i]);
+            }
+        }
+
+        // Add LM head parameters
+        if (_lmHead is not null)
+        {
+            var lmHeadParams = _lmHead.GetParameters();
+            for (int i = 0; i < lmHeadParams.Length; i++)
+            {
+                parameters.Add(lmHeadParams[i]);
+            }
+        }
+
         return new Vector<T>([.. parameters]);
     }
 
@@ -1893,9 +2104,9 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         // Set query tokens
         if (_queryTokens is not null)
         {
-            for (int i = 0; i < _queryTokens.Rows; i++)
+            for (int i = 0; i < _queryTokens.Shape[0]; i++)
             {
-                for (int j = 0; j < _queryTokens.Columns; j++)
+                for (int j = 0; j < _queryTokens.Shape[1]; j++)
                 {
                     _queryTokens[i, j] = parameters[offset++];
                 }
@@ -1905,9 +2116,9 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         // Set query positional embeddings
         if (_queryPositionalEmbeddings is not null)
         {
-            for (int i = 0; i < _queryPositionalEmbeddings.Rows; i++)
+            for (int i = 0; i < _queryPositionalEmbeddings.Shape[0]; i++)
             {
-                for (int j = 0; j < _queryPositionalEmbeddings.Columns; j++)
+                for (int j = 0; j < _queryPositionalEmbeddings.Shape[1]; j++)
                 {
                     _queryPositionalEmbeddings[i, j] = parameters[offset++];
                 }
@@ -1987,6 +2198,32 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             _languageModelProjection.SetParameters(lmProjParams);
             offset += paramCount;
         }
+
+        // Set LM decoder layer parameters
+        foreach (var layer in _lmDecoderLayers)
+        {
+            int layerParamCount = layer.ParameterCount;
+            var layerParams = new Vector<T>(layerParamCount);
+            for (int i = 0; i < layerParamCount; i++)
+            {
+                layerParams[i] = parameters[offset + i];
+            }
+            layer.SetParameters(layerParams);
+            offset += layerParamCount;
+        }
+
+        // Set LM head parameters
+        if (_lmHead is not null)
+        {
+            int paramCount = _lmHead.ParameterCount;
+            var lmHeadParams = new Vector<T>(paramCount);
+            for (int i = 0; i < paramCount; i++)
+            {
+                lmHeadParams[i] = parameters[offset + i];
+            }
+            _lmHead.SetParameters(lmHeadParams);
+            offset += paramCount;
+        }
     }
 
     /// <inheritdoc/>
@@ -2026,19 +2263,40 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         var gradients = new List<T>();
 
         // Gradients for query tokens (accumulated during backward)
-        if (_queryTokens is not null)
+        if (_queryTokens is not null && _queryTokensGradients is not null)
         {
-            // For now, use zero gradients for query tokens as they don't have layer-based gradient tracking
-            for (int i = 0; i < _queryTokens.Rows * _queryTokens.Columns; i++)
+            for (int i = 0; i < _queryTokensGradients.Shape[0]; i++)
+            {
+                for (int j = 0; j < _queryTokensGradients.Shape[1]; j++)
+                {
+                    gradients.Add(_queryTokensGradients[i, j]);
+                }
+            }
+        }
+        else if (_queryTokens is not null)
+        {
+            // Fallback to zeros if gradients not accumulated
+            for (int i = 0; i < _queryTokens.Shape[0] * _queryTokens.Shape[1]; i++)
             {
                 gradients.Add(NumOps.Zero);
             }
         }
 
         // Gradients for query positional embeddings
-        if (_queryPositionalEmbeddings is not null)
+        if (_queryPositionalEmbeddings is not null && _queryPositionalEmbeddingsGradients is not null)
         {
-            for (int i = 0; i < _queryPositionalEmbeddings.Rows * _queryPositionalEmbeddings.Columns; i++)
+            for (int i = 0; i < _queryPositionalEmbeddingsGradients.Shape[0]; i++)
+            {
+                for (int j = 0; j < _queryPositionalEmbeddingsGradients.Shape[1]; j++)
+                {
+                    gradients.Add(_queryPositionalEmbeddingsGradients[i, j]);
+                }
+            }
+        }
+        else if (_queryPositionalEmbeddings is not null)
+        {
+            // Fallback to zeros if gradients not accumulated
+            for (int i = 0; i < _queryPositionalEmbeddings.Shape[0] * _queryPositionalEmbeddings.Shape[1]; i++)
             {
                 gradients.Add(NumOps.Zero);
             }
@@ -2100,6 +2358,26 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             }
         }
 
+        // Get LM decoder layer gradients
+        foreach (var layer in _lmDecoderLayers)
+        {
+            var layerGrads = layer.GetParameterGradients();
+            for (int i = 0; i < layerGrads.Length; i++)
+            {
+                gradients.Add(layerGrads[i]);
+            }
+        }
+
+        // Get LM head gradients
+        if (_lmHead is not null)
+        {
+            var lmHeadGrads = _lmHead.GetParameterGradients();
+            for (int i = 0; i < lmHeadGrads.Length; i++)
+            {
+                gradients.Add(lmHeadGrads[i]);
+            }
+        }
+
         return new Vector<T>([.. gradients]);
     }
 
@@ -2119,6 +2397,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
                 { "LmHiddenDim", _lmHiddenDim },
                 { "NumQformerLayers", _numQformerLayers },
                 { "NumHeads", _numHeads },
+                { "NumLmDecoderLayers", _numLmDecoderLayers },
                 { "VocabularySize", _vocabularySize },
                 { "LanguageModelType", _languageModelType },
                 { "UseNativeMode", _useNativeMode },
@@ -2188,6 +2467,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             _numQformerLayers,
             _numQueryTokens,
             _numHeads,
+            _numLmDecoderLayers,
             _languageModelType,
             _tokenizer,
             null,

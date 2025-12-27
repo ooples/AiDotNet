@@ -676,7 +676,8 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         {
             var attnOutput = _audioEncoderLayers[i].Forward(current);
             var ffn1 = _audioEncoderLayers[i + 1].Forward(attnOutput);
-            var ffn2 = _audioEncoderLayers[i + 2].Forward(ApplyGelu(ffn1));
+            // ffn1 layer already has GELU activation - don't apply again
+            var ffn2 = _audioEncoderLayers[i + 2].Forward(ffn1);
             current = AddResidual(attnOutput, ffn2);
         }
 
@@ -721,7 +722,8 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         {
             var attnOutput = _visualEncoderLayers[i].Forward(current);
             var ffn1 = _visualEncoderLayers[i + 1].Forward(attnOutput);
-            var ffn2 = _visualEncoderLayers[i + 2].Forward(ApplyGelu(ffn1));
+            // ffn1 layer already has GELU activation - don't apply again
+            var ffn2 = _visualEncoderLayers[i + 2].Forward(ffn1);
             current = AddResidual(attnOutput, ffn2);
         }
 
@@ -756,7 +758,8 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         var numPatches = numPatchesH * numPatchesW;
         var patchDim = channels * patchSize * patchSize;
 
-        var patches = new Tensor<T>([numPatches, 768]);
+        // Use computed patchDim instead of hardcoded 768
+        var patches = new Tensor<T>([numPatches, patchDim]);
 
         for (int ph = 0; ph < numPatchesH; ph++)
         {
@@ -765,11 +768,11 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
                 var patchIdx = ph * numPatchesW + pw;
                 var flatIdx = 0;
 
-                for (int c = 0; c < channels && flatIdx < 768; c++)
+                for (int c = 0; c < channels && flatIdx < patchDim; c++)
                 {
-                    for (int py = 0; py < patchSize && flatIdx < 768; py++)
+                    for (int py = 0; py < patchSize && flatIdx < patchDim; py++)
                     {
-                        for (int px = 0; px < patchSize && flatIdx < 768; px++)
+                        for (int px = 0; px < patchSize && flatIdx < patchDim; px++)
                         {
                             var y = ph * patchSize + py;
                             var x = pw * patchSize + px;
@@ -777,7 +780,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
                             if (srcIdx < frame.Length)
                             {
-                                patches.Data[patchIdx * 768 + flatIdx] = frame.Data[srcIdx];
+                                patches.Data[patchIdx * patchDim + flatIdx] = frame.Data[srcIdx];
                             }
                             flatIdx++;
                         }
