@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
@@ -386,38 +387,328 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
     private Dictionary<string, Tensor<T>> ComputeGradients(Vector<T> input, T target)
     {
         var gradients = new Dictionary<string, Tensor<T>>();
+        int seqLen = Math.Min(input.Length, _options.LookbackWindow);
+        int embDim = _options.EmbeddingDim;
+        int forecastHorizon = _options.ForecastHorizon;
 
-        // Forward pass with caching
-        var (prediction, cache) = ForwardWithCache(input);
-        T error = _numOps.Subtract(target, prediction);
-        T dLoss = _numOps.Multiply(_numOps.FromDouble(-2.0), error);
+        // Create computation nodes for all trainable parameters
+        var inputProjNode = TensorOperations<T>.Variable(_inputProjection, "inputProj", requiresGradient: true);
+        var seasonalProjNode = TensorOperations<T>.Variable(_seasonalProjection, "seasonalProj", requiresGradient: true);
+        var trendProjNode = TensorOperations<T>.Variable(_trendProjection, "trendProj", requiresGradient: true);
+        var outputBiasNode = TensorOperations<T>.Variable(_outputBias, "outputBias", requiresGradient: true);
 
-        // Initialize gradient tensors
-        var dSeasonalProj = new Tensor<T>(new[] { 1, _options.EmbeddingDim });
-        var dTrendProj = new Tensor<T>(new[] { 1, _options.EmbeddingDim });
-        var dOutputBias = new Tensor<T>(new[] { _options.ForecastHorizon });
-
-        // Gradient for output (first position)
-        dOutputBias[0] = dLoss;
-
-        // Gradient through seasonal and trend projections
-        for (int j = 0; j < _options.EmbeddingDim; j++)
+        // Create input tensor as computation node
+        var inputTensor = new Tensor<T>(new[] { seqLen, 1 });
+        for (int t = 0; t < seqLen; t++)
         {
-            if (cache.SeasonalOutput != null && cache.SeasonalOutput.Length > j)
+            inputTensor[t, 0] = input[t];
+        }
+        var inputNode = TensorOperations<T>.Variable(inputTensor, "input", requiresGradient: false);
+
+        // Forward pass using autodiff operations
+        // 1. Input embedding: embedded = input @ inputProj + positionalEncoding
+        var inputProjReshaped = TensorOperations<T>.Reshape(inputProjNode, new[] { 1, embDim });
+        var embedded = TensorOperations<T>.MatrixMultiply(inputNode, inputProjReshaped);
+
+        // Add positional encoding
+        var posTensor = new Tensor<T>(new[] { seqLen, embDim });
+        for (int t = 0; t < seqLen; t++)
+        {
+            for (int d = 0; d < embDim; d++)
             {
-                dSeasonalProj[j] = _numOps.Multiply(dLoss, cache.SeasonalOutput[j]);
+                posTensor[t, d] = _positionalEncoding[t * embDim + d];
             }
-            if (cache.TrendOutput != null && cache.TrendOutput.Length > j)
+        }
+        var posNode = TensorOperations<T>.Variable(posTensor, "pos", requiresGradient: false);
+        embedded = TensorOperations<T>.Add(embedded, posNode);
+
+        // 2. Series decomposition (moving average for trend extraction)
+        var trendOutput = ComputeMovingAverageNode(embedded, _movingAvgKernel);
+        var seasonalOutput = TensorOperations<T>.Subtract(embedded, trendOutput);
+
+        // 3. Process through encoder layers (simplified forward for gradient computation)
+        for (int i = 0; i < _encoderLayers.Count; i++)
+        {
+            var layerOutput = ProcessEncoderLayerAutodiff(seasonalOutput, trendOutput, i);
+            seasonalOutput = layerOutput.seasonal;
+            trendOutput = layerOutput.trend;
+        }
+
+        // 4. Process through decoder layers
+        var decoderSeasonalInit = TensorOperations<T>.Variable(_decoderSeasonalInit, "decSeasonalInit", requiresGradient: true);
+        var decoderTrendInit = TensorOperations<T>.Variable(_decoderTrendInit, "decTrendInit", requiresGradient: true);
+
+        var decoderSeasonal = decoderSeasonalInit;
+        var decoderTrend = decoderTrendInit;
+
+        for (int i = 0; i < _decoderLayers.Count; i++)
+        {
+            var layerOutput = ProcessDecoderLayerAutodiff(decoderSeasonal, decoderTrend, seasonalOutput, trendOutput, i);
+            decoderSeasonal = layerOutput.seasonal;
+            decoderTrend = layerOutput.trend;
+        }
+
+        // 5. Output projection: output = seasonal @ seasonalProj + trend @ trendProj + bias
+        var seasonalContrib = TensorOperations<T>.MatrixMultiply(decoderSeasonal, TensorOperations<T>.Transpose(seasonalProjNode));
+        var trendContrib = TensorOperations<T>.MatrixMultiply(decoderTrend, TensorOperations<T>.Transpose(trendProjNode));
+        var output = TensorOperations<T>.Add(seasonalContrib, trendContrib);
+
+        // Add output bias (broadcast across sequence)
+        var biasReshaped = TensorOperations<T>.Reshape(outputBiasNode, new[] { forecastHorizon, 1 });
+        output = TensorOperations<T>.Add(output, biasReshaped);
+
+        // 6. Compute loss: MSE = mean((output - target)^2)
+        var targetTensor = new Tensor<T>(new[] { forecastHorizon, 1 });
+        targetTensor[0, 0] = target; // Single-step prediction target
+        var targetNode = TensorOperations<T>.Variable(targetTensor, "target", requiresGradient: false);
+
+        var diff = TensorOperations<T>.Subtract(output, targetNode);
+        var squared = TensorOperations<T>.ElementwiseMultiply(diff, diff);
+        var loss = TensorOperations<T>.Mean(squared);
+
+        // 7. Backward pass to compute gradients
+        loss.Gradient = new Tensor<T>(loss.Value.Shape);
+        loss.Gradient[0] = _numOps.One;
+
+        // Topological sort for backward pass
+        var visited = new HashSet<ComputationNode<T>>();
+        var topoOrder = new List<ComputationNode<T>>();
+        TopologicalSort(loss, visited, topoOrder);
+
+        // Execute backward pass
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
             {
-                dTrendProj[j] = _numOps.Multiply(dLoss, cache.TrendOutput[j]);
+                node.BackwardFunction(node.Gradient);
             }
         }
 
-        gradients["seasonalProjection"] = dSeasonalProj;
-        gradients["trendProjection"] = dTrendProj;
-        gradients["outputBias"] = dOutputBias;
+        // 8. Collect gradients for all trainable parameters
+        if (inputProjNode.Gradient != null)
+            gradients["inputProjection"] = inputProjNode.Gradient;
+
+        if (seasonalProjNode.Gradient != null)
+            gradients["seasonalProjection"] = seasonalProjNode.Gradient;
+
+        if (trendProjNode.Gradient != null)
+            gradients["trendProjection"] = trendProjNode.Gradient;
+
+        if (outputBiasNode.Gradient != null)
+            gradients["outputBias"] = outputBiasNode.Gradient;
+
+        if (decoderSeasonalInit.Gradient != null)
+            gradients["decoderSeasonalInit"] = decoderSeasonalInit.Gradient;
+
+        if (decoderTrendInit.Gradient != null)
+            gradients["decoderTrendInit"] = decoderTrendInit.Gradient;
 
         return gradients;
+    }
+
+    private void TopologicalSort(ComputationNode<T> node, HashSet<ComputationNode<T>> visited, List<ComputationNode<T>> topoOrder)
+    {
+        if (visited.Contains(node)) return;
+
+        foreach (var parent in node.Parents)
+        {
+            TopologicalSort(parent, visited, topoOrder);
+        }
+
+        visited.Add(node);
+        topoOrder.Add(node);
+    }
+
+    private ComputationNode<T> ComputeMovingAverageNode(ComputationNode<T> input, int kernelSize)
+    {
+        var shape = input.Value.Shape;
+        int seqLen = shape[0];
+        int embDim = shape.Length > 1 ? shape[1] : 1;
+
+        // Compute moving average using autodiff operations
+        var result = new Tensor<T>(shape);
+        int halfK = kernelSize / 2;
+
+        for (int t = 0; t < seqLen; t++)
+        {
+            int start = Math.Max(0, t - halfK);
+            int end = Math.Min(seqLen - 1, t + halfK);
+            int count = end - start + 1;
+
+            for (int d = 0; d < embDim; d++)
+            {
+                var sum = _numOps.Zero;
+                for (int k = start; k <= end; k++)
+                {
+                    int idx = embDim > 1 ? k * embDim + d : k;
+                    sum = _numOps.Add(sum, input.Value[idx]);
+                }
+                int outIdx = embDim > 1 ? t * embDim + d : t;
+                result[outIdx] = _numOps.Divide(sum, _numOps.FromDouble(count));
+            }
+        }
+
+        // Create node with backward function for gradient propagation
+        var node = new ComputationNode<T>(
+            result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            name: "movingAvg");
+
+        node.BackwardFunction = (gradient) =>
+        {
+            if (input.RequiresGradient)
+            {
+                if (input.Gradient == null)
+                    input.Gradient = new Tensor<T>(input.Value.Shape);
+
+                for (int t = 0; t < seqLen; t++)
+                {
+                    int start = Math.Max(0, t - halfK);
+                    int end = Math.Min(seqLen - 1, t + halfK);
+                    int count = end - start + 1;
+                    var scale = _numOps.FromDouble(1.0 / count);
+
+                    for (int d = 0; d < embDim; d++)
+                    {
+                        int gradIdx = embDim > 1 ? t * embDim + d : t;
+                        var gradVal = _numOps.Multiply(gradient[gradIdx], scale);
+
+                        for (int k = start; k <= end; k++)
+                        {
+                            int inputIdx = embDim > 1 ? k * embDim + d : k;
+                            input.Gradient[inputIdx] = _numOps.Add(input.Gradient[inputIdx], gradVal);
+                        }
+                    }
+                }
+            }
+        };
+
+        return node;
+    }
+
+    private (ComputationNode<T> seasonal, ComputationNode<T> trend) ProcessEncoderLayerAutodiff(
+        ComputationNode<T> seasonal, ComputationNode<T> trend, int layerIdx)
+    {
+        var layer = _encoderLayers[layerIdx];
+
+        // Get layer parameters as computation nodes
+        var queryProj = TensorOperations<T>.Variable(layer.GetQueryProjection(), $"enc{layerIdx}_queryProj", requiresGradient: true);
+        var keyProj = TensorOperations<T>.Variable(layer.GetKeyProjection(), $"enc{layerIdx}_keyProj", requiresGradient: true);
+        var valueProj = TensorOperations<T>.Variable(layer.GetValueProjection(), $"enc{layerIdx}_valueProj", requiresGradient: true);
+        var outputProj = TensorOperations<T>.Variable(layer.GetOutputProjection(), $"enc{layerIdx}_outputProj", requiresGradient: true);
+
+        // Auto-correlation computation using autodiff
+        var query = TensorOperations<T>.MatrixMultiply(seasonal, queryProj);
+        var key = TensorOperations<T>.MatrixMultiply(seasonal, keyProj);
+        var value = TensorOperations<T>.MatrixMultiply(seasonal, valueProj);
+
+        // Simplified auto-correlation: use scaled dot-product attention as approximation
+        var attnOutput = TensorOperations<T>.ScaledDotProductAttention(query, key, value);
+        var projected = TensorOperations<T>.MatrixMultiply(attnOutput, outputProj);
+
+        // Residual connection
+        var residual = TensorOperations<T>.Add(seasonal, projected);
+
+        // Layer normalization
+        var gamma1 = TensorOperations<T>.Variable(layer.GetLayerNorm1Gamma(), $"enc{layerIdx}_ln1Gamma", requiresGradient: true);
+        var beta1 = TensorOperations<T>.Variable(layer.GetLayerNorm1Beta(), $"enc{layerIdx}_ln1Beta", requiresGradient: true);
+        var normalized = TensorOperations<T>.LayerNorm(residual, new[] { residual.Value.Shape[^1] }, gamma1, beta1);
+
+        // Feed-forward network
+        var ff1W = TensorOperations<T>.Variable(layer.GetFF1Weight(), $"enc{layerIdx}_ff1W", requiresGradient: true);
+        var ff1B = TensorOperations<T>.Variable(layer.GetFF1Bias(), $"enc{layerIdx}_ff1B", requiresGradient: true);
+        var ff2W = TensorOperations<T>.Variable(layer.GetFF2Weight(), $"enc{layerIdx}_ff2W", requiresGradient: true);
+        var ff2B = TensorOperations<T>.Variable(layer.GetFF2Bias(), $"enc{layerIdx}_ff2B", requiresGradient: true);
+
+        var ffHidden = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(normalized, ff1W), ff1B);
+        var ffActivated = TensorOperations<T>.ReLU(ffHidden);
+        var ffOutput = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(ffActivated, ff2W), ff2B);
+
+        // Residual + LayerNorm
+        var ffResidual = TensorOperations<T>.Add(normalized, ffOutput);
+        var gamma2 = TensorOperations<T>.Variable(layer.GetLayerNorm2Gamma(), $"enc{layerIdx}_ln2Gamma", requiresGradient: true);
+        var beta2 = TensorOperations<T>.Variable(layer.GetLayerNorm2Beta(), $"enc{layerIdx}_ln2Beta", requiresGradient: true);
+        var newSeasonal = TensorOperations<T>.LayerNorm(ffResidual, new[] { ffResidual.Value.Shape[^1] }, gamma2, beta2);
+
+        // Series decomposition
+        var newTrend = ComputeMovingAverageNode(newSeasonal, _movingAvgKernel);
+        newSeasonal = TensorOperations<T>.Subtract(newSeasonal, newTrend);
+
+        // Accumulate trend
+        var combinedTrend = TensorOperations<T>.Add(trend, newTrend);
+
+        return (newSeasonal, combinedTrend);
+    }
+
+    private (ComputationNode<T> seasonal, ComputationNode<T> trend) ProcessDecoderLayerAutodiff(
+        ComputationNode<T> decoderSeasonal, ComputationNode<T> decoderTrend,
+        ComputationNode<T> encoderSeasonal, ComputationNode<T> encoderTrend, int layerIdx)
+    {
+        var layer = _decoderLayers[layerIdx];
+
+        // Self-attention projections
+        var selfQueryProj = TensorOperations<T>.Variable(layer.GetSelfQueryProjection(), $"dec{layerIdx}_selfQueryProj", requiresGradient: true);
+        var selfKeyProj = TensorOperations<T>.Variable(layer.GetSelfKeyProjection(), $"dec{layerIdx}_selfKeyProj", requiresGradient: true);
+        var selfValueProj = TensorOperations<T>.Variable(layer.GetSelfValueProjection(), $"dec{layerIdx}_selfValueProj", requiresGradient: true);
+        var selfOutputProj = TensorOperations<T>.Variable(layer.GetSelfOutputProjection(), $"dec{layerIdx}_selfOutputProj", requiresGradient: true);
+
+        // Self-attention
+        var selfQuery = TensorOperations<T>.MatrixMultiply(decoderSeasonal, selfQueryProj);
+        var selfKey = TensorOperations<T>.MatrixMultiply(decoderSeasonal, selfKeyProj);
+        var selfValue = TensorOperations<T>.MatrixMultiply(decoderSeasonal, selfValueProj);
+        var selfAttn = TensorOperations<T>.ScaledDotProductAttention(selfQuery, selfKey, selfValue);
+        var selfProjected = TensorOperations<T>.MatrixMultiply(selfAttn, selfOutputProj);
+
+        // Residual + LayerNorm
+        var selfResidual = TensorOperations<T>.Add(decoderSeasonal, selfProjected);
+        var ln1Gamma = TensorOperations<T>.Variable(layer.GetLayerNorm1Gamma(), $"dec{layerIdx}_ln1Gamma", requiresGradient: true);
+        var ln1Beta = TensorOperations<T>.Variable(layer.GetLayerNorm1Beta(), $"dec{layerIdx}_ln1Beta", requiresGradient: true);
+        var normalized1 = TensorOperations<T>.LayerNorm(selfResidual, new[] { selfResidual.Value.Shape[^1] }, ln1Gamma, ln1Beta);
+
+        // Cross-attention with encoder
+        var crossQueryProj = TensorOperations<T>.Variable(layer.GetCrossQueryProjection(), $"dec{layerIdx}_crossQueryProj", requiresGradient: true);
+        var crossKeyProj = TensorOperations<T>.Variable(layer.GetCrossKeyProjection(), $"dec{layerIdx}_crossKeyProj", requiresGradient: true);
+        var crossValueProj = TensorOperations<T>.Variable(layer.GetCrossValueProjection(), $"dec{layerIdx}_crossValueProj", requiresGradient: true);
+        var crossOutputProj = TensorOperations<T>.Variable(layer.GetCrossOutputProjection(), $"dec{layerIdx}_crossOutputProj", requiresGradient: true);
+
+        var crossQuery = TensorOperations<T>.MatrixMultiply(normalized1, crossQueryProj);
+        var crossKey = TensorOperations<T>.MatrixMultiply(encoderSeasonal, crossKeyProj);
+        var crossValue = TensorOperations<T>.MatrixMultiply(encoderSeasonal, crossValueProj);
+        var crossAttn = TensorOperations<T>.ScaledDotProductAttention(crossQuery, crossKey, crossValue);
+        var crossProjected = TensorOperations<T>.MatrixMultiply(crossAttn, crossOutputProj);
+
+        // Residual + LayerNorm
+        var crossResidual = TensorOperations<T>.Add(normalized1, crossProjected);
+        var ln2Gamma = TensorOperations<T>.Variable(layer.GetLayerNorm2Gamma(), $"dec{layerIdx}_ln2Gamma", requiresGradient: true);
+        var ln2Beta = TensorOperations<T>.Variable(layer.GetLayerNorm2Beta(), $"dec{layerIdx}_ln2Beta", requiresGradient: true);
+        var normalized2 = TensorOperations<T>.LayerNorm(crossResidual, new[] { crossResidual.Value.Shape[^1] }, ln2Gamma, ln2Beta);
+
+        // Feed-forward network
+        var ff1W = TensorOperations<T>.Variable(layer.GetFF1Weight(), $"dec{layerIdx}_ff1W", requiresGradient: true);
+        var ff1B = TensorOperations<T>.Variable(layer.GetFF1Bias(), $"dec{layerIdx}_ff1B", requiresGradient: true);
+        var ff2W = TensorOperations<T>.Variable(layer.GetFF2Weight(), $"dec{layerIdx}_ff2W", requiresGradient: true);
+        var ff2B = TensorOperations<T>.Variable(layer.GetFF2Bias(), $"dec{layerIdx}_ff2B", requiresGradient: true);
+
+        var ffHidden = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(normalized2, ff1W), ff1B);
+        var ffActivated = TensorOperations<T>.ReLU(ffHidden);
+        var ffOutput = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(ffActivated, ff2W), ff2B);
+
+        // Residual + LayerNorm
+        var ffResidual = TensorOperations<T>.Add(normalized2, ffOutput);
+        var ln3Gamma = TensorOperations<T>.Variable(layer.GetLayerNorm3Gamma(), $"dec{layerIdx}_ln3Gamma", requiresGradient: true);
+        var ln3Beta = TensorOperations<T>.Variable(layer.GetLayerNorm3Beta(), $"dec{layerIdx}_ln3Beta", requiresGradient: true);
+        var newSeasonal = TensorOperations<T>.LayerNorm(ffResidual, new[] { ffResidual.Value.Shape[^1] }, ln3Gamma, ln3Beta);
+
+        // Series decomposition
+        var newTrend = ComputeMovingAverageNode(newSeasonal, _movingAvgKernel);
+        newSeasonal = TensorOperations<T>.Subtract(newSeasonal, newTrend);
+
+        // Accumulate trend
+        var combinedTrend = TensorOperations<T>.Add(decoderTrend, newTrend);
+
+        return (newSeasonal, combinedTrend);
     }
 
     private void AccumulateGradients(Dictionary<string, Tensor<T>> gradients)
@@ -1047,6 +1338,20 @@ internal class AutoformerEncoderLayer<T>
         accumulators[$"{prefix}ff2Bias"] = new Tensor<T>(_ff2Bias.Shape);
     }
 
+    // Getters for autodiff integration
+    public Tensor<T> GetQueryProjection() => _queryProj;
+    public Tensor<T> GetKeyProjection() => _keyProj;
+    public Tensor<T> GetValueProjection() => _valueProj;
+    public Tensor<T> GetOutputProjection() => _outputProj;
+    public Tensor<T> GetFF1Weight() => _ff1Weight;
+    public Tensor<T> GetFF1Bias() => _ff1Bias;
+    public Tensor<T> GetFF2Weight() => _ff2Weight;
+    public Tensor<T> GetFF2Bias() => _ff2Bias;
+    public Tensor<T> GetLayerNorm1Gamma() => _layerNorm1Gamma;
+    public Tensor<T> GetLayerNorm1Beta() => _layerNorm1Beta;
+    public Tensor<T> GetLayerNorm2Gamma() => _layerNorm2Gamma;
+    public Tensor<T> GetLayerNorm2Beta() => _layerNorm2Beta;
+
     public void ApplyGradients(Dictionary<string, Tensor<T>> accumulators, T scale, int layerIndex)
     {
         string prefix = $"encoder_{layerIndex}_";
@@ -1403,6 +1708,26 @@ internal class AutoformerDecoderLayer<T>
         accumulators[$"{prefix}ff2Weight"] = new Tensor<T>(_ff2Weight.Shape);
         accumulators[$"{prefix}ff2Bias"] = new Tensor<T>(_ff2Bias.Shape);
     }
+
+    // Getters for autodiff integration
+    public Tensor<T> GetSelfQueryProjection() => _selfQueryProj;
+    public Tensor<T> GetSelfKeyProjection() => _selfKeyProj;
+    public Tensor<T> GetSelfValueProjection() => _selfValueProj;
+    public Tensor<T> GetSelfOutputProjection() => _selfOutputProj;
+    public Tensor<T> GetCrossQueryProjection() => _crossQueryProj;
+    public Tensor<T> GetCrossKeyProjection() => _crossKeyProj;
+    public Tensor<T> GetCrossValueProjection() => _crossValueProj;
+    public Tensor<T> GetCrossOutputProjection() => _crossOutputProj;
+    public Tensor<T> GetFF1Weight() => _ff1Weight;
+    public Tensor<T> GetFF1Bias() => _ff1Bias;
+    public Tensor<T> GetFF2Weight() => _ff2Weight;
+    public Tensor<T> GetFF2Bias() => _ff2Bias;
+    public Tensor<T> GetLayerNorm1Gamma() => _layerNorm1Gamma;
+    public Tensor<T> GetLayerNorm1Beta() => _layerNorm1Beta;
+    public Tensor<T> GetLayerNorm2Gamma() => _layerNorm2Gamma;
+    public Tensor<T> GetLayerNorm2Beta() => _layerNorm2Beta;
+    public Tensor<T> GetLayerNorm3Gamma() => _layerNorm3Gamma;
+    public Tensor<T> GetLayerNorm3Beta() => _layerNorm3Beta;
 
     public void ApplyGradients(Dictionary<string, Tensor<T>> accumulators, T scale, int layerIndex)
     {
