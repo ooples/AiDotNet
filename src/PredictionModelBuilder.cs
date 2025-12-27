@@ -182,6 +182,9 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     // Unified augmentation configuration
     private Augmentation.AugmentationConfig? _augmentationConfig;
 
+    // Self-supervised learning configuration
+    private SelfSupervisedLearning.SSLConfig? _sslConfig;
+
     // Federated learning configuration (facade-first: orchestration is internal)
     private FederatedLearningOptions? _federatedLearningOptions;
     private IAggregationStrategy<IFullModel<T, TInput, TOutput>>? _federatedAggregationStrategy;
@@ -3992,6 +3995,76 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         }
 
         return config;
+    }
+
+    /// <summary>
+    /// Configures self-supervised learning for unsupervised representation learning.
+    /// </summary>
+    /// <param name="configure">Optional action to configure SSL settings.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// Self-supervised learning (SSL) allows training powerful representations from unlabeled data.
+    /// The learned representations can then be fine-tuned on smaller labeled datasets, often
+    /// achieving better results than training from scratch.
+    /// </para>
+    /// <para><b>For Beginners:</b> SSL is like teaching a model to understand patterns in data
+    /// without needing human labels. Think of it as the model learning to "see" or "understand"
+    /// images/text before being taught specific tasks. This makes it much better at learning
+    /// new tasks with less labeled data.</para>
+    ///
+    /// <para><b>Supported Methods:</b></para>
+    /// <list type="bullet">
+    /// <item><b>SimCLR:</b> Contrastive learning with in-batch negatives (large batch sizes)</item>
+    /// <item><b>MoCo/MoCoV2/MoCoV3:</b> Momentum contrastive with memory queue (efficient)</item>
+    /// <item><b>BYOL:</b> No negatives required, uses momentum teacher</item>
+    /// <item><b>SimSiam:</b> Simple Siamese networks with stop-gradient</item>
+    /// <item><b>BarlowTwins:</b> Decorrelation-based, no negatives needed</item>
+    /// <item><b>DINO:</b> Self-distillation for Vision Transformers</item>
+    /// <item><b>MAE:</b> Masked autoencoding for ViT pretraining</item>
+    /// </list>
+    ///
+    /// <para><b>Example - Basic SSL pretraining:</b></para>
+    /// <code>
+    /// var result = builder
+    ///     .ConfigureModel(encoder)
+    ///     .ConfigureSelfSupervisedLearning()  // Uses SimCLR by default
+    ///     .Build(unlabeledImages);
+    /// </code>
+    ///
+    /// <para><b>Example - Custom SSL configuration:</b></para>
+    /// <code>
+    /// var result = builder
+    ///     .ConfigureModel(encoder)
+    ///     .ConfigureSelfSupervisedLearning(ssl =>
+    ///     {
+    ///         ssl.Method = SSLMethodType.MoCoV3;
+    ///         ssl.PretrainingEpochs = 300;
+    ///         ssl.Temperature = 0.2;
+    ///         ssl.ProjectorOutputDimension = 256;
+    ///         ssl.MoCo = new MoCoConfig { Momentum = 0.99 };
+    ///     })
+    ///     .Build(unlabeledImages);
+    /// </code>
+    ///
+    /// <para><b>Example - BYOL without negative samples:</b></para>
+    /// <code>
+    /// var result = builder
+    ///     .ConfigureModel(encoder)
+    ///     .ConfigureSelfSupervisedLearning(ssl =>
+    ///     {
+    ///         ssl.Method = SSLMethodType.BYOL;
+    ///         ssl.BYOL = new BYOLConfig { Momentum = 0.996 };
+    ///     })
+    ///     .Build(unlabeledImages);
+    /// </code>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureSelfSupervisedLearning(
+        Action<SelfSupervisedLearning.SSLConfig>? configure = null)
+    {
+        _sslConfig = new SelfSupervisedLearning.SSLConfig();
+        configure?.Invoke(_sslConfig);
+        return this;
     }
 
     /// <summary>
