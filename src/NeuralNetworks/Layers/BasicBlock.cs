@@ -119,6 +119,13 @@ public class BasicBlock<T> : LayerBase<T>
 
         _bn2 = new BatchNormalizationLayer<T>(outChannels);
 
+        // Zero-init residual: initialize last BN's gamma to zero so residual blocks
+        // start as identity mappings, improving training stability
+        if (zeroInitResidual)
+        {
+            _bn2.ZeroInitGamma();
+        }
+
         // Downsample if dimensions change
         _hasDownsample = stride != 1 || inChannels != outChannels;
         if (_hasDownsample)

@@ -146,6 +146,13 @@ public class BottleneckBlock<T> : LayerBase<T>
 
         _bn3 = new BatchNormalizationLayer<T>(outChannels);
 
+        // Zero-init residual: initialize last BN's gamma to zero so residual blocks
+        // start as identity mappings, improving training stability
+        if (zeroInitResidual)
+        {
+            _bn3.ZeroInitGamma();
+        }
+
         // Downsample if dimensions change
         _hasDownsample = stride != 1 || inChannels != outChannels;
         if (_hasDownsample)

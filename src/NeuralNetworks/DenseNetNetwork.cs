@@ -487,7 +487,7 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
     {
-        return CreateNewInstance();
+        return DeepCopy();
     }
 
     /// <summary>

@@ -178,6 +178,20 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Initializes gamma (scale) parameters to zero.
+    /// </summary>
+    /// <remarks>
+    /// This is used for zero-init residual in ResNet, where the last BatchNorm in each
+    /// residual block has gamma initialized to zero. This makes the residual blocks
+    /// start as identity mappings, which can improve training.
+    /// </remarks>
+    public void ZeroInitGamma()
+    {
+        int featureSize = InputShape[0];
+        _gamma = Tensor<T>.CreateDefault([featureSize], NumOps.Zero);
+    }
+
+    /// <summary>
     /// Gets the running mean of the batch normalization layer.
     /// </summary>
     /// <returns>The running mean tensor used during inference.</returns>
