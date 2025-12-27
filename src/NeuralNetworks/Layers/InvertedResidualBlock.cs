@@ -466,22 +466,44 @@ public class InvertedResidualBlock<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Transposes a tensor from NCHW [B, C, H, W] to NHWC [B, H, W, C] format.
+    /// Transposes a tensor from NCHW to NHWC format.
+    /// Supports both 3D [C, H, W] and 4D [B, C, H, W] inputs.
     /// Uses vectorized Engine.TensorPermute operation.
     /// </summary>
     private Tensor<T> TransposeNCHWToNHWC(Tensor<T> input)
     {
-        // NCHW [0, 1, 2, 3] -> NHWC [0, 2, 3, 1]
+        if (input.Shape.Length == 3)
+        {
+            // 3D input [C, H, W] -> add batch dimension -> [1, C, H, W]
+            var input4D = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+            // NCHW [0, 1, 2, 3] -> NHWC [0, 2, 3, 1]
+            var result4D = Engine.TensorPermute(input4D, [0, 2, 3, 1]);
+            // Remove batch dimension -> [H, W, C]
+            return result4D.Reshape([result4D.Shape[1], result4D.Shape[2], result4D.Shape[3]]);
+        }
+
+        // 4D input: NCHW [0, 1, 2, 3] -> NHWC [0, 2, 3, 1]
         return Engine.TensorPermute(input, [0, 2, 3, 1]);
     }
 
     /// <summary>
-    /// Transposes a tensor from NHWC [B, H, W, C] to NCHW [B, C, H, W] format.
+    /// Transposes a tensor from NHWC to NCHW format.
+    /// Supports both 3D [H, W, C] and 4D [B, H, W, C] inputs.
     /// Uses vectorized Engine.TensorPermute operation.
     /// </summary>
     private Tensor<T> TransposeNHWCToNCHW(Tensor<T> input)
     {
-        // NHWC [0, 1, 2, 3] -> NCHW [0, 3, 1, 2]
+        if (input.Shape.Length == 3)
+        {
+            // 3D input [H, W, C] -> add batch dimension -> [1, H, W, C]
+            var input4D = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+            // NHWC [0, 1, 2, 3] -> NCHW [0, 3, 1, 2]
+            var result4D = Engine.TensorPermute(input4D, [0, 3, 1, 2]);
+            // Remove batch dimension -> [C, H, W]
+            return result4D.Reshape([result4D.Shape[1], result4D.Shape[2], result4D.Shape[3]]);
+        }
+
+        // 4D input: NHWC [0, 1, 2, 3] -> NCHW [0, 3, 1, 2]
         return Engine.TensorPermute(input, [0, 3, 1, 2]);
     }
 

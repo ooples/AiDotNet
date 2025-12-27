@@ -4195,7 +4195,13 @@ public static class LayerHelper<T>
         }
 
         // Final 1x1 convolution
-        int finalConvChannels = configuration.WidthMultiplier == Enums.MobileNetV2WidthMultiplier.Alpha140 ? 1792 : 1280;
+        // Per MobileNetV2 spec: base is 1280, scaled by alpha for alpha > 1.0
+        int finalConvChannels = configuration.WidthMultiplier switch
+        {
+            Enums.MobileNetV2WidthMultiplier.Alpha140 => 1792,  // 1280 * 1.4 = 1792
+            Enums.MobileNetV2WidthMultiplier.Alpha130 => 1664,  // 1280 * 1.3 = 1664
+            _ => 1280  // For alpha <= 1.0, keep at 1280 for better accuracy
+        };
         yield return new ConvolutionalLayer<T>(
             inputDepth: currentChannels,
             outputDepth: finalConvChannels,
