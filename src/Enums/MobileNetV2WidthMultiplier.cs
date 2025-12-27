@@ -37,6 +37,11 @@ public enum MobileNetV2WidthMultiplier
     Alpha100,
 
     /// <summary>
+    /// Width multiplier of 1.25 - Wider model for improved accuracy.
+    /// </summary>
+    Alpha125,
+
+    /// <summary>
     /// Width multiplier of 1.3 - Wider model for higher accuracy.
     /// </summary>
     Alpha130,

@@ -4200,6 +4200,7 @@ public static class LayerHelper<T>
         {
             Enums.MobileNetV2WidthMultiplier.Alpha140 => 1792,  // 1280 * 1.4 = 1792
             Enums.MobileNetV2WidthMultiplier.Alpha130 => 1664,  // 1280 * 1.3 = 1664
+            Enums.MobileNetV2WidthMultiplier.Alpha125 => 1600,  // 1280 * 1.25 = 1600
             _ => 1280  // For alpha <= 1.0, keep at 1280 for better accuracy
         };
         yield return new ConvolutionalLayer<T>(
