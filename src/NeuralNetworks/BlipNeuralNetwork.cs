@@ -956,7 +956,9 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     {
         Tensor<T> imageFeatures = GetImageFeaturesNative(image);
         var generatedTokens = new List<int> { GetBosTokenId() };
-        var random = Tensors.Helpers.RandomHelper.CreateSeededRandom(DateTime.Now.Millisecond);
+        // Use thread-safe random with proper seed (not DateTime.Millisecond which only has 1000 values)
+        var random = Tensors.Helpers.RandomHelper.CreateSeededRandom(
+            Tensors.Helpers.RandomHelper.ThreadSafeRandom.Next());
 
         for (int step = 0; step < maxLength; step++)
         {
@@ -1098,9 +1100,14 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         }
 
         // Process through transformer layers (except final projection)
-        foreach (var layer in _visionEncoderLayers.Skip(1).Take(_visionEncoderLayers.Count - 2))
+        // Skip first layer (embedding) and last layer (projection), handling edge cases
+        int layerCount = _visionEncoderLayers.Count;
+        if (layerCount > 2)
         {
-            hidden = layer.Forward(hidden);
+            foreach (var layer in _visionEncoderLayers.Skip(1).Take(layerCount - 2))
+            {
+                hidden = layer.Forward(hidden);
+            }
         }
 
         return hidden;
@@ -1145,9 +1152,14 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         }
 
         // Process through transformer layers (except final projection)
-        foreach (var layer in _textEncoderLayers.Skip(1).Take(_textEncoderLayers.Count - 2))
+        // Skip first layer (embedding) and last layer (projection), handling edge cases
+        int textLayerCount = _textEncoderLayers.Count;
+        if (textLayerCount > 2)
         {
-            hidden = layer.Forward(hidden);
+            foreach (var layer in _textEncoderLayers.Skip(1).Take(textLayerCount - 2))
+            {
+                hidden = layer.Forward(hidden);
+            }
         }
 
         return hidden;
@@ -1881,7 +1893,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() },
                 { "TaskType", Architecture.TaskType.ToString() },
-                { "ParameterCount", GetParameterCount() },
+                { "ParameterCount", ParameterCount },
                 { "UseNativeMode", _useNativeMode }
             },
             ModelData = this.Serialize()

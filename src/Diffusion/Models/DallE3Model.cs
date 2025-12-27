@@ -42,8 +42,35 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
     private readonly IReadOnlyList<DallE3ImageSize> _supportedSizes;
     private readonly int? _userSeed;
 
-    // Safety patterns for content filtering
-    private readonly HashSet<string> _unsafePatterns;
+    // Safety patterns for content filtering - using regex for more accurate matching
+    private static readonly System.Text.RegularExpressions.Regex[] UnsafePatterns = new[]
+    {
+        // Violence patterns - match word boundaries to avoid false positives
+        new System.Text.RegularExpressions.Regex(@"\b(violen(ce|t)|gore|blood(y|shed)?|murder|kill(ing)?|weapon|assault|attack(ing)?)\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
+        // Explicit content patterns
+        new System.Text.RegularExpressions.Regex(@"\b(explicit|nude|naked|porn(ograph(y|ic))?|nsfw|sexual|erotic)\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
+        // Harmful content patterns
+        new System.Text.RegularExpressions.Regex(@"\b(harm(ful)?|dangerous|toxic|poison|self[-\s]?harm|suicide)\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
+        // Illegal activity patterns
+        new System.Text.RegularExpressions.Regex(@"\b(illegal|drug(s)?|contraband|trafficking|smuggl(e|ing))\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
+        // Hate speech patterns
+        new System.Text.RegularExpressions.Regex(@"\b(hate(ful)?|racist|discrimination|bigot(ry)?|slur)\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled)
+    };
+
+    // Category names corresponding to each pattern
+    private static readonly string[] UnsafeCategories = new[]
+    {
+        "violence",
+        "explicit_content",
+        "harmful_content",
+        "illegal_activity",
+        "hate_speech"
+    };
 
     #endregion
 
@@ -115,11 +142,6 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
             DallE3ImageSize.Square1024,
             DallE3ImageSize.Wide1792x1024,
             DallE3ImageSize.Tall1024x1792
-        };
-
-        _unsafePatterns = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "violence", "explicit", "harmful", "illegal", "hate"
         };
     }
 
@@ -404,14 +426,19 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
     /// <inheritdoc/>
     public (bool IsSafe, IEnumerable<string> FlaggedCategories) CheckPromptSafety(string prompt)
     {
-        var flagged = new List<string>();
-        var lowerPrompt = prompt.ToLowerInvariant();
-
-        foreach (var pattern in _unsafePatterns)
+        if (string.IsNullOrWhiteSpace(prompt))
         {
-            if (lowerPrompt.Contains(pattern))
+            return (true, Array.Empty<string>());
+        }
+
+        var flagged = new List<string>();
+
+        // Check each pattern category using compiled regex for accuracy and performance
+        for (int i = 0; i < UnsafePatterns.Length; i++)
+        {
+            if (UnsafePatterns[i].IsMatch(prompt))
             {
-                flagged.Add(pattern);
+                flagged.Add(UnsafeCategories[i]);
             }
         }
 

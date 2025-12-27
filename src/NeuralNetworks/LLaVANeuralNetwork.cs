@@ -68,7 +68,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     #region Shared Fields
 
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly int _embeddingDimension;
     private readonly int _maxSequenceLength;
@@ -127,7 +127,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         int embeddingDimension = 4096,
         int maxSequenceLength = 2048,
         int imageSize = 336,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
@@ -197,7 +197,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         string languageModelType = "llama",
         string visionEncoderType = "clip-vit-l",
         ITokenizer? tokenizer = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
@@ -482,9 +482,15 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     {
         var results = new List<(string Response, T Score)>();
 
+        // Cap maximum temperature to prevent degenerate outputs
+        const double maxTemperature = 1.2;
+        const double tempIncrement = 0.05;
+
         for (int i = 0; i < numResponses; i++)
         {
-            var response = Generate(image, prompt, 256, temperature + (i * 0.05));
+            // Calculate temperature with upper bound to prevent sampling issues
+            double adjustedTemp = Math.Min(temperature + (i * tempIncrement), maxTemperature);
+            var response = Generate(image, prompt, 256, adjustedTemp);
             var score = NumOps.FromDouble(Math.Min(response.Length / 100.0, 1.0));
             results.Add((response, score));
         }
@@ -861,8 +867,9 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         }
 
         double totalProb = nucleus.Sum(x => NumOps.ToDouble(x.Prob));
-        var random = new Random();
-        double rand = random.NextDouble() * totalProb;
+        // Use thread-safe random instead of creating new Random() per call
+        // (new Random() produces identical sequences when called rapidly)
+        double rand = Tensors.Helpers.RandomHelper.ThreadSafeRandom.NextDouble() * totalProb;
 
         double runningSum = 0;
         foreach (var item in nucleus)
@@ -1097,19 +1104,26 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
+        try
+        {
+            var visualFeatures = ExtractVisualFeatures(input);
+            var projectedFeatures = ProjectToLanguageSpace(visualFeatures);
 
-        var visualFeatures = ExtractVisualFeatures(input);
-        var projectedFeatures = ProjectToLanguageSpace(visualFeatures);
+            LastLoss = LossFunction.CalculateLoss(projectedFeatures.ToVector(), expectedOutput.ToVector());
+            var lossGradient = LossFunction.CalculateDerivative(projectedFeatures.ToVector(), expectedOutput.ToVector());
+            var gradient = Tensor<T>.FromVector(lossGradient);
 
-        LastLoss = LossFunction.CalculateLoss(projectedFeatures.ToVector(), expectedOutput.ToVector());
-        var lossGradient = LossFunction.CalculateDerivative(projectedFeatures.ToVector(), expectedOutput.ToVector());
-        var gradient = Tensor<T>.FromVector(lossGradient);
+            // Propagate gradients through the network
+            Backward(gradient);
 
-        Backward(gradient);
-        var currentParams = GetParameters();
-        UpdateParameters(currentParams);
-
-        SetTrainingMode(false);
+            // Use optimizer to update all layer parameters based on their gradients
+            // (not just setting current params back unchanged)
+            _optimizer.UpdateParameters(Layers);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>

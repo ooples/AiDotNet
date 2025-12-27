@@ -813,12 +813,49 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
             ["dangerous_activities"] = (false, NumOps.Zero)
         };
 
-        var upperResponse = response.ToUpperInvariant();
+        // Parse each category's response more accurately by looking for pattern like:
+        // "Violence: YES" or "1. Violence - FLAGGED" rather than just checking if both appear anywhere
         foreach (var category in result.Keys.ToList())
         {
-            bool flagged = upperResponse.Contains(category.ToUpperInvariant()) &&
-                          (upperResponse.Contains("YES") || upperResponse.Contains("FLAGGED"));
-            T confidence = flagged ? NumOps.FromDouble(0.7) : NumOps.FromDouble(0.9);
+            // Create patterns that match category followed by YES/FLAGGED within the same line
+            // This prevents false positives from unrelated YES/FLAGGED responses
+            var categoryUpper = category.ToUpperInvariant().Replace("_", "[\\s_-]*");
+            var pattern = new System.Text.RegularExpressions.Regex(
+                $@"{categoryUpper}[:\s\-]*\b(YES|FLAGGED)\b",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            bool flagged = pattern.IsMatch(response);
+
+            // Also check for confidence level if present
+            T confidence;
+            if (flagged)
+            {
+                // Look for confidence level after category
+                var confPattern = new System.Text.RegularExpressions.Regex(
+                    $@"{categoryUpper}[^.]*\b(HIGH|MEDIUM|LOW)\b",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                var confMatch = confPattern.Match(response);
+                if (confMatch.Success)
+                {
+                    var confLevel = confMatch.Groups[1].Value.ToUpperInvariant();
+                    confidence = confLevel switch
+                    {
+                        "HIGH" => NumOps.FromDouble(0.9),
+                        "MEDIUM" => NumOps.FromDouble(0.7),
+                        "LOW" => NumOps.FromDouble(0.5),
+                        _ => NumOps.FromDouble(0.7)
+                    };
+                }
+                else
+                {
+                    confidence = NumOps.FromDouble(0.7);
+                }
+            }
+            else
+            {
+                confidence = NumOps.FromDouble(0.9); // High confidence in "not flagged"
+            }
+
             result[category] = (flagged, confidence);
         }
 
@@ -1284,7 +1321,9 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
 
     private int SampleFromDistribution(Vector<T> probs)
     {
-        double random = new Random().NextDouble();
+        // Use thread-safe random instead of creating new Random() per call
+        // (new Random() produces identical sequences when called rapidly)
+        double random = Tensors.Helpers.RandomHelper.ThreadSafeRandom.NextDouble();
         double cumulative = 0;
 
         for (int i = 0; i < probs.Length; i++)
