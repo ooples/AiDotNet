@@ -390,7 +390,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>
         {
             int count = _projectBn.GetParameters().Length;
             _projectBn.SetParameters(parameters.SubVector(offset, count));
-            offset += count;
+            // offset not incremented since this is the last parameter block
         }
     }
 
