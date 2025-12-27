@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum ChainType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum ChainType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents different types of chains for composing language model operations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_ChainType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.ChainType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.ChainType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_ChainType" data-uid="AiDotNet.Enums.ChainType" class="text-break">
+Enum ChainType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/ChainType.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents different types of chains for composing language model operations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum ChainType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_ChainType_Conditional"><code>Conditional = 1</code></dt>
+  <dd><p>Conditional chain with branching logic based on intermediate results.</p>
+<p>
+<b>For Beginners:</b> Conditional chains make decisions and take different paths based on results.
+<p>Like a choose-your-own-adventure book:</p>
+<ul>
+<li>Evaluate a condition</li>
+<li>If true, go down path A</li>
+<li>If false, go down path B</li>
+<li>Different paths lead to different outcomes</li>
+</ul>
+<p>Example:
+Input: Customer email</p>
+<p>Step 1: Classify email type
+→ If &quot;complaint&quot;:</p>
+<ul>
+<li>Extract issue</li>
+<li>Check severity</li>
+<li>Route to appropriate team
+→ If &quot;question&quot;:</li>
+<li>Search knowledge base</li>
+<li>Generate answer
+→ If &quot;feedback&quot;:</li>
+<li>Categorize feedback</li>
+<li>Log to database</li>
+</ul>
+<p>The chain adapts based on what it encounters.</p>
+<p>Use this when:</p>
+<ul>
+<li>Different inputs require different processing</li>
+<li>You need to make decisions based on intermediate results</li>
+<li>Workflows have multiple possible paths</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ChainType_Loop"><code>Loop = 2</code></dt>
+  <dd><p>Looping chain that repeats operations until a condition is met.</p>
+<p>
+<b>For Beginners:</b> Looping chains repeat operations until they achieve a goal or meet a condition.
+<p>Like a video game character searching for a key:</p>
+<ul>
+<li>Check current room for key</li>
+<li>If found: Stop searching</li>
+<li>If not found: Move to next room and repeat</li>
+<li>Continue until key is found or all rooms are checked</li>
+</ul>
+<p>Example - Research assistant:
+Goal: &quot;Find 5 peer-reviewed articles about climate change&quot;</p>
+<p>Loop iteration 1: Search → Found 2 articles → Continue
+Loop iteration 2: Refine search → Found 1 more (total 3) → Continue
+Loop iteration 3: Broaden search → Found 2 more (total 5) → Stop</p>
+<p>Result: 5 articles found</p>
+<p>Loop with refinement:
+Goal: &quot;Generate a summary that's exactly 100 words&quot;</p>
+<p>Attempt 1: Generated 85 words → Too short → Try again with &quot;expand&quot; instruction
+Attempt 2: Generated 112 words → Too long → Try again with &quot;condense&quot; instruction
+Attempt 3: Generated 98 words → Close enough → Accept</p>
+<p>Use this when:</p>
+<ul>
+<li>You need to refine results iteratively</li>
+<li>The exact number of steps isn't known in advance</li>
+<li>Quality improves with iteration</li>
+<li>You need to meet specific criteria</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ChainType_MapReduce"><code>MapReduce = 4</code></dt>
+  <dd><p>Map-reduce chain that processes collections by mapping operations and reducing results.</p>
+<p>
+<b>For Beginners:</b> Map-reduce chains process large collections by working on items individually,
+then combining results.
+<p>Two phases:</p>
+<ol>
+<li>Map: Apply the same operation to each item in a collection</li>
+<li>Reduce: Combine all the results into a single output</li>
+</ol>
+<p>Think of it like grading exams:</p>
+<ul>
+<li>Map phase: Grade each student's exam individually (can be done in parallel)</li>
+<li>Reduce phase: Calculate class average and statistics from all grades</li>
+</ul>
+<p>Example - Analyze multiple documents:
+Input: [Document1, Document2, Document3, Document4, Document5]</p>
+<p>Map phase (apply to each document):</p>
+<ul>
+<li>Document1 → Extract key points → [&quot;Point A&quot;, &quot;Point B&quot;]</li>
+<li>Document2 → Extract key points → [&quot;Point C&quot;, &quot;Point D&quot;]</li>
+<li>Document3 → Extract key points → [&quot;Point E&quot;]</li>
+<li>Document4 → Extract key points → [&quot;Point F&quot;, &quot;Point G&quot;]</li>
+<li>Document5 → Extract key points → [&quot;Point H&quot;]</li>
+</ul>
+<p>Reduce phase (combine all results):
+All points: [&quot;Point A&quot;, &quot;Point B&quot;, &quot;Point C&quot;, ..., &quot;Point H&quot;]
+→ Identify common themes
+→ Rank by importance
+→ Generate final summary</p>
+<p>Benefits:</p>
+<ul>
+<li>Handles large collections efficiently</li>
+<li>Map phase can be parallelized</li>
+<li>Scales well with data size</li>
+<li>Clean separation of processing and aggregation</li>
+</ul>
+<p>Use this when:</p>
+<ul>
+<li>Processing multiple similar items</li>
+<li>Each item needs the same analysis</li>
+<li>Final result combines all individual analyses</li>
+<li>Working with large document collections</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ChainType_Parallel"><code>Parallel = 3</code></dt>
+  <dd><p>Parallel chain that executes multiple independent operations simultaneously.</p>
+<p>
+<b>For Beginners:</b> Parallel chains run multiple operations at the same time, then combine results.
+<p>Like a team working on a project:</p>
+<ul>
+<li>Different team members work on different tasks simultaneously</li>
+<li>Each person completes their part independently</li>
+<li>At the end, all parts are combined into the final product</li>
+</ul>
+<p>Example - Comprehensive product analysis:
+Input: Product URL</p>
+<p>Parallel operations (all at once):</p>
+<ul>
+<li>Branch 1: Extract product specs</li>
+<li>Branch 2: Analyze customer reviews</li>
+<li>Branch 3: Find competitor prices</li>
+<li>Branch 4: Check availability</li>
+</ul>
+<p>Combine results:
+&quot;Product X costs $99, has 4.5-star rating, is in stock, and is cheaper than competitors&quot;</p>
+<p>Benefits:</p>
+<ul>
+<li>Much faster than sequential processing</li>
+<li>Each branch is independent</li>
+<li>Results are combined at the end</li>
+</ul>
+<p>Use this when:</p>
+<ul>
+<li>Operations don't depend on each other</li>
+<li>Speed is important</li>
+<li>You need multiple perspectives on the same input</li>
+<li>Tasks can be done independently</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ChainType_Router"><code>Router = 5</code></dt>
+  <dd><p>Router chain that directs inputs to specialized chains based on content.</p>
+<p>
+<b>For Beginners:</b> Router chains analyze input and send it to the best specialized chain for that type.
+<p>Like a receptionist at a hospital:</p>
+<ul>
+<li>Patient arrives with symptoms</li>
+<li>Receptionist determines the issue</li>
+<li>Patient is directed to the right specialist</li>
+<li>Specialist provides appropriate care</li>
+</ul>
+<p>Example - Customer support system:
+Input: Customer message</p>
+<p>Router analysis:</p>
+<ul>
+<li>If about billing → Route to BillingChain</li>
+<li>If about technical issue → Route to TechnicalSupportChain</li>
+<li>If about product info → Route to ProductInfoChain</li>
+<li>If about returns → Route to ReturnsChain</li>
+</ul>
+<p>Each specialized chain is optimized for its specific task:</p>
+<ul>
+<li>BillingChain: Knows about invoices, payments, refunds</li>
+<li>TechnicalSupportChain: Knows about troubleshooting, diagnostics</li>
+<li>ProductInfoChain: Knows about features, specifications</li>
+<li>ReturnsChain: Knows about return policies, shipping</li>
+</ul>
+<p>Benefits:</p>
+<ul>
+<li>Each chain can be optimized for its specialty</li>
+<li>Easier to maintain than one giant chain</li>
+<li>Better results because of specialization</li>
+<li>Can add new specialized chains easily</li>
+</ul>
+<p>Use this when:</p>
+<ul>
+<li>Inputs fall into distinct categories</li>
+<li>Different categories need different processing</li>
+<li>You want specialized handling for each type</li>
+<li>One-size-fits-all approach doesn't work well</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ChainType_Sequential"><code>Sequential = 0</code></dt>
+  <dd><p>Simple sequential chain where output of each step feeds into the next.</p>
+<p>
+<b>For Beginners:</b> Sequential chains run steps one after another in order.
+<p>Like a recipe:</p>
+<ul>
+<li>Step 1: Gather ingredients</li>
+<li>Step 2: Mix ingredients</li>
+<li>Step 3: Bake mixture</li>
+<li>Step 4: Serve result</li>
+</ul>
+<p>Each step must complete before the next begins.</p>
+<p>Example:
+Input: &quot;Analyze customer feedback about our product&quot;
+Step 1: Extract feedback → [&quot;Great product!&quot;, &quot;Too expensive&quot;, &quot;Love it&quot;]
+Step 2: Classify sentiment → [Positive, Negative, Positive]
+Step 3: Generate summary → &quot;Overall positive (67%) with price concerns&quot;
+Output: Summary report</p>
+<p>Use this when:</p>
+<ul>
+<li>Steps must happen in a specific order</li>
+<li>Each step depends on the previous step's output</li>
+<li>The workflow is straightforward and linear</li>
+</ul>
+
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_ChainType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Chains connect multiple language model operations together, like building blocks.
+<p>Think of chains like assembly lines:</p>
+<ul>
+<li>Each step does a specific task</li>
+<li>Output from one step becomes input for the next</li>
+<li>Complex workflows are built from simple components</li>
+<li>The final result is the combination of all steps</li>
+</ul>
+<p>For example, a research assistant might:</p>
+<ol>
+<li>Search for relevant documents (Step 1)</li>
+<li>Summarize each document (Step 2)</li>
+<li>Combine summaries into a final report (Step 3)</li>
+</ol>
+<p>Chains make this easy to build, test, and modify.</p>
+
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/ChainType.cs/#L24" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

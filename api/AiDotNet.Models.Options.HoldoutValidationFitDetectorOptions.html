@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class HoldoutValidationFitDetectorOptions | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class HoldoutValidationFitDetectorOptions | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the Holdout Validation Fit Detector, which analyzes model performance on separate training and validation datasets to identify overfitting, underfitting, and other model quality issues.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_HoldoutValidationFitDetectorOptions.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.HoldoutValidationFitDetectorOptions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.HoldoutValidationFitDetectorOptions">
+
+
+
+  <h1 id="AiDotNet_Models_Options_HoldoutValidationFitDetectorOptions" data-uid="AiDotNet.Models.Options.HoldoutValidationFitDetectorOptions" class="text-break">
+Class HoldoutValidationFitDetectorOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/HoldoutValidationFitDetectorOptions.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the Holdout Validation Fit Detector, which analyzes model performance
+on separate training and validation datasets to identify overfitting, underfitting, and other
+model quality issues.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class HoldoutValidationFitDetectorOptions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">HoldoutValidationFitDetectorOptions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_HoldoutValidationFitDetectorOptions_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Holdout validation is a technique where a portion of the available data is "held out" from training
+and used only for validation. By comparing model performance on training data versus this held-out
+validation data, we can detect various issues like overfitting (performing much better on training
+than validation data) or underfitting (performing poorly on both datasets).
+</p>
+<p><b>For Beginners:</b> This detector helps you understand if your machine learning model is
+learning properly by comparing how well it performs on data it has seen during training versus new
+data it hasn't seen before.
+<p>Think of it like testing a student's understanding: if they can only answer questions they've seen
+before but struggle with new questions on the same topic, they've memorized answers rather than
+truly understanding the subject. Similarly, a good model should perform well not just on its training
+data but also on new, unseen data.</p>
+<p>This detector uses several thresholds to identify common problems:</p>
+<ul>
+<li>Overfitting: The model performs much better on training data than validation data (memorization)</li>
+<li>Underfitting: The model performs poorly on both training and validation data (not learning enough)</li>
+<li>High Variance: The model's performance varies significantly across different validation sets</li>
+<li>Good Fit: The model performs well on both training and validation data (proper learning)</li>
+<li>Stability: The model's performance is consistent across different validation sets</li>
+</ul>
+<p>By detecting these issues early, you can adjust your model or training approach to get better results.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_HoldoutValidationFitDetectorOptions_GoodFitThreshold_" data-uid="AiDotNet.Models.Options.HoldoutValidationFitDetectorOptions.GoodFitThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_HoldoutValidationFitDetectorOptions_GoodFitThreshold" data-uid="AiDotNet.Models.Options.HoldoutValidationFitDetectorOptions.GoodFitThreshold">
+  GoodFitThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/HoldoutValidationFitDetectorOptions.cs/#L153"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for confirming good fit based on the absolute performance on validation data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double GoodFitThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The good fit threshold, defaulting to 0.7 (70%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_HoldoutValidationFitDetectorOptions_GoodFitThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This threshold determines when a model is considered to have a good fit. If the model's performance
+on the validation data exceeds this threshold, and it's not overfitting, the model is likely capturing
+the underlying patterns in the data well. The exact interpretation depends on the performance metric being used.
+</p>
+<p><b>For Beginners:</b> This setting helps identify when your model is performing well enough
+to be considered successful. With the default value of 0.7, if your model's performance score on
+the validation data is above 70%, and it's not overfitting, it's considered to have a good fit.
+<p>For example, if you're using accuracy as your metric and your model achieves 75% accuracy on validation
+data (and doesn't show signs of overfitting), it would be considered to have a good fit. This suggests
+your model has learned meaningful patterns that generalize well to new data.</p>
+<p>The appropriate threshold depends on your specific problem and performance metric:</p>
+<ul>
+<li>For some difficult problems, even 60% accuracy might be excellent</li>
+<li>For easier problems, you might want to set this threshold higher (e.g., 0.85 or 0.9)</li>
+<li>For metrics like mean squared error (where lower is better), you would need to invert the logic</li>
+</ul>
+<p>A good fit means your model has struck a good balance between underfitting and overfitting - it's
+complex enough to learn from the data but not so complex that it just memorizes it.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_HoldoutValidationFitDetectorOptions_HighVarianceThreshold_" data-uid="AiDotNet.Models.Options.HoldoutValidationFitDetectorOptions.HighVarianceThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_HoldoutValidationFitDetectorOptions_HighVarianceThreshold" data-uid="AiDotNet.Models.Options.HoldoutValidationFitDetectorOptions.HighVarianceThreshold">
+  HighVarianceThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/HoldoutValidationFitDetectorOptions.cs/#L125"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for detecting high variance based on the relative difference between
+multiple validation runs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double HighVarianceThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The high variance threshold, defaulting to 0.1 (10%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_HoldoutValidationFitDetectorOptions_HighVarianceThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This threshold determines when a model is considered to have high variance. If the relative standard
+deviation of performance across multiple validation runs exceeds this threshold, the model likely
+has high variance and is sensitive to the specific data split used for validation.
+</p>
+<p><b>For Beginners:</b> This setting helps identify when your model's performance is too
+inconsistent across different validation datasets. With the default value of 0.1, if your model's
+performance varies by more than 10% when validated on different subsets of your data, it's flagged
+as having high variance.
+<p>For example, if you run validation 5 times with different random splits and get accuracy scores of
+82%, 75%, 88%, 79%, and 84%, the standard deviation relative to the mean would be about 0.06 or 6%.
+This would be acceptable. But if the scores varied more widely, like 65%, 85%, 72%, 90%, and 78%,
+the relative standard deviation would be higher than 10%, indicating high variance.</p>
+<p>High variance suggests that your model's performance depends too much on which specific data points
+it sees during training and validation. This is often a sign of overfitting or insufficient data.</p>
+<p>When high variance is detected, you might want to:</p>
+<ul>
+<li>Use cross-validation instead of a single validation split</li>
+<li>Gather more training data</li>
+<li>Simplify your model</li>
+<li>Use ensemble methods to reduce variance</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_HoldoutValidationFitDetectorOptions_OverfitThreshold_" data-uid="AiDotNet.Models.Options.HoldoutValidationFitDetectorOptions.OverfitThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_HoldoutValidationFitDetectorOptions_OverfitThreshold" data-uid="AiDotNet.Models.Options.HoldoutValidationFitDetectorOptions.OverfitThreshold">
+  OverfitThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/HoldoutValidationFitDetectorOptions.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for detecting overfitting based on the relative difference between
+training and validation performance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double OverfitThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The overfit threshold, defaulting to 0.1 (10%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_HoldoutValidationFitDetectorOptions_OverfitThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This threshold determines when a model is considered to be overfitting. If the relative difference
+between training and validation performance exceeds this threshold, the model is likely overfitting
+to the training data. The difference is typically calculated as (training_score - validation_score) / training_score.
+</p>
+<p><b>For Beginners:</b> This setting helps identify when your model is "memorizing" the training
+data instead of learning general patterns. With the default value of 0.1, if your model performs
+more than 10% better on the training data than on the validation data, it's flagged as overfitting.
+<p>For example, if your model achieves 90% accuracy on training data but only 80% on validation data
+(a relative difference of about 11%), it would be considered overfitting. This suggests your model
+has learned patterns that are specific to your training data but don't generalize well to new data.</p>
+<p>When overfitting is detected, you might want to:</p>
+<ul>
+<li>Use more regularization to penalize complexity</li>
+<li>Reduce model complexity (fewer features, simpler model)</li>
+<li>Gather more training data</li>
+<li>Use techniques like early stopping or dropout</li>
+</ul>
+<p>If you want to be more strict about preventing overfitting, you could lower this threshold (e.g., to 0.05).
+If you're willing to accept more potential overfitting, you could increase it (e.g., to 0.15).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_HoldoutValidationFitDetectorOptions_StabilityThreshold_" data-uid="AiDotNet.Models.Options.HoldoutValidationFitDetectorOptions.StabilityThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_HoldoutValidationFitDetectorOptions_StabilityThreshold" data-uid="AiDotNet.Models.Options.HoldoutValidationFitDetectorOptions.StabilityThreshold">
+  StabilityThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/HoldoutValidationFitDetectorOptions.cs/#L183"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for confirming model stability based on the relative difference between
+multiple validation runs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double StabilityThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The stability threshold, defaulting to 0.05 (5%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_HoldoutValidationFitDetectorOptions_StabilityThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This threshold determines when a model is considered to be stable. If the relative standard deviation
+of performance across multiple validation runs is below this threshold, the model is likely stable
+and not overly sensitive to the specific data split used for validation.
+</p>
+<p><b>For Beginners:</b> This setting helps identify when your model's performance is consistent
+enough across different validation datasets to be considered reliable. With the default value of 0.05,
+if your model's performance varies by less than 5% when validated on different subsets of your data,
+it's considered stable.
+<p>For example, if you run validation 5 times with different random splits and get accuracy scores of
+82%, 80%, 83%, 81%, and 84%, the standard deviation relative to the mean would be about 0.02 or 2%.
+This would indicate a stable model since it's below the 5% threshold.</p>
+<p>Stability is important because it suggests your model will perform consistently when deployed in
+the real world, rather than having unpredictable performance that depends on which specific data
+it encounters.</p>
+<p>A stable model with good performance is the ideal outcome of the machine learning process. It means
+your model has learned general patterns that apply consistently across different subsets of data,
+which is exactly what we want.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_HoldoutValidationFitDetectorOptions_UnderfitThreshold_" data-uid="AiDotNet.Models.Options.HoldoutValidationFitDetectorOptions.UnderfitThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_HoldoutValidationFitDetectorOptions_UnderfitThreshold" data-uid="AiDotNet.Models.Options.HoldoutValidationFitDetectorOptions.UnderfitThreshold">
+  UnderfitThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/HoldoutValidationFitDetectorOptions.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for detecting underfitting based on the absolute performance on training data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double UnderfitThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The underfit threshold, defaulting to 0.5 (50%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_HoldoutValidationFitDetectorOptions_UnderfitThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This threshold determines when a model is considered to be underfitting. If the model's performance
+on the training data is below this threshold, the model is likely too simple to capture the underlying
+patterns in the data. The exact interpretation depends on the performance metric being used.
+</p>
+<p><b>For Beginners:</b> This setting helps identify when your model is "not learning enough"
+from the training data. With the default value of 0.5, if your model's performance score on the
+training data is below 50%, it's flagged as underfitting.
+<p>For example, if you're using accuracy as your metric and your model only achieves 45% accuracy even
+on the training data, it would be considered underfitting. This suggests your model is too simple
+to capture the patterns in your data, or there might be issues with your features or training process.</p>
+<p>When underfitting is detected, you might want to:</p>
+<ul>
+<li>Increase model complexity (more features, more complex model)</li>
+<li>Train for more iterations or epochs</li>
+<li>Reduce regularization strength</li>
+<li>Engineer better features</li>
+<li>Try a different type of model altogether</li>
+</ul>
+<p>The appropriate threshold depends on your specific problem and performance metric. For some difficult
+problems, even 40% accuracy might be good, while for others, anything below 80% might indicate underfitting.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/HoldoutValidationFitDetectorOptions.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IVectorActivationFunction&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IVectorActivationFunction&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines activation functions that operate on vectors and tensors in neural networks.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IVectorActivationFunction_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IVectorActivationFunction%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IVectorActivationFunction`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IVectorActivationFunction_1" data-uid="AiDotNet.Interfaces.IVectorActivationFunction`1" class="text-break">
+Interface IVectorActivationFunction&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVectorActivationFunction.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines activation functions that operate on vectors and tensors in neural networks.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IVectorActivationFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IVectorActivationFunction_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>Activation functions introduce non-linearity into neural networks, allowing them to learn
+complex patterns in data. This interface provides methods to apply activation functions
+to vectors and tensors, as well as calculate their derivatives for backpropagation.</p>
+<p><b>For Beginners:</b> Activation functions are like &quot;decision makers&quot; in neural networks.</p>
+<p>Imagine you're deciding whether to go outside based on the temperature:</p>
+<ul>
+<li>If it's below 60—F, you definitely won't go (output = 0)</li>
+<li>If it's above 75—F, you definitely will go (output = 1)</li>
+<li>If it's between 60-75—F, you're somewhat likely to go (output between 0 and 1)</li>
+</ul>
+<p>This is similar to how activation functions work. They take the input from previous
+calculations in the neural network and transform it into an output that determines
+how strongly a neuron &quot;fires&quot; or activates. Without activation functions, neural
+networks would just be doing simple linear calculations and couldn't learn complex patterns.</p>
+<p>Common activation functions include:</p>
+<ul>
+<li>Sigmoid: Outputs values between 0 and 1 (like our temperature example)</li>
+<li>ReLU: Outputs the input if positive, or zero if negative</li>
+<li>Tanh: Outputs values between -1 and 1</li>
+</ul>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IVectorActivationFunction_1_SupportsJitCompilation_" data-uid="AiDotNet.Interfaces.IVectorActivationFunction`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVectorActivationFunction_1_SupportsJitCompilation" data-uid="AiDotNet.Interfaces.IVectorActivationFunction`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVectorActivationFunction.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this activation function supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the activation can be applied to computation graphs for JIT compilation.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IVectorActivationFunction_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Activation functions return false if:
+- Gradient computation (backward pass) is not yet implemented
+- The activation uses operations not supported by TensorOperations
+- The activation has dynamic behavior that cannot be represented in a static graph
+</p>
+<p>
+Once gradient computation is implemented and tested, set this to true.
+</p>
+<p>
+<b>For Beginners:</b> JIT (Just-In-Time) compilation is an advanced optimization technique
+that pre-compiles the neural network's operations into a faster execution graph.
+This property indicates whether this activation function is ready to be part of that
+optimized execution. If false, the activation will fall back to the standard execution path.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IVectorActivationFunction_1_Activate_" data-uid="AiDotNet.Interfaces.IVectorActivationFunction`1.Activate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVectorActivationFunction_1_Activate_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IVectorActivationFunction`1.Activate(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Activate(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVectorActivationFunction.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the activation function to each element in a tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; Activate(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor to apply the activation function to.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with the activation function applied to each element.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IVectorActivationFunction_1_Activate_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method transforms each value in the input tensor according to the activation function.</p>
+<p><b>For Beginners:</b> A tensor is like a multi-dimensional array - think of it as a cube or
+higher-dimensional block of numbers. This method applies the same transformation to
+every number in that block.</p>
+<p>For example, if you have image data (which can be represented as a 3D tensor with
+dimensions for height, width, and color channels), this method would apply the
+activation function to every pixel value in the image.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IVectorActivationFunction_1_Activate_" data-uid="AiDotNet.Interfaces.IVectorActivationFunction`1.Activate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVectorActivationFunction_1_Activate_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interfaces.IVectorActivationFunction`1.Activate(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Activate(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVectorActivationFunction.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the activation function to each element in a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; Activate(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to apply the activation function to.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector with the activation function applied to each element.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IVectorActivationFunction_1_Activate_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method transforms each value in the input vector according to the activation function.</p>
+<p><b>For Beginners:</b> This method takes a list of numbers (the input vector) and applies
+the same transformation to each number. For example, if using the ReLU activation function:</p>
+<p>Input vector: [-2, 0, 3, -1, 5]
+Output vector: [0, 0, 3, 0, 5]</p>
+<p>The ReLU function keeps positive values unchanged but changes negative values to zero.
+Different activation functions will transform the values differently.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IVectorActivationFunction_1_ApplyToGraph_" data-uid="AiDotNet.Interfaces.IVectorActivationFunction`1.ApplyToGraph*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVectorActivationFunction_1_ApplyToGraph_AiDotNet_Autodiff_ComputationNode__0__" data-uid="AiDotNet.Interfaces.IVectorActivationFunction`1.ApplyToGraph(AiDotNet.Autodiff.ComputationNode{`0})">
+  ApplyToGraph(ComputationNode&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVectorActivationFunction.cs/#L148"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies this activation function to a computation graph node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">ComputationNode&lt;T&gt; ApplyToGraph(ComputationNode&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The computation node to apply the activation to.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>A new computation node with the activation applied.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IVectorActivationFunction_1_ApplyToGraph_AiDotNet_Autodiff_ComputationNode__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method maps the activation to the corresponding TensorOperations method.
+For example, Softmax returns TensorOperations&lt;T&gt;.Softmax(input).
+</p>
+<p>
+<b>For Beginners:</b> This method adds the activation function to the computation graph,
+which is a data structure that represents all the operations in the neural network.
+The graph can then be optimized and executed more efficiently through JIT compilation.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Thrown if SupportsJitCompilation is false.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Interfaces_IVectorActivationFunction_1_Backward_" data-uid="AiDotNet.Interfaces.IVectorActivationFunction`1.Backward*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVectorActivationFunction_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IVectorActivationFunction`1.Backward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Backward(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVectorActivationFunction.cs/#L175"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the backward pass gradient for this activation function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; Backward(Tensor&lt;T&gt; input, Tensor&lt;T&gt; outputGradient)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input tensor that was used in the forward pass.</p>
+</dd>
+    <dt><code>outputGradient</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The gradient flowing back from the next layer.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The gradient with respect to the input.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IVectorActivationFunction_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+For .NET 8.0+, a default implementation is provided that computes the element-wise product
+of the activation derivative and the incoming output gradient: inputGradient = derivative(input) * outputGradient.
+For .NET Framework 4.7.1, implementers must provide this method explicitly.
+</p>
+<p>
+This default behavior is appropriate for most element-wise activation functions where the
+chain rule simplifies to element-wise multiplication. Implementations that require different
+behavior (e.g., softmax, which has cross-element dependencies) should override this method.
+</p>
+<p>
+<b>For Beginners:</b> During backpropagation, we need to calculate how much each input
+contributed to the final error. This is done by multiplying the derivative of the activation
+function at each point by the gradient flowing back from the next layer. The default
+implementation handles this automatically for most activation functions.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IVectorActivationFunction_1_Derivative_" data-uid="AiDotNet.Interfaces.IVectorActivationFunction`1.Derivative*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVectorActivationFunction_1_Derivative_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IVectorActivationFunction`1.Derivative(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Derivative(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVectorActivationFunction.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the derivative of the activation function for each element in a tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; Derivative(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor to calculate derivatives for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A tensor containing the derivatives of the activation function.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IVectorActivationFunction_1_Derivative_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method computes the derivatives of the activation function for all elements in the input tensor.</p>
+<p><b>For Beginners:</b> Similar to the vector version, this calculates how sensitive the activation
+function is to changes in each element of the input tensor. The difference is that this
+works with multi-dimensional data.</p>
+<p>For example, with image data, this would tell us how a small change in each pixel's value
+would affect the output of the activation function. This information is used during the
+learning process to adjust the neural network's parameters.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IVectorActivationFunction_1_Derivative_" data-uid="AiDotNet.Interfaces.IVectorActivationFunction`1.Derivative*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVectorActivationFunction_1_Derivative_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interfaces.IVectorActivationFunction`1.Derivative(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Derivative(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVectorActivationFunction.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the derivative of the activation function for each element in a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Matrix&lt;T&gt; Derivative(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to calculate derivatives for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix containing the derivatives of the activation function.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IVectorActivationFunction_1_Derivative_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method computes how the activation function's output changes with respect to small
+changes in its input. This is essential for the backpropagation algorithm in neural networks.</p>
+<p><b>For Beginners:</b> The derivative tells us how sensitive the activation function is to changes
+in its input. This is crucial for the &quot;learning&quot; part of neural networks.</p>
+<p>Think of it like this: If you slightly increase the temperature in our earlier example,
+how much more likely are you to go outside? The derivative gives us this rate of change.</p>
+<p>For a vector input, this method returns a matrix where each element represents the
+derivative at the corresponding position in the input vector.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVectorActivationFunction.cs/#L31" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

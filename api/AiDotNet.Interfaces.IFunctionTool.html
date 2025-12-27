@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IFunctionTool | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IFunctionTool | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for tools (functions) that language models can invoke.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IFunctionTool.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IFunctionTool%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IFunctionTool">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IFunctionTool" data-uid="AiDotNet.Interfaces.IFunctionTool" class="text-break">
+Interface IFunctionTool  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFunctionTool.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for tools (functions) that language models can invoke.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IFunctionTool</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IFunctionTool_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A function tool represents an external capability that a language model can use to accomplish tasks
+beyond text generation. Tools provide structured interfaces for actions like searching databases,
+performing calculations, fetching web content, or executing code.
+</p>
+<p><b>For Beginners:</b> A function tool is like giving the AI a superpower or tool to use.
+<p>Think of tools like apps on a smartphone:</p>
+<ul>
+<li>The phone (LLM) is powerful on its own</li>
+<li>Apps (tools) extend its capabilities</li>
+<li>The phone decides which app to use based on what you need</li>
+<li>Each app has specific inputs and outputs</li>
+</ul>
+<p>Example tools:</p>
+<ul>
+<li>Calculator: Perform complex math</li>
+<li>Web Search: Find current information</li>
+<li>Database Query: Retrieve stored data</li>
+<li>Weather API: Get current weather</li>
+<li>Code Executor: Run programming code</li>
+</ul>
+<p>How tools work with LLMs:</p>
+<ol>
+<li>User: &quot;What's 15% of 2,847?&quot;</li>
+<li>LLM: &quot;I need to calculate this&quot; → Calls Calculator tool</li>
+<li>Calculator: Executes calculation → Returns 427.05</li>
+<li>LLM: Uses result → &quot;15% of 2,847 is 427.05&quot;</li>
+</ol>
+<p>Without tools, the LLM could only estimate. With tools, it gets exact answers.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IFunctionTool_Description_" data-uid="AiDotNet.Interfaces.IFunctionTool.Description*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFunctionTool_Description" data-uid="AiDotNet.Interfaces.IFunctionTool.Description">
+  Description
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFunctionTool.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the description of what the function does.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string Description { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IFunctionTool_Description_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The description helps the language model understand when and how to use the tool.
+It should clearly explain the tool's purpose, capabilities, and limitations.
+</p>
+<p><b>For Beginners:</b> This explains what the tool does, like an app description.
+<p>Example:
+Name: &quot;get_current_weather&quot;
+Description: &quot;Retrieves the current weather conditions for a specified location.
+Provides temperature, conditions, humidity, and wind speed.
+Works for cities worldwide.&quot;</p>
+<p>The description helps the LLM decide:</p>
+<ul>
+<li>WHEN to use the tool: &quot;User asked about weather? Use this tool!&quot;</li>
+<li>WHAT it returns: &quot;It gives temperature and conditions&quot;</li>
+<li>LIMITATIONS: &quot;Only current weather, not forecasts&quot;</li>
+</ul>
+<p>Good descriptions:</p>
+<ul>
+<li>Clear purpose: What the tool does</li>
+<li>Expected output: What it returns</li>
+<li>Limitations: What it can't do</li>
+<li>Use cases: When to use it</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IFunctionTool_Name_" data-uid="AiDotNet.Interfaces.IFunctionTool.Name*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFunctionTool_Name" data-uid="AiDotNet.Interfaces.IFunctionTool.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFunctionTool.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of the function tool.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IFunctionTool_Name_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The name should be descriptive and follow standard naming conventions (e.g., snake_case).
+This name is used by the language model to identify and invoke the tool.
+</p>
+<p><b>For Beginners:</b> This is the tool's identifier, like an app name.
+<p>Examples:</p>
+<ul>
+<li>&quot;get_current_weather&quot;</li>
+<li>&quot;search_database&quot;</li>
+<li>&quot;calculate&quot;</li>
+<li>&quot;fetch_web_page&quot;</li>
+</ul>
+<p>Good names are:</p>
+<ul>
+<li>Descriptive: Clearly indicates what the tool does</li>
+<li>Concise: Not too long or complex</li>
+<li>Consistent: Follow a naming pattern (verb_noun)</li>
+<li>Unambiguous: Distinct from other tool names</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IFunctionTool_ParameterSchema_" data-uid="AiDotNet.Interfaces.IFunctionTool.ParameterSchema*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFunctionTool_ParameterSchema" data-uid="AiDotNet.Interfaces.IFunctionTool.ParameterSchema">
+  ParameterSchema
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFunctionTool.cs/#L133"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the JSON schema describing the function's parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">JObject ParameterSchema { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">JObject</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IFunctionTool_ParameterSchema_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The schema defines what arguments the function accepts, their types, whether they're required,
+and validation rules. This follows the JSON Schema specification to enable structured function calling.
+</p>
+<p><b>For Beginners:</b> This is like a form that defines what information the tool needs.
+<p>Example for &quot;get_current_weather&quot;:
+Schema:
+{
+&quot;type&quot;: &quot;object&quot;,
+&quot;properties&quot;: {
+&quot;location&quot;: {
+&quot;type&quot;: &quot;string&quot;,
+&quot;description&quot;: &quot;The city and state, e.g., San Francisco, CA&quot;
+},
+&quot;unit&quot;: {
+&quot;type&quot;: &quot;string&quot;,
+&quot;enum&quot;: [&quot;celsius&quot;, &quot;fahrenheit&quot;],
+&quot;description&quot;: &quot;The temperature unit&quot;
+}
+},
+&quot;required&quot;: [&quot;location&quot;]
+}</p>
+<p>This tells the LLM:</p>
+<ul>
+<li>&quot;location&quot; is required (must provide)</li>
+<li>&quot;unit&quot; is optional (has default)</li>
+<li>&quot;unit&quot; must be either &quot;celsius&quot; or &quot;fahrenheit&quot;</li>
+<li>What each parameter means</li>
+</ul>
+<p>The LLM uses this to generate valid function calls:
+get_current_weather(location=&quot;Paris, France&quot;, unit=&quot;celsius&quot;)</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IFunctionTool_Execute_" data-uid="AiDotNet.Interfaces.IFunctionTool.Execute*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFunctionTool_Execute_Newtonsoft_Json_Linq_JObject_" data-uid="AiDotNet.Interfaces.IFunctionTool.Execute(Newtonsoft.Json.Linq.JObject)">
+  Execute(JObject)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFunctionTool.cs/#L177"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string Execute(JObject arguments)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>arguments</code> <span class="xref">JObject</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IFunctionTool_ValidateArguments_" data-uid="AiDotNet.Interfaces.IFunctionTool.ValidateArguments*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFunctionTool_ValidateArguments_Newtonsoft_Json_Linq_JObject_" data-uid="AiDotNet.Interfaces.IFunctionTool.ValidateArguments(Newtonsoft.Json.Linq.JObject)">
+  ValidateArguments(JObject)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFunctionTool.cs/#L210"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that the provided arguments match the parameter schema.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool ValidateArguments(JObject arguments)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>arguments</code> <span class="xref">JObject</span></dt>
+    <dd><p>The function arguments to validate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if arguments are valid; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IFunctionTool_ValidateArguments_Newtonsoft_Json_Linq_JObject__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Checks whether the provided arguments conform to the parameter schema,
+including type validation, required field presence, and constraint checking.
+</p>
+<p><b>For Beginners:</b> This checks if the arguments are correct before executing.
+<p>Example:
+Schema requires: location (required string), unit (optional, must be &quot;celsius&quot; or &quot;fahrenheit&quot;)</p>
+<p>Arguments: {&quot;location&quot;: &quot;Paris&quot;}
+Validate() → True (location present, unit optional)</p>
+<p>Arguments: {&quot;unit&quot;: &quot;celsius&quot;}
+Validate() → False (missing required &quot;location&quot;)</p>
+<p>Arguments: {&quot;location&quot;: &quot;Paris&quot;, &quot;unit&quot;: &quot;kelvin&quot;}
+Validate() → False (&quot;kelvin&quot; not in allowed values)</p>
+<p>This helps:</p>
+<ul>
+<li>Catch errors early</li>
+<li>Provide clear error messages</li>
+<li>Prevent invalid operations</li>
+<li>Ensure data quality</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFunctionTool.cs/#L38" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

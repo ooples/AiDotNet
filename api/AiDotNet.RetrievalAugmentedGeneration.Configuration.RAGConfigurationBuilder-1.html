@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class RAGConfigurationBuilder&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class RAGConfigurationBuilder&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Builder for constructing RAG configuration.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RetrievalAugmentedGeneration_Configuration_RAGConfigurationBuilder_1.md&amp;value=---%0Auid%3A%20AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder`1">
+
+
+
+  <h1 id="AiDotNet_RetrievalAugmentedGeneration_Configuration_RAGConfigurationBuilder_1" data-uid="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder`1" class="text-break">
+Class RAGConfigurationBuilder&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Configuration/RAGConfigurationBuilder.cs/#L9"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.html">RetrievalAugmentedGeneration</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Configuration.html">Configuration</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Builder for constructing RAG configuration.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class RAGConfigurationBuilder&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for vector operations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">RAGConfigurationBuilder&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Configuration_RAGConfigurationBuilder_1__ctor_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Configuration_RAGConfigurationBuilder_1__ctor" data-uid="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder`1.#ctor">
+  RAGConfigurationBuilder()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Configuration/RAGConfigurationBuilder.cs/#L16"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder-1.html">RAGConfigurationBuilder&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RAGConfigurationBuilder()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Configuration_RAGConfigurationBuilder_1_Build_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder`1.Build*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Configuration_RAGConfigurationBuilder_1_Build" data-uid="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder`1.Build">
+  Build()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Configuration/RAGConfigurationBuilder.cs/#L167"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Builds the RAG configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RAGConfiguration&lt;T&gt; Build()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfiguration-1.html">RAGConfiguration</a>&lt;T&gt;</dt>
+    <dd><p>The configured RAG configuration.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Configuration_RAGConfigurationBuilder_1_WithChunking_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder`1.WithChunking*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Configuration_RAGConfigurationBuilder_1_WithChunking_System_String_System_Int32_System_Int32_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder`1.WithChunking(System.String,System.Int32,System.Int32)">
+  WithChunking(string, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Configuration/RAGConfigurationBuilder.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configures the chunking strategy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RAGConfigurationBuilder&lt;T&gt; WithChunking(string strategy, int chunkSize = 1000, int chunkOverlap = 200)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>strategy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The chunking strategy name.</p>
+</dd>
+    <dt><code>chunkSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The chunk size.</p>
+</dd>
+    <dt><code>chunkOverlap</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The chunk overlap.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder-1.html">RAGConfigurationBuilder</a>&lt;T&gt;</dt>
+    <dd><p>The builder instance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Configuration_RAGConfigurationBuilder_1_WithContextCompression_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder`1.WithContextCompression*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Configuration_RAGConfigurationBuilder_1_WithContextCompression_System_String_System_Double_System_Int32_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder`1.WithContextCompression(System.String,System.Double,System.Int32)">
+  WithContextCompression(string, double, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Configuration/RAGConfigurationBuilder.cs/#L147"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configures context compression.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RAGConfigurationBuilder&lt;T&gt; WithContextCompression(string strategy, double compressionRatio = 0.5, int maxLength = 500)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>strategy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The compression strategy name.</p>
+</dd>
+    <dt><code>compressionRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The compression ratio (0.0 to 1.0).</p>
+</dd>
+    <dt><code>maxLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum length of compressed content.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder-1.html">RAGConfigurationBuilder</a>&lt;T&gt;</dt>
+    <dd><p>The builder instance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Configuration_RAGConfigurationBuilder_1_WithDocumentStore_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder`1.WithDocumentStore*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Configuration_RAGConfigurationBuilder_1_WithDocumentStore_System_String_System_Collections_Generic_Dictionary_System_String_System_Object__" data-uid="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder`1.WithDocumentStore(System.String,System.Collections.Generic.Dictionary{System.String,System.Object})">
+  WithDocumentStore(string, Dictionary&lt;string, object&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Configuration/RAGConfigurationBuilder.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configures the document store.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RAGConfigurationBuilder&lt;T&gt; WithDocumentStore(string type, Dictionary&lt;string, object&gt;? parameters = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>type</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The document store type.</p>
+</dd>
+    <dt><code>parameters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>Additional parameters for the document store.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder-1.html">RAGConfigurationBuilder</a>&lt;T&gt;</dt>
+    <dd><p>The builder instance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Configuration_RAGConfigurationBuilder_1_WithEmbedding_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder`1.WithEmbedding*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Configuration_RAGConfigurationBuilder_1_WithEmbedding_System_String_System_String_System_String_System_Int32_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder`1.WithEmbedding(System.String,System.String,System.String,System.Int32)">
+  WithEmbedding(string, string, string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Configuration/RAGConfigurationBuilder.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configures the embedding model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RAGConfigurationBuilder&lt;T&gt; WithEmbedding(string modelType, string modelPath = &quot;&quot;, string apiKey = &quot;&quot;, int embeddingDimension = 768)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelType</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The embedding model type.</p>
+</dd>
+    <dt><code>modelPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the model.</p>
+</dd>
+    <dt><code>apiKey</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The API key (if required).</p>
+</dd>
+    <dt><code>embeddingDimension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The embedding dimension.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder-1.html">RAGConfigurationBuilder</a>&lt;T&gt;</dt>
+    <dd><p>The builder instance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Configuration_RAGConfigurationBuilder_1_WithQueryExpansion_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder`1.WithQueryExpansion*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Configuration_RAGConfigurationBuilder_1_WithQueryExpansion_System_String_System_Int32_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder`1.WithQueryExpansion(System.String,System.Int32)">
+  WithQueryExpansion(string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Configuration/RAGConfigurationBuilder.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configures query expansion.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RAGConfigurationBuilder&lt;T&gt; WithQueryExpansion(string strategy, int numExpansions = 3)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>strategy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The query expansion strategy name.</p>
+</dd>
+    <dt><code>numExpansions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of query expansions to generate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder-1.html">RAGConfigurationBuilder</a>&lt;T&gt;</dt>
+    <dd><p>The builder instance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Configuration_RAGConfigurationBuilder_1_WithReranking_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder`1.WithReranking*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Configuration_RAGConfigurationBuilder_1_WithReranking_System_String_System_Int32_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder`1.WithReranking(System.String,System.Int32)">
+  WithReranking(string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Configuration/RAGConfigurationBuilder.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configures the reranking strategy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RAGConfigurationBuilder&lt;T&gt; WithReranking(string strategy, int topK = 5)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>strategy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The reranking strategy name.</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of documents to return after reranking.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder-1.html">RAGConfigurationBuilder</a>&lt;T&gt;</dt>
+    <dd><p>The builder instance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Configuration_RAGConfigurationBuilder_1_WithRetrieval_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder`1.WithRetrieval*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Configuration_RAGConfigurationBuilder_1_WithRetrieval_System_String_System_Int32_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder`1.WithRetrieval(System.String,System.Int32)">
+  WithRetrieval(string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Configuration/RAGConfigurationBuilder.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configures the retrieval strategy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RAGConfigurationBuilder&lt;T&gt; WithRetrieval(string strategy, int topK = 10)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>strategy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The retrieval strategy name.</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of documents to retrieve.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Configuration.RAGConfigurationBuilder-1.html">RAGConfigurationBuilder</a>&lt;T&gt;</dt>
+    <dd><p>The builder instance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Configuration/RAGConfigurationBuilder.cs/#L9" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

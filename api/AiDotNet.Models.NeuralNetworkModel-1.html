@@ -1,0 +1,1902 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class NeuralNetworkModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class NeuralNetworkModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a neural network model that implements the IFullModel interface.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_NeuralNetworkModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.NeuralNetworkModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.NeuralNetworkModel`1">
+
+
+
+  <h1 id="AiDotNet_Models_NeuralNetworkModel_1" data-uid="AiDotNet.Models.NeuralNetworkModel`1" class="text-break">
+Class NeuralNetworkModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a neural network model that implements the IFullModel interface.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class NeuralNetworkModel&lt;T&gt; : IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">NeuralNetworkModel&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Models_NeuralNetworkModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class wraps a neural network implementation to provide a consistent interface with other model types.
+It handles training, prediction, serialization, and other operations required by the IFullModel interface,
+delegating to the underlying neural network. This allows neural networks to be used interchangeably with
+other model types in optimization and model selection processes.
+</p>
+<p><b>For Beginners:</b> This is a wrapper that makes neural networks work with the same interface as simpler models.
+<p>Neural networks are powerful machine learning models that can:</p>
+<ul>
+<li>Learn complex patterns in data that simpler models might miss</li>
+<li>Process different types of data like images, text, or tabular data</li>
+<li>Automatically extract useful features from raw data</li>
+</ul>
+<p>This class allows you to use neural networks anywhere you would use simpler models,
+making it easy to compare them or use them in the same optimization processes.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1__ctor_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1__ctor_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__" data-uid="AiDotNet.Models.NeuralNetworkModel`1.#ctor(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0})">
+  NeuralNetworkModel(NeuralNetworkArchitecture&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L159"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the NeuralNetworkModel class with the specified architecture.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NeuralNetworkModel(NeuralNetworkArchitecture&lt;T&gt; architecture)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The architecture defining the structure of the neural network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1__ctor_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new NeuralNetworkModel instance with the specified architecture. It initializes
+the underlying neural network based on the architecture provided. The architecture determines the network's
+structure, including the number and type of layers, the input and output dimensions, and the type of task
+the network is designed to perform.
+</p>
+<p><b>For Beginners:</b> This constructor creates a new neural network model with the specified design.
+<p>When creating a NeuralNetworkModel:</p>
+<ul>
+<li>You provide an architecture that defines the network's structure</li>
+<li>The constructor creates the actual neural network based on this design</li>
+<li>The model is ready to be trained or to make predictions</li>
+</ul>
+<p>The architecture is crucial as it determines what kind of data the network can process
+and what kind of problems it can solve. Different architectures work better for
+different types of problems.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_Architecture_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.Architecture*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_Architecture" data-uid="AiDotNet.Models.NeuralNetworkModel`1.Architecture">
+  Architecture
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the architecture of the neural network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NeuralNetworkArchitecture&lt;T&gt; Architecture { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>A NeuralNetworkArchitecture&lt;T&gt; instance defining the structure of the network.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_Architecture_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property provides access to the architecture that defines the structure of the neural network, including
+its layers, input/output dimensions, and task-specific properties. The architecture serves as a blueprint for
+the network and contains information about the network's topology and configuration.
+</p>
+<p><b>For Beginners:</b> This property gives you access to the blueprint of the neural network.
+<p>The architecture:</p>
+<ul>
+<li>Defines how many layers the network has</li>
+<li>Specifies how many neurons are in each layer</li>
+<li>Determines what kind of data the network can process</li>
+<li>Configures how the network learns and makes predictions</li>
+</ul>
+<p>Think of it like the plans for a building - it defines the structure
+but doesn't contain the actual building materials.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_Complexity_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.Complexity*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_Complexity" data-uid="AiDotNet.Models.NeuralNetworkModel`1.Complexity">
+  Complexity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L212"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the complexity of the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Complexity { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>An integer representing the model's complexity.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_Complexity_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns a measure of the model's complexity, which is calculated as the total number of
+trainable parameters (weights and biases) in the neural network. The complexity of a neural network is
+an important factor in understanding its capacity to learn, its potential for overfitting, and its
+computational requirements.
+</p>
+<p><b>For Beginners:</b> This tells you how complex the neural network is.
+<p>The complexity:</p>
+<ul>
+<li>Is measured by the total number of adjustable parameters in the network</li>
+<li>Higher complexity means the network can learn more complex patterns</li>
+<li>But higher complexity also means more training data is needed</li>
+<li>And higher complexity increases the risk of overfitting</li>
+</ul>
+<p>A simple network might have hundreds of parameters,
+while deep networks can have millions or billions.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_DefaultLossFunction_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.DefaultLossFunction*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_DefaultLossFunction" data-uid="AiDotNet.Models.NeuralNetworkModel`1.DefaultLossFunction">
+  DefaultLossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L954"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the default loss function used by this model for gradient computation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ILossFunction&lt;T&gt; DefaultLossFunction { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_DefaultLossFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This loss function is used when calling <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ComputeGradients__1__2_AiDotNet_Interfaces_ILossFunction__0__">ComputeGradients(TInput, TOutput, ILossFunction&lt;T&gt;?)</a>
+without explicitly providing a loss function. It represents the model's primary training objective.
+</p>
+<p><b>For Beginners:</b>
+The loss function tells the model "what counts as a mistake". For example:
+- For regression (predicting numbers): Mean Squared Error measures how far predictions are from actual values
+- For classification (predicting categories): Cross Entropy measures how confident the model is in the right category
+<p>This property provides a sensible default so you don't have to specify the loss function every time,
+but you can still override it if needed for special cases.</p>
+
+<p><b>Distributed Training:</b>
+In distributed training, all workers use the same loss function to ensure consistent gradient computation.
+The default loss function is automatically used when workers compute local gradients.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if accessed before the model has been configured with a loss function.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_FeatureCount_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.FeatureCount*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_FeatureCount" data-uid="AiDotNet.Models.NeuralNetworkModel`1.FeatureCount">
+  FeatureCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L187"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of features used by the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int FeatureCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>An integer representing the number of input features.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_FeatureCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the number of features that the model uses, which is determined by the input size
+of the neural network. For one-dimensional inputs, this is simply the input size. For multi-dimensional
+inputs, this is the total number of input elements (calculated as InputHeight * InputWidth * InputDepth).
+</p>
+<p><b>For Beginners:</b> This tells you how many input variables the neural network uses.
+<p>The feature count:</p>
+<ul>
+<li>For simple data, it's the number of input values (like age, height, weight)</li>
+<li>For image data, it's the total number of pixels times the number of color channels</li>
+<li>For text data, it might be the vocabulary size or embedding dimension</li>
+</ul>
+<p>This helps you understand how much input information the network is considering,
+and it's important for ensuring your input data has the right dimensions.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_Network_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.Network*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_Network" data-uid="AiDotNet.Models.NeuralNetworkModel`1.Network">
+  Network
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the underlying neural network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NeuralNetworkBase&lt;T&gt; Network { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html">NeuralNetworkBase</a>&lt;T&gt;</dt>
+    <dd><p>A NeuralNetworkBase&lt;T&gt; instance containing the actual neural network.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_Network_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property provides access to the underlying neural network implementation. The network is responsible for
+the actual computations, while this class serves as an adapter to the IFullModel interface. This property
+can be used to access network-specific features not exposed through the IFullModel interface.
+</p>
+<p><b>For Beginners:</b> This property gives you direct access to the actual neural network.
+<p>The network:</p>
+<ul>
+<li>Contains all the layers and connections of the neural network</li>
+<li>Handles the actual calculations and learning</li>
+<li>Stores all the learned weights and parameters</li>
+</ul>
+<p>You can use this property to access neural network-specific features
+that aren't available through the standard model interface.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_ParameterCount_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.ParameterCount*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_ParameterCount" data-uid="AiDotNet.Models.NeuralNetworkModel`1.ParameterCount">
+  ParameterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L889"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of parameters in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual int ParameterCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_ParameterCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This property returns the total count of trainable parameters in the model.
+It's useful for understanding model complexity and memory requirements.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_SupportsJitCompilation_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_SupportsJitCompilation" data-uid="AiDotNet.Models.NeuralNetworkModel`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L971"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model currently supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the model can be JIT compiled, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Some models may not support JIT compilation due to:
+- Dynamic graph structure (changes based on input)
+- Lack of computation graph representation
+- Use of operations not yet supported by the JIT compiler
+</p>
+<p><b>For Beginners:</b> This tells you whether this specific model can benefit from JIT compilation.
+<p>Models return false if they:</p>
+<ul>
+<li>Use layer-based architecture without graph export (e.g., current neural networks)</li>
+<li>Have control flow that changes based on input data</li>
+<li>Use operations the JIT compiler doesn't understand yet</li>
+</ul>
+<p>In these cases, the model will still work normally, just without JIT acceleration.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_ApplyGradients_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.ApplyGradients*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.ApplyGradients(AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0)">
+  ApplyGradients(Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L961"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies pre-computed gradients to update the model parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ApplyGradients(Vector&lt;T&gt; gradients, T learningRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The gradient vector to apply.</p>
+</dd>
+    <dt><code>learningRate</code> <span class="xref">T</span></dt>
+    <dd><p>The learning rate for the update.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Updates parameters using: θ = θ - learningRate * gradients
+</p>
+<p><b>For Beginners:</b>
+After computing gradients (seeing which direction to move),
+this method actually moves the model in that direction.
+The learning rate controls how big of a step to take.
+</p>
+<p><b>Distributed Training:</b>
+In DDP/ZeRO-2, this applies the synchronized (averaged) gradients after
+communication across workers. Each worker applies the same averaged gradients
+to keep parameters consistent.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_Clone_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.Clone*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_Clone" data-uid="AiDotNet.Models.NeuralNetworkModel`1.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L883"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a shallow copy of this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance with the same architecture and parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_Clone_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a copy of the model that shares the same architecture but has its own set
+of parameters. It is equivalent to DeepCopy for this implementation but is provided for compatibility
+with the IFullModel interface.
+</p>
+<p><b>For Beginners:</b> This method creates a copy of the neural network model.
+<p>In this implementation, Clone and DeepCopy do the same thing - they
+both create a completely independent copy of the model with the same
+architecture and parameters. Both methods are provided for compatibility
+with the IFullModel interface.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_ComputeGradients_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.ComputeGradients*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Interfaces_ILossFunction__0__" data-uid="AiDotNet.Models.NeuralNetworkModel`1.ComputeGradients(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Interfaces.ILossFunction{`0})">
+  ComputeGradients(Tensor&lt;T&gt;, Tensor&lt;T&gt;, ILossFunction&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L957"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes gradients of the loss function with respect to model parameters for the given data,
+WITHOUT updating the model parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; ComputeGradients(Tensor&lt;T&gt; input, Tensor&lt;T&gt; target, ILossFunction&lt;T&gt;? lossFunction = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input data.</p>
+</dd>
+    <dt><code>target</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The target/expected output.</p>
+</dd>
+    <dt><code>lossFunction</code> <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>The loss function to use for gradient computation. If null, uses the model's default loss function.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing gradients with respect to all model parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Interfaces_ILossFunction__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs a forward pass, computes the loss, and back-propagates to compute gradients,
+but does NOT update the model's parameters. The parameters remain unchanged after this call.
+</p>
+<p><b>Distributed Training:</b>
+In DDP/ZeRO-2, each worker calls this to compute local gradients on its data batch.
+These gradients are then synchronized (averaged) across workers before applying updates.
+This ensures all workers compute the same parameter updates despite having different data.
+</p>
+<p><b>For Meta-Learning:</b>
+After adapting a model on a support set, you can use this method to compute gradients
+on the query set. These gradients become the meta-gradients for updating the meta-parameters.
+</p>
+<p><b>For Beginners:</b>
+Think of this as "dry run" training:
+- The model sees what direction it should move (the gradients)
+- But it doesn't actually move (parameters stay the same)
+- You get to decide what to do with this information (average with others, inspect, modify, etc.)
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>If lossFunction is null and the model has no default loss function.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_DeepCopy_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.DeepCopy*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_DeepCopy" data-uid="AiDotNet.Models.NeuralNetworkModel`1.DeepCopy">
+  DeepCopy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L848"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; DeepCopy()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance with the same architecture and parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_DeepCopy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a deep copy of the neural network model, including both its architecture and
+learned parameters. The new model is independent of the original, so changes to one will not affect
+the other. This is useful for creating variations of a model while preserving the original.
+</p>
+<p><b>For Beginners:</b> This method creates an exact duplicate of the neural network,
+with the same structure and the same learned weights. This is useful when you need to
+make changes to a model without affecting the original.
+<p>The deep copy:</p>
+<ul>
+<li>Has identical architecture (same layers, neurons, connections)</li>
+<li>Has identical parameters (same weights and biases)</li>
+<li>Is completely independent of the original</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Creating model variants for experimentation</li>
+<li>Saving a checkpoint before making changes</li>
+<li>Creating ensemble models</li>
+<li>Implementing techniques like dropout ensemble</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_Deserialize_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.Deserialize*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_Deserialize_System_Byte___" data-uid="AiDotNet.Models.NeuralNetworkModel`1.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L629"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes the model from a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Deserialize(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method deserializes the model from a byte array by reading the architecture details and the network parameters.
+It expects the same format as produced by the Serialize method: the architecture information followed by the network
+parameters. This allows a model that was previously serialized to be reconstructed.
+</p>
+<p><b>For Beginners:</b> This method reconstructs a neural network model from a byte array created by Serialize.
+<p>When deserializing the model:</p>
+<ul>
+<li>The architecture is read first to recreate the structure</li>
+<li>Then the parameters (weights) are loaded into that structure</li>
+<li>The resulting model is identical to the one that was serialized</li>
+</ul>
+<p>This is used when:</p>
+<ul>
+<li>Loading a previously saved model</li>
+<li>Receiving a model from another system</li>
+<li>Resuming training from a checkpoint</li>
+</ul>
+<p>After deserialization, the model can be used for predictions or further training
+just as if it had never been serialized.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_ExportComputationGraph_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.ExportComputationGraph*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.Models.NeuralNetworkModel`1.ExportComputationGraph(System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{`0}})">
+  ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L974"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exports the model's computation graph for JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputNodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List to populate with input computation nodes (parameters).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output computation node representing the model's prediction.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method should construct a computation graph representing the model's forward pass.
+The graph should use placeholder input nodes that will be filled with actual data during execution.
+</p>
+<p><b>For Beginners:</b> This method creates a "recipe" of your model's calculations
+that the JIT compiler can optimize.
+<p>The method should:</p>
+<ol>
+<li>Create placeholder nodes for inputs (features, parameters)</li>
+<li>Build the computation graph using TensorOperations</li>
+<li>Return the final output node</li>
+<li>Add all input nodes to the inputNodes list (in order)</li>
+</ol>
+<p>Example for a simple linear model (y = Wx + b):</p>
+<pre><code class="lang-csharp">public ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)
+{
+    // Create placeholder inputs
+    var x = TensorOperations&lt;T&gt;.Variable(new Tensor&lt;T&gt;(InputShape), "x");
+    var W = TensorOperations&lt;T&gt;.Variable(Weights, "W");
+    var b = TensorOperations&lt;T&gt;.Variable(Bias, "b");
+
+    // Add inputs in order
+    inputNodes.Add(x);
+    inputNodes.Add(W);
+    inputNodes.Add(b);
+
+    // Build graph: y = Wx + b
+    var matmul = TensorOperations&lt;T&gt;.MatMul(x, W);
+    var output = TensorOperations&lt;T&gt;.Add(matmul, b);
+
+    return output;
+}</code></pre>
+<p>The JIT compiler will then:</p>
+<ul>
+<li>Optimize the graph (fuse operations, eliminate dead code)</li>
+<li>Compile it to fast native code</li>
+<li>Cache the compiled version for reuse</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_GetActiveFeatureIndices_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.GetActiveFeatureIndices*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_GetActiveFeatureIndices" data-uid="AiDotNet.Models.NeuralNetworkModel`1.GetActiveFeatureIndices">
+  GetActiveFeatureIndices()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L770"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the indices of all features used by this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;int&gt; GetActiveFeatureIndices()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>A collection of feature indices.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_GetActiveFeatureIndices_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the indices of all features that are used by the model. For neural networks,
+this typically includes all features from 0 to FeatureCount-1, as neural networks generally use
+all input features to some extent.
+</p>
+<p><b>For Beginners:</b> This method returns a list of which input features the model actually uses.
+For neural networks, this typically includes all available features unless specific feature selection has been applied.
+<p>Unlike some simpler models (like linear regression with feature selection) where
+certain inputs might be completely ignored, neural networks typically process
+all input features and learn which ones are important during training.</p>
+<p>This method returns all feature indices from 0 to (FeatureCount-1).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_GetFeatureImportance_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.GetFeatureImportance*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_GetFeatureImportance" data-uid="AiDotNet.Models.NeuralNetworkModel`1.GetFeatureImportance">
+  GetFeatureImportance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L809"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the feature importance scores as a dictionary.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, T&gt; GetFeatureImportance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>A dictionary mapping feature names to their importance scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>This method is not supported for neural networks. Feature importance in neural networks
+requires specialized techniques like gradient-based attribution or permutation importance.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_GetModelMetadata_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_GetModelMetadata" data-uid="AiDotNet.Models.NeuralNetworkModel`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L525"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets metadata about the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>A ModelMetadata object containing information about the model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns metadata about the model, including its type, feature count, complexity, and additional
+information about the neural network. The metadata includes the model type (Neural Network), the number of
+features, the complexity (total parameter count), a description, and additional information such as the
+architecture details, layer counts, and activation functions used. This metadata is useful for model selection,
+analysis, and visualization.
+</p>
+<p><b>For Beginners:</b> This method returns detailed information about the neural network model.
+<p>The metadata includes:</p>
+<ul>
+<li>Basic properties like model type, feature count, and complexity</li>
+<li>Architecture details like layer counts and types</li>
+<li>Statistics about the model's parameters</li>
+</ul>
+<p>This information is useful for:</p>
+<ul>
+<li>Understanding the model's structure</li>
+<li>Comparing different models</li>
+<li>Analyzing the model's capabilities</li>
+<li>Documenting the model for future reference</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_GetParameters_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_GetParameters" data-uid="AiDotNet.Models.NeuralNetworkModel`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L708"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all trainable parameters of the neural network as a single vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing all trainable parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_GetParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns all trainable parameters of the neural network as a single vector.
+These parameters include weights and biases from all layers that support training.
+The vector can be used to save the model's state, apply optimization techniques,
+or transfer learning between models.
+</p>
+<p><b>For Beginners:</b> This method collects all the learned weights and biases from the neural network
+into a single list. This is useful for saving the model, optimizing it, or transferring its knowledge.
+<p>The parameters:</p>
+<ul>
+<li>Are the numbers that the neural network has learned during training</li>
+<li>Include weights (how strongly neurons connect to each other)</li>
+<li>Include biases (baseline activation levels for neurons)</li>
+</ul>
+<p>A simple network might have hundreds of parameters, while modern deep networks
+often have millions or billions of parameters.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_IsFeatureUsed_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.IsFeatureUsed*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_IsFeatureUsed_System_Int32_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.IsFeatureUsed(System.Int32)">
+  IsFeatureUsed(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L294"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether a specific feature is used by the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsFeatureUsed(int featureIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the feature to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Always returns true for neural networks, as they typically use all input features.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_IsFeatureUsed_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method determines whether a specific feature is used by the model. For neural networks, all features
+are typically used in some capacity, so this method always returns true. Unlike some linear models where
+features can have zero coefficients and therefore no impact, neural networks generally incorporate all
+input features, though they may learn to assign different importance to different features during training.
+</p>
+<p><b>For Beginners:</b> This method checks if a particular input variable affects the model's predictions.
+<p>For neural networks:</p>
+<ul>
+<li>This method always returns true</li>
+<li>Neural networks typically use all input features in some way</li>
+<li>The network learns which features are important during training</li>
+<li>Even if a feature isn't useful, the network will learn to assign it less weight</li>
+</ul>
+<p>This differs from simpler models like linear regression,
+where features can be explicitly excluded with zero coefficients.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_LoadModel_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.LoadModel*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_LoadModel_System_String_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.LoadModel(System.String)">
+  LoadModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L936"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the model from disk.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void LoadModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The file path to read the model from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_LoadModel_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method reads the model bytes from the provided path and deserializes them into this instance.
+</p>
+<p>
+<b>For Beginners:</b> This restores a model you saved earlier so you can run predictions right away.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_LoadState_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.LoadState*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_LoadState_System_IO_Stream_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.LoadState(System.IO.Stream)">
+  LoadState(Stream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L968"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the model's state (parameters and configuration) from a stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void LoadState(Stream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream to read the model state from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_LoadState_System_IO_Stream__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method deserializes model state that was previously saved with SaveState,
+restoring all parameters and configuration to recreate the saved model state.
+</p>
+<p>
+<b>For Beginners:</b> This is like loading a saved game.
+<p>When you call LoadState:</p>
+<ul>
+<li>All the parameters are read from the stream</li>
+<li>The model is configured to match the saved architecture</li>
+<li>The model becomes identical to when SaveState was called</li>
+</ul>
+<p>After loading, the model can make predictions using the restored parameters.</p>
+
+<p>
+<b>Stream Handling:</b>
+- The stream position will be advanced by the number of bytes read
+- The stream is not closed (caller must dispose)
+- Stream data must match the format written by SaveState
+</p>
+<p>
+<b>Versioning:</b>
+Implementations should consider:
+- Including format version number in serialized data
+- Validating compatibility before deserialization
+- Providing migration paths for old formats when possible
+</p>
+<p>
+<b>Usage:</b>
+<pre><code class="lang-csharp">// Load from file
+using var stream = File.OpenRead("model.bin");
+model.LoadState(stream);</code></pre>
+
+<p>
+<b>Important:</b> The stream must contain state data saved by SaveState from a
+compatible model (same architecture and numeric type).
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when stream is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when stream is not readable or contains invalid data.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when deserialization fails or data is incompatible with model architecture.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_Predict_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.Predict*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_Predict_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Models.NeuralNetworkModel`1.Predict(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Predict(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L392"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Uses the model to make a prediction for the given input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Predict(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input tensor to make a prediction for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The predicted output tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_Predict_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method uses the trained neural network to make a prediction for the given input tensor.
+It sets the network to prediction mode (not training mode), performs a forward pass through
+the network, and returns the output as a tensor with the appropriate shape.
+</p>
+<p><b>For Beginners:</b> This method makes predictions using what the neural network has learned.
+<p>When making a prediction:</p>
+<ol>
+<li>The input data is sent through the network</li>
+<li>Each layer processes the data based on its learned weights</li>
+<li>The final layer produces the output (prediction)</li>
+</ol>
+<p>Unlike training, no weights are updated during prediction - the network
+is simply using what it already knows to make its best guess.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_SaveModel_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.SaveModel*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_SaveModel_System_String_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.SaveModel(System.String)">
+  SaveModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L906"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the model to disk.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SaveModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The file path to write the model to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_SaveModel_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method serializes the model and writes the bytes to the provided path, creating the directory if needed.
+</p>
+<p>
+<b>For Beginners:</b> This is how you save your trained model so you can load it later without training again.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_SaveState_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.SaveState*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_SaveState_System_IO_Stream_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.SaveState(System.IO.Stream)">
+  SaveState(Stream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L965"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the model's current state (parameters and configuration) to a stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SaveState(Stream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream to write the model state to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_SaveState_System_IO_Stream__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method serializes all the information needed to recreate the model's current state,
+including trained parameters, layer configurations, and any internal state variables.
+</p>
+<p>
+<b>For Beginners:</b> This is like creating a snapshot of your trained model.
+<p>When you call SaveState:</p>
+<ul>
+<li>All the learned parameters (weights and biases) are written to the stream</li>
+<li>The model's architecture information is saved</li>
+<li>Any other internal state (like normalization statistics) is preserved</li>
+</ul>
+<p>You can later use LoadState to restore the model to this exact state.</p>
+
+<p>
+<b>Stream Handling:</b>
+- The stream position will be advanced by the number of bytes written
+- The stream is flushed but not closed (caller must dispose)
+- For file-based persistence, wrap in File.Create/FileStream
+</p>
+<p>
+<b>Usage:</b>
+<pre><code class="lang-csharp">// Save to file
+using var stream = File.Create("model.bin");
+model.SaveState(stream);</code></pre>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when stream is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when stream is not writable.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when model state cannot be serialized (e.g., uninitialized model).</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_Serialize_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.Serialize*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_Serialize" data-uid="AiDotNet.Models.NeuralNetworkModel`1.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L572"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the model to a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method serializes the model to a byte array by writing the architecture details and the network parameters.
+The serialization format includes the architecture information followed by the network parameters. This allows
+the model to be stored or transmitted and later reconstructed using the Deserialize method.
+</p>
+<p><b>For Beginners:</b> This method converts the neural network model to a byte array that can be saved or transmitted.
+<p>When serializing the model:</p>
+<ul>
+<li>Both the architecture (structure) and parameters (weights) are saved</li>
+<li>The data is formatted in a way that can be efficiently stored</li>
+<li>The resulting byte array contains everything needed to reconstruct the model</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Saving trained models to disk</li>
+<li>Sharing models with others</li>
+<li>Deploying models to production systems</li>
+<li>Creating model checkpoints during long training processes</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_SetActiveFeatureIndices_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.SetActiveFeatureIndices*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__" data-uid="AiDotNet.Models.NeuralNetworkModel`1.SetActiveFeatureIndices(System.Collections.Generic.IEnumerable{System.Int32})">
+  SetActiveFeatureIndices(IEnumerable&lt;int&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L795"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the active feature indices for this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetActiveFeatureIndices(IEnumerable&lt;int&gt; featureIndices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>The indices of features to activate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_SetLearningRate_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.SetLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_SetLearningRate__0_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.SetLearningRate(`0)">
+  SetLearningRate(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L236"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the learning rate for training the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NeuralNetworkModel&lt;T&gt; SetLearningRate(T learningRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>learningRate</code> <span class="xref">T</span></dt>
+    <dd><p>The learning rate to use during training.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.NeuralNetworkModel-1.html">NeuralNetworkModel</a>&lt;T&gt;</dt>
+    <dd><p>This model instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_SetLearningRate__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method sets the learning rate used during training. The learning rate controls how quickly the model
+adapts to the training data. A higher learning rate means faster learning but may cause instability, while
+a lower learning rate means slower but more stable learning.
+</p>
+<p><b>For Beginners:</b> This lets you control how big each learning step is during training.
+<p>The learning rate:</p>
+<ul>
+<li>Controls how quickly the network adjusts its weights</li>
+<li>Smaller values (like 0.001) make training more stable but slower</li>
+<li>Larger values (like 0.1) make training faster but potentially unstable</li>
+</ul>
+<p>Finding the right learning rate is often a process of trial and error.
+This method lets you set it to the value you want to try.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_SetParameters_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.SetParameters*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Models.NeuralNetworkModel`1.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L781"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the parameters for this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the model parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_SetTrainingMode_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.SetTrainingMode*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_SetTrainingMode_System_Boolean_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.SetTrainingMode(System.Boolean)">
+  SetTrainingMode(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L263"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets whether the model is in training mode or prediction mode.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NeuralNetworkModel&lt;T&gt; SetTrainingMode(bool isTraining)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>isTraining</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True for training mode, false for prediction mode.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.NeuralNetworkModel-1.html">NeuralNetworkModel</a>&lt;T&gt;</dt>
+    <dd><p>This model instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_SetTrainingMode_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method sets whether the model is in training mode or prediction mode. Some components of neural networks
+behave differently during training versus prediction, such as dropout layers, which randomly disable neurons
+during training but not during prediction.
+</p>
+<p><b>For Beginners:</b> This switches the network between learning mode and prediction mode.
+<p>The two modes are:</p>
+<ul>
+<li>Training mode: The network is learning and updating its weights</li>
+<li>Prediction mode: The network is using what it learned to make predictions</li>
+</ul>
+<p>Some special layers like Dropout and BatchNormalization work differently
+depending on which mode the network is in. This method lets you switch between them.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_Train_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.Train*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_Train_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Models.NeuralNetworkModel`1.Train(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Train(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L331"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the model with the provided input and expected output.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Train(Tensor&lt;T&gt; input, Tensor&lt;T&gt; expectedOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input tensor to train with.</p>
+</dd>
+    <dt><code>expectedOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The expected output tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_Train_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method trains the neural network with the provided input and expected output tensors.
+It sets the network to training mode, performs a forward pass through the network, calculates
+the error between the predicted output and the expected output, and backpropagates the error
+to update the network's weights.
+</p>
+<p><b>For Beginners:</b> This method teaches the neural network using an example.
+<p>During training:</p>
+<ol>
+<li>The input data is sent through the network (forward pass)</li>
+<li>The network makes a prediction</li>
+<li>The prediction is compared to the expected output</li>
+<li>The error is calculated</li>
+<li>The network adjusts its weights to reduce the error</li>
+</ol>
+<p>This process is repeated with many examples to gradually improve the network's performance.
+Each example helps the network learn a little more about the patterns in your data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NeuralNetworkModel_1_WithParameters_" data-uid="AiDotNet.Models.NeuralNetworkModel`1.WithParameters*"></a>
+
+  <h3 id="AiDotNet_Models_NeuralNetworkModel_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Models.NeuralNetworkModel`1.WithParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  WithParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L739"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the model with new parameter values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; WithParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The new parameter values to use.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The updated model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NeuralNetworkModel_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a new model with the same architecture as the current model but with the provided
+parameter values. This allows creating a modified version of the model without altering the original.
+The new parameters must match the number of parameters in the original model.
+</p>
+<p><b>For Beginners:</b> This method lets you change all the weights and biases in the neural network
+at once by providing a list of new values. It's useful when optimizing the model or loading saved weights.
+<p>When updating parameters:</p>
+<ul>
+<li>A new model is created with the same structure as this one</li>
+<li>The new model's weights and biases are set to the values you provide</li>
+<li>The original model remains unchanged</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Loading pre-trained weights</li>
+<li>Testing different parameter values</li>
+<li>Implementing evolutionary algorithms</li>
+<li>Creating ensemble models with different parameter sets</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NeuralNetworkModel.cs/#L28" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

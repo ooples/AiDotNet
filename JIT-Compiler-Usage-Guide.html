@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>JIT Compiler Usage Guide | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="JIT Compiler Usage Guide | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/JIT-Compiler-Usage-Guide.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="jit-compiler-usage-guide">JIT Compiler Usage Guide</h1>
+
+<h2 id="overview">Overview</h2>
+<p>The AiDotNet JIT (Just-In-Time) Compiler dramatically improves the performance of computation graphs by compiling them to optimized executable code. This can provide <strong>5-10x speedups</strong> for typical neural network operations.</p>
+<h2 id="quick-start">Quick Start</h2>
+<h3 id="basic-usage">Basic Usage</h3>
+<pre><code class="lang-csharp">using AiDotNet.Autodiff;
+using AiDotNet.JitCompiler;
+
+// Create a computation graph
+var x = new ComputationNode&lt;float&gt;(inputTensor, requiresGradient: false);
+var weights = new ComputationNode&lt;float&gt;(weightsTensor, requiresGradient: false);
+var bias = new ComputationNode&lt;float&gt;(biasTensor, requiresGradient: false);
+
+var matmul = TensorOperations.MatrixMultiply(x, weights);
+var add = TensorOperations.Add(matmul, bias);
+var result = TensorOperations.ReLU(add);
+
+// Create JIT compiler
+var jit = new JitCompiler();
+
+// Compile the graph
+var compiled = jit.Compile(result, new List&lt;ComputationNode&lt;float&gt;&gt; { x, weights, bias });
+
+// Execute the compiled function (much faster!)
+var output = compiled(new[] { inputTensor, weightsTensor, biasTensor });
+</code></pre>
+<h3 id="with-compilation-statistics">With Compilation Statistics</h3>
+<pre><code class="lang-csharp">// Compile with statistics to see what optimizations were applied
+var (compiledFunc, stats) = jit.CompileWithStats(result, inputs);
+
+Console.WriteLine(stats);
+// Output:
+// Compilation Stats:
+//   Original operations: 15
+//   Optimized operations: 8
+//   Operations eliminated: 7 (46.7%)
+//   Optimizations applied: Constant Folding, Dead Code Elimination, Operation Fusion
+//   Compilation time: 12.34ms
+//   Cache hit: false
+
+// Use the compiled function
+var output = compiledFunc(inputTensors);
+</code></pre>
+<h2 id="how-it-works">How It Works</h2>
+<p>The JIT compiler follows a multi-stage pipeline:</p>
+<h3 id="1-ir-construction">1. IR Construction</h3>
+<p>Converts the ComputationNode graph into an Intermediate Representation (IR):</p>
+<ul>
+<li>Each operation becomes an IROp</li>
+<li>Tensors are assigned IDs</li>
+<li>Graph structure is preserved</li>
+</ul>
+<h3 id="2-optimization">2. Optimization</h3>
+<p>Applies multiple optimization passes:</p>
+<h4 id="constant-folding">Constant Folding</h4>
+<p>Evaluates operations with constant inputs at compile time:</p>
+<pre><code>Before: t2 = Add(Constant(2), Constant(3)); t3 = Mul(t2, input)
+After:  t2 = Constant(5); t3 = Mul(t2, input)
+</code></pre>
+<h4 id="dead-code-elimination">Dead Code Elimination</h4>
+<p>Removes operations whose results are never used:</p>
+<pre><code>Before: t2 = Add(a, b); t3 = Mul(a, b); Output: t2
+After:  t2 = Add(a, b); Output: t2  (t3 removed!)
+</code></pre>
+<h4 id="operation-fusion">Operation Fusion</h4>
+<p>Combines multiple operations into fused operations:</p>
+<pre><code>Before: t2 = MatMul(x, w); t3 = Add(t2, b); t4 = ReLU(t3)
+After:  t4 = FusedLinearReLU(x, w, b)  (3 ops → 1 op!)
+</code></pre>
+<h3 id="3-code-generation">3. Code Generation</h3>
+<p>Generates executable .NET code using Expression Trees:</p>
+<ul>
+<li>Converts each IR operation to a .NET expression</li>
+<li>Builds a lambda function</li>
+<li>Compiles to native code via .NET JIT</li>
+</ul>
+<h3 id="4-caching">4. Caching</h3>
+<p>Compiled functions are cached by graph structure:</p>
+<ul>
+<li>First compilation: ~10-50ms (depends on graph size)</li>
+<li>Subsequent compilations of same structure: instant!</li>
+</ul>
+<h2 id="configuration">Configuration</h2>
+<h3 id="custom-compiler-options">Custom Compiler Options</h3>
+<pre><code class="lang-csharp">var options = new JitCompilerOptions
+{
+    EnableConstantFolding = true,      // Default: true
+    EnableDeadCodeElimination = true,  // Default: true
+    EnableOperationFusion = true,      // Default: true
+    EnableCaching = true               // Default: true
+};
+
+var jit = new JitCompiler(options);
+</code></pre>
+<h3 id="disabling-optimizations-for-debugging">Disabling Optimizations for Debugging</h3>
+<pre><code class="lang-csharp">var debugOptions = new JitCompilerOptions
+{
+    EnableConstantFolding = false,
+    EnableDeadCodeElimination = false,
+    EnableOperationFusion = false,
+    EnableCaching = false  // Force recompilation every time
+};
+
+var debugJit = new JitCompiler(debugOptions);
+</code></pre>
+<h2 id="best-practices">Best Practices</h2>
+<h3 id="1-reuse-compiled-functions">1. Reuse Compiled Functions</h3>
+<p>The compiled function can be called many times with different tensor values:</p>
+<pre><code class="lang-csharp">// Compile once
+var compiled = jit.Compile(modelOutput, modelInputs);
+
+// Use many times
+for (int epoch = 0; epoch &lt; 100; epoch++)
+{
+    for (int batch = 0; batch &lt; batches.Count; batch++)
+    {
+        var output = compiled(batches[batch]);  // Fast execution!
+        // ... training logic ...
+    }
+}
+</code></pre>
+<h3 id="2-set-operation-metadata-for-jit">2. Set Operation Metadata for JIT</h3>
+<p>For optimal JIT compilation, set operation type when creating nodes:</p>
+<pre><code class="lang-csharp">var result = new ComputationNode&lt;float&gt;(value)
+{
+    OperationType = &quot;Add&quot;,
+    OperationParams = new Dictionary&lt;string, object&gt;
+    {
+        // Include operation-specific parameters if needed
+    }
+};
+</code></pre>
+<p>The <code>TensorOperations</code> methods will automatically set this metadata in future updates.</p>
+<h3 id="3-cache-management">3. Cache Management</h3>
+<pre><code class="lang-csharp">// Get cache statistics
+var cacheStats = jit.GetCacheStats();
+Console.WriteLine($&quot;Cached graphs: {cacheStats.CachedGraphCount}&quot;);
+Console.WriteLine($&quot;Memory used: {cacheStats.EstimatedMemoryBytes / 1024} KB&quot;);
+
+// Clear cache if needed (e.g., memory pressure)
+jit.ClearCache();
+</code></pre>
+<h3 id="4-monitor-compilation-performance">4. Monitor Compilation Performance</h3>
+<pre><code class="lang-csharp">var (compiledFunc, stats) = jit.CompileWithStats(graph, inputs);
+
+if (!stats.CacheHit)
+{
+    Console.WriteLine($&quot;Compiled new graph in {stats.CompilationTime.TotalMilliseconds}ms&quot;);
+    Console.WriteLine($&quot;Optimized away {stats.OptimizationPercentage:F1}% of operations&quot;);
+}
+</code></pre>
+<h2 id="performance-expectations">Performance Expectations</h2>
+<h3 id="typical-speedups">Typical Speedups</h3>
+<table>
+<thead>
+<tr>
+<th>Graph Type</th>
+<th>Operations</th>
+<th>Speedup</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Small linear layer</td>
+<td>3-5 ops</td>
+<td>3-5x</td>
+<td>Less overhead benefit</td>
+</tr>
+<tr>
+<td>Deep MLP</td>
+<td>20-50 ops</td>
+<td>5-8x</td>
+<td>Good optimization opportunity</td>
+</tr>
+<tr>
+<td>CNN layer</td>
+<td>10-30 ops</td>
+<td>7-10x</td>
+<td>Convolution fusion helps</td>
+</tr>
+<tr>
+<td>Transformer block</td>
+<td>50-100 ops</td>
+<td>8-12x</td>
+<td>Many fusion opportunities</td>
+</tr>
+</tbody>
+</table>
+<h3 id="when-to-use-jit">When to Use JIT</h3>
+<p><strong>Best for:</strong></p>
+<ul>
+<li>Inference (forward pass only)</li>
+<li>Repeated execution of same graph structure</li>
+<li>Large models with many operations</li>
+<li>Production deployments</li>
+</ul>
+<p><strong>Less beneficial for:</strong></p>
+<ul>
+<li>Graphs that change structure frequently</li>
+<li>Very small operations (compilation overhead)</li>
+</ul>
+<h2 id="common-patterns">Common Patterns</h2>
+<h3 id="model-inference">Model Inference</h3>
+<pre><code class="lang-csharp">public class JitCompiledModel
+{
+    private readonly JitCompiler _jit = new();
+    private Func&lt;Tensor&lt;float&gt;[], Tensor&lt;float&gt;[]&gt;? _compiledForward;
+
+    public Tensor&lt;float&gt; Forward(Tensor&lt;float&gt; input)
+    {
+        // Build computation graph
+        var inputNode = new ComputationNode&lt;float&gt;(input);
+        var output = BuildGraph(inputNode);
+
+        // Compile on first call
+        if (_compiledForward == null)
+        {
+            _compiledForward = _jit.Compile(output, new List&lt;ComputationNode&lt;float&gt;&gt; { inputNode });
+        }
+
+        // Execute compiled version
+        var result = _compiledForward(new[] { input });
+        return result[0];
+    }
+}
+</code></pre>
+<h3 id="batch-processing">Batch Processing</h3>
+<pre><code class="lang-csharp">var jit = new JitCompiler();
+var compiled = jit.Compile(batchGraph, batchInputs);
+
+Parallel.ForEach(batches, batch =&gt;
+{
+    var output = compiled(batch);  // Thread-safe execution
+    ProcessOutput(output);
+});
+</code></pre>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="node-does-not-have-operationtype-metadata">&quot;Node does not have OperationType metadata&quot;</h3>
+<p><strong>Problem:</strong> ComputationNode doesn't have operation type information.</p>
+<p><strong>Solution:</strong> Ensure you're using TensorOperations methods that set metadata, or manually set:</p>
+<pre><code class="lang-csharp">node.OperationType = &quot;Add&quot;;
+node.OperationParams = new Dictionary&lt;string, object&gt;();
+</code></pre>
+<h3 id="compilation-is-slow">Compilation is slow</h3>
+<p><strong>Problem:</strong> Graph compilation takes too long.</p>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li>Enable caching (default)</li>
+<li>Compile during initialization, not in hot path</li>
+<li>Reduce graph size if possible</li>
+<li>Disable expensive optimizations if needed</li>
+</ol>
+<h3 id="cache-memory-usage-high">Cache memory usage high</h3>
+<p><strong>Problem:</strong> Too many compiled graphs cached.</p>
+<p><strong>Solutions:</strong></p>
+<pre><code class="lang-csharp">// Monitor cache
+var stats = jit.GetCacheStats();
+if (stats.EstimatedMemoryBytes &gt; threshold)
+{
+    jit.ClearCache();
+}
+</code></pre>
+<h2 id="future-enhancements">Future Enhancements</h2>
+<p>Planned improvements:</p>
+<ul>
+<li>[x] Support for backward pass (gradient) compilation</li>
+<li>[ ] GPU code generation</li>
+<li>[ ] More fusion patterns</li>
+<li>[ ] Advanced optimizations (loop unrolling, vectorization hints)</li>
+<li>[ ] Profiling and auto-tuning</li>
+</ul>
+<h2 id="examples">Examples</h2>
+<p>See the <code>examples/JitCompilerExample.cs</code> file for complete working examples.</p>
+<h2 id="api-reference">API Reference</h2>
+<h3 id="jitcompiler">JitCompiler</h3>
+<h4 id="methods">Methods</h4>
+<ul>
+<li><p><code>Func&lt;Tensor&lt;T&gt;[], Tensor&lt;T&gt;[]&gt; Compile&lt;T&gt;(ComputationNode&lt;T&gt; outputNode, List&lt;ComputationNode&lt;T&gt;&gt; inputs)</code></p>
+<ul>
+<li>Compiles a computation graph to executable code</li>
+</ul>
+</li>
+<li><p><code>(Func&lt;Tensor&lt;T&gt;[], Tensor&lt;T&gt;[]&gt;, CompilationStats) CompileWithStats&lt;T&gt;(...)</code></p>
+<ul>
+<li>Compiles and returns statistics</li>
+</ul>
+</li>
+<li><p><code>Func&lt;Tensor&lt;T&gt;[], Tensor&lt;T&gt;[]&gt; CompileBackward&lt;T&gt;(ComputationNode&lt;T&gt; outputNode, List&lt;ComputationNode&lt;T&gt;&gt; inputs)</code></p>
+<ul>
+<li>Compiles a backward pass (gradient computation) graph to executable code</li>
+</ul>
+</li>
+<li><p><code>(Func&lt;Tensor&lt;T&gt;[], Tensor&lt;T&gt;[]&gt;, CompilationStats) CompileBackwardWithStats&lt;T&gt;(...)</code></p>
+<ul>
+<li>Compiles backward pass and returns statistics</li>
+</ul>
+</li>
+<li><p><code>void ClearCache()</code></p>
+<ul>
+<li>Clears the compiled graph cache</li>
+</ul>
+</li>
+<li><p><code>CacheStats GetCacheStats()</code></p>
+<ul>
+<li>Gets cache statistics</li>
+</ul>
+</li>
+</ul>
+<h3 id="jitcompileroptions">JitCompilerOptions</h3>
+<h4 id="properties">Properties</h4>
+<ul>
+<li><code>bool EnableConstantFolding</code> - Enable constant folding optimization (default: true)</li>
+<li><code>bool EnableDeadCodeElimination</code> - Enable dead code elimination (default: true)</li>
+<li><code>bool EnableOperationFusion</code> - Enable operation fusion (default: true)</li>
+<li><code>bool EnableCaching</code> - Enable caching of compiled graphs (default: true)</li>
+</ul>
+<h3 id="compilationstats">CompilationStats</h3>
+<h4 id="properties-1">Properties</h4>
+<ul>
+<li><code>int OriginalOperationCount</code> - Operations before optimization</li>
+<li><code>int OptimizedOperationCount</code> - Operations after optimization</li>
+<li><code>List&lt;string&gt; OptimizationsApplied</code> - Applied optimization passes</li>
+<li><code>TimeSpan CompilationTime</code> - Time to compile</li>
+<li><code>bool CacheHit</code> - Whether result came from cache</li>
+<li><code>int OperationsEliminated</code> - Operations removed by optimization</li>
+<li><code>double OptimizationPercentage</code> - Percentage of operations optimized away</li>
+</ul>
+<h2 id="conclusion">Conclusion</h2>
+<p>The JIT compiler provides significant performance improvements for computation graph execution with minimal code changes. Simply create a compiler, call <code>Compile()</code>, and enjoy 5-10x speedups!</p>
+<p>For questions or issues, please file an issue on GitHub.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/JIT-Compiler-Usage-Guide.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

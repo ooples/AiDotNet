@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MultiStepReasoningRetriever&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MultiStepReasoningRetriever&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Multi-step reasoning retriever that breaks down complex queries into sequential steps.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_MultiStepReasoningRetriever_1.md&amp;value=---%0Auid%3A%20AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.MultiStepReasoningRetriever%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.MultiStepReasoningRetriever`1">
+
+
+
+  <h1 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_MultiStepReasoningRetriever_1" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.MultiStepReasoningRetriever`1" class="text-break">
+Class MultiStepReasoningRetriever&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/MultiStepReasoningRetriever.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.html">RetrievalAugmentedGeneration</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.html">AdvancedPatterns</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Multi-step reasoning retriever that breaks down complex queries into sequential steps.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MultiStepReasoningRetriever&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MultiStepReasoningRetriever&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_MultiStepReasoningRetriever_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This advanced retrieval pattern orchestrates multi-step reasoning where each step
+builds upon the results of previous steps. Unlike Chain-of-Thought which plans all
+steps upfront, multi-step reasoning adapts each step based on what was learned from
+previous steps, enabling dynamic problem-solving.
+</p>
+<p><b>For Beginners:</b> Think of this like solving a mystery by following clues.
+<p>Chain-of-Thought (plan everything first):</p>
+<ul>
+<li>Question: &quot;Who invented the transistor and how did it impact computing?&quot;</li>
+<li>Plans: [Find inventor, Find invention date, Find early applications, Find impact]</li>
+<li>Executes all steps</li>
+</ul>
+<p>Multi-Step Reasoning (adapt as you learn):</p>
+<ul>
+<li>Question: &quot;Who invented the transistor and how did it impact computing?&quot;</li>
+<li>Step 1: Search &quot;transistor inventor&quot; → Learn about Bell Labs team</li>
+<li>Step 2: Based on Bell Labs finding, search &quot;Bell Labs transistor computing applications&quot;</li>
+<li>Step 3: Based on applications found, search &quot;transistor revolution computer architecture&quot;</li>
+<li>Each step informed by previous discoveries</li>
+</ul>
+<p>This is useful when:</p>
+<ul>
+<li>The answer requires building knowledge progressively</li>
+<li>Later steps depend on findings from earlier steps</li>
+<li>You need to adapt the search strategy based on what you find</li>
+</ul>
+
+<p><b>Example Usage:</b>
+<pre><code class="lang-csharp">var generator = new StubGenerator&lt;double&gt;();
+var baseRetriever = new DenseRetriever&lt;double&gt;(embeddingModel, documentStore);
+
+var multiStepRetriever = new MultiStepReasoningRetriever&lt;double&gt;(
+    generator,
+    baseRetriever,
+    maxSteps: 5  // Allow up to 5 reasoning steps
+);
+
+var result = multiStepRetriever.RetrieveMultiStep(
+    "What are the environmental and economic impacts of solar energy adoption?",
+    topK: 15
+);
+
+// result.Documents: Final aggregated documents
+// result.ReasoningTrace: Shows the progression of reasoning steps
+// result.StepResults: Detailed results from each step</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_MultiStepReasoningRetriever_1__ctor_" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.MultiStepReasoningRetriever`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_MultiStepReasoningRetriever_1__ctor_AiDotNet_Interfaces_IGenerator__0__AiDotNet_RetrievalAugmentedGeneration_Retrievers_RetrieverBase__0__System_Int32_" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.MultiStepReasoningRetriever`1.#ctor(AiDotNet.Interfaces.IGenerator{`0},AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase{`0},System.Int32)">
+  MultiStepReasoningRetriever(IGenerator&lt;T&gt;, RetrieverBase&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/MultiStepReasoningRetriever.cs/#L139"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.MultiStepReasoningRetriever-1.html">MultiStepReasoningRetriever&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MultiStepReasoningRetriever(IGenerator&lt;T&gt; generator, RetrieverBase&lt;T&gt; baseRetriever, int maxSteps = 5)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>generator</code> <a class="xref" href="AiDotNet.Interfaces.IGenerator-1.html">IGenerator</a>&lt;T&gt;</dt>
+    <dd><p>The LLM generator for reasoning.</p>
+</dd>
+    <dt><code>baseRetriever</code> <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase-1.html">RetrieverBase</a>&lt;T&gt;</dt>
+    <dd><p>The underlying retriever to use.</p>
+</dd>
+    <dt><code>maxSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of reasoning steps (default: 5).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_MultiStepReasoningRetriever_1_RetrieveMultiStep_" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.MultiStepReasoningRetriever`1.RetrieveMultiStep*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_MultiStepReasoningRetriever_1_RetrieveMultiStep_System_String_System_Int32_System_Collections_Generic_Dictionary_System_String_System_Object__" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.MultiStepReasoningRetriever`1.RetrieveMultiStep(System.String,System.Int32,System.Collections.Generic.Dictionary{System.String,System.Object})">
+  RetrieveMultiStep(string, int, Dictionary&lt;string, object&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/MultiStepReasoningRetriever.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves documents using adaptive multi-step reasoning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MultiStepReasoningRetriever&lt;T&gt;.MultiStepReasoningResult RetrieveMultiStep(string query, int topK, Dictionary&lt;string, object&gt;? metadataFilters = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The complex query to answer.</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of documents to return.</p>
+</dd>
+    <dt><code>metadataFilters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>Metadata filters to apply during retrieval.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.MultiStepReasoningRetriever-1.html">MultiStepReasoningRetriever</a>&lt;T&gt;.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.MultiStepReasoningRetriever-1.MultiStepReasoningResult.html">MultiStepReasoningResult</a></dt>
+    <dd><p>Multi-step reasoning result with documents and reasoning trace.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/MultiStepReasoningRetriever.cs/#L64" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

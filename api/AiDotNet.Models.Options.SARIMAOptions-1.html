@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SARIMAOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SARIMAOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Seasonal Autoregressive Integrated Moving Average (SARIMA) models, which extend ARIMA models to incorporate seasonal components in time series data.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_SARIMAOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.SARIMAOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.SARIMAOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_SARIMAOptions_1" data-uid="AiDotNet.Models.Options.SARIMAOptions`1" class="text-break">
+Class SARIMAOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SARIMAOptions.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Seasonal Autoregressive Integrated Moving Average (SARIMA) models,
+which extend ARIMA models to incorporate seasonal components in time series data.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SARIMAOptions&lt;T&gt; : TimeSeriesRegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The data type used in matrix operations for the time series model.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html">TimeSeriesRegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">SARIMAOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LagOrder">TimeSeriesRegressionOptions&lt;T&gt;.LagOrder</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_IncludeTrend">TimeSeriesRegressionOptions&lt;T&gt;.IncludeTrend</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_AutocorrelationCorrection">TimeSeriesRegressionOptions&lt;T&gt;.AutocorrelationCorrection</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_ModelType">TimeSeriesRegressionOptions&lt;T&gt;.ModelType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LossFunction">TimeSeriesRegressionOptions&lt;T&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_SARIMAOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+SARIMA (Seasonal Autoregressive Integrated Moving Average) is a sophisticated time series forecasting model 
+that extends the ARIMA (Autoregressive Integrated Moving Average) framework to handle seasonal patterns in data. 
+It is particularly useful for time series that exhibit both trend and seasonality, such as monthly sales data, 
+quarterly economic indicators, or daily web traffic with weekly patterns. The model is denoted as 
+SARIMA(p,d,q)(P,D,Q)m, where p, d, q are the non-seasonal parameters (autoregressive order, differencing order, 
+and moving average order), P, D, Q are the corresponding seasonal parameters, and m is the seasonal period. 
+This class provides configuration options for all these parameters, allowing fine-tuning of the SARIMA model 
+to best capture the specific characteristics of the time series being analyzed.
+</p>
+<p><b>For Beginners:</b> SARIMA helps predict future values in time series data that has seasonal patterns.
+<p>Time series data shows how values change over time, like:</p>
+<ul>
+<li>Monthly sales figures</li>
+<li>Daily temperature readings</li>
+<li>Quarterly company earnings</li>
+</ul>
+<p>Many time series have seasonal patterns:</p>
+<ul>
+<li>Retail sales spike during holidays</li>
+<li>Ice cream consumption increases in summer</li>
+<li>Energy usage follows daily and yearly cycles</li>
+</ul>
+<p>SARIMA is designed to capture both:</p>
+<ul>
+<li>The overall trend in your data</li>
+<li>The repeating seasonal patterns</li>
+</ul>
+<p>It does this by combining:</p>
+<ul>
+<li>Regular ARIMA components that handle short-term patterns and trends</li>
+<li>Seasonal components that handle repeating patterns at fixed intervals</li>
+</ul>
+<p>This class lets you configure exactly how the SARIMA model analyzes your time series data,
+including how many past values to consider and how to handle seasonality.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_SARIMAOptions_1_D_" data-uid="AiDotNet.Models.Options.SARIMAOptions`1.D*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SARIMAOptions_1_D" data-uid="AiDotNet.Models.Options.SARIMAOptions`1.D">
+  D
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SARIMAOptions.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the differencing order (d) of the non-seasonal component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int D { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A non-negative integer, defaulting to 0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SARIMAOptions_1_D_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The differencing order (d) specifies how many times the time series is differenced to achieve stationarity. 
+Differencing involves computing the differences between consecutive observations and is used to remove trends 
+from the data. A value of 0 means no differencing is applied, which is appropriate for already stationary 
+series. A value of 1 applies first-order differencing, which can remove linear trends. A value of 2 applies 
+second-order differencing, which can remove quadratic trends. Higher values are rarely needed in practice. 
+The default value of 0 assumes that the time series is already stationary or that any non-stationarity will 
+be addressed by other components of the model. Statistical tests like the Augmented Dickey-Fuller test can 
+help determine the appropriate differencing order.
+</p>
+<p><b>For Beginners:</b> This setting controls how the model handles trends in your data.
+<p>Differencing means taking the difference between consecutive values:</p>
+<ul>
+<li>It helps remove trends and make the data more stable (stationary)</li>
+<li>Each level of differencing removes a more complex trend</li>
+</ul>
+<p>The default value of 0 means:</p>
+<ul>
+<li>No differencing is applied</li>
+<li>The model assumes your data doesn't have strong trends or that other components will handle them</li>
+</ul>
+<p>Different values mean:</p>
+<ul>
+<li>D=0: No trend removal (use when data has no trend or when you want to preserve the trend)</li>
+<li>D=1: Removes linear trends (like steady growth or decline)</li>
+<li>D=2: Removes quadratic trends (like accelerating growth or decline)</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase to 1 when your data shows clear upward or downward trends</li>
+<li>Increase to 2 when trends are changing (accelerating or decelerating)</li>
+<li>Keep at 0 when data fluctuates around a constant level</li>
+</ul>
+<p>For example, with steadily increasing monthly sales data, setting D=1 would help the model
+focus on the patterns in the growth rather than the absolute values.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SARIMAOptions_1_MaxIterations_" data-uid="AiDotNet.Models.Options.SARIMAOptions`1.MaxIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SARIMAOptions_1_MaxIterations" data-uid="AiDotNet.Models.Options.SARIMAOptions`1.MaxIterations">
+  MaxIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SARIMAOptions.cs/#L355"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of iterations for the parameter estimation algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SARIMAOptions_1_MaxIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the maximum number of iterations allowed for the numerical optimization algorithm 
+used to estimate the SARIMA model parameters. SARIMA models are typically fitted using maximum likelihood 
+estimation, which requires an iterative optimization procedure. This parameter prevents the algorithm from 
+running indefinitely in cases where convergence is difficult to achieve. The default value of 1000 is 
+sufficient for most applications to achieve convergence. However, for particularly complex models or 
+difficult datasets, more iterations may be required. Conversely, for simpler models or when approximate 
+solutions are acceptable, fewer iterations may be sufficient. If the algorithm reaches this maximum without 
+converging according to the Tolerance criterion, it will return the best solution found so far, possibly 
+with a warning.
+</p>
+<p><b>For Beginners:</b> This setting limits how long the algorithm will try to find the best model parameters.
+<p>SARIMA uses an iterative process to find the optimal parameters:</p>
+<ul>
+<li>It starts with initial estimates and gradually improves them</li>
+<li>Each iteration refines the parameters to better fit your data</li>
+<li>The process continues until the improvements become very small or the maximum iterations is reached</li>
+</ul>
+<p>The default value of 1000 means:</p>
+<ul>
+<li>The algorithm will try up to 1000 rounds of refinement</li>
+<li>This is usually more than enough for most time series</li>
+<li>If it reaches this limit without converging, it returns the best solution found so far</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it (e.g., to 2000 or 5000) for complex seasonal patterns or if you get convergence warnings</li>
+<li>Decrease it (e.g., to 500) when you need faster results and approximate solutions are acceptable</li>
+</ul>
+<p>For example, when fitting a SARIMA model to complex economic data with multiple seasonal
+patterns, you might need to increase this value to ensure the algorithm finds the optimal solution.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SARIMAOptions_1_P_" data-uid="AiDotNet.Models.Options.SARIMAOptions`1.P*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SARIMAOptions_1_P" data-uid="AiDotNet.Models.Options.SARIMAOptions`1.P">
+  P
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SARIMAOptions.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the autoregressive order (p) of the non-seasonal component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int P { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A non-negative integer, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SARIMAOptions_1_P_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The autoregressive order (p) determines how many lagged observations are included in the model. It 
+represents the number of past time points that directly influence the current value. A higher p value 
+allows the model to capture more complex autocorrelation patterns but increases the risk of overfitting 
+and computational complexity. The default value of 1 means that the model includes the influence of the 
+immediately preceding observation, which is sufficient for many time series with simple autocorrelation 
+structures. For time series with more complex dependencies on past values, a higher p value might be 
+appropriate. Model selection techniques like AIC (Akaike Information Criterion) or BIC (Bayesian Information 
+Criterion) are often used to determine the optimal p value.
+</p>
+<p><b>For Beginners:</b> This setting controls how many previous time points directly influence the current prediction.
+<p>The P value determines:</p>
+<ul>
+<li>How many past observations the model uses to predict the current value</li>
+<li>How directly the model captures the relationship between current and past values</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>The model considers the immediate previous value (t-1) when predicting the current value (t)</li>
+<li>This works well for many simple time series</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>P=1: Today's temperature depends on yesterday's temperature</li>
+<li>P=2: Today's temperature depends on both yesterday's and the day before's temperatures</li>
+<li>P=3: Extends this pattern to three previous days</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it (to 2, 3, etc.) when you believe values depend on multiple previous time points</li>
+<li>Keep it low (0 or 1) for simpler patterns or to avoid overfitting with limited data</li>
+</ul>
+<p>For example, in stock price prediction, a P value of 2 or 3 might capture short-term momentum
+effects where recent price movements influence current price changes.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SARIMAOptions_1_Q_" data-uid="AiDotNet.Models.Options.SARIMAOptions`1.Q*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SARIMAOptions_1_Q" data-uid="AiDotNet.Models.Options.SARIMAOptions`1.Q">
+  Q
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SARIMAOptions.cs/#L164"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the moving average order (q) of the non-seasonal component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Q { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A non-negative integer, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SARIMAOptions_1_Q_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The moving average order (q) determines how many lagged forecast errors are included in the model. It 
+represents the number of past random shocks (unexpected events or innovations) that influence the current 
+value. A higher q value allows the model to capture more complex patterns in the residuals but increases 
+the risk of overfitting and computational complexity. The default value of 1 means that the model includes 
+the influence of the immediately preceding forecast error, which is sufficient for many time series with 
+simple error structures. For time series with more complex error patterns, a higher q value might be 
+appropriate. As with the autoregressive order, model selection techniques like AIC or BIC are often used 
+to determine the optimal q value.
+</p>
+<p><b>For Beginners:</b> This setting controls how the model handles unexpected events or shocks in your data.
+<p>The Q value determines:</p>
+<ul>
+<li>How many past &quot;surprises&quot; or errors influence the current prediction</li>
+<li>How the model accounts for unexpected events that caused previous predictions to be off</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>The model considers the most recent prediction error when making new predictions</li>
+<li>This helps adjust for recent unexpected events</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Q=1: If yesterday's weather was unexpectedly rainy, today's forecast adjusts for that surprise</li>
+<li>Q=2: Adjusts for surprises from both yesterday and the day before</li>
+<li>Q=3: Extends this pattern to three previous days</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when unexpected events have lingering effects over multiple time periods</li>
+<li>Keep it low when shocks to the system are quickly absorbed</li>
+</ul>
+<p>For example, in retail sales, a Q value of 2 might help account for how unexpected events
+(like a promotion or supply shortage) affect sales for a couple of periods afterward.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SARIMAOptions_1_SeasonalD_" data-uid="AiDotNet.Models.Options.SARIMAOptions`1.SeasonalD*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SARIMAOptions_1_SeasonalD" data-uid="AiDotNet.Models.Options.SARIMAOptions`1.SeasonalD">
+  SeasonalD
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SARIMAOptions.cs/#L242"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the seasonal differencing order (D) of the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SeasonalD { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A non-negative integer, defaulting to 0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SARIMAOptions_1_SeasonalD_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The seasonal differencing order (D) specifies how many times the time series is seasonally differenced to 
+achieve seasonal stationarity. Seasonal differencing involves computing the differences between observations 
+separated by the seasonal period and is used to remove seasonal trends from the data. A value of 0 means no 
+seasonal differencing is applied, which is appropriate for series without seasonal trends. A value of 1 
+applies first-order seasonal differencing, which can remove seasonal patterns that change linearly over time. 
+Higher values are rarely needed in practice. The default value of 0 assumes that any seasonal patterns in the 
+time series are stable over time or will be addressed by other components of the model. Statistical tests and 
+visual inspection of seasonal plots can help determine the appropriate seasonal differencing order.
+</p>
+<p><b>For Beginners:</b> This setting controls how the model handles changing seasonal patterns.
+<p>Seasonal differencing compares values across seasons:</p>
+<ul>
+<li>It helps remove changing seasonal patterns</li>
+<li>It's like comparing &quot;this January vs. last January&quot; instead of &quot;January vs. December&quot;</li>
+</ul>
+<p>The default value of 0 means:</p>
+<ul>
+<li>No seasonal differencing is applied</li>
+<li>The model assumes seasonal patterns are stable over time</li>
+</ul>
+<p>Different values mean:</p>
+<ul>
+<li>SeasonalD=0: No seasonal trend removal (seasons have consistent patterns)</li>
+<li>SeasonalD=1: Removes changing seasonal patterns (when seasonal effects grow or shrink over time)</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase to 1 when seasonal patterns are getting stronger or weaker over time</li>
+<li>Keep at 0 when seasonal patterns are consistent year after year</li>
+</ul>
+<p>For example, if holiday sales spikes are getting larger each year, setting SeasonalD=1 would
+help the model account for this growing seasonal effect.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SARIMAOptions_1_SeasonalP_" data-uid="AiDotNet.Models.Options.SARIMAOptions`1.SeasonalP*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SARIMAOptions_1_SeasonalP" data-uid="AiDotNet.Models.Options.SARIMAOptions`1.SeasonalP">
+  SeasonalP
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SARIMAOptions.cs/#L203"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the seasonal autoregressive order (P) of the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SeasonalP { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A non-negative integer, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SARIMAOptions_1_SeasonalP_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The seasonal autoregressive order (P) determines how many seasonally lagged observations are included in 
+the model. It represents the number of past seasonal time points that directly influence the current value. 
+For example, with monthly data and a seasonal period of 12, a P value of 1 means that the value from the 
+same month in the previous year influences the current value. A higher P value allows the model to capture 
+more complex seasonal autocorrelation patterns but increases the risk of overfitting and computational 
+complexity. The default value of 1 is sufficient for many seasonal time series with simple seasonal 
+autocorrelation structures. For time series with more complex seasonal dependencies, a higher P value 
+might be appropriate.
+</p>
+<p><b>For Beginners:</b> This setting controls how previous seasons influence the current prediction.
+<p>The SeasonalP value determines:</p>
+<ul>
+<li>How many previous seasonal periods directly influence the current value</li>
+<li>How the model captures year-over-year (or season-over-season) patterns</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>The model considers the same time point from the previous season</li>
+<li>For monthly data with 12-month seasonality, January 2023 is influenced by January 2022</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>SeasonalP=1: This month's sales depend on the same month last year</li>
+<li>SeasonalP=2: This month's sales depend on the same month from both last year and two years ago</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when you believe multiple previous seasons influence the current season</li>
+<li>Keep it at 1 for most seasonal patterns, as one previous season is often sufficient</li>
+</ul>
+<p>For example, in tourism data, a SeasonalP of 1 would capture how summer tourism this year
+is related to summer tourism last year.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SARIMAOptions_1_SeasonalPeriod_" data-uid="AiDotNet.Models.Options.SARIMAOptions`1.SeasonalPeriod*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SARIMAOptions_1_SeasonalPeriod" data-uid="AiDotNet.Models.Options.SARIMAOptions`1.SeasonalPeriod">
+  SeasonalPeriod
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SARIMAOptions.cs/#L317"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of time points in one seasonal cycle.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SeasonalPeriod { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 12 (monthly seasonality).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SARIMAOptions_1_SeasonalPeriod_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The seasonal period defines the number of time points that make up one complete seasonal cycle in the data. 
+It represents the periodicity of the seasonal pattern. Common values include 12 for monthly data with yearly 
+seasonality, 4 for quarterly data with yearly seasonality, 7 for daily data with weekly seasonality, or 24 
+for hourly data with daily seasonality. The default value of 12 is appropriate for monthly data with yearly 
+seasonality, which is common in many business and economic applications. This property overrides the 
+SeasonalPeriod property inherited from the base class to provide a more appropriate default value for 
+SARIMA models. The correct specification of the seasonal period is crucial for the model to properly 
+capture the seasonal patterns in the data.
+</p>
+<p><b>For Beginners:</b> This setting defines how long one complete seasonal cycle is in your data.
+<p>The SeasonalPeriod tells the model how many time points make up a complete cycle:</p>
+<ul>
+<li>For monthly data: 12 (default) means a yearly seasonal pattern</li>
+<li>For quarterly data: 4 would mean a yearly seasonal pattern</li>
+<li>For daily data: 7 would mean a weekly seasonal pattern</li>
+<li>For hourly data: 24 would mean a daily seasonal pattern</li>
+</ul>
+<p>This value is critical because it tells the model exactly how far back to look for seasonal patterns:</p>
+<ul>
+<li>With monthly data and SeasonalPeriod=12, January is compared with previous Januaries</li>
+<li>With daily data and SeasonalPeriod=7, Mondays are compared with previous Mondays</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Change it to match the natural cycle in your data</li>
+<li>Common values: 12 (monthly), 4 (quarterly), 7 (daily with weekly pattern), 24 (hourly)</li>
+</ul>
+<p>For example, if analyzing weekly sales data over multiple years, you might set this to 52
+to capture yearly seasonality (52 weeks in a year).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SARIMAOptions_1_SeasonalQ_" data-uid="AiDotNet.Models.Options.SARIMAOptions`1.SeasonalQ*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SARIMAOptions_1_SeasonalQ" data-uid="AiDotNet.Models.Options.SARIMAOptions`1.SeasonalQ">
+  SeasonalQ
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SARIMAOptions.cs/#L280"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the seasonal moving average order (Q) of the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SeasonalQ { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A non-negative integer, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SARIMAOptions_1_SeasonalQ_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The seasonal moving average order (Q) determines how many seasonally lagged forecast errors are included in 
+the model. It represents the number of past seasonal random shocks that influence the current value. For 
+example, with monthly data and a seasonal period of 12, a Q value of 1 means that the forecast error from 
+the same month in the previous year influences the current value. A higher Q value allows the model to 
+capture more complex seasonal error patterns but increases the risk of overfitting and computational 
+complexity. The default value of 1 is sufficient for many seasonal time series with simple seasonal error 
+structures. For time series with more complex seasonal error patterns, a higher Q value might be appropriate.
+</p>
+<p><b>For Beginners:</b> This setting controls how unexpected seasonal events influence the current prediction.
+<p>The SeasonalQ value determines:</p>
+<ul>
+<li>How many past seasonal &quot;surprises&quot; or errors influence the current prediction</li>
+<li>How the model accounts for unexpected events that happened in previous seasons</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>The model considers the prediction error from the same time in the previous season</li>
+<li>For monthly data, an unexpected spike last December affects this December's prediction</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>SeasonalQ=1: If last Christmas had unexpectedly high sales, this Christmas's forecast adjusts for that</li>
+<li>SeasonalQ=2: Adjusts for surprises from both last Christmas and the Christmas before that</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when seasonal shocks have effects that persist across multiple years</li>
+<li>Keep it at 1 for most cases, as one seasonal period is often sufficient</li>
+</ul>
+<p>For example, in energy consumption data, a SeasonalQ of 1 would help account for how an
+unusually cold winter last year might inform predictions for this winter.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SARIMAOptions_1_Tolerance_" data-uid="AiDotNet.Models.Options.SARIMAOptions`1.Tolerance*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SARIMAOptions_1_Tolerance" data-uid="AiDotNet.Models.Options.SARIMAOptions`1.Tolerance">
+  Tolerance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SARIMAOptions.cs/#L393"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the convergence tolerance for the parameter estimation algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Tolerance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value, defaulting to 1e-5 (0.00001).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SARIMAOptions_1_Tolerance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the convergence criterion for the numerical optimization algorithm used to estimate 
+the SARIMA model parameters. The algorithm terminates when the relative change in the log-likelihood function 
+or parameter estimates between consecutive iterations is less than this tolerance value. A smaller tolerance 
+requires more precise convergence, potentially leading to more accurate parameter estimates but requiring more 
+iterations. A larger tolerance allows for earlier termination, potentially saving computational resources at 
+the cost of less precise parameter estimates. The default value of 1e-5 (0.00001) provides a good balance 
+between precision and computational efficiency for most applications. For high-precision requirements, a 
+smaller value might be appropriate, while for exploratory analysis or when computational resources are limited, 
+a larger value might be used.
+</p>
+<p><b>For Beginners:</b> This setting determines how precise the final solution needs to be.
+<p>During the iterative process, the algorithm keeps refining its solution:</p>
+<ul>
+<li>It compares each new solution to the previous one</li>
+<li>When the improvement becomes smaller than the tolerance value, it stops</li>
+<li>This indicates the solution has stabilized and further iterations won't improve much</li>
+</ul>
+<p>The Tolerance value (default 0.00001 or 1e-5) means:</p>
+<ul>
+<li>The algorithm will stop when improvements between iterations are very small</li>
+<li>A smaller value requires more precision (and usually more iterations)</li>
+<li>A larger value allows the algorithm to stop earlier with an approximate solution</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Decrease it (e.g., to 1e-6 or 1e-7) when you need extremely precise parameter estimates</li>
+<li>Increase it (e.g., to 1e-4 or 1e-3) when you need faster results and can accept slight imprecision</li>
+</ul>
+<p>For example, in a production forecasting system where small prediction improvements have
+significant financial impact, you might use a smaller tolerance to ensure maximum precision.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SARIMAOptions.cs/#L43" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

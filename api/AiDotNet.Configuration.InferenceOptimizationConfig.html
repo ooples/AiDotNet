@@ -1,0 +1,1293 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class InferenceOptimizationConfig | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class InferenceOptimizationConfig | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration for inference-time optimizations to maximize prediction throughput and efficiency.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Configuration_InferenceOptimizationConfig.md&amp;value=---%0Auid%3A%20AiDotNet.Configuration.InferenceOptimizationConfig%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Configuration.InferenceOptimizationConfig">
+
+
+
+  <h1 id="AiDotNet_Configuration_InferenceOptimizationConfig" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig" class="text-break">
+Class InferenceOptimizationConfig  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Configuration.html">Configuration</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration for inference-time optimizations to maximize prediction throughput and efficiency.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class InferenceOptimizationConfig</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">InferenceOptimizationConfig</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Configuration_InferenceOptimizationConfig_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This configuration controls advanced inference optimizations including KV caching for transformers,
+request batching for throughput, and speculative decoding for faster autoregressive generation.
+These optimizations are automatically applied during prediction based on your configuration.
+</p>
+<p><b>For Beginners:</b> Inference optimization makes your model's predictions faster and more efficient.
+<p>Key features:</p>
+<ul>
+<li><b>KV Cache:</b> Remembers previous computations in attention layers (2-10x faster for long sequences)</li>
+<li><b>Batching:</b> Groups multiple predictions together (higher throughput)</li>
+<li><b>Speculative Decoding:</b> Uses a small model to draft tokens, then verifies (1.5-3x faster generation)</li>
+</ul>
+<p>Default settings are optimized for most use cases. Simply enable and let the library handle the rest.</p>
+<p>Example:</p>
+<pre><code class="lang-csharp">var config = InferenceOptimizationConfig.Default;
+
+var result = await new PredictionModelBuilder&lt;double, ...&gt;()
+    .ConfigureModel(myModel)
+    .ConfigureInferenceOptimizations(config)
+    .BuildAsync();</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_AdaptiveBatchSize_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.AdaptiveBatchSize*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_AdaptiveBatchSize" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.AdaptiveBatchSize">
+  AdaptiveBatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L287"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether adaptive batch sizing is enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool AdaptiveBatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to enable adaptive sizing (default: true).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_AdaptiveBatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Automatically adjusts batch size based on system load.
+<p>When enabled:</p>
+<ul>
+<li>Low load: Smaller batches for lower latency</li>
+<li>High load: Larger batches for higher throughput</li>
+<li>Automatically balances latency vs throughput</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_AttentionMasking_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.AttentionMasking*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_AttentionMasking" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.AttentionMasking">
+  AttentionMasking
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L208"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets how attention masking should be applied for optimized attention implementations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AttentionMaskingMode AttentionMasking { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Configuration.AttentionMaskingMode.html">AttentionMaskingMode</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_AttentionMasking_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><ul>
+<li>Auto: Applies causal masking for known autoregressive models (e.g., text generation), otherwise no mask.</li>
+<li>Disabled: Never applies causal masking.</li>
+<li>Causal: Always applies causal masking (GPT-style).</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_BatchTimeoutMs_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.BatchTimeoutMs*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_BatchTimeoutMs" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.BatchTimeoutMs">
+  BatchTimeoutMs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L272"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum time to wait for batch to fill in milliseconds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BatchTimeoutMs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Batch timeout in milliseconds (default: 10ms).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_BatchTimeoutMs_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> How long to wait before processing a partial batch.
+<p>Lower values = lower latency but smaller batches.
+Higher values = larger batches but more waiting.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_Default_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.Default*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_Default" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.Default">
+  Default
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a default configuration with sensible settings for most use cases.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static InferenceOptimizationConfig Default { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Configuration.InferenceOptimizationConfig.html">InferenceOptimizationConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_Default_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default settings:</p>
+<ul>
+<li>KV Cache: Enabled for transformer models, 1GB max size</li>
+<li>Batching: Enabled with adaptive batch sizing</li>
+<li>Speculative Decoding: Disabled (requires explicit configuration)</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_DraftModelType_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.DraftModelType*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_DraftModelType" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.DraftModelType">
+  DraftModelType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L410"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the type of draft model to use for speculative decoding.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DraftModelType DraftModelType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Configuration.DraftModelType.html">DraftModelType</a></dt>
+    <dd><p>Draft model type (default: NGram).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_DraftModelType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The draft model generates candidate tokens quickly.
+<p>Options:</p>
+<ul>
+<li><b>NGram:</b> Simple statistical model (fast, no GPU needed)</li>
+<li><b>SmallNeural:</b> Smaller companion model (more accurate drafts)</li>
+</ul>
+<p>NGram is usually sufficient and has near-zero overhead.</p>
+<p>
+<b>Note:</b> Small neural draft models require an external companion model. In the MVP, the library
+falls back to <a class="xref" href="AiDotNet.Configuration.DraftModelType.html#AiDotNet_Configuration_DraftModelType_NGram">NGram</a> when a companion draft model is not available.
+</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_EnableBatching_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.EnableBatching*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_EnableBatching" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.EnableBatching">
+  EnableBatching
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L236"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether request batching is enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableBatching { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to enable batching (default: true).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_EnableBatching_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Batching groups multiple predictions together for efficiency.
+<p>Benefits:</p>
+<ul>
+<li>Higher throughput (more predictions per second)</li>
+<li>Better GPU utilization</li>
+<li>Lower per-request latency under load</li>
+</ul>
+<p>How it works:</p>
+<ul>
+<li>Incoming prediction requests are queued</li>
+<li>When batch is full OR timeout reached, batch is processed together</li>
+<li>Results are returned to each caller</li>
+</ul>
+<p>Trade-offs:</p>
+<ul>
+<li>Slight latency increase for single requests (waiting for batch)</li>
+<li>Significant throughput increase under load</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_EnableFlashAttention_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.EnableFlashAttention*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_EnableFlashAttention" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.EnableFlashAttention">
+  EnableFlashAttention
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L198"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether Flash Attention is enabled (when applicable).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableFlashAttention { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_EnableFlashAttention_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Flash Attention computes exact attention without materializing the full N×N attention matrix,
+reducing memory bandwidth pressure and improving throughput for long sequences.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_EnableKVCache_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.EnableKVCache*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_EnableKVCache" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.EnableKVCache">
+  EnableKVCache
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether KV (Key-Value) caching is enabled for attention layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableKVCache { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to enable KV caching (default: true).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_EnableKVCache_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> KV caching speeds up transformer models by remembering previous computations.
+<p>How it works:</p>
+<ul>
+<li>Attention layers compute keys and values for each token</li>
+<li>Without caching: Recomputes all keys/values for every new token</li>
+<li>With caching: Stores previous keys/values, only computes for new tokens</li>
+</ul>
+<p>Benefits:</p>
+<ul>
+<li>2-10x faster for long sequences</li>
+<li>Essential for autoregressive generation (GPT-style)</li>
+<li>Minimal memory overhead for huge speedup</li>
+</ul>
+<p>When to disable:</p>
+<ul>
+<li>Memory-constrained environments</li>
+<li>Very short sequences (overhead exceeds benefit)</li>
+<li>Non-transformer models (no effect)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_EnablePagedKVCache_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.EnablePagedKVCache*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_EnablePagedKVCache" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.EnablePagedKVCache">
+  EnablePagedKVCache
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L177"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use a paged KV-cache backend (vLLM-style) for long-context / multi-sequence serving.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnablePagedKVCache { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_EnablePagedKVCache_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>When enabled, the system may choose a paged cache implementation that allocates KV memory in fixed-size blocks.
+This is the industry-standard approach for high-throughput serving where many sequences are active concurrently.
+Users can disable this to force the traditional contiguous KV-cache.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_EnableSpeculativeDecoding_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.EnableSpeculativeDecoding*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_EnableSpeculativeDecoding" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.EnableSpeculativeDecoding">
+  EnableSpeculativeDecoding
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L389"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether speculative decoding is enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableSpeculativeDecoding { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to enable speculative decoding (default: false).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_EnableSpeculativeDecoding_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Speculative decoding speeds up autoregressive generation (GPT-style).
+<p>How it works:</p>
+<ol>
+<li>A small &quot;draft&quot; model quickly generates candidate tokens</li>
+<li>The main model verifies all candidates in one pass</li>
+<li>Accepted tokens are kept, rejected ones are regenerated</li>
+</ol>
+<p>Benefits:</p>
+<ul>
+<li>1.5-3x faster generation for LLMs</li>
+<li>No quality loss (verification ensures correctness)</li>
+</ul>
+<p>Requirements:</p>
+<ul>
+<li>Autoregressive model (generates tokens sequentially)</li>
+<li>Draft model must be available (NGram or smaller neural network)</li>
+</ul>
+<p>When to disable:</p>
+<ul>
+<li>Non-autoregressive models</li>
+<li>Single-pass predictions</li>
+<li>When draft model overhead exceeds benefit</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_EnableWeightOnlyQuantization_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.EnableWeightOnlyQuantization*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_EnableWeightOnlyQuantization" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.EnableWeightOnlyQuantization">
+  EnableWeightOnlyQuantization
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L484"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether weight-only INT8 quantization is enabled for inference.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableWeightOnlyQuantization { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_EnableWeightOnlyQuantization_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Weight-only quantization reduces memory bandwidth and improves cache locality by storing weights in int8
+with per-output scaling. Activations remain in FP32/FP16, and accumulation is performed in float.
+</p>
+<p>
+<b>For Beginners:</b> This makes your model weights smaller so the CPU/GPU can read them faster.
+</p>
+<p>
+This is disabled by default until validated across more layer types and kernels. When enabled, the optimizer
+will apply it opportunistically and fall back safely when unsupported.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_HighPerformance_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.HighPerformance*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_HighPerformance" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.HighPerformance">
+  HighPerformance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a high-performance configuration optimized for maximum throughput.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static InferenceOptimizationConfig HighPerformance { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Configuration.InferenceOptimizationConfig.html">InferenceOptimizationConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_HighPerformance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>All optimizations enabled with aggressive settings:</p>
+<ul>
+<li>KV Cache: Enabled with 2GB max size</li>
+<li>Batching: Enabled with larger batch sizes</li>
+<li>Speculative Decoding: Enabled with NGram draft model</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_KVCacheEvictionPolicy_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.KVCacheEvictionPolicy*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_KVCacheEvictionPolicy" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.KVCacheEvictionPolicy">
+  KVCacheEvictionPolicy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L117"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the KV cache eviction policy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CacheEvictionPolicy KVCacheEvictionPolicy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Configuration.CacheEvictionPolicy.html">CacheEvictionPolicy</a></dt>
+    <dd><p>Cache eviction policy (default: LRU).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_KVCacheMaxSizeMB_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.KVCacheMaxSizeMB*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_KVCacheMaxSizeMB" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.KVCacheMaxSizeMB">
+  KVCacheMaxSizeMB
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum KV cache size in megabytes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int KVCacheMaxSizeMB { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum cache size in MB (default: 1024 = 1GB).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_KVCacheMaxSizeMB_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This limits how much memory the KV cache can use.
+<p>Guidelines:</p>
+<ul>
+<li>512MB: Good for small models or memory-constrained systems</li>
+<li>1024MB (default): Balanced for most use cases</li>
+<li>2048MB+: For large models or long sequences</li>
+</ul>
+<p>When cache fills up, oldest entries are evicted (LRU policy).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_KVCachePrecision_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.KVCachePrecision*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_KVCachePrecision" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.KVCachePrecision">
+  KVCachePrecision
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the precision used for KV-cache storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public KVCachePrecisionMode KVCachePrecision { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Configuration.KVCachePrecisionMode.html">KVCachePrecisionMode</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_KVCachePrecision_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Industry-standard serving stores KV-cache in FP16 to halve memory usage and increase cache capacity.
+The default <a class="xref" href="AiDotNet.Configuration.KVCachePrecisionMode.html#AiDotNet_Configuration_KVCachePrecisionMode_Auto">Auto</a> selects FP16 when KV-cache is enabled and the numeric
+type supports it.
+</p>
+<p>
+<b>For Beginners:</b> This setting controls how much memory your model uses during autoregressive inference.
+<ul>
+<li>FP16: Uses about half the memory (recommended default)</li>
+<li>FP32: Uses more memory but can be slightly more numerically accurate</li>
+</ul>
+<p>Most production systems prefer FP16 KV-cache for capacity and throughput.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_KVCacheQuantization_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.KVCacheQuantization*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_KVCacheQuantization" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.KVCacheQuantization">
+  KVCacheQuantization
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L167"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the quantization mode used for KV-cache storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public KVCacheQuantizationMode KVCacheQuantization { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Configuration.KVCacheQuantizationMode.html">KVCacheQuantizationMode</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_KVCacheQuantization_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+KV-cache quantization can further reduce memory beyond FP16 by storing keys/values in int8 with scaling.
+This is an opt-in advanced feature because it can introduce small numerical error.
+</p>
+<p><b>For Beginners:</b>
+- None (default): Store KV-cache in FP16/FP32 depending on <a class="xref" href="AiDotNet.Configuration.InferenceOptimizationConfig.html#AiDotNet_Configuration_InferenceOptimizationConfig_KVCachePrecision">KVCachePrecision</a>.
+- Int8: Store KV-cache in 8-bit integers to save memory (advanced).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_KVCacheWindowSize_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.KVCacheWindowSize*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_KVCacheWindowSize" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.KVCacheWindowSize">
+  KVCacheWindowSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the sliding window size in tokens when <a class="xref" href="AiDotNet.Configuration.InferenceOptimizationConfig.html#AiDotNet_Configuration_InferenceOptimizationConfig_UseSlidingWindowKVCache">UseSlidingWindowKVCache</a> is enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int KVCacheWindowSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Window size in tokens (default: 1024).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_MaxBatchSize_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.MaxBatchSize*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_MaxBatchSize" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.MaxBatchSize">
+  MaxBatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L253"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum batch size for grouped predictions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxBatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum batch size (default: 32).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_MaxBatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> How many predictions to group together.
+<p>Guidelines:</p>
+<ul>
+<li>8-16: Good for memory-constrained systems</li>
+<li>32 (default): Balanced for most cases</li>
+<li>64+: For high-throughput GPU inference</li>
+</ul>
+<p>Larger batches = better throughput but more memory.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_MinBatchSize_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.MinBatchSize*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_MinBatchSize" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.MinBatchSize">
+  MinBatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L259"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum batch size before processing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MinBatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Minimum batch size (default: 1).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_PagedKVCacheBlockSize_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.PagedKVCacheBlockSize*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_PagedKVCacheBlockSize" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.PagedKVCacheBlockSize">
+  PagedKVCacheBlockSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L185"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the block size (in tokens) for the paged KV-cache when enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int PagedKVCacheBlockSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_PagedKVCacheBlockSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Common values are 16 or 32. Smaller blocks reduce internal fragmentation; larger blocks reduce table overhead.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_SpeculationDepth_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.SpeculationDepth*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_SpeculationDepth" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.SpeculationDepth">
+  SpeculationDepth
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L427"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the speculation depth (number of tokens to draft ahead).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SpeculationDepth { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Speculation depth (default: 4).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_SpeculationDepth_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> How many tokens the draft model predicts at once.
+<p>Guidelines:</p>
+<ul>
+<li>3-4: Conservative, high acceptance rate</li>
+<li>5-6: Balanced (default: 4)</li>
+<li>7+: Aggressive, may have more rejections</li>
+</ul>
+<p>Higher depth = more speedup potential but more wasted work on rejections.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_SpeculationPolicy_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.SpeculationPolicy*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_SpeculationPolicy" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.SpeculationPolicy">
+  SpeculationPolicy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L449"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the policy for when speculative decoding should run.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SpeculationPolicy SpeculationPolicy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Configuration.SpeculationPolicy.html">SpeculationPolicy</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_SpeculationPolicy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Auto is recommended: it can back off speculative decoding under high load (e.g., large batches)
+to avoid throughput regressions, while still enabling it for latency-sensitive scenarios.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_SpeculativeMethod_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.SpeculativeMethod*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_SpeculativeMethod" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.SpeculativeMethod">
+  SpeculativeMethod
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L462"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the speculative decoding method.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SpeculativeMethod SpeculativeMethod { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Configuration.SpeculativeMethod.html">SpeculativeMethod</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_SpeculativeMethod_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The default <a class="xref" href="AiDotNet.Configuration.SpeculativeMethod.html#AiDotNet_Configuration_SpeculativeMethod_Auto">Auto</a> currently selects <a class="xref" href="AiDotNet.Configuration.SpeculativeMethod.html#AiDotNet_Configuration_SpeculativeMethod_ClassicDraftModel">ClassicDraftModel</a>.
+</p>
+<p>
+<b>For Beginners:</b> This chooses the "style" of speculative decoding.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_UseSlidingWindowKVCache_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.UseSlidingWindowKVCache*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_UseSlidingWindowKVCache" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.UseSlidingWindowKVCache">
+  UseSlidingWindowKVCache
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use a sliding window KV-cache for long contexts.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseSlidingWindowKVCache { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_UseSlidingWindowKVCache_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>When enabled, only the most recent <a class="xref" href="AiDotNet.Configuration.InferenceOptimizationConfig.html#AiDotNet_Configuration_InferenceOptimizationConfig_KVCacheWindowSize">KVCacheWindowSize</a> tokens are kept.
+This is a common industry approach for long-context serving to cap memory usage.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_UseTreeSpeculation_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.UseTreeSpeculation*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_UseTreeSpeculation" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.UseTreeSpeculation">
+  UseTreeSpeculation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L440"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use tree-structured speculation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseTreeSpeculation { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to enable tree speculation (default: false).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_UseTreeSpeculation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Tree speculation generates multiple candidate sequences in parallel.
+<p>Instead of one sequence of draft tokens, generates a tree of possibilities.
+Can improve acceptance rate but uses more memory.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Configuration_InferenceOptimizationConfig_Validate_" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.Validate*"></a>
+
+  <h3 id="AiDotNet_Configuration_InferenceOptimizationConfig_Validate" data-uid="AiDotNet.Configuration.InferenceOptimizationConfig.Validate">
+  Validate()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L308"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates the configuration and throws if any values are invalid.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Validate()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_InferenceOptimizationConfig_Validate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Call this method to ensure your configuration is valid before use.
+<p>Validation rules:</p>
+<ul>
+<li>KVCacheMaxSizeMB must be positive</li>
+<li>MaxBatchSize must be positive</li>
+<li>MinBatchSize must be positive and not exceed MaxBatchSize</li>
+<li>BatchTimeoutMs must be non-negative</li>
+<li>SpeculationDepth must be non-negative</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when configuration values are invalid.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/InferenceOptimizationConfig.cs/#L32" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

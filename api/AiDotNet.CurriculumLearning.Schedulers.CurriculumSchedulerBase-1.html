@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CurriculumSchedulerBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CurriculumSchedulerBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Abstract base class for curriculum schedulers providing common functionality.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1">
+
+
+
+  <h1 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1" class="text-break">
+Class CurriculumSchedulerBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.CurriculumLearning.html">CurriculumLearning</a>.<a class="xref" href="AiDotNet.CurriculumLearning.Schedulers.html">Schedulers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Abstract base class for curriculum schedulers providing common functionality.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class CurriculumSchedulerBase&lt;T&gt; : ICurriculumScheduler&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">CurriculumSchedulerBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.ICurriculumScheduler-1.html">ICurriculumScheduler</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.CurriculumLearning.Schedulers.CompetenceBasedScheduler-1.html">CompetenceBasedScheduler&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.CurriculumLearning.Schedulers.CosineScheduler-1.html">CosineScheduler&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.CurriculumLearning.Schedulers.ExponentialScheduler-1.html">ExponentialScheduler&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.CurriculumLearning.Schedulers.LinearScheduler-1.html">LinearScheduler&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.CurriculumLearning.Schedulers.PolynomialScheduler-1.html">PolynomialScheduler&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.CurriculumLearning.Schedulers.SelfPacedScheduler-1.html">SelfPacedScheduler&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.CurriculumLearning.Schedulers.StepScheduler-1.html">StepScheduler&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> A curriculum scheduler determines how the training curriculum
+progresses over time. It controls when and how many samples are included in training
+as the model advances through the curriculum.</p>
+<p><b>Core Responsibilities:</b></p>
+<ul><li>Track current training progress (epoch, phase)</li><li>Calculate data fraction to use at each training stage</li><li>Select samples based on difficulty scores and current progress</li><li>Determine when curriculum is complete</li></ul>
+<p><b>Common Scheduler Types:</b></p>
+<ul><li><b>Linear:</b> Constant rate of curriculum progression</li><li><b>Exponential:</b> Starts slow, accelerates progression</li><li><b>Step:</b> Discrete jumps in curriculum phases</li><li><b>Self-Paced:</b> Adapts based on model performance</li><li><b>Competence-Based:</b> Advances when model masters current content</li></ul>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1__ctor_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1__ctor_System_Int32__0__0_System_Nullable_System_Int32__" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.#ctor(System.Int32,`0,`0,System.Nullable{System.Int32})">
+  CurriculumSchedulerBase(int, T?, T?, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase-1.html">CurriculumSchedulerBase&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected CurriculumSchedulerBase(int totalEpochs, T? minFraction = default, T? maxFraction = default, int? totalPhases = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>totalEpochs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Total number of training epochs.</p>
+</dd>
+    <dt><code>minFraction</code> <span class="xref">T</span></dt>
+    <dd><p>Minimum data fraction to start with (default 0.1).</p>
+</dd>
+    <dt><code>maxFraction</code> <span class="xref">T</span></dt>
+    <dd><p>Maximum data fraction to end with (default 1.0).</p>
+</dd>
+    <dt><code>totalPhases</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Total number of curriculum phases (default matches epochs).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_NumOps" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Numeric operations for type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_CurrentEpoch_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.CurrentEpoch*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_CurrentEpoch" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.CurrentEpoch">
+  CurrentEpoch
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current epoch number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CurrentEpoch { get; protected set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_CurrentPhase_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.CurrentPhase*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_CurrentPhase" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.CurrentPhase">
+  CurrentPhase
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current phase as a value between 0 and 1.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual T CurrentPhase { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_CurrentPhase_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Phase 0 means only easiest samples are available.
+Phase 1 means all samples are available.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_CurrentPhaseNumber_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.CurrentPhaseNumber*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_CurrentPhaseNumber" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.CurrentPhaseNumber">
+  CurrentPhaseNumber
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current phase number (0-indexed).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual int CurrentPhaseNumber { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_IsComplete_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.IsComplete*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_IsComplete" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.IsComplete">
+  IsComplete
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether the curriculum has completed (all samples available).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool IsComplete { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_MaxFraction_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.MaxFraction*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_MaxFraction" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.MaxFraction">
+  MaxFraction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Maximum data fraction to end with (usually 1.0).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected T MaxFraction { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_MinFraction_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.MinFraction*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_MinFraction" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.MinFraction">
+  MinFraction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Minimum data fraction to start with.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected T MinFraction { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_Name_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.Name*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_Name" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of this scheduler.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_TotalEpochs_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.TotalEpochs*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_TotalEpochs" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.TotalEpochs">
+  TotalEpochs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Total number of epochs for training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int TotalEpochs { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_TotalPhases_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.TotalPhases*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_TotalPhases" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.TotalPhases">
+  TotalPhases
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L95"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of phases in the curriculum.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual int TotalPhases { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_AdvancePhase_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.AdvancePhase*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_AdvancePhase" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.AdvancePhase">
+  AdvancePhase()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L203"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Advances to the next phase.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool AdvancePhase()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if advanced, false if already at final phase.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_GetCurrentIndices_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.GetCurrentIndices*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_GetCurrentIndices_System_Int32___System_Int32_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.GetCurrentIndices(System.Int32[],System.Int32)">
+  GetCurrentIndices(int[], int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L229"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the indices of samples available at the current phase.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual int[] GetCurrentIndices(int[] sortedIndices, int totalSamples)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sortedIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Indices sorted by difficulty (easy to hard).</p>
+</dd>
+    <dt><code>totalSamples</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Total number of samples.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Indices of samples available for training.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_GetDataFraction_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.GetDataFraction*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_GetDataFraction" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.GetDataFraction">
+  GetDataFraction()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the data fraction available at the current phase.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract T GetDataFraction()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Fraction of data to use (0 to 1).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_GetDifficultyThreshold_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.GetDifficultyThreshold*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_GetDifficultyThreshold" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.GetDifficultyThreshold">
+  GetDifficultyThreshold()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L170"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the difficulty threshold for the current phase.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual T GetDifficultyThreshold()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Maximum difficulty score allowed in current phase.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_GetDifficultyThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default implementation returns the data fraction as the threshold,
+meaning samples with normalized difficulty below this value are included.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_GetIndicesAtPhase_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.GetIndicesAtPhase*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_GetIndicesAtPhase_System_Int32___System_Int32__0_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.GetIndicesAtPhase(System.Int32[],System.Int32,`0)">
+  GetIndicesAtPhase(int[], int, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L241"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the indices of samples available at a specific phase.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual int[] GetIndicesAtPhase(int[] sortedIndices, int totalSamples, T phase)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sortedIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Indices sorted by difficulty (easy to hard).</p>
+</dd>
+    <dt><code>totalSamples</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Total number of samples.</p>
+</dd>
+    <dt><code>phase</code> <span class="xref">T</span></dt>
+    <dd><p>The phase to get indices for (0 to 1).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Indices of samples available at the specified phase.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_GetStatistics_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.GetStatistics*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_GetStatistics" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.GetStatistics">
+  GetStatistics()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L285"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets scheduler-specific statistics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Dictionary&lt;string, object&gt; GetStatistics()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>Dictionary of statistics about the scheduler state.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_InterpolateFraction_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.InterpolateFraction*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_InterpolateFraction__0_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.InterpolateFraction(`0)">
+  InterpolateFraction(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L268"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Interpolates between min and max fraction based on progress.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected T InterpolateFraction(T t)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>t</code> <span class="xref">T</span></dt>
+    <dd><p>Interpolation parameter [0, 1].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Interpolated fraction.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_Reset_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.Reset*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_Reset" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L217"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the scheduler to the initial phase.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_StepEpoch_" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.StepEpoch*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_Schedulers_CurriculumSchedulerBase_1_StepEpoch_AiDotNet_CurriculumLearning_Interfaces_CurriculumEpochMetrics__0__" data-uid="AiDotNet.CurriculumLearning.Schedulers.CurriculumSchedulerBase`1.StepEpoch(AiDotNet.CurriculumLearning.Interfaces.CurriculumEpochMetrics{`0})">
+  StepEpoch(CurriculumEpochMetrics&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L181"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the scheduler after an epoch.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool StepEpoch(CurriculumEpochMetrics&lt;T&gt; epochMetrics)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>epochMetrics</code> <a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.CurriculumEpochMetrics-1.html">CurriculumEpochMetrics</a>&lt;T&gt;</dt>
+    <dd><p>Metrics from the completed epoch.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the phase should advance, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/Schedulers/CurriculumSchedulerBase.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

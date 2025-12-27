@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class AgentAssistanceOptionsBuilder | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class AgentAssistanceOptionsBuilder | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides a fluent interface for configuring which AI agent assistance features should be enabled during model building.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_AgentAssistanceOptionsBuilder.md&amp;value=---%0Auid%3A%20AiDotNet.Models.AgentAssistanceOptionsBuilder%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder">
+
+
+
+  <h1 id="AiDotNet_Models_AgentAssistanceOptionsBuilder" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder" class="text-break">
+Class AgentAssistanceOptionsBuilder  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentAssistanceOptionsBuilder.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides a fluent interface for configuring which AI agent assistance features should be enabled during model building.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class AgentAssistanceOptionsBuilder</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">AgentAssistanceOptionsBuilder</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_AgentAssistanceOptionsBuilder_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This builder class provides a chainable, fluent API for configuring agent assistance options. It allows you to
+selectively enable or disable specific agent capabilities such as data analysis, model selection recommendations,
+hyperparameter tuning suggestions, feature analysis, and meta-learning advice. By default, all features are disabled,
+requiring explicit opt-in for each capability you want to use. This design gives you fine-grained control over which
+AI assistance features are active and helps manage API costs by only enabling the features you need.
+</p>
+<p><b>For Beginners:</b> This class helps you choose which AI assistance features you want to use when building
+your machine learning models.
+<p>Think of it as a configuration menu where you can turn on or off different AI helper features:</p>
+<ul>
+<li><strong>Data Analysis</strong>: AI examines your data and points out patterns, issues, or characteristics</li>
+<li><strong>Model Selection</strong>: AI recommends which type of model would work best for your problem</li>
+<li><strong>Hyperparameter Tuning</strong>: AI suggests optimal settings for your chosen model</li>
+<li><strong>Feature Analysis</strong>: AI analyzes which input features are most important</li>
+<li><strong>Meta-Learning Advice</strong>: AI provides general best practices based on similar problems</li>
+</ul>
+<p>Why use a builder:</p>
+<ul>
+<li>You can chain method calls together for clean, readable code</li>
+<li>You only pay for (and wait for) the AI features you actually use</li>
+<li>You can easily enable/disable features without changing lots of code</li>
+<li>All features start disabled for safety and cost control</li>
+</ul>
+<p>For example, if you're building a house price prediction model and want AI help choosing the model
+and tuning it, but don't need data analysis, you would enable just ModelSelection and HyperparameterTuning.
+This keeps your API costs lower and makes the process faster.</p>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Models_AgentAssistanceOptionsBuilder_Build_" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.Build*"></a>
+
+  <h3 id="AiDotNet_Models_AgentAssistanceOptionsBuilder_Build" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.Build">
+  Build()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentAssistanceOptionsBuilder.cs/#L334"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Builds and returns the configured AgentAssistanceOptions instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AgentAssistanceOptions Build()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.AgentAssistanceOptions.html">AgentAssistanceOptions</a></dt>
+    <dd><p>An AgentAssistanceOptions instance with all configured settings.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentAssistanceOptionsBuilder_Build_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method finalizes the configuration and returns the AgentAssistanceOptions object that can be
+passed to the PredictionModelBuilder. You typically call this method at the end of your fluent chain.
+</p>
+<p><b>For Beginners:</b> This finalizes your configuration choices and creates the options object.
+<p>You call this at the end of your configuration chain, like:</p>
+<pre><code class="lang-csharp">var options = new AgentAssistanceOptionsBuilder()
+    .EnableDataAnalysis()
+    .EnableModelSelection()
+    .Build();</code></pre>
+<p>The returned options object is then passed to ConfigureAgentAssistance() in your model builder.
+Returns a fresh copy to prevent external mutation of builder state.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentAssistanceOptionsBuilder_DisableDataAnalysis_" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.DisableDataAnalysis*"></a>
+
+  <h3 id="AiDotNet_Models_AgentAssistanceOptionsBuilder_DisableDataAnalysis" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.DisableDataAnalysis">
+  DisableDataAnalysis()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentAssistanceOptionsBuilder.cs/#L249"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Disables AI-powered data analysis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AgentAssistanceOptionsBuilder DisableDataAnalysis()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.AgentAssistanceOptionsBuilder.html">AgentAssistanceOptionsBuilder</a></dt>
+    <dd><p>The current builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentAssistanceOptionsBuilder_DisableDataAnalysis_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method turns off data analysis assistance, useful if you want to disable a previously enabled feature
+or ensure it's explicitly disabled even if it was enabled by default in a template configuration.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentAssistanceOptionsBuilder_DisableFeatureAnalysis_" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.DisableFeatureAnalysis*"></a>
+
+  <h3 id="AiDotNet_Models_AgentAssistanceOptionsBuilder_DisableFeatureAnalysis" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.DisableFeatureAnalysis">
+  DisableFeatureAnalysis()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentAssistanceOptionsBuilder.cs/#L291"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Disables AI-powered feature analysis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AgentAssistanceOptionsBuilder DisableFeatureAnalysis()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.AgentAssistanceOptionsBuilder.html">AgentAssistanceOptionsBuilder</a></dt>
+    <dd><p>The current builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentAssistanceOptionsBuilder_DisableFeatureAnalysis_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method turns off feature analysis assistance, useful if you've already performed feature engineering
+or want to skip this analysis to reduce processing time and API costs.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentAssistanceOptionsBuilder_DisableHyperparameterTuning_" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.DisableHyperparameterTuning*"></a>
+
+  <h3 id="AiDotNet_Models_AgentAssistanceOptionsBuilder_DisableHyperparameterTuning" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.DisableHyperparameterTuning">
+  DisableHyperparameterTuning()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentAssistanceOptionsBuilder.cs/#L277"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Disables AI-powered hyperparameter tuning suggestions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AgentAssistanceOptionsBuilder DisableHyperparameterTuning()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.AgentAssistanceOptionsBuilder.html">AgentAssistanceOptionsBuilder</a></dt>
+    <dd><p>The current builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentAssistanceOptionsBuilder_DisableHyperparameterTuning_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method turns off hyperparameter tuning assistance, useful if you want to use default hyperparameters
+or have your own tuning strategy you prefer to follow.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentAssistanceOptionsBuilder_DisableMetaLearningAdvice_" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.DisableMetaLearningAdvice*"></a>
+
+  <h3 id="AiDotNet_Models_AgentAssistanceOptionsBuilder_DisableMetaLearningAdvice" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.DisableMetaLearningAdvice">
+  DisableMetaLearningAdvice()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentAssistanceOptionsBuilder.cs/#L305"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Disables AI-powered meta-learning advice.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AgentAssistanceOptionsBuilder DisableMetaLearningAdvice()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.AgentAssistanceOptionsBuilder.html">AgentAssistanceOptionsBuilder</a></dt>
+    <dd><p>The current builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentAssistanceOptionsBuilder_DisableMetaLearningAdvice_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method turns off meta-learning advice, useful if you're experienced with this type of problem
+or want to focus only on specific technical recommendations rather than general guidance.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentAssistanceOptionsBuilder_DisableModelSelection_" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.DisableModelSelection*"></a>
+
+  <h3 id="AiDotNet_Models_AgentAssistanceOptionsBuilder_DisableModelSelection" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.DisableModelSelection">
+  DisableModelSelection()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentAssistanceOptionsBuilder.cs/#L263"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Disables AI-powered model selection recommendations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AgentAssistanceOptionsBuilder DisableModelSelection()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.AgentAssistanceOptionsBuilder.html">AgentAssistanceOptionsBuilder</a></dt>
+    <dd><p>The current builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentAssistanceOptionsBuilder_DisableModelSelection_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method turns off model selection assistance, useful if you already know which model you want to use
+or want to reduce API calls and costs by skipping this feature.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentAssistanceOptionsBuilder_EnableDataAnalysis_" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.EnableDataAnalysis*"></a>
+
+  <h3 id="AiDotNet_Models_AgentAssistanceOptionsBuilder_EnableDataAnalysis" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.EnableDataAnalysis">
+  EnableDataAnalysis()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentAssistanceOptionsBuilder.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enables AI-powered data analysis that examines your dataset for patterns, anomalies, and characteristics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AgentAssistanceOptionsBuilder EnableDataAnalysis()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.AgentAssistanceOptionsBuilder.html">AgentAssistanceOptionsBuilder</a></dt>
+    <dd><p>The current builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentAssistanceOptionsBuilder_EnableDataAnalysis_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, the AI agent will analyze your training data to identify characteristics such as data distributions,
+potential outliers, missing values, correlations between features, and other statistical properties. The agent
+provides insights about data quality issues and suggests preprocessing steps that might improve model performance.
+</p>
+<p><b>For Beginners:</b> This tells the AI to examine your data and give you insights about it.
+<p>What the AI looks for:</p>
+<ul>
+<li>Unusual patterns or outliers (data points that don't fit the pattern)</li>
+<li>Missing or invalid values</li>
+<li>How your features relate to each other</li>
+<li>Whether your data is balanced or skewed</li>
+<li>Potential data quality issues</li>
+</ul>
+<p>This is useful when:</p>
+<ul>
+<li>You're working with unfamiliar data</li>
+<li>You want to catch data quality issues early</li>
+<li>You need guidance on data preprocessing</li>
+<li>You want to understand your data better before modeling</li>
+</ul>
+<p>For example, if you're predicting house prices, the AI might notice that 20% of your price values are
+missing, or that there's a very strong correlation between square footage and price.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentAssistanceOptionsBuilder_EnableFeatureAnalysis_" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.EnableFeatureAnalysis*"></a>
+
+  <h3 id="AiDotNet_Models_AgentAssistanceOptionsBuilder_EnableFeatureAnalysis" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.EnableFeatureAnalysis">
+  EnableFeatureAnalysis()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentAssistanceOptionsBuilder.cs/#L194"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enables AI-powered feature analysis to identify important variables and suggest feature engineering improvements.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AgentAssistanceOptionsBuilder EnableFeatureAnalysis()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.AgentAssistanceOptionsBuilder.html">AgentAssistanceOptionsBuilder</a></dt>
+    <dd><p>The current builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentAssistanceOptionsBuilder_EnableFeatureAnalysis_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, the AI agent will analyze your input features to identify which ones are most important for
+predictions, detect redundant or highly correlated features, and suggest feature engineering techniques that
+might improve model performance. This can include recommendations for creating new features, transforming
+existing ones, or removing unhelpful features that add noise without predictive value.
+</p>
+<p><b>For Beginners:</b> This tells the AI to examine your input variables (features) and give advice about them.
+<p>What the AI analyzes:</p>
+<ul>
+<li>Which features are most important for making predictions</li>
+<li>Which features might be redundant or unhelpful</li>
+<li>How features relate to each other</li>
+<li>Whether creating new combined features would help</li>
+</ul>
+<p>What you get:</p>
+<ul>
+<li>Ranking of feature importance</li>
+<li>Suggestions for new features to create (feature engineering)</li>
+<li>Identification of features that could be removed</li>
+<li>Recommendations for transforming features</li>
+</ul>
+<p>This is useful when:</p>
+<ul>
+<li>You have many features and want to know which matter most</li>
+<li>You suspect some features aren't helping</li>
+<li>You want ideas for improving your feature set</li>
+<li>You're trying to simplify your model without losing accuracy</li>
+</ul>
+<p>For example, when predicting house prices, the AI might tell you that square footage and location
+are very important, number of bathrooms is somewhat important, but exterior color doesn't matter at all.
+It might also suggest creating a new feature: &quot;price per square foot&quot; which could improve predictions.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentAssistanceOptionsBuilder_EnableHyperparameterTuning_" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.EnableHyperparameterTuning*"></a>
+
+  <h3 id="AiDotNet_Models_AgentAssistanceOptionsBuilder_EnableHyperparameterTuning" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.EnableHyperparameterTuning">
+  EnableHyperparameterTuning()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentAssistanceOptionsBuilder.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enables AI-powered hyperparameter tuning suggestions to optimize model configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AgentAssistanceOptionsBuilder EnableHyperparameterTuning()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.AgentAssistanceOptionsBuilder.html">AgentAssistanceOptionsBuilder</a></dt>
+    <dd><p>The current builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentAssistanceOptionsBuilder_EnableHyperparameterTuning_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, the AI agent will suggest optimal hyperparameter values for your selected model based on
+your data characteristics and problem type. Hyperparameters are settings that control how the model learns,
+such as learning rate, tree depth, number of neurons, etc. The agent provides specific recommended values
+along with explanations of how each parameter affects model performance and why those values are appropriate.
+</p>
+<p><b>For Beginners:</b> This tells the AI to suggest the best settings for your chosen model.
+<p>What are hyperparameters:</p>
+<ul>
+<li>Settings that control how your model learns (like learning speed, complexity, etc.)</li>
+<li>Different from the parameters the model learns during training</li>
+<li>Can dramatically affect how well your model performs</li>
+<li>Usually require experimentation to find good values</li>
+</ul>
+<p>How the AI helps:</p>
+<ul>
+<li>Recommends specific values for each important setting</li>
+<li>Explains what each setting does and why that value makes sense</li>
+<li>Considers your data size, complexity, and characteristics</li>
+<li>Saves you hours of manual tuning experiments</li>
+</ul>
+<p>This is useful when:</p>
+<ul>
+<li>You're using a complex model with many settings</li>
+<li>You don't know where to start with hyperparameter values</li>
+<li>You want to get better results without extensive manual tuning</li>
+<li>You want to understand what each setting does</li>
+</ul>
+<p>For example, if you're using a Random Forest, the AI might suggest using 100 trees with a max depth
+of 15, and explain that this balances model accuracy with avoiding overfitting for your dataset size.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentAssistanceOptionsBuilder_EnableMetaLearningAdvice_" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.EnableMetaLearningAdvice*"></a>
+
+  <h3 id="AiDotNet_Models_AgentAssistanceOptionsBuilder_EnableMetaLearningAdvice" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.EnableMetaLearningAdvice">
+  EnableMetaLearningAdvice()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentAssistanceOptionsBuilder.cs/#L235"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enables AI-powered meta-learning advice that provides best practices and general recommendations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AgentAssistanceOptionsBuilder EnableMetaLearningAdvice()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.AgentAssistanceOptionsBuilder.html">AgentAssistanceOptionsBuilder</a></dt>
+    <dd><p>The current builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentAssistanceOptionsBuilder_EnableMetaLearningAdvice_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, the AI agent will provide high-level advice based on machine learning best practices and
+experiences with similar problems. This includes recommendations about data preprocessing, validation strategies,
+potential pitfalls to avoid, and general approaches that tend to work well for problems similar to yours.
+Meta-learning advice draws on patterns learned from many different machine learning projects.
+</p>
+<p><b>For Beginners:</b> This tells the AI to share general wisdom and best practices for your type of problem.
+<p>What you get:</p>
+<ul>
+<li>General advice about your machine learning approach</li>
+<li>Common mistakes to avoid for your type of problem</li>
+<li>Recommended validation and testing strategies</li>
+<li>Best practices from similar successful projects</li>
+<li>Warnings about potential issues specific to your problem type</li>
+</ul>
+<p>This is useful when:</p>
+<ul>
+<li>You're tackling a new type of machine learning problem</li>
+<li>You want to avoid common beginner mistakes</li>
+<li>You need guidance on overall strategy, not just technical details</li>
+<li>You want to benefit from experience with similar problems</li>
+</ul>
+<p>For example, when building a time series forecasting model, the AI might advise:</p>
+<ul>
+<li>Always split data chronologically, never randomly</li>
+<li>Watch for seasonal patterns that repeat yearly</li>
+<li>Consider testing on multiple time periods, not just one</li>
+<li>Be careful about data leakage from future to past</li>
+</ul>
+<p>This higher-level guidance complements the more specific technical recommendations from other features.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentAssistanceOptionsBuilder_EnableModelSelection_" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.EnableModelSelection*"></a>
+
+  <h3 id="AiDotNet_Models_AgentAssistanceOptionsBuilder_EnableModelSelection" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.EnableModelSelection">
+  EnableModelSelection()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentAssistanceOptionsBuilder.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enables AI-powered model selection recommendations based on your data characteristics and problem type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AgentAssistanceOptionsBuilder EnableModelSelection()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.AgentAssistanceOptionsBuilder.html">AgentAssistanceOptionsBuilder</a></dt>
+    <dd><p>The current builder instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentAssistanceOptionsBuilder_EnableModelSelection_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, the AI agent will analyze your data and problem characteristics to recommend the most appropriate
+model type. The agent considers factors such as dataset size, feature dimensionality, linearity of relationships,
+presence of outliers, and computational constraints. It provides a recommended model type along with reasoning
+explaining why that model is a good fit for your specific use case.
+</p>
+<p><b>For Beginners:</b> This tells the AI to suggest which type of model would work best for your problem.
+<p>How it helps:</p>
+<ul>
+<li>Recommends a specific model type (like Random Forest, Neural Network, etc.)</li>
+<li>Explains why that model is a good choice for your data</li>
+<li>Considers your data's characteristics (size, complexity, patterns)</li>
+<li>Saves you from trying many models manually</li>
+</ul>
+<p>This is useful when:</p>
+<ul>
+<li>You're not sure which model to use</li>
+<li>You want expert guidance on model selection</li>
+<li>You're new to machine learning</li>
+<li>You want to avoid obviously poor model choices</li>
+</ul>
+<p>For example, if you have a small dataset with clear linear relationships, the AI might recommend
+Simple Regression and explain that more complex models would likely overfit with so little data.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="operators">Operators
+</h2>
+
+
+  <a id="AiDotNet_Models_AgentAssistanceOptionsBuilder_op_Implicit_" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.op_Implicit*"></a>
+
+  <h3 id="AiDotNet_Models_AgentAssistanceOptionsBuilder_op_Implicit_AiDotNet_Models_AgentAssistanceOptionsBuilder__AiDotNet_Models_AgentAssistanceOptions" data-uid="AiDotNet.Models.AgentAssistanceOptionsBuilder.op_Implicit(AiDotNet.Models.AgentAssistanceOptionsBuilder)~AiDotNet.Models.AgentAssistanceOptions">
+  implicit operator AgentAssistanceOptions(AgentAssistanceOptionsBuilder)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentAssistanceOptionsBuilder.cs/#L364"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Implicitly converts the builder to an AgentAssistanceOptions instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static implicit operator AgentAssistanceOptions(AgentAssistanceOptionsBuilder builder)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>builder</code> <a class="xref" href="AiDotNet.Models.AgentAssistanceOptionsBuilder.html">AgentAssistanceOptionsBuilder</a></dt>
+    <dd><p>The builder to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.AgentAssistanceOptions.html">AgentAssistanceOptions</a></dt>
+    <dd><p>The configured AgentAssistanceOptions instance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentAssistanceOptionsBuilder_op_Implicit_AiDotNet_Models_AgentAssistanceOptionsBuilder__AiDotNet_Models_AgentAssistanceOptions_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This implicit conversion operator allows you to use the builder directly where an AgentAssistanceOptions
+is expected, without explicitly calling Build(). This makes the API more flexible and the code slightly cleaner.
+</p>
+<p><b>For Beginners:</b> This allows you to skip calling Build() in some cases.
+<p>Because of this operator, both of these work the same:</p>
+<pre><code class="lang-csharp">// Explicit Build() call
+var options = new AgentAssistanceOptionsBuilder()
+    .EnableDataAnalysis()
+    .Build();
+
+// Implicit conversion (no Build() needed)
+AgentAssistanceOptions options = new AgentAssistanceOptionsBuilder()
+    .EnableDataAnalysis();</code></pre>
+<p>C# automatically calls this conversion when needed, making your code slightly cleaner.
+Returns a fresh copy to prevent external mutation of builder state.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentAssistanceOptionsBuilder.cs/#L35" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

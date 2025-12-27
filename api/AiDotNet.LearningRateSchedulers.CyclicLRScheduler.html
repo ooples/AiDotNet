@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CyclicLRScheduler | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CyclicLRScheduler | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements cyclical learning rate policy.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_LearningRateSchedulers_CyclicLRScheduler.md&amp;value=---%0Auid%3A%20AiDotNet.LearningRateSchedulers.CyclicLRScheduler%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.LearningRateSchedulers.CyclicLRScheduler">
+
+
+
+  <h1 id="AiDotNet_LearningRateSchedulers_CyclicLRScheduler" data-uid="AiDotNet.LearningRateSchedulers.CyclicLRScheduler" class="text-break">
+Class CyclicLRScheduler  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LearningRateSchedulers/CyclicLRScheduler.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.LearningRateSchedulers.html">LearningRateSchedulers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements cyclical learning rate policy.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class CyclicLRScheduler : LearningRateSchedulerBase, ILearningRateScheduler</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.LearningRateSchedulers.LearningRateSchedulerBase.html">LearningRateSchedulerBase</a></div>
+      <div><span class="xref">CyclicLRScheduler</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.LearningRateSchedulers.ILearningRateScheduler.html">ILearningRateScheduler</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.LearningRateSchedulers.LearningRateSchedulerBase.html#AiDotNet_LearningRateSchedulers_LearningRateSchedulerBase__baseLearningRate">LearningRateSchedulerBase._baseLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LearningRateSchedulers.LearningRateSchedulerBase.html#AiDotNet_LearningRateSchedulers_LearningRateSchedulerBase__currentLearningRate">LearningRateSchedulerBase._currentLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LearningRateSchedulers.LearningRateSchedulerBase.html#AiDotNet_LearningRateSchedulers_LearningRateSchedulerBase__currentStep">LearningRateSchedulerBase._currentStep</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LearningRateSchedulers.LearningRateSchedulerBase.html#AiDotNet_LearningRateSchedulers_LearningRateSchedulerBase__minLearningRate">LearningRateSchedulerBase._minLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LearningRateSchedulers.LearningRateSchedulerBase.html#AiDotNet_LearningRateSchedulers_LearningRateSchedulerBase_CurrentLearningRate">LearningRateSchedulerBase.CurrentLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LearningRateSchedulers.LearningRateSchedulerBase.html#AiDotNet_LearningRateSchedulers_LearningRateSchedulerBase_BaseLearningRate">LearningRateSchedulerBase.BaseLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LearningRateSchedulers.LearningRateSchedulerBase.html#AiDotNet_LearningRateSchedulers_LearningRateSchedulerBase_CurrentStep">LearningRateSchedulerBase.CurrentStep</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LearningRateSchedulers.LearningRateSchedulerBase.html#AiDotNet_LearningRateSchedulers_LearningRateSchedulerBase_Step">LearningRateSchedulerBase.Step()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LearningRateSchedulers.LearningRateSchedulerBase.html#AiDotNet_LearningRateSchedulers_LearningRateSchedulerBase_GetLearningRateAtStep_System_Int32_">LearningRateSchedulerBase.GetLearningRateAtStep(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LearningRateSchedulers.LearningRateSchedulerBase.html#AiDotNet_LearningRateSchedulers_LearningRateSchedulerBase_Reset">LearningRateSchedulerBase.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LearningRateSchedulers.LearningRateSchedulerBase.html#AiDotNet_LearningRateSchedulers_LearningRateSchedulerBase_LoadState_System_Collections_Generic_Dictionary_System_String_System_Object__">LearningRateSchedulerBase.LoadState(Dictionary&lt;string, object&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_LearningRateSchedulers_CyclicLRScheduler_examples">Examples</h2>
+  <pre><code class="lang-csharp">// Triangular mode cycling between 0.001 and 0.1
+var scheduler = new CyclicLRScheduler(
+    baseLearningRate: 0.001,
+    maxLearningRate: 0.1,
+    stepSizeUp: 2000,
+    mode: CyclicLRScheduler.CyclicMode.Triangular
+);</code></pre>
+
+
+  <h2 id="AiDotNet_LearningRateSchedulers_CyclicLRScheduler_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+CyclicLR cycles the learning rate between two boundaries with a constant frequency.
+This approach can help escape local minima and find better solutions by periodically
+increasing the learning rate.
+</p>
+<p><b>For Beginners:</b> Instead of always decreasing the learning rate, cyclic learning
+rates go up and down in cycles. The idea is that periodically increasing the learning rate
+can help the model escape local minima (suboptimal solutions) and explore better solutions.
+Think of it like occasionally taking bigger jumps while hiking to avoid getting stuck in small valleys.
+</p>
+<p>
+Based on the paper "Cyclical Learning Rates for Training Neural Networks" by Leslie N. Smith.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_LearningRateSchedulers_CyclicLRScheduler__ctor_" data-uid="AiDotNet.LearningRateSchedulers.CyclicLRScheduler.#ctor*"></a>
+
+  <h3 id="AiDotNet_LearningRateSchedulers_CyclicLRScheduler__ctor_System_Double_System_Double_System_Int32_System_Nullable_System_Int32__AiDotNet_LearningRateSchedulers_CyclicLRScheduler_CyclicMode_System_Double_" data-uid="AiDotNet.LearningRateSchedulers.CyclicLRScheduler.#ctor(System.Double,System.Double,System.Int32,System.Nullable{System.Int32},AiDotNet.LearningRateSchedulers.CyclicLRScheduler.CyclicMode,System.Double)">
+  CyclicLRScheduler(double, double, int, int?, CyclicMode, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LearningRateSchedulers/CyclicLRScheduler.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the CyclicLRScheduler class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CyclicLRScheduler(double baseLearningRate, double maxLearningRate, int stepSizeUp = 2000, int? stepSizeDown = null, CyclicLRScheduler.CyclicMode mode = CyclicMode.Triangular, double gamma = 1)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>baseLearningRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Minimum learning rate.</p>
+</dd>
+    <dt><code>maxLearningRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Maximum learning rate.</p>
+</dd>
+    <dt><code>stepSizeUp</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of training iterations in the increasing half of a cycle. Default: 2000</p>
+</dd>
+    <dt><code>stepSizeDown</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Number of training iterations in the decreasing half. Default: same as stepSizeUp</p>
+</dd>
+    <dt><code>mode</code> <a class="xref" href="AiDotNet.LearningRateSchedulers.CyclicLRScheduler.html">CyclicLRScheduler</a>.<a class="xref" href="AiDotNet.LearningRateSchedulers.CyclicLRScheduler.CyclicMode.html">CyclicMode</a></dt>
+    <dd><p>Cycling mode. Default: Triangular</p>
+</dd>
+    <dt><code>gamma</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Constant for 'exp_range' mode, scales amplitude by gamma^cycle. Default: 1.0</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_LearningRateSchedulers_CyclicLRScheduler_CycleCount_" data-uid="AiDotNet.LearningRateSchedulers.CyclicLRScheduler.CycleCount*"></a>
+
+  <h3 id="AiDotNet_LearningRateSchedulers_CyclicLRScheduler_CycleCount" data-uid="AiDotNet.LearningRateSchedulers.CyclicLRScheduler.CycleCount">
+  CycleCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LearningRateSchedulers/CyclicLRScheduler.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current cycle count.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CycleCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_LearningRateSchedulers_CyclicLRScheduler_MaxLearningRate_" data-uid="AiDotNet.LearningRateSchedulers.CyclicLRScheduler.MaxLearningRate*"></a>
+
+  <h3 id="AiDotNet_LearningRateSchedulers_CyclicLRScheduler_MaxLearningRate" data-uid="AiDotNet.LearningRateSchedulers.CyclicLRScheduler.MaxLearningRate">
+  MaxLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LearningRateSchedulers/CyclicLRScheduler.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum learning rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxLearningRate { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_LearningRateSchedulers_CyclicLRScheduler_StepSizeDown_" data-uid="AiDotNet.LearningRateSchedulers.CyclicLRScheduler.StepSizeDown*"></a>
+
+  <h3 id="AiDotNet_LearningRateSchedulers_CyclicLRScheduler_StepSizeDown" data-uid="AiDotNet.LearningRateSchedulers.CyclicLRScheduler.StepSizeDown">
+  StepSizeDown
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LearningRateSchedulers/CyclicLRScheduler.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the step size for decreasing phase.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int StepSizeDown { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_LearningRateSchedulers_CyclicLRScheduler_StepSizeUp_" data-uid="AiDotNet.LearningRateSchedulers.CyclicLRScheduler.StepSizeUp*"></a>
+
+  <h3 id="AiDotNet_LearningRateSchedulers_CyclicLRScheduler_StepSizeUp" data-uid="AiDotNet.LearningRateSchedulers.CyclicLRScheduler.StepSizeUp">
+  StepSizeUp
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LearningRateSchedulers/CyclicLRScheduler.cs/#L96"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the step size for increasing phase.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int StepSizeUp { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_LearningRateSchedulers_CyclicLRScheduler_ComputeLearningRate_" data-uid="AiDotNet.LearningRateSchedulers.CyclicLRScheduler.ComputeLearningRate*"></a>
+
+  <h3 id="AiDotNet_LearningRateSchedulers_CyclicLRScheduler_ComputeLearningRate_System_Int32_" data-uid="AiDotNet.LearningRateSchedulers.CyclicLRScheduler.ComputeLearningRate(System.Int32)">
+  ComputeLearningRate(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LearningRateSchedulers/CyclicLRScheduler.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the learning rate for a given step.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override double ComputeLearningRate(int step)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The step number.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The computed learning rate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_LearningRateSchedulers_CyclicLRScheduler_GetState_" data-uid="AiDotNet.LearningRateSchedulers.CyclicLRScheduler.GetState*"></a>
+
+  <h3 id="AiDotNet_LearningRateSchedulers_CyclicLRScheduler_GetState" data-uid="AiDotNet.LearningRateSchedulers.CyclicLRScheduler.GetState">
+  GetState()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LearningRateSchedulers/CyclicLRScheduler.cs/#L159"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the scheduler state for serialization/checkpointing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Dictionary&lt;string, object&gt; GetState()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>A dictionary containing the scheduler state.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/LearningRateSchedulers/CyclicLRScheduler.cs/#L32" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>JIT Compilation Roadmap | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="JIT Compilation Roadmap | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/JIT_ROADMAP.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="jit-compilation-roadmap">JIT Compilation Roadmap</h1>
+
+<h2 id="current-status">Current Status</h2>
+<h3 id="phase-1-foundation-complete-">Phase 1: Foundation (Complete ✅)</h3>
+<p><strong>Agents 1-5</strong> implemented the core infrastructure for JIT compilation:</p>
+<h4 id="agent-1-tensoroperations-foundation">Agent 1: TensorOperations Foundation</h4>
+<ul>
+<li>✅ Created <code>TensorOperations&lt;T&gt;</code> class with generic type support</li>
+<li>✅ Implemented core operations: Add, Subtract, ElementwiseMultiply, Divide, Power</li>
+<li>✅ Implemented mathematical operations: Exp, Log, Sqrt, Tanh, Sigmoid, ReLU</li>
+<li>✅ Implemented matrix operations: MatrixMultiply, Transpose</li>
+<li>✅ Implemented reduction operations: Sum, Mean</li>
+<li>✅ Implemented shape operations: Reshape, Concat, Pad</li>
+<li>✅ All operations return <code>ComputationNode&lt;T&gt;</code> for autodiff support</li>
+</ul>
+<h4 id="agent-2-ir-operations-group-1---relu-family">Agent 2: IR Operations (Group 1 - ReLU Family)</h4>
+<ul>
+<li>✅ Added IR operations for ReLU family activations</li>
+<li>✅ Integrated with IEngine for GPU acceleration</li>
+<li>✅ Operations: ReLU, LeakyReLU, GELU, ELU, SELU, CELU, PReLU, RReLU, ThresholdedReLU</li>
+</ul>
+<h4 id="agent-3-ir-operations-group-2---sigmoid-family">Agent 3: IR Operations (Group 2 - Sigmoid Family)</h4>
+<ul>
+<li>✅ Added IR operations for Sigmoid family activations</li>
+<li>✅ Integrated with IEngine for GPU acceleration</li>
+<li>✅ Operations: Sigmoid, Tanh, Swish, SiLU, Mish, HardSigmoid, HardTanh, Softplus, Softsign</li>
+</ul>
+<h4 id="agent-4-ir-operations-group-3---softmax--special">Agent 4: IR Operations (Group 3 - Softmax &amp; Special)</h4>
+<ul>
+<li>✅ Added IR operations for Softmax family</li>
+<li>✅ Added IR operations for special activations</li>
+<li>✅ Operations: Softmax, Softmin, LogSoftmax, LogSoftmin, Sign, Gaussian, ISRU, LiSHT, SQRBF, Squash, BinarySpiking, BentIdentity, Identity</li>
+<li>✅ Placeholder implementations for complex activations: Sparsemax, SphericalSoftmax, GumbelSoftmax, TaylorSoftmax, HierarchicalSoftmax, Maxout</li>
+</ul>
+<h4 id="agent-5-tensoroperations-method-completion">Agent 5: TensorOperations Method Completion</h4>
+<ul>
+<li>✅ Added TensorOperations methods for all 37 activation functions</li>
+<li>✅ 27 fully implemented (ReLU, Sigmoid families, special activations)</li>
+<li>✅ 6 placeholder implementations (complex activations)</li>
+<li>✅ 4 pre-existing (ReLU, Sigmoid, Tanh, Softmax)</li>
+<li>✅ All methods integrated with IEngine for hardware acceleration</li>
+</ul>
+<p><strong>Summary</strong>: Infrastructure is complete. All 37 activation functions have TensorOperations methods and IEngine integration.</p>
+<hr>
+<h3 id="phase-2-denselayer-production-ready-complete-">Phase 2: DenseLayer Production-Ready (Complete ✅)</h3>
+<p><strong>Agent 6</strong> made DenseLayer production-ready for JIT compilation:</p>
+<h4 id="implementation">Implementation</h4>
+<ul>
+<li>✅ Implemented <code>ExportComputationGraph</code> with symbolic batch dimensions (-1)</li>
+<li>✅ Implemented <code>ApplyActivationToGraph</code> helper method</li>
+<li>✅ Implemented <code>CanActivationBeJitted</code> validation</li>
+<li>✅ Updated <code>SupportsJitCompilation</code> property</li>
+<li>✅ Added comprehensive validation</li>
+</ul>
+<h4 id="supported-activations-10">Supported Activations (10)</h4>
+<ul>
+<li>✅ ReLU, Sigmoid, Tanh, Softmax, Identity (baseline)</li>
+<li>✅ GELU, ELU, Mish, Swish, SiLU (modern activations)</li>
+</ul>
+<h4 id="testing--validation">Testing &amp; Validation</h4>
+<ul>
+<li>✅ Computation graph exports correctly</li>
+<li>✅ Symbolic batch dimensions work</li>
+<li>✅ Parameter nodes (weights, biases) handled correctly</li>
+<li>✅ Activation mapping verified</li>
+<li>✅ Build succeeds without errors</li>
+</ul>
+<p><strong>Summary</strong>: DenseLayer is the reference implementation. Pattern is established and documented.</p>
+<hr>
+<h3 id="phase-3-rollout-to-other-layers-pending-">Phase 3: Rollout to Other Layers (Pending ⏳)</h3>
+<p><strong>Agent 7</strong> created comprehensive documentation (this document and related guides).</p>
+<p><strong>Next step</strong>: Apply the DenseLayer pattern to 76 remaining layers.</p>
+<hr>
+<h2 id="layer-implementation-priorities">Layer Implementation Priorities</h2>
+<h3 id="total-layers-77">Total Layers: 77</h3>
+<ul>
+<li><strong>Production-Ready</strong>: 1 (DenseLayer)</li>
+<li><strong>Pending Implementation</strong>: 76</li>
+</ul>
+<hr>
+<h3 id="priority-1-core-layers-6-layers">Priority 1: Core Layers (6 layers)</h3>
+<p>These are the most commonly used layers in neural networks. Implementing these will enable JIT compilation for the majority of models.</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>File</th>
+<th>Priority Reason</th>
+<th>Estimated Complexity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>ConvolutionalLayer</strong></td>
+<td><code>ConvolutionalLayer.cs</code></td>
+<td>Used in all CNNs (ResNet, VGG, etc.)</td>
+<td>Medium - Conv2D operation</td>
+</tr>
+<tr>
+<td><strong>LayerNormalizationLayer</strong></td>
+<td><code>LayerNormalizationLayer.cs</code></td>
+<td>Critical for Transformers (BERT, GPT)</td>
+<td>Medium - LayerNorm operation</td>
+</tr>
+<tr>
+<td><strong>PoolingLayer</strong></td>
+<td><code>PoolingLayer.cs</code></td>
+<td>Used in all CNNs for downsampling</td>
+<td>Low - MaxPool2D/AvgPool2D</td>
+</tr>
+<tr>
+<td><strong>BatchNormalizationLayer</strong></td>
+<td><code>BatchNormalizationLayer.cs</code></td>
+<td>Used in most modern CNNs</td>
+<td>Medium - BatchNorm operation</td>
+</tr>
+<tr>
+<td><strong>DropoutLayer</strong></td>
+<td><code>DropoutLayer.cs</code></td>
+<td>Used in almost all models</td>
+<td>Low - Element-wise mask</td>
+</tr>
+<tr>
+<td><strong>FlattenLayer</strong></td>
+<td><code>FlattenLayer.cs</code></td>
+<td>Connects CNNs to dense layers</td>
+<td>Low - Reshape operation</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Estimated time</strong>: 1-2 days per layer = 6-12 days total</p>
+<hr>
+<h3 id="priority-2-recurrent-layers-3-layers">Priority 2: Recurrent Layers (3 layers)</h3>
+<p>Essential for sequence models (NLP, time series).</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>File</th>
+<th>Priority Reason</th>
+<th>Estimated Complexity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>LSTMLayer</strong></td>
+<td><code>LSTMLayer.cs</code></td>
+<td>Most popular RNN variant</td>
+<td>High - Complex gates</td>
+</tr>
+<tr>
+<td><strong>GRULayer</strong></td>
+<td><code>GRULayer.cs</code></td>
+<td>Alternative to LSTM, simpler</td>
+<td>High - Complex gates</td>
+</tr>
+<tr>
+<td><strong>RecurrentLayer</strong></td>
+<td><code>RecurrentLayer.cs</code></td>
+<td>Basic RNN layer</td>
+<td>Medium - Recurrent connections</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Estimated time</strong>: 2-3 days per layer = 6-9 days total</p>
+<hr>
+<h3 id="priority-3-attention-layers-4-layers">Priority 3: Attention Layers (4 layers)</h3>
+<p>Critical for Transformers and modern NLP/vision models.</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>File</th>
+<th>Priority Reason</th>
+<th>Estimated Complexity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>MultiHeadAttentionLayer</strong></td>
+<td><code>MultiHeadAttentionLayer.cs</code></td>
+<td>Core of Transformer architecture</td>
+<td>High - Complex attention mechanism</td>
+</tr>
+<tr>
+<td><strong>SelfAttentionLayer</strong></td>
+<td><code>SelfAttentionLayer.cs</code></td>
+<td>Used in Transformers</td>
+<td>High - Attention computation</td>
+</tr>
+<tr>
+<td><strong>AttentionLayer</strong></td>
+<td><code>AttentionLayer.cs</code></td>
+<td>Basic attention mechanism</td>
+<td>Medium - QKV projections</td>
+</tr>
+<tr>
+<td><strong>TransformerEncoderLayer</strong></td>
+<td><code>TransformerEncoderLayer.cs</code></td>
+<td>Complete encoder block</td>
+<td>High - Combines attention + FFN</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Estimated time</strong>: 2-3 days per layer = 8-12 days total</p>
+<hr>
+<h3 id="priority-4-specialized-convolutional-layers-6-layers">Priority 4: Specialized Convolutional Layers (6 layers)</h3>
+<p>Important for advanced vision models.</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>File</th>
+<th>Priority Reason</th>
+<th>Estimated Complexity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>DepthwiseSeparableConvolutionalLayer</strong></td>
+<td><code>DepthwiseSeparableConvolutionalLayer.cs</code></td>
+<td>MobileNet, EfficientNet</td>
+<td>Medium - Depthwise + Pointwise</td>
+</tr>
+<tr>
+<td><strong>DeconvolutionalLayer</strong></td>
+<td><code>DeconvolutionalLayer.cs</code></td>
+<td>GANs, image generation</td>
+<td>Medium - ConvTranspose2D</td>
+</tr>
+<tr>
+<td><strong>DilatedConvolutionalLayer</strong></td>
+<td><code>DilatedConvolutionalLayer.cs</code></td>
+<td>WaveNet, semantic segmentation</td>
+<td>Medium - Dilated convolution</td>
+</tr>
+<tr>
+<td><strong>SeparableConvolutionalLayer</strong></td>
+<td><code>SeparableConvolutionalLayer.cs</code></td>
+<td>Efficient CNNs</td>
+<td>Medium - Separable convolution</td>
+</tr>
+<tr>
+<td><strong>LocallyConnectedLayer</strong></td>
+<td><code>LocallyConnectedLayer.cs</code></td>
+<td>Face recognition, pattern-specific</td>
+<td>Medium - Local connections</td>
+</tr>
+<tr>
+<td><strong>ConvLSTMLayer</strong></td>
+<td><code>ConvLSTMLayer.cs</code></td>
+<td>Video processing, spatio-temporal</td>
+<td>High - Conv + LSTM fusion</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Estimated time</strong>: 1-2 days per layer = 6-12 days total</p>
+<hr>
+<h3 id="priority-5-utility-layers-10-layers">Priority 5: Utility Layers (10 layers)</h3>
+<p>Small but frequently used layers.</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>File</th>
+<th>Estimated Complexity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>AddLayer</strong></td>
+<td><code>AddLayer.cs</code></td>
+<td>Low - Element-wise add</td>
+</tr>
+<tr>
+<td><strong>MultiplyLayer</strong></td>
+<td><code>MultiplyLayer.cs</code></td>
+<td>Low - Element-wise multiply</td>
+</tr>
+<tr>
+<td><strong>ConcatenateLayer</strong></td>
+<td><code>ConcatenateLayer.cs</code></td>
+<td>Low - Concat operation</td>
+</tr>
+<tr>
+<td><strong>ReshapeLayer</strong></td>
+<td><code>ReshapeLayer.cs</code></td>
+<td>Low - Reshape operation</td>
+</tr>
+<tr>
+<td><strong>ActivationLayer</strong></td>
+<td><code>ActivationLayer.cs</code></td>
+<td>Low - Just activation</td>
+</tr>
+<tr>
+<td><strong>ResidualLayer</strong></td>
+<td><code>ResidualLayer.cs</code></td>
+<td>Low - Add input to output</td>
+</tr>
+<tr>
+<td><strong>PaddingLayer</strong></td>
+<td><code>PaddingLayer.cs</code></td>
+<td>Low - Pad operation</td>
+</tr>
+<tr>
+<td><strong>CroppingLayer</strong></td>
+<td><code>CroppingLayer.cs</code></td>
+<td>Low - Crop operation</td>
+</tr>
+<tr>
+<td><strong>UpsamplingLayer</strong></td>
+<td><code>UpsamplingLayer.cs</code></td>
+<td>Low - Upsample operation</td>
+</tr>
+<tr>
+<td><strong>SplitLayer</strong></td>
+<td><code>SplitLayer.cs</code></td>
+<td>Low - Split operation</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Estimated time</strong>: 0.5-1 day per layer = 5-10 days total</p>
+<hr>
+<h3 id="priority-6-advanced-architecture-layers-8-layers">Priority 6: Advanced Architecture Layers (8 layers)</h3>
+<p>Modern architectural innovations.</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>File</th>
+<th>Priority Reason</th>
+<th>Estimated Complexity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>ResidualLayer</strong></td>
+<td><code>ResidualLayer.cs</code></td>
+<td>ResNet, skip connections</td>
+<td>Low - Add operation</td>
+</tr>
+<tr>
+<td><strong>HighwayLayer</strong></td>
+<td><code>HighwayLayer.cs</code></td>
+<td>Highway networks</td>
+<td>Medium - Gated shortcut</td>
+</tr>
+<tr>
+<td><strong>SqueezeAndExcitationLayer</strong></td>
+<td><code>SqueezeAndExcitationLayer.cs</code></td>
+<td>SENet, channel attention</td>
+<td>Medium - Global pooling + FC</td>
+</tr>
+<tr>
+<td><strong>GatedLinearUnitLayer</strong></td>
+<td><code>GatedLinearUnitLayer.cs</code></td>
+<td>Language modeling</td>
+<td>Medium - Gated activation</td>
+</tr>
+<tr>
+<td><strong>MixtureOfExpertsLayer</strong></td>
+<td><code>MixtureOfExpertsLayer.cs</code></td>
+<td>Sparse models (Switch Transformer)</td>
+<td>High - Routing + experts</td>
+</tr>
+<tr>
+<td><strong>CapsuleLayer</strong></td>
+<td><code>CapsuleLayer.cs</code></td>
+<td>Capsule Networks</td>
+<td>High - Dynamic routing</td>
+</tr>
+<tr>
+<td><strong>GraphConvolutionalLayer</strong></td>
+<td><code>GraphConvolutionalLayer.cs</code></td>
+<td>Graph neural networks</td>
+<td>High - Graph operations</td>
+</tr>
+<tr>
+<td><strong>SpatialTransformerLayer</strong></td>
+<td><code>SpatialTransformerLayer.cs</code></td>
+<td>Spatial attention</td>
+<td>High - Affine transformation</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Estimated time</strong>: 1-3 days per layer = 8-24 days total</p>
+<hr>
+<h3 id="priority-7-embedding--encoding-layers-5-layers">Priority 7: Embedding &amp; Encoding Layers (5 layers)</h3>
+<p>Essential for NLP and sequence models.</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>File</th>
+<th>Estimated Complexity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>EmbeddingLayer</strong></td>
+<td><code>EmbeddingLayer.cs</code></td>
+<td>Low - Lookup table</td>
+</tr>
+<tr>
+<td><strong>PositionalEncodingLayer</strong></td>
+<td><code>PositionalEncodingLayer.cs</code></td>
+<td>Low - Add positional embeddings</td>
+</tr>
+<tr>
+<td><strong>PatchEmbeddingLayer</strong></td>
+<td><code>PatchEmbeddingLayer.cs</code></td>
+<td>Medium - Vision Transformers</td>
+</tr>
+<tr>
+<td><strong>TransformerDecoderLayer</strong></td>
+<td><code>TransformerDecoderLayer.cs</code></td>
+<td>High - Decoder block</td>
+</tr>
+<tr>
+<td><strong>DecoderLayer</strong></td>
+<td><code>DecoderLayer.cs</code></td>
+<td>Medium - Seq2seq decoder</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Estimated time</strong>: 1-2 days per layer = 5-10 days total</p>
+<hr>
+<h3 id="priority-8-specialized--research-layers-34-layers">Priority 8: Specialized &amp; Research Layers (34 layers)</h3>
+<p>These are specialized layers for specific use cases, research, or niche applications.</p>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Layers</th>
+<th>Estimated Time</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Pooling Variants</strong></td>
+<td>MaxPoolingLayer, GlobalPoolingLayer</td>
+<td>1-2 days</td>
+</tr>
+<tr>
+<td><strong>Normalization</strong></td>
+<td>(Already covered: BatchNorm, LayerNorm)</td>
+<td>-</td>
+</tr>
+<tr>
+<td><strong>Noise &amp; Regularization</strong></td>
+<td>GaussianNoiseLayer, MaskingLayer</td>
+<td>1-2 days</td>
+</tr>
+<tr>
+<td><strong>Memory-Augmented</strong></td>
+<td>MemoryReadLayer, MemoryWriteLayer, ContinuumMemorySystemLayer, TemporalMemoryLayer</td>
+<td>4-6 days</td>
+</tr>
+<tr>
+<td><strong>Spiking Neural Networks</strong></td>
+<td>SpikingLayer, SynapticPlasticityLayer</td>
+<td>2-3 days</td>
+</tr>
+<tr>
+<td><strong>Quantum</strong></td>
+<td>QuantumLayer</td>
+<td>1-2 days</td>
+</tr>
+<tr>
+<td><strong>Capsule Networks</strong></td>
+<td>PrimaryCapsuleLayer, DigitCapsuleLayer</td>
+<td>2-3 days</td>
+</tr>
+<tr>
+<td><strong>Specialized Conv</strong></td>
+<td>SubpixelConvolutionalLayer</td>
+<td>1 day</td>
+</tr>
+<tr>
+<td><strong>RBF &amp; Kernel Methods</strong></td>
+<td>RBFLayer, LogVarianceLayer</td>
+<td>1-2 days</td>
+</tr>
+<tr>
+<td><strong>Anomaly Detection</strong></td>
+<td>AnomalyDetectorLayer</td>
+<td>1 day</td>
+</tr>
+<tr>
+<td><strong>Bidirectional</strong></td>
+<td>BidirectionalLayer</td>
+<td>2 days</td>
+</tr>
+<tr>
+<td><strong>Time Distributed</strong></td>
+<td>TimeDistributedLayer</td>
+<td>1 day</td>
+</tr>
+<tr>
+<td><strong>Readout &amp; Measurement</strong></td>
+<td>ReadoutLayer, MeasurementLayer</td>
+<td>1-2 days</td>
+</tr>
+<tr>
+<td><strong>Reconstruction</strong></td>
+<td>ReconstructionLayer</td>
+<td>1 day</td>
+</tr>
+<tr>
+<td><strong>Reparameterization</strong></td>
+<td>RepParameterizationLayer</td>
+<td>1 day</td>
+</tr>
+<tr>
+<td><strong>Reservoir Computing</strong></td>
+<td>ReservoirLayer</td>
+<td>1-2 days</td>
+</tr>
+<tr>
+<td><strong>Spatial Pooler</strong></td>
+<td>SpatialPoolerLayer</td>
+<td>1-2 days</td>
+</tr>
+<tr>
+<td><strong>RBM</strong></td>
+<td>RBMLayer</td>
+<td>2-3 days</td>
+</tr>
+<tr>
+<td><strong>Feed Forward</strong></td>
+<td>FeedForwardLayer, FullyConnectedLayer</td>
+<td>1 day</td>
+</tr>
+<tr>
+<td><strong>Expert</strong></td>
+<td>ExpertLayer</td>
+<td>1 day</td>
+</tr>
+<tr>
+<td><strong>Input</strong></td>
+<td>InputLayer</td>
+<td>0.5 day</td>
+</tr>
+<tr>
+<td><strong>Lambda</strong></td>
+<td>LambdaLayer</td>
+<td>1 day</td>
+</tr>
+<tr>
+<td><strong>Mean</strong></td>
+<td>MeanLayer</td>
+<td>0.5 day</td>
+</tr>
+<tr>
+<td><strong>CRF</strong></td>
+<td>ConditionalRandomFieldLayer</td>
+<td>2-3 days</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Estimated time</strong>: 30-50 days total</p>
+<hr>
+<h2 id="timeline-estimate">Timeline Estimate</h2>
+<h3 id="optimistic-single-developer-full-time">Optimistic (Single Developer, Full-Time)</h3>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Duration</th>
+<th>Cumulative</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Priority 1 (Core)</td>
+<td>6-12 days</td>
+<td>6-12 days</td>
+</tr>
+<tr>
+<td>Priority 2 (RNN)</td>
+<td>6-9 days</td>
+<td>12-21 days</td>
+</tr>
+<tr>
+<td>Priority 3 (Attention)</td>
+<td>8-12 days</td>
+<td>20-33 days</td>
+</tr>
+<tr>
+<td>Priority 4 (Specialized Conv)</td>
+<td>6-12 days</td>
+<td>26-45 days</td>
+</tr>
+<tr>
+<td>Priority 5 (Utility)</td>
+<td>5-10 days</td>
+<td>31-55 days</td>
+</tr>
+<tr>
+<td>Priority 6 (Advanced)</td>
+<td>8-24 days</td>
+<td>39-79 days</td>
+</tr>
+<tr>
+<td>Priority 7 (Embedding)</td>
+<td>5-10 days</td>
+<td>44-89 days</td>
+</tr>
+<tr>
+<td>Priority 8 (Specialized)</td>
+<td>30-50 days</td>
+<td>74-139 days</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Total</strong>: 2.5-5 months (full-time)</p>
+<h3 id="realistic-with-testing-documentation-reviews">Realistic (With Testing, Documentation, Reviews)</h3>
+<p>Multiply by 1.5-2x for:</p>
+<ul>
+<li>Testing each layer</li>
+<li>Handling edge cases</li>
+<li>Code reviews</li>
+<li>Documentation updates</li>
+<li>Bug fixes</li>
+</ul>
+<p><strong>Total</strong>: 4-10 months (full-time)</p>
+<hr>
+<h2 id="implementation-strategy">Implementation Strategy</h2>
+<h3 id="batch-approach">Batch Approach</h3>
+<p>Instead of implementing layers one-by-one, batch similar layers together:</p>
+<p><strong>Batch 1: Simple Utility Layers (Week 1)</strong></p>
+<ul>
+<li>FlattenLayer, ReshapeLayer, AddLayer, MultiplyLayer, ConcatenateLayer</li>
+<li>5 layers × 1 day = 5 days</li>
+</ul>
+<p><strong>Batch 2: Core Vision Layers (Week 2)</strong></p>
+<ul>
+<li>ConvolutionalLayer, PoolingLayer, BatchNormalizationLayer</li>
+<li>3 layers × 2 days = 6 days</li>
+</ul>
+<p><strong>Batch 3: Normalization &amp; Regularization (Week 3)</strong></p>
+<ul>
+<li>LayerNormalizationLayer, DropoutLayer, GaussianNoiseLayer</li>
+<li>3 layers × 1.5 days = 4-5 days</li>
+</ul>
+<p><strong>Batch 4: Recurrent Layers (Weeks 4-5)</strong></p>
+<ul>
+<li>LSTMLayer, GRULayer, RecurrentLayer</li>
+<li>3 layers × 3 days = 9 days</li>
+</ul>
+<p><strong>Batch 5: Attention Layers (Weeks 6-7)</strong></p>
+<ul>
+<li>MultiHeadAttentionLayer, SelfAttentionLayer, AttentionLayer</li>
+<li>3 layers × 3 days = 9 days</li>
+</ul>
+<p>Continue batching by layer type...</p>
+<hr>
+<h2 id="acceptance-criteria">Acceptance Criteria</h2>
+<p>For each layer to be considered &quot;production-ready&quot;:</p>
+<h3 id="code-requirements">Code Requirements</h3>
+<ul>
+<li>[ ] <code>ExportComputationGraph</code> method implemented</li>
+<li>[ ] <code>ApplyActivationToGraph</code> helper method implemented</li>
+<li>[ ] <code>CanActivationBeJitted</code> validation implemented</li>
+<li>[ ] <code>SupportsJitCompilation</code> property updated</li>
+<li>[ ] Symbolic batch dimensions (-1) supported</li>
+<li>[ ] All parameters exported as nodes</li>
+<li>[ ] Computation graph matches Forward() method exactly</li>
+</ul>
+<h3 id="documentation-requirements">Documentation Requirements</h3>
+<ul>
+<li>[ ] XML documentation updated with JIT support status</li>
+<li>[ ] Supported activations listed in XML comment</li>
+<li>[ ] Code example added to pattern guide (if new pattern)</li>
+</ul>
+<h3 id="testing-requirements">Testing Requirements</h3>
+<ul>
+<li>[ ] Build succeeds without errors</li>
+<li>[ ] Computation graph exports without exceptions</li>
+<li>[ ] JIT compilation succeeds</li>
+<li>[ ] Output matches eager mode (forward pass)</li>
+<li>[ ] Works with different batch sizes (1, 32, 128, etc.)</li>
+<li>[ ] Works with all supported activations</li>
+</ul>
+<h3 id="integration-requirements">Integration Requirements</h3>
+<ul>
+<li>[ ] IEngine operations used (for GPU acceleration)</li>
+<li>[ ] Error messages are clear and helpful</li>
+<li>[ ] Follows DenseLayer pattern consistently</li>
+<li>[ ] No breaking changes to existing API</li>
+</ul>
+<hr>
+<h2 id="future-work">Future Work</h2>
+<h3 id="phase-4-gradient-computation-not-scheduled">Phase 4: Gradient Computation (Not Scheduled)</h3>
+<p>After all layers support forward pass JIT compilation:</p>
+<p><strong>Tasks</strong>:</p>
+<ul>
+<li>Implement backward functions for all TensorOperations methods</li>
+<li>Add gradient accumulation support</li>
+<li>Implement optimizer integration with JIT graphs</li>
+<li>Test training with JIT compilation</li>
+</ul>
+<p><strong>Estimated time</strong>: 2-3 months</p>
+<p><strong>Benefits</strong>:</p>
+<ul>
+<li>Enable JIT compilation for training (not just inference)</li>
+<li>5-10x speedup for training large models</li>
+<li>Reduced memory usage during backpropagation</li>
+</ul>
+<hr>
+<h3 id="phase-5-advanced-optimizations-not-scheduled">Phase 5: Advanced Optimizations (Not Scheduled)</h3>
+<p>After gradient computation is complete:</p>
+<p><strong>Tasks</strong>:</p>
+<ul>
+<li>Graph fusion (combine multiple operations into one)</li>
+<li>Constant folding (pre-compute constant subgraphs)</li>
+<li>Common subexpression elimination</li>
+<li>Memory layout optimizations</li>
+<li>Kernel fusion for GPU</li>
+</ul>
+<p><strong>Estimated time</strong>: 1-2 months</p>
+<p><strong>Benefits</strong>:</p>
+<ul>
+<li>Further 2-5x speedup on top of basic JIT</li>
+<li>Reduced memory fragmentation</li>
+<li>Better GPU utilization</li>
+</ul>
+<hr>
+<h3 id="phase-6-extended-activation-support-not-scheduled">Phase 6: Extended Activation Support (Not Scheduled)</h3>
+<p><strong>Tasks</strong>:</p>
+<ul>
+<li>Fully implement 6 placeholder activations (Sparsemax, etc.)</li>
+<li>Add custom activation support</li>
+<li>Add activation fusion optimizations</li>
+</ul>
+<p><strong>Estimated time</strong>: 2-3 weeks</p>
+<p><strong>Benefits</strong>:</p>
+<ul>
+<li>100% activation coverage</li>
+<li>Support for cutting-edge research models</li>
+<li>Custom activation functions for specialized domains</li>
+</ul>
+<hr>
+<h2 id="success-metrics">Success Metrics</h2>
+<h3 id="coverage">Coverage</h3>
+<ul>
+<li><strong>Current</strong>: 1/77 layers (1.3%)</li>
+<li><strong>Target (Priority 1-5)</strong>: 35/77 layers (45%)</li>
+<li><strong>Target (All)</strong>: 77/77 layers (100%)</li>
+</ul>
+<h3 id="performance">Performance</h3>
+<ul>
+<li><strong>Target speedup</strong>: 5-10x for inference</li>
+<li><strong>Target memory reduction</strong>: 30-50%</li>
+</ul>
+<h3 id="adoption">Adoption</h3>
+<ul>
+<li><strong>Target</strong>: 80% of models in test suite can use JIT compilation</li>
+<li><strong>Target</strong>: All major architectures supported (ResNet, BERT, GPT, etc.)</li>
+</ul>
+<hr>
+<h2 id="resources">Resources</h2>
+<h3 id="documentation">Documentation</h3>
+<ul>
+<li><a href="JIT_COMPILATION_PATTERN_GUIDE.html">JIT_COMPILATION_PATTERN_GUIDE.md</a> - Implementation guide</li>
+<li><a href="JIT_ACTIVATION_MAPPING.html">JIT_ACTIVATION_MAPPING.md</a> - Activation reference</li>
+</ul>
+<h3 id="reference-implementation">Reference Implementation</h3>
+<ul>
+<li><code>src/NeuralNetworks/Layers/DenseLayer.cs</code> - Production-ready example</li>
+</ul>
+<h3 id="infrastructure">Infrastructure</h3>
+<ul>
+<li><code>src/Autodiff/TensorOperations.cs</code> - All operations</li>
+<li><code>src/Engines/IEngine.cs</code> - Hardware acceleration</li>
+<li><code>src/Autodiff/IR/</code> - Intermediate representation</li>
+</ul>
+<hr>
+<h2 id="contributing">Contributing</h2>
+<p>To contribute to JIT compilation implementation:</p>
+<ol>
+<li><strong>Pick a layer</strong> from the priority list above</li>
+<li><strong>Read the pattern guide</strong> (<a href="JIT_COMPILATION_PATTERN_GUIDE.html">JIT_COMPILATION_PATTERN_GUIDE.md</a>)</li>
+<li><strong>Study DenseLayer</strong> implementation as reference</li>
+<li><strong>Implement the pattern</strong> in your chosen layer</li>
+<li><strong>Test thoroughly</strong> with various activations and batch sizes</li>
+<li><strong>Create a PR</strong> with clear description and test results</li>
+</ol>
+<h3 id="questions">Questions?</h3>
+<p>If you encounter issues or have questions:</p>
+<ul>
+<li>Check the Troubleshooting section in the pattern guide</li>
+<li>Review the DenseLayer implementation</li>
+<li>Ask in the project's discussion forum</li>
+<li>Open an issue with the <code>jit-compilation</code> label</li>
+</ul>
+<hr>
+<h2 id="version-history">Version History</h2>
+<p><strong>v1.0</strong> (2025-11-23)</p>
+<ul>
+<li>Initial roadmap document</li>
+<li>Phases 1-2 complete (foundation + DenseLayer)</li>
+<li>76 layers pending implementation</li>
+<li>Priority list established</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/JIT_ROADMAP.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

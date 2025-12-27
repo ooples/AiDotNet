@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GradientVerification&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GradientVerification&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Utility for verifying gradient formulas using numerical differentiation.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_JitCompiler_Testing_GradientVerification_1.md&amp;value=---%0Auid%3A%20AiDotNet.JitCompiler.Testing.GradientVerification%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.JitCompiler.Testing.GradientVerification`1">
+
+
+
+  <h1 id="AiDotNet_JitCompiler_Testing_GradientVerification_1" data-uid="AiDotNet.JitCompiler.Testing.GradientVerification`1" class="text-break">
+Class GradientVerification&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/Testing/GradientVerification.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.JitCompiler.html">JitCompiler</a>.<a class="xref" href="AiDotNet.JitCompiler.Testing.html">Testing</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Utility for verifying gradient formulas using numerical differentiation.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">[Obsolete(&quot;For testing TensorOperations autodiff gradients, use AiDotNet.Autodiff.Testing.TensorOperationsVerification&lt;T&gt; instead. This class is retained for testing raw gradient formulas and IR operation semantics.&quot;)]
+public class GradientVerification&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">GradientVerification&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_JitCompiler_Testing_GradientVerification_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>Important:</b> This class verifies mathematical gradient formulas, NOT the actual
+TensorOperations autodiff implementations. For verifying TensorOperations gradients,
+use <a class="xref" href="AiDotNet.Autodiff.Testing.TensorOperationsVerification-1.html">TensorOperationsVerification&lt;T&gt;</a> instead.
+</p>
+<p>
+This class is useful for:
+- Testing that hand-written gradient formulas are mathematically correct
+- Verifying gradient formulas before implementing them in TensorOperations
+- Educational purposes to understand how numerical gradient checking works
+</p>
+<p><b>For Beginners:</b> This tests that gradient formulas are mathematically correct.
+<p>The idea:</p>
+<ol>
+<li>You provide a forward function (e.g., f(x) = x^2)</li>
+<li>You provide a gradient function (e.g., df/dx = 2x)</li>
+<li>We compute numerical gradient using finite differences: (f(x+h) - f(x-h)) / (2h)</li>
+<li>We compare your gradient formula with the numerical gradient</li>
+</ol>
+<p>This is different from <a class="xref" href="AiDotNet.Autodiff.Testing.TensorOperationsVerification-1.html">TensorOperationsVerification&lt;T&gt;</a>
+which tests the actual autodiff implementation in TensorOperations.</p>
+<p>Example:</p>
+<ul>
+<li>f(x) = x^2</li>
+<li>Your gradient formula: df/dx = 2x</li>
+<li>Numerical: (f(x+h) - f(x-h)) / (2h) = ((x+h)^2 - (x-h)^2) / (2h) = 2x</li>
+<li>They match! Your gradient formula is correct.</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_JitCompiler_Testing_GradientVerification_1__ctor_" data-uid="AiDotNet.JitCompiler.Testing.GradientVerification`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_Testing_GradientVerification_1__ctor" data-uid="AiDotNet.JitCompiler.Testing.GradientVerification`1.#ctor">
+  GradientVerification()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/Testing/GradientVerification.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes with default configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GradientVerification()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_Testing_GradientVerification_1__ctor_" data-uid="AiDotNet.JitCompiler.Testing.GradientVerification`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_Testing_GradientVerification_1__ctor_AiDotNet_JitCompiler_Testing_GradientVerification__0__VerificationConfig_" data-uid="AiDotNet.JitCompiler.Testing.GradientVerification`1.#ctor(AiDotNet.JitCompiler.Testing.GradientVerification{`0}.VerificationConfig)">
+  GradientVerification(VerificationConfig)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/Testing/GradientVerification.cs/#L117"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes with custom configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GradientVerification(GradientVerification&lt;T&gt;.VerificationConfig config)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>config</code> <a class="xref" href="AiDotNet.JitCompiler.Testing.GradientVerification-1.html">GradientVerification</a>&lt;T&gt;.<a class="xref" href="AiDotNet.JitCompiler.Testing.GradientVerification-1.VerificationConfig.html">VerificationConfig</a></dt>
+    <dd><p>The verification configuration.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_JitCompiler_Testing_GradientVerification_1_VerifyAllOperations_" data-uid="AiDotNet.JitCompiler.Testing.GradientVerification`1.VerifyAllOperations*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_Testing_GradientVerification_1_VerifyAllOperations" data-uid="AiDotNet.JitCompiler.Testing.GradientVerification`1.VerifyAllOperations">
+  VerifyAllOperations()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/Testing/GradientVerification.cs/#L311"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Verifies gradient formulas for common operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">[Obsolete(&quot;For testing TensorOperations autodiff, use TensorOperationsVerification&lt;T&gt;.VerifyAllOperations() instead.&quot;)]
+public static GradientVerification&lt;T&gt;.VerificationResult VerifyAllOperations()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.JitCompiler.Testing.GradientVerification-1.html">GradientVerification</a>&lt;T&gt;.<a class="xref" href="AiDotNet.JitCompiler.Testing.GradientVerification-1.VerificationResult.html">VerificationResult</a></dt>
+    <dd><p>Overall verification result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_Testing_GradientVerification_1_VerifyAllOperations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method verifies that the built-in gradient formulas for common operations
+are mathematically correct. It does NOT test the TensorOperations implementations.
+</p>
+<p><b>For Beginners:</b> This runs tests on gradient formulas for common operations.
+<p>It tests formulas like:</p>
+<ul>
+<li>ReLU: gradient = 1 if x &gt; 0, else 0</li>
+<li>Sigmoid: gradient = sigmoid(x) * (1 - sigmoid(x))</li>
+<li>Tanh: gradient = 1 - tanh(x)^2</li>
+<li>Add: gradient = 1 for both inputs</li>
+<li>Multiply: gradient = other input</li>
+</ul>
+<p>This verifies the math is correct, not the implementation in TensorOperations.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_Testing_GradientVerification_1_VerifyGradientFormula_" data-uid="AiDotNet.JitCompiler.Testing.GradientVerification`1.VerifyGradientFormula*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_Testing_GradientVerification_1_VerifyGradientFormula__0_____System_Func__0______0____0______System_Func__0______0____" data-uid="AiDotNet.JitCompiler.Testing.GradientVerification`1.VerifyGradientFormula(`0[][],System.Func{`0[][],`0[],`0[][]},System.Func{`0[][],`0[]})">
+  VerifyGradientFormula(T[][], Func&lt;T[][], T[], T[][]&gt;, Func&lt;T[][], T[]&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/Testing/GradientVerification.cs/#L211"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Verifies gradient formulas without requiring an IROp (simplified API).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GradientVerification&lt;T&gt;.VerificationResult VerifyGradientFormula(T[][] inputs, Func&lt;T[][], T[], T[][]&gt; gradientFunc, Func&lt;T[][], T[]&gt; forwardFunc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> T[][]</dt>
+    <dd><p>Input arrays to test.</p>
+</dd>
+    <dt><code>gradientFunc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-3">Func</a>&lt;T[][], T[], T[][]&gt;</dt>
+    <dd><p>Your gradient formula implementation.</p>
+</dd>
+    <dt><code>forwardFunc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;T[][], T[]&gt;</dt>
+    <dd><p>Your forward pass implementation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.JitCompiler.Testing.GradientVerification-1.html">GradientVerification</a>&lt;T&gt;.<a class="xref" href="AiDotNet.JitCompiler.Testing.GradientVerification-1.VerificationResult.html">VerificationResult</a></dt>
+    <dd><p>Verification result with detailed error information.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_Testing_GradientVerification_1_VerifyGradientFormula__0_____System_Func__0______0____0______System_Func__0______0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This is a simplified version that doesn't require an IROp parameter.
+Use this when you just want to verify a gradient formula.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_Testing_GradientVerification_1_VerifyOperation_" data-uid="AiDotNet.JitCompiler.Testing.GradientVerification`1.VerifyOperation*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_Testing_GradientVerification_1_VerifyOperation_AiDotNet_JitCompiler_IR_IROp__0_____System_Func__0______0____0______System_Func__0______0____" data-uid="AiDotNet.JitCompiler.Testing.GradientVerification`1.VerifyOperation(AiDotNet.JitCompiler.IR.IROp,`0[][],System.Func{`0[][],`0[],`0[][]},System.Func{`0[][],`0[]})">
+  VerifyOperation(IROp, T[][], Func&lt;T[][], T[], T[][]&gt;, Func&lt;T[][], T[]&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/Testing/GradientVerification.cs/#L148"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Verifies that a gradient formula matches numerical differentiation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GradientVerification&lt;T&gt;.VerificationResult VerifyOperation(IROp operation, T[][] inputs, Func&lt;T[][], T[], T[][]&gt; gradientFunc, Func&lt;T[][], T[]&gt; forwardFunc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>operation</code> <a class="xref" href="AiDotNet.JitCompiler.IR.IROp.html">IROp</a></dt>
+    <dd><p>The IR operation being verified (for metadata purposes only).</p>
+</dd>
+    <dt><code>inputs</code> T[][]</dt>
+    <dd><p>Input arrays to test.</p>
+</dd>
+    <dt><code>gradientFunc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-3">Func</a>&lt;T[][], T[], T[][]&gt;</dt>
+    <dd><p>Your gradient formula implementation.</p>
+</dd>
+    <dt><code>forwardFunc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;T[][], T[]&gt;</dt>
+    <dd><p>Your forward pass implementation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.JitCompiler.Testing.GradientVerification-1.html">GradientVerification</a>&lt;T&gt;.<a class="xref" href="AiDotNet.JitCompiler.Testing.GradientVerification-1.VerificationResult.html">VerificationResult</a></dt>
+    <dd><p>Verification result with detailed error information.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_Testing_GradientVerification_1_VerifyOperation_AiDotNet_JitCompiler_IR_IROp__0_____System_Func__0______0____0______System_Func__0______0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method tests whether your provided gradient function produces results
+that match numerical differentiation. It does NOT test the actual autodiff
+system - use <a class="xref" href="AiDotNet.Autodiff.Testing.TensorOperationsVerification-1.html">TensorOperationsVerification&lt;T&gt;</a> for that.
+</p>
+<p><b>For Beginners:</b> This tests your hand-written gradient formula.
+<p>You provide:</p>
+<ul>
+<li>forwardFunc: How to compute the output from inputs (forward pass)</li>
+<li>gradientFunc: Your gradient formula (backward pass)</li>
+</ul>
+<p>The method will:</p>
+<ol>
+<li>Compute gradients using your formula</li>
+<li>Compute gradients numerically (the &quot;ground truth&quot;)</li>
+<li>Compare them and report any differences</li>
+</ol>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/Testing/GradientVerification.cs/#L42" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

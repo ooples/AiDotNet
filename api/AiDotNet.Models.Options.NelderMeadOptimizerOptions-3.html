@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class NelderMeadOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class NelderMeadOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the Nelder-Mead optimization algorithm, a derivative-free method for finding the minimum of an objective function in a multidimensional space.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_NelderMeadOptimizerOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.NelderMeadOptimizerOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3" class="text-break">
+Class NelderMeadOptimizerOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NelderMeadOptimizerOptions.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the Nelder-Mead optimization algorithm, a derivative-free method
+for finding the minimum of an objective function in a multidimensional space.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class NelderMeadOptimizerOptions&lt;T, TInput, TOutput&gt; : OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">NelderMeadOptimizerOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxIterations">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseEarlyStopping">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseEarlyStopping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_EarlyStoppingPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.EarlyStoppingPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_BadFitPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.BadFitPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinimumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinimumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaximumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaximumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseExpressionTrees">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseExpressionTrees</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_LearningRateDecay">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.LearningRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumIncreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumIncreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumDecreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumDecreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_Tolerance">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_OptimizationMode">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.OptimizationMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentScale">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentScale</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_SignFlipProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.SignFlipProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FeatureSelectionProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FeatureSelectionProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_PredictionOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.PredictionOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelStatsOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelStatsOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelEvaluator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitDetector">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitDetector</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitnessCalculator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitnessCalculator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelCache">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_CreateDefaults_AiDotNet_Enums_OptimizerType_">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.CreateDefaults(OptimizerType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The Nelder-Mead method (also known as the downhill simplex method or amoeba method) is a numerical
+optimization technique that does not require derivative information. It works by constructing a simplex
+(a generalization of a triangle to higher dimensions) and systematically replacing the worst vertex
+of this simplex with a new point through a series of reflection, expansion, contraction, and shrinking
+operations. This approach is particularly useful for problems where the objective function is non-differentiable,
+is not known in closed form, or when gradient calculations are computationally expensive or unstable.
+</p>
+<p><b>For Beginners:</b> The Nelder-Mead algorithm is a clever way to find the minimum value of a function
+without needing to calculate derivatives (which can be complicated or impossible for some problems).
+<p>Imagine you're trying to find the lowest point in a hilly landscape:</p>
+<ul>
+<li>Instead of following the steepest downhill path (as gradient-based methods do)</li>
+<li>Nelder-Mead places a &quot;flexible shape&quot; on the landscape (like a triangle in 2D space)</li>
+<li>It then moves and reshapes this triangle, always trying to &quot;slide&quot; toward lower ground</li>
+</ul>
+<p>The algorithm works through a series of simple operations:</p>
+<ul>
+<li>Reflection: Try moving away from the highest point</li>
+<li>Expansion: If that works well, try moving even further</li>
+<li>Contraction: If reflection doesn't work, try moving a shorter distance</li>
+<li>Shrinking: If all else fails, make the triangle smaller and try again</li>
+</ul>
+<p>This class allows you to configure how aggressively or cautiously these operations are performed,
+which affects how quickly and reliably the algorithm can find the optimal solution.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_AdaptationRate_" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.AdaptationRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_AdaptationRate" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.AdaptationRate">
+  AdaptationRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NelderMeadOptimizerOptions.cs/#L528"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the rate at which parameters are adjusted when using adaptive parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AdaptationRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The adaptation rate, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_AdaptationRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When using adaptive parameters (UseAdaptiveParameters = true), this value controls how quickly the
+algorithm adjusts the reflection, expansion, contraction, and shrink coefficients based on their success
+or failure. Higher values cause more rapid adaptation, which can help the algorithm quickly find effective
+parameters but may also lead to more volatile behavior. Lower values provide more stable, gradual adaptation
+that is less likely to overreact to temporary patterns in the optimization landscape.
+</p>
+<p><b>For Beginners:</b> This setting controls how quickly the algorithm adjusts its
+parameters when adaptive mode is enabled.
+<p>Think of it like a &quot;learning rate&quot; for the algorithm itself:</p>
+<ul>
+<li>A higher value means it quickly changes its behavior based on recent experiences</li>
+<li>A lower value means it changes more gradually, considering longer history</li>
+</ul>
+<p>The default value of 0.1 means:</p>
+<ul>
+<li>Parameters will change by roughly 10% of the distance toward their new target values
+after each relevant operation</li>
+<li>This provides moderate adaptation that doesn't overreact to individual successes or failures</li>
+</ul>
+<p>You might want to increase this value if:</p>
+<ul>
+<li>You want the algorithm to adapt more quickly to different regions of the function</li>
+<li>You're starting with parameters that might be far from optimal</li>
+</ul>
+<p>You might want to decrease this value if:</p>
+<ul>
+<li>The algorithm seems to be changing its behavior too erratically</li>
+<li>You want more stable, gradual adaptation</li>
+<li>Your function has noisy evaluations that might mislead quick adaptation</li>
+</ul>
+<p>This setting has no effect if UseAdaptiveParameters is false.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_InitialAlpha_" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.InitialAlpha*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_InitialAlpha" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.InitialAlpha">
+  InitialAlpha
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NelderMeadOptimizerOptions.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial reflection coefficient, which controls how far to reflect the simplex away from the worst point.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialAlpha { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The initial reflection coefficient, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_InitialAlpha_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The alpha parameter controls the distance to which the simplex is reflected away from the worst point.
+Specifically, when the algorithm identifies the worst vertex, it computes the centroid of all other vertices
+and then reflects the worst vertex through this centroid by a distance proportional to alpha. The standard value
+of 1.0 creates a reflection point that is the same distance from the centroid as the worst point, but in the
+opposite direction. Larger values create more aggressive reflections, while smaller values create more
+conservative reflections.
+</p>
+<p><b>For Beginners:</b> This setting controls how far the algorithm tries to move when
+it's "reflecting" away from a bad point.
+<p>In our landscape analogy:</p>
+<ul>
+<li>When the algorithm finds that one corner of its triangle is on high ground</li>
+<li>It wants to move that corner to potentially lower ground</li>
+<li>Alpha determines how far it jumps in the opposite direction</li>
+</ul>
+<p>The default value of 1.0 means:</p>
+<ul>
+<li>It will try moving exactly as far away from the bad point as the bad point was from the center</li>
+<li>This creates a balanced exploration of the space</li>
+</ul>
+<p>You might want to increase this value if:</p>
+<ul>
+<li>Your function has large flat regions that need to be crossed quickly</li>
+<li>You want more aggressive exploration early in the optimization</li>
+</ul>
+<p>You might want to decrease this value if:</p>
+<ul>
+<li>Your function has many sharp peaks and valleys</li>
+<li>The algorithm seems to be overshooting good solutions</li>
+</ul>
+<p>Think of it like deciding how big of a step to take when moving away from a known bad area -
+larger steps cover more ground but might miss details.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_InitialBeta_" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.InitialBeta*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_InitialBeta" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.InitialBeta">
+  InitialBeta
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NelderMeadOptimizerOptions.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial contraction coefficient, which controls how far to contract the simplex toward the centroid.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialBeta { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The initial contraction coefficient, defaulting to 0.5.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_InitialBeta_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The beta parameter controls the contraction operation, which is performed when the reflection yields a point
+that is not better than the second worst point. In this case, the algorithm tries to contract the simplex by moving
+either the reflected point or the worst point (depending on which is better) toward the centroid of the remaining
+points. The contraction coefficient determines what fraction of the distance to the centroid is used. Smaller values
+create more aggressive contractions, moving closer to the centroid.
+</p>
+<p><b>For Beginners:</b> This setting controls how cautiously the algorithm approaches
+a potentially promising area by "contracting" toward it.
+<p>Continuing our landscape analogy:</p>
+<ul>
+<li>If the algorithm reflects away from a bad point but doesn't find better ground</li>
+<li>It tries contracting toward the center of the good points instead</li>
+<li>Beta determines how far along this path it moves</li>
+</ul>
+<p>The default value of 0.5 means:</p>
+<ul>
+<li>It will try a point halfway between the worst point and the center of the other points</li>
+<li>This creates a moderate approach that doesn't commit too strongly</li>
+</ul>
+<p>You might want to increase this value (closer to 1.0) if:</p>
+<ul>
+<li>The algorithm seems to be contracting too aggressively</li>
+<li>You want more conservative exploration of the space</li>
+</ul>
+<p>You might want to decrease this value (closer to 0.0) if:</p>
+<ul>
+<li>You want to approach promising areas more aggressively</li>
+<li>The function has narrow valleys that need precise localization</li>
+</ul>
+<p>Think of it like carefully approaching what might be a good spot - a smaller beta means
+moving more directly toward the center of what looks promising.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_InitialDelta_" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.InitialDelta*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_InitialDelta" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.InitialDelta">
+  InitialDelta
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NelderMeadOptimizerOptions.cs/#L187"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial shrink coefficient, which controls how much to shrink the entire simplex when other operations fail.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialDelta { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The initial shrink coefficient, defaulting to 0.5.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_InitialDelta_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The delta parameter controls the shrinking operation, which is performed when reflection, expansion, and contraction
+all fail to improve the worst vertex. In this case, the algorithm shrinks the entire simplex toward the best vertex,
+moving all vertices except the best one closer to it. The shrink coefficient determines what fraction of the distance
+to the best vertex is preserved. Smaller values create more aggressive shrinking, making the simplex smaller and
+concentrating the search in a smaller region.
+</p>
+<p><b>For Beginners:</b> This setting controls how much the algorithm shrinks its search area
+when it can't find a better solution through other means.
+<p>In our landscape analogy:</p>
+<ul>
+<li>If none of the other strategies (reflection, expansion, contraction) work</li>
+<li>The algorithm needs to make its triangle smaller to focus on more detailed exploration</li>
+<li>Delta determines how much smaller the triangle becomes</li>
+</ul>
+<p>The default value of 0.5 means:</p>
+<ul>
+<li>All points (except the best one) move halfway toward the best point</li>
+<li>This creates a smaller triangle focused around the most promising area</li>
+</ul>
+<p>You might want to increase this value (closer to 1.0) if:</p>
+<ul>
+<li>The algorithm seems to be shrinking too aggressively and getting stuck</li>
+<li>You want to maintain a broader search even when progress is difficult</li>
+</ul>
+<p>You might want to decrease this value if:</p>
+<ul>
+<li>You want faster convergence when the algorithm is near the solution</li>
+<li>Your function has very complex local structure that requires detailed exploration</li>
+</ul>
+<p>Think of it like zooming in on a promising area - a smaller delta means zooming in more
+aggressively when the algorithm needs to focus.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_InitialGamma_" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.InitialGamma*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_InitialGamma" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.InitialGamma">
+  InitialGamma
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NelderMeadOptimizerOptions.cs/#L149"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial expansion coefficient, which controls how far to expand the simplex in a promising direction.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialGamma { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The initial expansion coefficient, defaulting to 2.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_InitialGamma_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The gamma parameter controls the expansion operation, which is performed when the reflection yields a new best point.
+In this case, the algorithm tries to expand further in this promising direction by moving even farther from the centroid
+than the reflection point. The expansion coefficient determines how much farther to go, as a multiple of the reflection
+distance. Values greater than 1.0 result in points that are farther from the centroid than the reflection point, with
+larger values creating more aggressive expansions.
+</p>
+<p><b>For Beginners:</b> This setting controls how far the algorithm will try to move when
+it discovers a promising direction.
+<p>In our landscape analogy:</p>
+<ul>
+<li>If reflecting away from a bad point discovers significantly lower ground</li>
+<li>The algorithm gets excited and wants to try moving even further in that direction</li>
+<li>Gamma determines how much further it tries to go</li>
+</ul>
+<p>The default value of 2.0 means:</p>
+<ul>
+<li>If reflection finds a good point, try going twice as far in that direction</li>
+<li>This allows for rapid progress when a good direction is found</li>
+</ul>
+<p>You might want to increase this value if:</p>
+<ul>
+<li>Your function has long, steep slopes that can be descended quickly</li>
+<li>You want more aggressive exploration when promising directions are found</li>
+</ul>
+<p>You might want to decrease this value if:</p>
+<ul>
+<li>Your function has narrow valleys where the minimum could be easily overshot</li>
+<li>The optimization seems to bounce around too much</li>
+</ul>
+<p>Think of it like deciding how enthusiastically to follow a promising path - larger values
+mean taking bigger leaps of faith when things look good.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MaxAlpha_" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.MaxAlpha*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MaxAlpha" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.MaxAlpha">
+  MaxAlpha
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NelderMeadOptimizerOptions.cs/#L252"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum allowed value for the reflection coefficient when using adaptive parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxAlpha { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum reflection coefficient, defaulting to 2.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MaxAlpha_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When using adaptive parameters (UseAdaptiveParameters = true), this value sets an upper bound on how large
+the reflection coefficient (alpha) can become. This prevents the reflection operations from becoming too
+aggressive, which could cause the algorithm to overlook detailed structure in the objective function. The
+appropriate maximum value depends on the characteristics of the objective function and the desired balance
+between exploration and exploitation.
+</p>
+<p><b>For Beginners:</b> This setting establishes the maximum value for Alpha when
+the algorithm is automatically adjusting its parameters.
+<p>If you enable adaptive parameters:</p>
+<ul>
+<li>The algorithm will increase Alpha when reflections are successful</li>
+<li>This setting prevents Alpha from becoming too large</li>
+<li>It ensures the algorithm doesn't become too aggressive in its exploration</li>
+</ul>
+<p>The default value of 2.0 means:</p>
+<ul>
+<li>Even if reflections are consistently successful, Alpha won't go above 2.0</li>
+<li>This prevents the algorithm from taking excessively large steps</li>
+</ul>
+<p>You would typically only change this if you're using adaptive parameters and:</p>
+<ul>
+<li>You want to allow for even more aggressive reflections (higher value)</li>
+<li>You want to limit how far the algorithm can reflect (lower value)</li>
+</ul>
+<p>This setting has no effect if UseAdaptiveParameters is false.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MaxBeta_" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.MaxBeta*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MaxBeta" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.MaxBeta">
+  MaxBeta
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NelderMeadOptimizerOptions.cs/#L318"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum allowed value for the contraction coefficient when using adaptive parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxBeta { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum contraction coefficient, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MaxBeta_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When using adaptive parameters (UseAdaptiveParameters = true), this value sets an upper bound on how large
+the contraction coefficient (beta) can become. This prevents the contraction operations from becoming too
+conservative, which could slow down convergence. A value of 1.0 means that in the most conservative case,
+the contracted point would be at the centroid itself. Values greater than 1.0 are generally not used for
+contraction as they would move beyond the centroid.
+</p>
+<p><b>For Beginners:</b> This setting establishes the maximum value for Beta when
+the algorithm is automatically adjusting its parameters.
+<p>If you enable adaptive parameters:</p>
+<ul>
+<li>The algorithm will increase Beta when contractions need to be more conservative</li>
+<li>This setting prevents Beta from becoming too large</li>
+</ul>
+<p>The default value of 1.0 means:</p>
+<ul>
+<li>Beta won't go above 1.0, meaning contracted points won't go beyond the centroid</li>
+<li>This represents the most conservative possible contraction</li>
+</ul>
+<p>You would typically not set this above 1.0, as that would mean moving beyond the centroid,
+which defeats the purpose of contraction. You might set it lower if:</p>
+<ul>
+<li>You want to ensure contractions always make meaningful progress toward the centroid</li>
+<li>You don't want the algorithm to be too conservative even when adapting</li>
+</ul>
+<p>This setting has no effect if UseAdaptiveParameters is false.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MaxDelta_" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.MaxDelta*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MaxDelta" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.MaxDelta">
+  MaxDelta
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NelderMeadOptimizerOptions.cs/#L450"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum allowed value for the shrink coefficient when using adaptive parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxDelta { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum shrink coefficient, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MaxDelta_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When using adaptive parameters (UseAdaptiveParameters = true), this value sets an upper bound on how large
+the shrink coefficient (delta) can become. This prevents the shrinking operations from becoming too
+conservative, which could slow down convergence. A value of 1.0 would mean no shrinking at all (points
+maintain their original distances), so practical values should be less than 1.0.
+</p>
+<p><b>For Beginners:</b> This setting establishes the maximum value for Delta when
+the algorithm is automatically adjusting its parameters.
+<p>If you enable adaptive parameters:</p>
+<ul>
+<li>The algorithm will increase Delta when less aggressive shrinking is needed</li>
+<li>This setting prevents Delta from becoming too large</li>
+</ul>
+<p>The default value of 1.0 means:</p>
+<ul>
+<li>Delta won't go above 1.0, which would mean no shrinking at all</li>
+<li>This represents the most conservative possible shrinking</li>
+</ul>
+<p>You would typically not set this to 1.0 or above, as that would prevent effective shrinking.
+You might set it lower if:</p>
+<ul>
+<li>You want to ensure the algorithm always makes meaningful progress during shrinking</li>
+<li>You don't want the algorithm to be too conservative even when adapting</li>
+</ul>
+<p>This setting has no effect if UseAdaptiveParameters is false.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MaxGamma_" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.MaxGamma*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MaxGamma" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.MaxGamma">
+  MaxGamma
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NelderMeadOptimizerOptions.cs/#L384"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum allowed value for the expansion coefficient when using adaptive parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxGamma { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum expansion coefficient, defaulting to 3.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MaxGamma_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When using adaptive parameters (UseAdaptiveParameters = true), this value sets an upper bound on how large
+the expansion coefficient (gamma) can become. This prevents the expansion operations from becoming too
+aggressive, which could cause the algorithm to overlook detailed structure in the objective function by
+taking excessively large steps. The appropriate maximum value depends on the characteristics of the
+objective function and the desired balance between exploration and exploitation.
+</p>
+<p><b>For Beginners:</b> This setting establishes the maximum value for Gamma when
+the algorithm is automatically adjusting its parameters.
+<p>If you enable adaptive parameters:</p>
+<ul>
+<li>The algorithm will increase Gamma when expansions are successful</li>
+<li>This setting prevents Gamma from becoming too large</li>
+<li>It ensures the algorithm doesn't take excessively large steps</li>
+</ul>
+<p>The default value of 3.0 means:</p>
+<ul>
+<li>Gamma won't go above 3.0, meaning the algorithm won't try going more than 3 times
+the reflection distance</li>
+<li>This prevents the algorithm from making wild leaps that might miss important details</li>
+</ul>
+<p>You might want to change this if you're using adaptive parameters and:</p>
+<ul>
+<li>You want to allow for even more aggressive expansions (higher value)</li>
+<li>You want to limit how far the algorithm can expand (lower value)</li>
+</ul>
+<p>This setting has no effect if UseAdaptiveParameters is false.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MinAlpha_" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.MinAlpha*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MinAlpha" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.MinAlpha">
+  MinAlpha
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NelderMeadOptimizerOptions.cs/#L219"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum allowed value for the reflection coefficient when using adaptive parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinAlpha { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum reflection coefficient, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MinAlpha_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When using adaptive parameters (UseAdaptiveParameters = true), this value sets a lower bound on how small
+the reflection coefficient (alpha) can become. This prevents the reflection operations from becoming too
+conservative, which could slow down progress. The appropriate minimum value depends on the characteristics
+of the objective function and the desired balance between exploration and exploitation.
+</p>
+<p><b>For Beginners:</b> This setting establishes the minimum value for Alpha when
+the algorithm is automatically adjusting its parameters.
+<p>If you enable adaptive parameters (UseAdaptiveParameters = true):</p>
+<ul>
+<li>The algorithm will adjust Alpha based on its success or failure</li>
+<li>This setting prevents Alpha from becoming too small</li>
+<li>It ensures the algorithm maintains some minimum level of exploration</li>
+</ul>
+<p>The default value of 0.1 means:</p>
+<ul>
+<li>Even if reflections repeatedly fail, Alpha won't go below 0.1</li>
+<li>This prevents the algorithm from becoming too timid in its exploration</li>
+</ul>
+<p>You would typically only change this if you're using adaptive parameters and:</p>
+<ul>
+<li>You want to allow for even more conservative reflections (lower value)</li>
+<li>You want to ensure more aggressive minimum exploration (higher value)</li>
+</ul>
+<p>This setting has no effect if UseAdaptiveParameters is false.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MinBeta_" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.MinBeta*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MinBeta" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.MinBeta">
+  MinBeta
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NelderMeadOptimizerOptions.cs/#L285"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum allowed value for the contraction coefficient when using adaptive parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinBeta { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum contraction coefficient, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MinBeta_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When using adaptive parameters (UseAdaptiveParameters = true), this value sets a lower bound on how small
+the contraction coefficient (beta) can become. This prevents the contraction operations from becoming too
+aggressive, which could cause the simplex to collapse prematurely. The appropriate minimum value depends on
+the characteristics of the objective function and the desired exploration behavior.
+</p>
+<p><b>For Beginners:</b> This setting establishes the minimum value for Beta when
+the algorithm is automatically adjusting its parameters.
+<p>If you enable adaptive parameters:</p>
+<ul>
+<li>The algorithm will adjust Beta based on how well contractions work</li>
+<li>This setting prevents Beta from becoming too small</li>
+<li>It ensures the algorithm doesn't contract too aggressively</li>
+</ul>
+<p>The default value of 0.1 means:</p>
+<ul>
+<li>Beta won't go below 0.1, meaning contracted points will always be at least 10%
+of the way from the centroid to the worst point</li>
+<li>This prevents the simplex from collapsing too quickly</li>
+</ul>
+<p>You would typically only change this if you're using adaptive parameters and:</p>
+<ul>
+<li>You want to allow for even more aggressive contractions (lower value)</li>
+<li>You want to ensure more conservative minimum contractions (higher value)</li>
+</ul>
+<p>This setting has no effect if UseAdaptiveParameters is false.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MinDelta_" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.MinDelta*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MinDelta" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.MinDelta">
+  MinDelta
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NelderMeadOptimizerOptions.cs/#L418"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum allowed value for the shrink coefficient when using adaptive parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinDelta { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum shrink coefficient, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MinDelta_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When using adaptive parameters (UseAdaptiveParameters = true), this value sets a lower bound on how small
+the shrink coefficient (delta) can become. This prevents the shrinking operations from becoming too
+aggressive, which could cause the simplex to collapse too quickly and potentially miss the optimal solution.
+The appropriate minimum value depends on the characteristics of the objective function and the desired
+exploration behavior.
+</p>
+<p><b>For Beginners:</b> This setting establishes the minimum value for Delta when
+the algorithm is automatically adjusting its parameters.
+<p>If you enable adaptive parameters:</p>
+<ul>
+<li>The algorithm will adjust Delta based on how effective shrinking is</li>
+<li>This setting prevents Delta from becoming too small</li>
+<li>It ensures the algorithm doesn't shrink too aggressively</li>
+</ul>
+<p>The default value of 0.1 means:</p>
+<ul>
+<li>Delta won't go below 0.1, meaning points will never move more than 90% of the way
+toward the best point during shrinking</li>
+<li>This prevents the simplex from collapsing too rapidly</li>
+</ul>
+<p>You would typically only change this if you're using adaptive parameters and:</p>
+<ul>
+<li>You want to allow for even more aggressive shrinking (lower value)</li>
+<li>You want to ensure more conservative minimum shrinking (higher value)</li>
+</ul>
+<p>This setting has no effect if UseAdaptiveParameters is false.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MinGamma_" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.MinGamma*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MinGamma" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.MinGamma">
+  MinGamma
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NelderMeadOptimizerOptions.cs/#L350"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum allowed value for the expansion coefficient when using adaptive parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinGamma { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum expansion coefficient, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_MinGamma_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When using adaptive parameters (UseAdaptiveParameters = true), this value sets a lower bound on how small
+the expansion coefficient (gamma) can become. A value of 1.0 means that in the most conservative case,
+expansion would be equivalent to reflection (no additional movement). Values less than 1.0 are generally
+not used for expansion as they would be more conservative than the reflection.
+</p>
+<p><b>For Beginners:</b> This setting establishes the minimum value for Gamma when
+the algorithm is automatically adjusting its parameters.
+<p>If you enable adaptive parameters:</p>
+<ul>
+<li>The algorithm will adjust Gamma based on how successful expansions are</li>
+<li>This setting prevents Gamma from becoming too small</li>
+</ul>
+<p>The default value of 1.0 means:</p>
+<ul>
+<li>Gamma won't go below 1.0, which would make it equivalent to just reflection</li>
+<li>This ensures expansion always tries to go at least as far as reflection</li>
+</ul>
+<p>You would typically not set this below 1.0, as that would make expansion more conservative
+than reflection, which defeats its purpose. You might set it higher if:</p>
+<ul>
+<li>You want to ensure expansions always go significantly beyond reflection</li>
+<li>You want more aggressive minimum exploration in promising directions</li>
+</ul>
+<p>This setting has no effect if UseAdaptiveParameters is false.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_UseAdaptiveParameters_" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.UseAdaptiveParameters*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_UseAdaptiveParameters" data-uid="AiDotNet.Models.Options.NelderMeadOptimizerOptions`3.UseAdaptiveParameters">
+  UseAdaptiveParameters
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NelderMeadOptimizerOptions.cs/#L490"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to adaptively adjust the algorithm parameters based on their effectiveness.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseAdaptiveParameters { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Flag indicating whether to use adaptive parameters, defaulting to false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NelderMeadOptimizerOptions_3_UseAdaptiveParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When set to true, the algorithm will automatically adjust the reflection, expansion, contraction, and shrink
+coefficients based on how successful these operations are during optimization. Coefficients for operations
+that consistently yield improvements will be increased (within their specified bounds), while coefficients
+for operations that frequently fail will be decreased. This can improve performance on complex objective
+functions by tailoring the algorithm's behavior to the specific characteristics of the problem.
+</p>
+<p><b>For Beginners:</b> This setting determines whether the algorithm automatically
+adjusts its own parameters during optimization.
+<p>Think of it like learning from experience:</p>
+<ul>
+<li>When enabled, the algorithm will increase parameters for operations that work well</li>
+<li>And decrease parameters for operations that don't work well</li>
+<li>This helps it adapt to the specific &quot;terrain&quot; it's exploring</li>
+</ul>
+<p>The default value of false means:</p>
+<ul>
+<li>The algorithm will use fixed values for Alpha, Beta, Gamma, and Delta throughout the optimization</li>
+<li>This provides more predictable behavior but might be less efficient</li>
+</ul>
+<p>You might want to set this to true if:</p>
+<ul>
+<li>Your objective function has varied characteristics in different regions</li>
+<li>You're not sure what parameter values would work best</li>
+<li>You want the algorithm to self-tune based on its experience</li>
+</ul>
+<p>You might want to keep it false if:</p>
+<ul>
+<li>You've already tuned the parameters for your specific problem</li>
+<li>You want consistent, predictable behavior</li>
+<li>You're comparing different algorithm configurations systematically</li>
+</ul>
+<p>When enabled, the other &quot;Min&quot; and &quot;Max&quot; parameters determine the bounds for adaptation,
+and AdaptationRate controls how quickly parameters change.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NelderMeadOptimizerOptions.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

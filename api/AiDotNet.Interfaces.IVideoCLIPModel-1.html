@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IVideoCLIPModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IVideoCLIPModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for VideoCLIP-style models that align video and text in a shared embedding space.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IVideoCLIPModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IVideoCLIPModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IVideoCLIPModel_1" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1" class="text-break">
+Interface IVideoCLIPModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVideoCLIPModel.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for VideoCLIP-style models that align video and text in a shared embedding space.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IVideoCLIPModel&lt;T&gt; : IMultimodalEmbedding&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EncodeText_System_String_">IMultimodalEmbedding&lt;T&gt;.EncodeText(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EncodeTextBatch_System_Collections_Generic_IEnumerable_System_String__">IMultimodalEmbedding&lt;T&gt;.EncodeTextBatch(IEnumerable&lt;string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EncodeImage_System_Double___">IMultimodalEmbedding&lt;T&gt;.EncodeImage(double[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EncodeImageBatch_System_Collections_Generic_IEnumerable_System_Double____">IMultimodalEmbedding&lt;T&gt;.EncodeImageBatch(IEnumerable&lt;double[]&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_ComputeSimilarity_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">IMultimodalEmbedding&lt;T&gt;.ComputeSimilarity(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_ZeroShotClassify_System_Double___System_Collections_Generic_IEnumerable_System_String__">IMultimodalEmbedding&lt;T&gt;.ZeroShotClassify(double[], IEnumerable&lt;string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EmbeddingDimension">IMultimodalEmbedding&lt;T&gt;.EmbeddingDimension</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_MaxSequenceLength">IMultimodalEmbedding&lt;T&gt;.MaxSequenceLength</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_ImageSize">IMultimodalEmbedding&lt;T&gt;.ImageSize</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IVideoCLIPModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+VideoCLIP extends CLIP's contrastive learning paradigm to the video domain, enabling
+text-to-video and video-to-text retrieval, action recognition, and temporal understanding.
+</p>
+<p><b>For Beginners:</b> VideoCLIP is like CLIP but for videos!
+<p>While CLIP matches images with text, VideoCLIP matches VIDEOS with text:</p>
+<ul>
+<li>Understands actions and events that unfold over time</li>
+<li>Can find videos matching text descriptions</li>
+<li>Can generate descriptions for video clips</li>
+</ul>
+<p>Key capabilities:</p>
+<ul>
+<li>Temporal understanding: &quot;A person picks up a ball then throws it&quot;</li>
+<li>Action recognition: &quot;Playing basketball&quot;, &quot;Cooking&quot;, &quot;Dancing&quot;</li>
+<li>Video retrieval: Find videos matching any text query</li>
+<li>Video-text alignment: Match video segments to text descriptions</li>
+</ul>
+<p>Architecture differences from CLIP:</p>
+<ul>
+<li>Processes multiple frames, not just one image</li>
+<li>Uses temporal attention/pooling across frames</li>
+<li>Learns motion and action patterns</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IVideoCLIPModel_1_FrameRate_" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.FrameRate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVideoCLIPModel_1_FrameRate" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.FrameRate">
+  FrameRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVideoCLIPModel.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the frame rate (frames per second) for video sampling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">double FrameRate { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IVideoCLIPModel_1_NumFrames_" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.NumFrames*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVideoCLIPModel_1_NumFrames" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.NumFrames">
+  NumFrames
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVideoCLIPModel.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of frames the model processes per video clip.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int NumFrames { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IVideoCLIPModel_1_TemporalAggregation_" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.TemporalAggregation*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVideoCLIPModel_1_TemporalAggregation" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.TemporalAggregation">
+  TemporalAggregation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVideoCLIPModel.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the temporal aggregation method used.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string TemporalAggregation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IVideoCLIPModel_1_TemporalAggregation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Common methods: &quot;mean_pooling&quot;, &quot;temporal_transformer&quot;, &quot;late_fusion&quot;</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IVideoCLIPModel_1_AnswerVideoQuestion_" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.AnswerVideoQuestion*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVideoCLIPModel_1_AnswerVideoQuestion_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_String_System_Int32_" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.AnswerVideoQuestion(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.String,System.Int32)">
+  AnswerVideoQuestion(IEnumerable&lt;Tensor&lt;T&gt;&gt;, string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVideoCLIPModel.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Answers a question about video content.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string AnswerVideoQuestion(IEnumerable&lt;Tensor&lt;T&gt;&gt; frames, string question, int maxLength = 64)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>frames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Video frames.</p>
+</dd>
+    <dt><code>question</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Question about the video.</p>
+</dd>
+    <dt><code>maxLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum answer length.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Generated answer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IVideoCLIPModel_1_AnswerVideoQuestion_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_String_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Ask questions about videos!
+<p>Examples:</p>
+<ul>
+<li>&quot;What is the person doing?&quot; → &quot;Playing guitar&quot;</li>
+<li>&quot;How many people are in the video?&quot; → &quot;Three&quot;</li>
+<li>&quot;What happens at the end?&quot; → &quot;The dog catches the frisbee&quot;</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IVideoCLIPModel_1_ComputeTemporalSimilarityMatrix_" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.ComputeTemporalSimilarityMatrix*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVideoCLIPModel_1_ComputeTemporalSimilarityMatrix_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.ComputeTemporalSimilarityMatrix(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}})">
+  ComputeTemporalSimilarityMatrix(IEnumerable&lt;Tensor&lt;T&gt;&gt;, IEnumerable&lt;Tensor&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVideoCLIPModel.cs/#L197"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes temporal similarity matrix between video segments.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; ComputeTemporalSimilarityMatrix(IEnumerable&lt;Tensor&lt;T&gt;&gt; video1Frames, IEnumerable&lt;Tensor&lt;T&gt;&gt; video2Frames)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>video1Frames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>First video frames.</p>
+</dd>
+    <dt><code>video2Frames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Second video frames.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Similarity matrix with shape [numFrames1, numFrames2].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IVideoCLIPModel_1_ComputeTemporalSimilarityMatrix_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Useful for video alignment, finding corresponding moments, or detecting repetitions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IVideoCLIPModel_1_ComputeVideoTextSimilarity_" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.ComputeVideoTextSimilarity*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVideoCLIPModel_1_ComputeVideoTextSimilarity_System_String_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.ComputeVideoTextSimilarity(System.String,System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}})">
+  ComputeVideoTextSimilarity(string, IEnumerable&lt;Tensor&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVideoCLIPModel.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes similarity between a text description and a video.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T ComputeVideoTextSimilarity(string text, IEnumerable&lt;Tensor&lt;T&gt;&gt; frames)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text description of an action or event.</p>
+</dd>
+    <dt><code>frames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Video frames to compare against.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Similarity score, typically in range [-1, 1].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IVideoCLIPModel_1_ExtractFrameFeatures_" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.ExtractFrameFeatures*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVideoCLIPModel_1_ExtractFrameFeatures_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.ExtractFrameFeatures(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}})">
+  ExtractFrameFeatures(IEnumerable&lt;Tensor&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVideoCLIPModel.cs/#L186"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts frame-level features before temporal aggregation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; ExtractFrameFeatures(IEnumerable&lt;Tensor&lt;T&gt;&gt; frames)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>frames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Video frames.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Feature tensor with shape [numFrames, featureDim].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IVideoCLIPModel_1_GenerateVideoCaption_" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.GenerateVideoCaption*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVideoCLIPModel_1_GenerateVideoCaption_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Int32_" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.GenerateVideoCaption(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Int32)">
+  GenerateVideoCaption(IEnumerable&lt;Tensor&lt;T&gt;&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVideoCLIPModel.cs/#L158"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a caption describing the video content.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string GenerateVideoCaption(IEnumerable&lt;Tensor&lt;T&gt;&gt; frames, int maxLength = 77)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>frames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Video frames to caption.</p>
+</dd>
+    <dt><code>maxLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum caption length.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Generated caption describing the video.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IVideoCLIPModel_1_GetVideoEmbedding_" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.GetVideoEmbedding*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVideoCLIPModel_1_GetVideoEmbedding_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.GetVideoEmbedding(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}})">
+  GetVideoEmbedding(IEnumerable&lt;Tensor&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVideoCLIPModel.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a video (sequence of frames) into an embedding vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; GetVideoEmbedding(IEnumerable&lt;Tensor&lt;T&gt;&gt; frames)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>frames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Sequence of preprocessed frame tensors with shape [channels, height, width].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A normalized embedding vector representing the entire video.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IVideoCLIPModel_1_GetVideoEmbedding_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts a video into a single vector!
+<p>Process:</p>
+<ol>
+<li>Each frame is encoded independently (like CLIP)</li>
+<li>Frame features are aggregated over time</li>
+<li>Result is a single vector capturing the video's content and actions</li>
+</ol>
+<p>Now you can compare videos to text or other videos!</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IVideoCLIPModel_1_GetVideoEmbeddings_" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.GetVideoEmbeddings*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVideoCLIPModel_1_GetVideoEmbeddings_System_Collections_Generic_IEnumerable_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0____" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.GetVideoEmbeddings(System.Collections.Generic.IEnumerable{System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}}})">
+  GetVideoEmbeddings(IEnumerable&lt;IEnumerable&lt;Tensor&lt;T&gt;&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVideoCLIPModel.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts multiple videos into embedding vectors in a batch.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;Vector&lt;T&gt;&gt; GetVideoEmbeddings(IEnumerable&lt;IEnumerable&lt;Tensor&lt;T&gt;&gt;&gt; videos)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>videos</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>Collection of videos, each as a sequence of frames.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Collection of normalized embedding vectors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IVideoCLIPModel_1_LocalizeMoments_" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.LocalizeMoments*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVideoCLIPModel_1_LocalizeMoments_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_String_System_Int32_" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.LocalizeMoments(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.String,System.Int32)">
+  LocalizeMoments(IEnumerable&lt;Tensor&lt;T&gt;&gt;, string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVideoCLIPModel.cs/#L147"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Localizes moments in a video that match a text description.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;(int StartFrame, int EndFrame, T Score)&gt; LocalizeMoments(IEnumerable&lt;Tensor&lt;T&gt;&gt; frames, string query, int windowSize = 16)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>frames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Full video as sequence of frames.</p>
+</dd>
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text describing the moment to find.</p>
+</dd>
+    <dt><code>windowSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of frames per moment window.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,system.int32,-0-.startframe">StartFrame</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,system.int32,-0-.endframe">EndFrame</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,system.int32,-0-.score">Score</a>)&gt;</dt>
+    <dd><p>List of (startFrame, endFrame, score) for matching moments.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IVideoCLIPModel_1_LocalizeMoments_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_String_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Find specific moments in a video!
+<p>Example:</p>
+<ul>
+<li>Video: 5 minutes of a cooking show</li>
+<li>Query: &quot;chopping vegetables&quot;</li>
+<li>Result: [(300, 450, 0.92), (1200, 1350, 0.87)] - two segments where chopping happens</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IVideoCLIPModel_1_PredictNextAction_" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.PredictNextAction*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVideoCLIPModel_1_PredictNextAction_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Collections_Generic_IEnumerable_System_String__" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.PredictNextAction(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IEnumerable{System.String})">
+  PredictNextAction(IEnumerable&lt;Tensor&lt;T&gt;&gt;, IEnumerable&lt;string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVideoCLIPModel.cs/#L207"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts the next action or event in a video.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Dictionary&lt;string, T&gt; PredictNextAction(IEnumerable&lt;Tensor&lt;T&gt;&gt; frames, IEnumerable&lt;string&gt; possibleNextActions)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>frames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Observed video frames.</p>
+</dd>
+    <dt><code>possibleNextActions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Candidate actions that might happen next.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>Probability distribution over possible next actions.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IVideoCLIPModel_1_RetrieveTextsForVideo_" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.RetrieveTextsForVideo*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVideoCLIPModel_1_RetrieveTextsForVideo_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Collections_Generic_IEnumerable_System_String__System_Int32_" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.RetrieveTextsForVideo(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IEnumerable{System.String},System.Int32)">
+  RetrieveTextsForVideo(IEnumerable&lt;Tensor&lt;T&gt;&gt;, IEnumerable&lt;string&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVideoCLIPModel.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves the most relevant text descriptions for a video.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;(int Index, T Score)&gt; RetrieveTextsForVideo(IEnumerable&lt;Tensor&lt;T&gt;&gt; frames, IEnumerable&lt;string&gt; candidateTexts, int topK = 10)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>frames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Video frames to find descriptions for.</p>
+</dd>
+    <dt><code>candidateTexts</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Pool of text descriptions to search.</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of results to return.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,-0-.index">Index</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,-0-.score">Score</a>)&gt;</dt>
+    <dd><p>Indices of best matching texts with scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IVideoCLIPModel_1_RetrieveVideos_" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.RetrieveVideos*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVideoCLIPModel_1_RetrieveVideos_System_String_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Vector__0___System_Int32_" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.RetrieveVideos(System.String,System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Vector{`0}},System.Int32)">
+  RetrieveVideos(string, IEnumerable&lt;Vector&lt;T&gt;&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVideoCLIPModel.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves the most relevant videos for a text query.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;(int Index, T Score)&gt; RetrieveVideos(string query, IEnumerable&lt;Vector&lt;T&gt;&gt; videoEmbeddings, int topK = 10)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text description of desired video content.</p>
+</dd>
+    <dt><code>videoEmbeddings</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Pre-computed embeddings of video database.</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of results to return.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,-0-.index">Index</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,-0-.score">Score</a>)&gt;</dt>
+    <dd><p>Indices of top matching videos with their scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IVideoCLIPModel_1_ZeroShotActionRecognition_" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.ZeroShotActionRecognition*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IVideoCLIPModel_1_ZeroShotActionRecognition_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Collections_Generic_IEnumerable_System_String__" data-uid="AiDotNet.Interfaces.IVideoCLIPModel`1.ZeroShotActionRecognition(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IEnumerable{System.String})">
+  ZeroShotActionRecognition(IEnumerable&lt;Tensor&lt;T&gt;&gt;, IEnumerable&lt;string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVideoCLIPModel.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs zero-shot action classification on a video.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Dictionary&lt;string, T&gt; ZeroShotActionRecognition(IEnumerable&lt;Tensor&lt;T&gt;&gt; frames, IEnumerable&lt;string&gt; actionLabels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>frames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Video frames to classify.</p>
+</dd>
+    <dt><code>actionLabels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Candidate action labels.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>Dictionary mapping actions to probability scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IVideoCLIPModel_1_ZeroShotActionRecognition_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Collections_Generic_IEnumerable_System_String___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Recognize actions without training!
+<p>Example:</p>
+<ul>
+<li>Video: Someone shooting a basketball</li>
+<li>Labels: [&quot;playing basketball&quot;, &quot;playing soccer&quot;, &quot;swimming&quot;, &quot;running&quot;]</li>
+<li>Result: {&quot;playing basketball&quot;: 0.85, &quot;running&quot;: 0.08, ...}</li>
+</ul>
+<p>Works with any action you can describe in text!</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IVideoCLIPModel.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

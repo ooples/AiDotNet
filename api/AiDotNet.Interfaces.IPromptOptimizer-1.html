@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IPromptOptimizer&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IPromptOptimizer&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for optimizing prompts to improve language model performance.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IPromptOptimizer_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IPromptOptimizer%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IPromptOptimizer`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IPromptOptimizer_1" data-uid="AiDotNet.Interfaces.IPromptOptimizer`1" class="text-break">
+Interface IPromptOptimizer&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptOptimizer.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for optimizing prompts to improve language model performance.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IPromptOptimizer&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The type of numeric data used for scoring.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IPromptOptimizer_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A prompt optimizer automatically refines prompts to achieve better performance on a specific task.
+Optimization strategies include discrete search, gradient-based methods, ensemble approaches,
+and evolutionary algorithms.
+</p>
+<p><b>For Beginners:</b> A prompt optimizer automatically improves your prompts.
+<p>Think of it like automatic recipe refinement:</p>
+<ul>
+<li>You start with a basic recipe</li>
+<li>The optimizer tries variations (more salt, less sugar, different temperature)</li>
+<li>It measures which variations taste better</li>
+<li>It keeps refining until it finds the best version</li>
+</ul>
+<p>For prompts:</p>
+<ul>
+<li>You provide a basic prompt</li>
+<li>Optimizer generates variations</li>
+<li>Tests each variation's performance</li>
+<li>Returns the best-performing prompt</li>
+</ul>
+<p>Example:
+Initial prompt: &quot;Classify this review&quot;
+After optimization: &quot;Carefully analyze the sentiment and tone of the following product review.
+Classify it as positive, negative, or neutral based on the overall customer satisfaction.&quot;
+Result: 15% accuracy improvement</p>
+<p>Benefits:</p>
+<ul>
+<li>Better results without manual trial-and-error</li>
+<li>Discover optimal phrasings you wouldn't think of</li>
+<li>Systematic improvement process</li>
+<li>Measurable performance gains</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IPromptOptimizer_1_GetOptimizationHistory_" data-uid="AiDotNet.Interfaces.IPromptOptimizer`1.GetOptimizationHistory*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IPromptOptimizer_1_GetOptimizationHistory" data-uid="AiDotNet.Interfaces.IPromptOptimizer`1.GetOptimizationHistory">
+  GetOptimizationHistory()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptOptimizer.cs/#L197"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the optimization history showing performance over iterations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyList&lt;OptimizationHistoryEntry&lt;T&gt;&gt; GetOptimizationHistory()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Interfaces.OptimizationHistoryEntry-1.html">OptimizationHistoryEntry</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IPromptOptimizer_1_GetOptimizationHistory_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Returns a list of prompts and their scores from the optimization process,
+allowing analysis of how optimization progressed.
+</p>
+<p><b>For Beginners:</b> Shows how the prompt improved during optimization.
+<p>Like a training log showing progress:</p>
+<ul>
+<li>Iteration 1: &quot;Classify sentiment&quot; → Score: 0.65</li>
+<li>Iteration 5: &quot;Classify the sentiment of&quot; → Score: 0.72</li>
+<li>Iteration 10: &quot;Analyze sentiment and classify as&quot; → Score: 0.78</li>
+<li>Iteration 20: &quot;Carefully analyze the sentiment...&quot; → Score: 0.85</li>
+</ul>
+<p>Use this to:</p>
+<ul>
+<li>Visualize improvement over time</li>
+<li>Understand what changes helped</li>
+<li>Debug optimization issues</li>
+<li>Decide if more iterations would help</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">var history = optimizer.GetOptimizationHistory();
+
+foreach (var entry in history)
+{
+    Console.WriteLine($&quot;Iteration {entry.Iteration}: Score {entry.Score}&quot;);
+    Console.WriteLine($&quot;Prompt: {entry.Prompt}&quot;);
+}
+
+// Plot improvement curve
+PlotScores(history.Select(h =&gt; h.Score));
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IPromptOptimizer_1_Optimize_" data-uid="AiDotNet.Interfaces.IPromptOptimizer`1.Optimize*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IPromptOptimizer_1_Optimize_System_String_System_Func_System_String__0__System_Int32_" data-uid="AiDotNet.Interfaces.IPromptOptimizer`1.Optimize(System.String,System.Func{System.String,`0},System.Int32)">
+  Optimize(string, Func&lt;string, T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptOptimizer.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IPromptTemplate Optimize(string initialPrompt, Func&lt;string, T&gt; evaluationFunction, int maxIterations = 100)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>initialPrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>evaluationFunction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd></dd>
+    <dt><code>maxIterations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IPromptTemplate.html">IPromptTemplate</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IPromptOptimizer_1_OptimizeAsync_" data-uid="AiDotNet.Interfaces.IPromptOptimizer`1.OptimizeAsync*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IPromptOptimizer_1_OptimizeAsync_System_String_System_Func_System_String_System_Threading_Tasks_Task__0___System_Int32_System_Threading_CancellationToken_" data-uid="AiDotNet.Interfaces.IPromptOptimizer`1.OptimizeAsync(System.String,System.Func{System.String,System.Threading.Tasks.Task{`0}},System.Int32,System.Threading.CancellationToken)">
+  OptimizeAsync(string, Func&lt;string, Task&lt;T&gt;&gt;, int, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptOptimizer.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;IPromptTemplate&gt; OptimizeAsync(string initialPrompt, Func&lt;string, Task&lt;T&gt;&gt; evaluationFunction, int maxIterations = 100, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>initialPrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>evaluationFunction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+    <dt><code>maxIterations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IPromptTemplate.html">IPromptTemplate</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptOptimizer.cs/#L40" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

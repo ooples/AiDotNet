@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IJitCompilable&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IJitCompilable&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Interface for models that can expose their computation graph for JIT compilation.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IJitCompilable_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IJitCompilable%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IJitCompilable`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IJitCompilable_1" data-uid="AiDotNet.Interfaces.IJitCompilable`1" class="text-break">
+Interface IJitCompilable&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IJitCompilable.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Interface for models that can expose their computation graph for JIT compilation.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IJitCompilable_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Models implementing this interface can be JIT compiled for significantly faster inference.
+JIT compilation converts the model's computation graph into optimized native code, providing
+5-10x speedup for complex models.
+</p>
+<p><b>For Beginners:</b> JIT (Just-In-Time) compilation is like translating your model's
+calculations into a faster language. This interface lets models opt-in to this optimization.
+<p>Benefits of JIT compilation:</p>
+<ul>
+<li>2-3x faster for simple operations</li>
+<li>5-10x faster for complex models</li>
+<li>Near-zero overhead for cached compilations</li>
+<li>Automatic operation fusion and optimization</li>
+</ul>
+<p>Requirements:</p>
+<ul>
+<li>Model must use ComputationNode-based computation graphs</li>
+<li>Graph structure must be deterministic (same structure for different inputs)</li>
+</ul>
+<p><b>Note:</b> Currently, neural networks using layer-based architecture need to be enhanced
+to export their forward pass as a computation graph to support JIT compilation.
+This is planned for a future update.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IJitCompilable_1_SupportsJitCompilation_" data-uid="AiDotNet.Interfaces.IJitCompilable`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IJitCompilable_1_SupportsJitCompilation" data-uid="AiDotNet.Interfaces.IJitCompilable`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IJitCompilable.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model currently supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the model can be JIT compiled, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IJitCompilable_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Some models may not support JIT compilation due to:
+- Dynamic graph structure (changes based on input)
+- Lack of computation graph representation
+- Use of operations not yet supported by the JIT compiler
+</p>
+<p><b>For Beginners:</b> This tells you whether this specific model can benefit from JIT compilation.
+<p>Models return false if they:</p>
+<ul>
+<li>Use layer-based architecture without graph export (e.g., current neural networks)</li>
+<li>Have control flow that changes based on input data</li>
+<li>Use operations the JIT compiler doesn't understand yet</li>
+</ul>
+<p>In these cases, the model will still work normally, just without JIT acceleration.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IJitCompilable_1_ExportComputationGraph_" data-uid="AiDotNet.Interfaces.IJitCompilable`1.ExportComputationGraph*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IJitCompilable_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.Interfaces.IJitCompilable`1.ExportComputationGraph(System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{`0}})">
+  ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IJitCompilable.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exports the model's computation graph for JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputNodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List to populate with input computation nodes (parameters).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output computation node representing the model's prediction.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IJitCompilable_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method should construct a computation graph representing the model's forward pass.
+The graph should use placeholder input nodes that will be filled with actual data during execution.
+</p>
+<p><b>For Beginners:</b> This method creates a "recipe" of your model's calculations
+that the JIT compiler can optimize.
+<p>The method should:</p>
+<ol>
+<li>Create placeholder nodes for inputs (features, parameters)</li>
+<li>Build the computation graph using TensorOperations</li>
+<li>Return the final output node</li>
+<li>Add all input nodes to the inputNodes list (in order)</li>
+</ol>
+<p>Example for a simple linear model (y = Wx + b):</p>
+<pre><code class="lang-csharp">public ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)
+{
+    // Create placeholder inputs
+    var x = TensorOperations&lt;T&gt;.Variable(new Tensor&lt;T&gt;(InputShape), "x");
+    var W = TensorOperations&lt;T&gt;.Variable(Weights, "W");
+    var b = TensorOperations&lt;T&gt;.Variable(Bias, "b");
+
+    // Add inputs in order
+    inputNodes.Add(x);
+    inputNodes.Add(W);
+    inputNodes.Add(b);
+
+    // Build graph: y = Wx + b
+    var matmul = TensorOperations&lt;T&gt;.MatMul(x, W);
+    var output = TensorOperations&lt;T&gt;.Add(matmul, b);
+
+    return output;
+}</code></pre>
+<p>The JIT compiler will then:</p>
+<ul>
+<li>Optimize the graph (fuse operations, eliminate dead code)</li>
+<li>Compile it to fast native code</li>
+<li>Cache the compiled version for reuse</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IJitCompilable.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

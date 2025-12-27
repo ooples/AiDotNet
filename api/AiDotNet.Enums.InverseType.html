@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum InverseType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum InverseType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Specifies different algorithms for calculating matrix inverses in mathematical operations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_InverseType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.InverseType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.InverseType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_InverseType" data-uid="AiDotNet.Enums.InverseType" class="text-break">
+Enum InverseType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/InverseType.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Specifies different algorithms for calculating matrix inverses in mathematical operations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum InverseType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_InverseType_GaussianJordan"><code>GaussianJordan = 2</code></dt>
+  <dd><p>A direct method for finding matrix inverses using elementary row operations.</p>
+<p>
+<b>For Beginners:</b> The Gaussian-Jordan method is a systematic approach that transforms 
+the original matrix into the identity matrix while simultaneously transforming the 
+identity matrix into the inverse.
+<p>Think of it as:</p>
+<ul>
+<li>Like solving a step-by-step puzzle following clear rules</li>
+<li>The most commonly taught method in linear algebra classes</li>
+<li>Reliable and works for almost any invertible matrix</li>
+<li>Easy to understand and implement</li>
+</ul>
+<p>Best used when:</p>
+<ul>
+<li>You need a reliable, general-purpose method</li>
+<li>Working with small to medium-sized matrices</li>
+<li>Accuracy is more important than speed</li>
+<li>You need to understand each step of the process</li>
+<li>The matrix is well-conditioned (not close to being non-invertible)</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_InverseType_Newton"><code>Newton = 1</code></dt>
+  <dd><p>An iterative algorithm that approximates the inverse through successive refinements.</p>
+<p>
+<b>For Beginners:</b> Newton's method (also called Newton-Raphson) finds the inverse by making 
+an initial guess and then repeatedly improving that guess.
+<p>Think of it as:</p>
+<ul>
+<li>Like homing in on a target by making better and better guesses</li>
+<li>Starts with an approximation and refines it iteratively</li>
+<li>Can be very efficient when a good initial guess is available</li>
+<li>Works well for special types of matrices</li>
+</ul>
+<p>Best used when:</p>
+<ul>
+<li>You already have a good approximate inverse</li>
+<li>Working with special matrix types (like diagonally dominant matrices)</li>
+<li>The matrix has special properties that make Newton's method converge quickly</li>
+<li>You need to update an inverse after small changes to the original matrix</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_InverseType_Strassen"><code>Strassen = 0</code></dt>
+  <dd><p>A divide-and-conquer algorithm for matrix inversion that's efficient for large matrices.</p>
+<p>
+<b>For Beginners:</b> The Strassen algorithm is a clever approach that breaks down large matrix 
+operations into smaller ones, making calculations faster for big matrices.
+<p>Think of it as:</p>
+<ul>
+<li>Like solving a big puzzle by breaking it into smaller, manageable pieces</li>
+<li>More efficient than traditional methods for large matrices</li>
+<li>Uses fewer multiplication operations (which are computationally expensive)</li>
+<li>A good balance between speed and accuracy</li>
+</ul>
+<p>Best used when:</p>
+<ul>
+<li>Working with large matrices (typically larger than 128×128)</li>
+<li>Speed is important</li>
+<li>You have sufficient memory available</li>
+<li>The matrix is well-conditioned (not close to being non-invertible)</li>
+</ul>
+
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_InverseType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> A matrix inverse is like finding the opposite of a number. Just as 1/5 is the 
+inverse of 5 (because 5 × 1/5 = 1), a matrix inverse is a special matrix that, when multiplied 
+with the original matrix, gives the identity matrix (the matrix equivalent of the number 1).
+<p>Matrix inverses are important in AI and machine learning for:</p>
+<ul>
+<li>Solving systems of equations</li>
+<li>Finding optimal parameters in linear regression</li>
+<li>Transforming data</li>
+<li>Many other mathematical operations</li>
+</ul>
+<p>Different algorithms for finding inverses have different trade-offs in terms of speed,
+accuracy, and memory usage. This enum lets you choose which algorithm to use.</p>
+
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/InverseType.cs/#L22" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

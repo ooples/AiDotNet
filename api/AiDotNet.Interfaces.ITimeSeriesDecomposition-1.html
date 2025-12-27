@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface ITimeSeriesDecomposition&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface ITimeSeriesDecomposition&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines methods and properties for decomposing time series data into its component parts.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_ITimeSeriesDecomposition_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.ITimeSeriesDecomposition%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.ITimeSeriesDecomposition`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_ITimeSeriesDecomposition_1" data-uid="AiDotNet.Interfaces.ITimeSeriesDecomposition`1" class="text-break">
+Interface ITimeSeriesDecomposition&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ITimeSeriesDecomposition.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines methods and properties for decomposing time series data into its component parts.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface ITimeSeriesDecomposition&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_ITimeSeriesDecomposition_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>Time series decomposition breaks down a sequence of data points into underlying patterns
+such as trend, seasonality, and residual components.</p>
+<p><b>For Beginners:</b> Time series decomposition is like taking apart a complex signal (like sales data
+over time) into simpler pieces that are easier to understand. Imagine your store's sales
+throughout the year - decomposition helps you separate:</p>
+<ul>
+<li>The overall growth trend (are sales generally increasing?)</li>
+<li>Seasonal patterns (higher sales during holidays?)</li>
+<li>Day-to-day random variations</li>
+</ul>
+<p>This makes it easier to understand what's really happening in your data and make better predictions.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_ITimeSeriesDecomposition_1_TimeSeries_" data-uid="AiDotNet.Interfaces.ITimeSeriesDecomposition`1.TimeSeries*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ITimeSeriesDecomposition_1_TimeSeries" data-uid="AiDotNet.Interfaces.ITimeSeriesDecomposition`1.TimeSeries">
+  TimeSeries
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ITimeSeriesDecomposition.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the original time series data that was decomposed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; TimeSeries { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ITimeSeriesDecomposition_1_TimeSeries_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This property provides access to the input data used for the decomposition.</p>
+<p><b>For Beginners:</b> This is simply your original data - the sequence of values over time
+that you wanted to analyze. For example, if you're analyzing daily temperature readings,
+this would be your complete list of temperature values in chronological order.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_ITimeSeriesDecomposition_1_GetComponent_" data-uid="AiDotNet.Interfaces.ITimeSeriesDecomposition`1.GetComponent*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ITimeSeriesDecomposition_1_GetComponent_AiDotNet_Enums_DecompositionComponentType_" data-uid="AiDotNet.Interfaces.ITimeSeriesDecomposition`1.GetComponent(AiDotNet.Enums.DecompositionComponentType)">
+  GetComponent(DecompositionComponentType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ITimeSeriesDecomposition.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a specific component of the time series decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">object? GetComponent(DecompositionComponentType componentType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>componentType</code> <a class="xref" href="AiDotNet.Enums.DecompositionComponentType.html">DecompositionComponentType</a></dt>
+    <dd><p>The type of component to retrieve (e.g., Trend, Seasonal, Residual).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd><p>The requested component data, or null if the component doesn't exist.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ITimeSeriesDecomposition_1_GetComponent_AiDotNet_Enums_DecompositionComponentType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method retrieves a single component by its type.</p>
+<p><b>For Beginners:</b> This lets you look at just one specific pattern in your data. For example,
+if you only want to see the seasonal pattern in your sales data (like how much sales
+increase during holidays), you would use this method to get just that piece.</p>
+<p>The component is returned as an &quot;object&quot; type, which means you'll need to convert it
+to the appropriate type (usually a Vector&lt;T&gt;) before using it.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ITimeSeriesDecomposition_1_GetComponents_" data-uid="AiDotNet.Interfaces.ITimeSeriesDecomposition`1.GetComponents*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ITimeSeriesDecomposition_1_GetComponents" data-uid="AiDotNet.Interfaces.ITimeSeriesDecomposition`1.GetComponents">
+  GetComponents()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ITimeSeriesDecomposition.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all available decomposition components as a dictionary.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Dictionary&lt;DecompositionComponentType, object&gt; GetComponents()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="AiDotNet.Enums.DecompositionComponentType.html">DecompositionComponentType</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>A dictionary mapping component types to their corresponding data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ITimeSeriesDecomposition_1_GetComponents_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method returns all the extracted components from the time series.</p>
+<p><b>For Beginners:</b> This gives you all the pieces that make up your data, organized by type.
+Common components include:</p>
+<ul>
+<li>Trend: The long-term direction (going up, down, or staying flat)</li>
+<li>Seasonality: Regular patterns that repeat (like higher sales every weekend)</li>
+<li>Cycle: Longer patterns that don't have a fixed frequency</li>
+<li>Residual/Noise: The random variations that don't fit any pattern</li>
+</ul>
+<p>Each component helps you understand a different aspect of what's happening in your data.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ITimeSeriesDecomposition_1_HasComponent_" data-uid="AiDotNet.Interfaces.ITimeSeriesDecomposition`1.HasComponent*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ITimeSeriesDecomposition_1_HasComponent_AiDotNet_Enums_DecompositionComponentType_" data-uid="AiDotNet.Interfaces.ITimeSeriesDecomposition`1.HasComponent(AiDotNet.Enums.DecompositionComponentType)">
+  HasComponent(DecompositionComponentType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ITimeSeriesDecomposition.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if a specific decomposition component is available.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool HasComponent(DecompositionComponentType componentType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>componentType</code> <a class="xref" href="AiDotNet.Enums.DecompositionComponentType.html">DecompositionComponentType</a></dt>
+    <dd><p>The type of component to check for (e.g., Trend, Seasonal, Residual).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the component exists; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ITimeSeriesDecomposition_1_HasComponent_AiDotNet_Enums_DecompositionComponentType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method determines whether a particular component was extracted during decomposition.</p>
+<p><b>For Beginners:</b> Not all decomposition methods extract all possible components. This method
+lets you check if a specific component is available before trying to use it.</p>
+<p>For example, some simple decomposition methods might not separate cyclical patterns
+from the trend. You can use this method to check if the &quot;Cycle&quot; component exists
+before trying to analyze it.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ITimeSeriesDecomposition.cs/#L21" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

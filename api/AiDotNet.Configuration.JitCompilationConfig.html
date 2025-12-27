@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class JitCompilationConfig | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class JitCompilationConfig | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration for JIT (Just-In-Time) compilation of models for accelerated inference.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Configuration_JitCompilationConfig.md&amp;value=---%0Auid%3A%20AiDotNet.Configuration.JitCompilationConfig%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Configuration.JitCompilationConfig">
+
+
+
+  <h1 id="AiDotNet_Configuration_JitCompilationConfig" data-uid="AiDotNet.Configuration.JitCompilationConfig" class="text-break">
+Class JitCompilationConfig  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/JitCompilationConfig.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Configuration.html">Configuration</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration for JIT (Just-In-Time) compilation of models for accelerated inference.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class JitCompilationConfig</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">JitCompilationConfig</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Configuration_JitCompilationConfig_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+JIT compilation converts your model's computation graph into optimized native code,
+providing significant performance improvements for inference. This configuration allows
+you to control whether and how JIT compilation is applied.
+</p>
+<p><b>For Beginners:</b> JIT compilation is like translating your model into a faster language
+before using it. This can make predictions 5-10x faster, especially for complex models.
+<p>Key benefits:</p>
+<ul>
+<li><b>Performance:</b> 2-3x faster for simple operations, 5-10x for complex models</li>
+<li><b>Optimization:</b> Automatic operation fusion, dead code elimination</li>
+<li><b>Caching:</b> Compiled once, reused many times</li>
+</ul>
+<p>When to enable JIT:</p>
+<ul>
+<li>Production inference (maximize speed)</li>
+<li>Batch processing (repeated predictions)</li>
+<li>Large or complex models (more optimization opportunities)</li>
+</ul>
+<p>When NOT to enable JIT:</p>
+<ul>
+<li>Training (JIT is for inference only)</li>
+<li>Models that change structure dynamically</li>
+<li>Very simple models (compilation overhead exceeds benefits)</li>
+</ul>
+<p><b>Note:</b> Your model must implement IJitCompilable to support JIT compilation.
+Currently, this works with models built using TensorOperations computation graphs.
+Neural networks using layer-based architecture will be supported in a future update.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Configuration_JitCompilationConfig_CompilerOptions_" data-uid="AiDotNet.Configuration.JitCompilationConfig.CompilerOptions*"></a>
+
+  <h3 id="AiDotNet_Configuration_JitCompilationConfig_CompilerOptions" data-uid="AiDotNet.Configuration.JitCompilationConfig.CompilerOptions">
+  CompilerOptions
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/JitCompilationConfig.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the JIT compiler options for optimization and performance tuning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public JitCompilerOptions CompilerOptions { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.JitCompiler.JitCompilerOptions.html">JitCompilerOptions</a></dt>
+    <dd><p>Compiler options controlling optimization passes (default: all optimizations enabled).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_JitCompilationConfig_CompilerOptions_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+These options control how the JIT compiler optimizes your model's computation graph.
+The default configuration enables all optimizations, which works well for most cases.
+</p>
+<p><b>For Beginners:</b> These settings control HOW the JIT compiler optimizes your model.
+<p>Available optimizations:</p>
+<ul>
+<li><b>Constant Folding:</b> Pre-computes constant values</li>
+<li><b>Dead Code Elimination:</b> Removes unused operations</li>
+<li><b>Operation Fusion:</b> Combines multiple operations into one (biggest speedup!)</li>
+<li><b>Caching:</b> Reuses compiled graphs with same structure</li>
+</ul>
+<p>Default settings (all enabled) work well for 99% of cases. You might customize if:</p>
+<ul>
+<li>Debugging: Disable optimizations to see original graph structure</li>
+<li>Memory constrained: Disable caching to reduce memory usage</li>
+<li>Experimental: Test impact of specific optimizations</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">var config = new JitCompilationConfig
+{
+    Enabled = true,
+    CompilerOptions = new JitCompilerOptions
+    {
+        EnableOperationFusion = true,  // Biggest perf gain
+        EnableDeadCodeElimination = true,
+        EnableConstantFolding = true,
+        EnableCaching = true
+    }
+};</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_JitCompilationConfig_Enabled_" data-uid="AiDotNet.Configuration.JitCompilationConfig.Enabled*"></a>
+
+  <h3 id="AiDotNet_Configuration_JitCompilationConfig_Enabled" data-uid="AiDotNet.Configuration.JitCompilationConfig.Enabled">
+  Enabled
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/JitCompilationConfig.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether JIT compilation is enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Enabled { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to enable JIT compilation, false to disable (default: false).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_JitCompilationConfig_Enabled_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Turn this on to make your model's predictions faster.
+<p>When enabled:</p>
+<ul>
+<li>The model's computation graph is compiled during BuildAsync()</li>
+<li>Predictions use the compiled version (5-10x faster)</li>
+<li>Compilation happens once, then results are cached</li>
+</ul>
+<p>When disabled:</p>
+<ul>
+<li>The model runs normally without JIT acceleration</li>
+<li>No compilation overhead during build</li>
+<li>Predictions use the standard execution path</li>
+</ul>
+<p>The compilation adds 10-50ms during model building, but makes every subsequent
+prediction much faster. For production deployment, this is almost always worth it.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Configuration_JitCompilationConfig_ThrowOnFailure_" data-uid="AiDotNet.Configuration.JitCompilationConfig.ThrowOnFailure*"></a>
+
+  <h3 id="AiDotNet_Configuration_JitCompilationConfig_ThrowOnFailure" data-uid="AiDotNet.Configuration.JitCompilationConfig.ThrowOnFailure">
+  ThrowOnFailure
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/JitCompilationConfig.cs/#L140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to throw an exception if JIT compilation fails.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool ThrowOnFailure { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to throw on failure, false to fall back to normal execution (default: false).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Configuration_JitCompilationConfig_ThrowOnFailure_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When JIT compilation fails (e.g., model doesn't support it, unsupported operations),
+this setting determines whether to throw an exception or silently fall back to normal execution.
+</p>
+<p><b>For Beginners:</b> This controls what happens if JIT compilation can't be done.
+<p>When true (ThrowOnFailure = true):</p>
+<ul>
+<li>If JIT fails, an exception is thrown immediately</li>
+<li>Build process stops</li>
+<li>You're notified of the problem right away</li>
+<li>Good for debugging or when JIT is critical</li>
+</ul>
+<p>When false (ThrowOnFailure = false, default):</p>
+<ul>
+<li>If JIT fails, a warning is logged but build continues</li>
+<li>Model works normally without JIT acceleration</li>
+<li>Graceful degradation</li>
+<li>Good for production where availability &gt; performance</li>
+</ul>
+<p>Common reasons JIT might fail:</p>
+<ul>
+<li>Model doesn't implement IJitCompilable</li>
+<li>Model has dynamic graph structure</li>
+<li>Operation types not yet supported by JIT compiler</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Development: Fail fast to catch issues
+var devConfig = new JitCompilationConfig { Enabled = true, ThrowOnFailure = true };
+
+// Production: Graceful fallback
+var prodConfig = new JitCompilationConfig { Enabled = true, ThrowOnFailure = false };</code></pre>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Configuration/JitCompilationConfig.cs/#L37" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Struct Octonion&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Struct Octonion&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents an octonion (a + b e1 + ... + h e7) with a scalar and seven imaginary components.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_LinearAlgebra_Octonion_1.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.LinearAlgebra.Octonion%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1">
+
+
+
+  <h1 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1" class="text-break">
+Struct Octonion&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L11"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.html">LinearAlgebra</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents an octonion (a + b e1 + ... + h e7) with a scalar and seven imaginary components.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly struct Octonion&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for components.</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1__ctor_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1__ctor__0__0__0__0__0__0__0__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.#ctor(`0,`0,`0,`0,`0,`0,`0,`0)">
+  Octonion(T, T, T, T, T, T, T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Octonion(T scalar, T e1, T e2, T e3, T e4, T e5, T e6, T e7)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <span class="xref">T</span></dt>
+    <dd></dd>
+    <dt><code>e1</code> <span class="xref">T</span></dt>
+    <dd></dd>
+    <dt><code>e2</code> <span class="xref">T</span></dt>
+    <dd></dd>
+    <dt><code>e3</code> <span class="xref">T</span></dt>
+    <dd></dd>
+    <dt><code>e4</code> <span class="xref">T</span></dt>
+    <dd></dd>
+    <dt><code>e5</code> <span class="xref">T</span></dt>
+    <dd></dd>
+    <dt><code>e6</code> <span class="xref">T</span></dt>
+    <dd></dd>
+    <dt><code>e7</code> <span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_E1_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.E1*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_E1" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.E1">
+  E1
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L17"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T E1 { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_E2_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.E2*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_E2" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.E2">
+  E2
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L18"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T E2 { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_E3_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.E3*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_E3" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.E3">
+  E3
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L19"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T E3 { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_E4_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.E4*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_E4" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.E4">
+  E4
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L20"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T E4 { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_E5_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.E5*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_E5" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.E5">
+  E5
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T E5 { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_E6_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.E6*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_E6" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.E6">
+  E6
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T E6 { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_E7_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.E7*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_E7" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.E7">
+  E7
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T E7 { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_IsScalar_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.IsScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_IsScalar" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.IsScalar">
+  IsScalar
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsScalar { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_Magnitude_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.Magnitude*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_Magnitude" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.Magnitude">
+  Magnitude
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Magnitude { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_NormSquared_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.NormSquared*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_NormSquared" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.NormSquared">
+  NormSquared
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T NormSquared { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_Scalar_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.Scalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_Scalar" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.Scalar">
+  Scalar
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L16"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Scalar { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_VectorMagnitude_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.VectorMagnitude*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_VectorMagnitude" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.VectorMagnitude">
+  VectorMagnitude
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T VectorMagnitude { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_Conjugate_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.Conjugate*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_Conjugate" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.Conjugate">
+  Conjugate()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Octonion&lt;T&gt; Conjugate()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_Equals_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.Equals*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_Equals_AiDotNet_Tensors_LinearAlgebra_Octonion__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.Equals(AiDotNet.Tensors.LinearAlgebra.Octonion{`0})">
+  Equals(Octonion&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L257"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Equals(Octonion&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_Equals_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.Equals*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_Equals_System_Object_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.Equals(System.Object)">
+  Equals(object?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L270"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether this instance and a specified object are equal.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool Equals(object? obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd><p>The object to compare with the current instance.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> if <code class="paramref">obj</code> and this instance are the same type and represent the same value; otherwise, <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_GetHashCode_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.GetHashCode*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_GetHashCode" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.GetHashCode">
+  GetHashCode()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L272"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the hash code for this instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int GetHashCode()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A 32-bit signed integer that is the hash code for this instance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_Inverse_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.Inverse*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_Inverse" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.Inverse">
+  Inverse()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Octonion&lt;T&gt; Inverse()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_Scale_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.Scale*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_Scale__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.Scale(`0)">
+  Scale(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Octonion&lt;T&gt; Scale(T scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_ToString_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.ToString*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_ToString" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.ToString">
+  ToString()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L289"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the fully qualified type name of this instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string ToString()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The fully qualified type name.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="operators">Operators
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_op_Addition_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.op_Addition*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_op_Addition_AiDotNet_Tensors_LinearAlgebra_Octonion__0__AiDotNet_Tensors_LinearAlgebra_Octonion__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.op_Addition(AiDotNet.Tensors.LinearAlgebra.Octonion{`0},AiDotNet.Tensors.LinearAlgebra.Octonion{`0})">
+  operator +(Octonion&lt;T&gt;, Octonion&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Octonion&lt;T&gt; operator +(Octonion&lt;T&gt; a, Octonion&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_op_Division_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.op_Division*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_op_Division_AiDotNet_Tensors_LinearAlgebra_Octonion__0__AiDotNet_Tensors_LinearAlgebra_Octonion__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.op_Division(AiDotNet.Tensors.LinearAlgebra.Octonion{`0},AiDotNet.Tensors.LinearAlgebra.Octonion{`0})">
+  operator /(Octonion&lt;T&gt;, Octonion&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L250"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Octonion&lt;T&gt; operator /(Octonion&lt;T&gt; a, Octonion&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_op_Equality_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.op_Equality*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_op_Equality_AiDotNet_Tensors_LinearAlgebra_Octonion__0__AiDotNet_Tensors_LinearAlgebra_Octonion__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.op_Equality(AiDotNet.Tensors.LinearAlgebra.Octonion{`0},AiDotNet.Tensors.LinearAlgebra.Octonion{`0})">
+  operator ==(Octonion&lt;T&gt;, Octonion&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L253"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool operator ==(Octonion&lt;T&gt; left, Octonion&lt;T&gt; right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_op_Inequality_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.op_Inequality*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_op_Inequality_AiDotNet_Tensors_LinearAlgebra_Octonion__0__AiDotNet_Tensors_LinearAlgebra_Octonion__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.op_Inequality(AiDotNet.Tensors.LinearAlgebra.Octonion{`0},AiDotNet.Tensors.LinearAlgebra.Octonion{`0})">
+  operator !=(Octonion&lt;T&gt;, Octonion&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L255"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool operator !=(Octonion&lt;T&gt; left, Octonion&lt;T&gt; right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_op_Multiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.op_Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_op_Multiply_AiDotNet_Tensors_LinearAlgebra_Octonion__0__AiDotNet_Tensors_LinearAlgebra_Octonion__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.op_Multiply(AiDotNet.Tensors.LinearAlgebra.Octonion{`0},AiDotNet.Tensors.LinearAlgebra.Octonion{`0})">
+  operator *(Octonion&lt;T&gt;, Octonion&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Octonion&lt;T&gt; operator *(Octonion&lt;T&gt; a, Octonion&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_op_Subtraction_" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.op_Subtraction*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Octonion_1_op_Subtraction_AiDotNet_Tensors_LinearAlgebra_Octonion__0__AiDotNet_Tensors_LinearAlgebra_Octonion__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Octonion`1.op_Subtraction(AiDotNet.Tensors.LinearAlgebra.Octonion{`0},AiDotNet.Tensors.LinearAlgebra.Octonion{`0})">
+  operator -(Octonion&lt;T&gt;, Octonion&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Octonion&lt;T&gt; operator -(Octonion&lt;T&gt; a, Octonion&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Octonion.cs/#L11" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

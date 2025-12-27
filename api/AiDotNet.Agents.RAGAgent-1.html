@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class RAGAgent&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class RAGAgent&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements a Retrieval-Augmented Generation (RAG) agent that answers questions by retrieving relevant documents from a knowledge base, optionally reranking them, and generating grounded answers with citations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Agents_RAGAgent_1.md&amp;value=---%0Auid%3A%20AiDotNet.Agents.RAGAgent%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Agents.RAGAgent`1">
+
+
+
+  <h1 id="AiDotNet_Agents_RAGAgent_1" data-uid="AiDotNet.Agents.RAGAgent`1" class="text-break">
+Class RAGAgent&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Agents/RAGAgent.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Agents.html">Agents</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements a Retrieval-Augmented Generation (RAG) agent that answers questions by
+retrieving relevant documents from a knowledge base, optionally reranking them,
+and generating grounded answers with citations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class RAGAgent&lt;T&gt; : AgentBase&lt;T&gt;, IAgent&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for model parameters and operations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Agents.AgentBase-1.html">AgentBase</a>&lt;T&gt;</div>
+      <div><span class="xref">RAGAgent&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IAgent-1.html">IAgent</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Agents.AgentBase-1.html#AiDotNet_Agents_AgentBase_1_ChatModel">AgentBase&lt;T&gt;.ChatModel</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Agents.AgentBase-1.html#AiDotNet_Agents_AgentBase_1_Tools">AgentBase&lt;T&gt;.Tools</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Agents.AgentBase-1.html#AiDotNet_Agents_AgentBase_1_Scratchpad">AgentBase&lt;T&gt;.Scratchpad</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Agents.AgentBase-1.html#AiDotNet_Agents_AgentBase_1_AppendToScratchpad_System_String_">AgentBase&lt;T&gt;.AppendToScratchpad(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Agents.AgentBase-1.html#AiDotNet_Agents_AgentBase_1_ClearScratchpad">AgentBase&lt;T&gt;.ClearScratchpad()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Agents.AgentBase-1.html#AiDotNet_Agents_AgentBase_1_FindTool_System_String_">AgentBase&lt;T&gt;.FindTool(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Agents.AgentBase-1.html#AiDotNet_Agents_AgentBase_1_GetToolDescriptions">AgentBase&lt;T&gt;.GetToolDescriptions()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Agents.AgentBase-1.html#AiDotNet_Agents_AgentBase_1_ValidateMaxIterations_System_Int32_">AgentBase&lt;T&gt;.ValidateMaxIterations(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Agents_RAGAgent_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>For Beginners:
+RAGAgent is specialized for knowledge-intensive tasks where answers must be grounded
+in a document collection (knowledge base). Unlike general agents that use tools,
+RAGAgent has the RAG pipeline as its core reasoning mechanism.</p>
+<p><strong>What is RAG?</strong>
+RAG = Retrieval-Augmented Generation</p>
+<ol>
+<li><strong>Retrieval</strong>: Find relevant documents from your knowledge base</li>
+<li><strong>Augmentation</strong>: Add those documents to the query as context</li>
+<li><strong>Generation</strong>: LLM generates answer based on retrieved documents</li>
+</ol>
+<p><strong>When to use RAGAgent:</strong></p>
+<ul>
+<li>You have a knowledge base (documents, manuals, FAQs, research papers)</li>
+<li>Questions require factual information from those documents</li>
+<li>You want answers with citations/sources</li>
+<li>Information changes frequently (update docs, not the model)</li>
+<li>You need verifiable, grounded answers</li>
+</ul>
+<p><strong>When NOT to use RAGAgent:</strong></p>
+<ul>
+<li>For creative writing tasks</li>
+<li>When answers don't need factual grounding</li>
+<li>For simple calculation or logic tasks (use ChainOfThoughtAgent)</li>
+<li>When you need to call various tools dynamically (use Agent/ReAct)</li>
+</ul>
+<p><strong>Example workflow:</strong></p>
+<pre><code class="lang-csharp">User: "What are the system requirements for product X?"
+
+=== RETRIEVAL ===
+- Search knowledge base for "product X system requirements"
+- Find 10 potentially relevant documents
+
+=== RERANKING (optional) ===
+- Deeply analyze those 10 documents
+- Keep top 5 most relevant
+
+=== GENERATION ===
+- LLM reads the 5 documents
+- Generates answer: "Product X requires [specs from doc 1],
+  with recommended [specs from doc 2]..."
+- Includes citations: [1], [2]
+
+Final Answer: Full answer with source citations</code></pre>
+<p><strong>Key benefits:</strong></p>
+<ul>
+<li><strong>Grounded</strong>: Answers based on real documents, not hallucinations</li>
+<li><strong>Verifiable</strong>: Citations let users check sources</li>
+<li><strong>Up-to-date</strong>: Update knowledge base without retraining</li>
+<li><strong>Transparent</strong>: See which documents were used</li>
+<li><strong>Domain-specific</strong>: Works with your proprietary data</li>
+</ul>
+<p><strong>Research background:</strong>
+Based on &quot;Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks&quot; (Lewis et al., 2020)
+which showed combining retrieval with generation significantly improves factual accuracy.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Agents_RAGAgent_1__ctor_" data-uid="AiDotNet.Agents.RAGAgent`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Agents_RAGAgent_1__ctor_AiDotNet_Interfaces_IChatModel__0__AiDotNet_Interfaces_IRetriever__0__AiDotNet_Interfaces_IGenerator__0__AiDotNet_Interfaces_IReranker__0__System_Int32_System_Nullable_System_Int32__System_Boolean_System_Boolean_" data-uid="AiDotNet.Agents.RAGAgent`1.#ctor(AiDotNet.Interfaces.IChatModel{`0},AiDotNet.Interfaces.IRetriever{`0},AiDotNet.Interfaces.IGenerator{`0},AiDotNet.Interfaces.IReranker{`0},System.Int32,System.Nullable{System.Int32},System.Boolean,System.Boolean)">
+  RAGAgent(IChatModel&lt;T&gt;, IRetriever&lt;T&gt;, IGenerator&lt;T&gt;, IReranker&lt;T&gt;?, int, int?, bool, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Agents/RAGAgent.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Agents.RAGAgent-1.html">RAGAgent&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RAGAgent(IChatModel&lt;T&gt; chatModel, IRetriever&lt;T&gt; retriever, IGenerator&lt;T&gt; generator, IReranker&lt;T&gt;? reranker = null, int retrievalTopK = 10, int? rerankTopK = 5, bool includeCitations = true, bool allowQueryRefinement = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>chatModel</code> <a class="xref" href="AiDotNet.Interfaces.IChatModel-1.html">IChatModel</a>&lt;T&gt;</dt>
+    <dd><p>The chat model for query understanding and refinement.</p>
+</dd>
+    <dt><code>retriever</code> <a class="xref" href="AiDotNet.Interfaces.IRetriever-1.html">IRetriever</a>&lt;T&gt;</dt>
+    <dd><p>The retriever for finding relevant documents.</p>
+</dd>
+    <dt><code>generator</code> <a class="xref" href="AiDotNet.Interfaces.IGenerator-1.html">IGenerator</a>&lt;T&gt;</dt>
+    <dd><p>The generator for creating grounded answers.</p>
+</dd>
+    <dt><code>reranker</code> <a class="xref" href="AiDotNet.Interfaces.IReranker-1.html">IReranker</a>&lt;T&gt;</dt>
+    <dd><p>Optional reranker for improving document relevance (recommended for better accuracy).</p>
+</dd>
+    <dt><code>retrievalTopK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of documents to retrieve initially (default: 10).</p>
+</dd>
+    <dt><code>rerankTopK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Number of documents to keep after reranking (default: 5). Only used if reranker provided.</p>
+</dd>
+    <dt><code>includeCitations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to include source citations in answers (default: true).</p>
+</dd>
+    <dt><code>allowQueryRefinement</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to refine ambiguous queries before retrieval (default: true).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Agents_RAGAgent_1__ctor_AiDotNet_Interfaces_IChatModel__0__AiDotNet_Interfaces_IRetriever__0__AiDotNet_Interfaces_IGenerator__0__AiDotNet_Interfaces_IReranker__0__System_Int32_System_Nullable_System_Int32__System_Boolean_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+Creates a RAG agent that answers questions using your knowledge base.</p>
+<p><strong>Required components:</strong></p>
+<ul>
+<li>chatModel: For query understanding (e.g., OpenAI GPT, Claude)</li>
+<li>retriever: Searches your knowledge base (e.g., DenseRetriever, HybridRetriever)</li>
+<li>generator: Creates answers from retrieved docs (often same as chatModel)</li>
+</ul>
+<p><strong>Optional but recommended:</strong></p>
+<ul>
+<li>reranker: Improves document ranking for better accuracy
+Without reranker: Uses retriever's ranking
+With reranker: Re-sorts documents more carefully</li>
+</ul>
+<p><strong>Configuration:</strong></p>
+<ul>
+<li>retrievalTopK: Cast wide net initially (10-20 documents)</li>
+<li>rerankTopK: Keep best after reranking (3-7 documents)</li>
+<li>includeCitations: Show sources like [1], [2] (very useful!)</li>
+<li>allowQueryRefinement: Clarify vague queries before searching</li>
+</ul>
+<p><strong>Query Refinement Example:</strong></p>
+<ul>
+<li>User asks: &quot;How do I reset it?&quot;</li>
+<li>Agent thinks: &quot;Reset what? Password? Device? Settings?&quot;</li>
+<li>Refined query: &quot;How do I reset the password?&quot;</li>
+<li>Better retrieval results!</li>
+</ul>
+<p>Example setup:</p>
+<pre><code class="lang-csharp">var retriever = new HybridRetriever&lt;double&gt;(...);
+var reranker = new CrossEncoderReranker&lt;double&gt;(...);
+var generator = new OpenAIGenerator&lt;double&gt;(...);
+var chatModel = new OpenAIChatModel&lt;double&gt;(...);
+
+var ragAgent = new RAGAgent&lt;double&gt;(
+    chatModel: chatModel,
+    retriever: retriever,
+    generator: generator,
+    reranker: reranker,
+    retrievalTopK: 10,      // Get 10 candidates
+    rerankTopK: 5,          // Keep top 5
+    includeCitations: true  // Show sources
+);</code></pre>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when required parameters are null.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Agents_RAGAgent_1_GetPipelineInfo_" data-uid="AiDotNet.Agents.RAGAgent`1.GetPipelineInfo*"></a>
+
+  <h3 id="AiDotNet_Agents_RAGAgent_1_GetPipelineInfo" data-uid="AiDotNet.Agents.RAGAgent`1.GetPipelineInfo">
+  GetPipelineInfo()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Agents/RAGAgent.cs/#L416"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a summary of the RAG pipeline configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string GetPipelineInfo()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string describing the RAG pipeline setup.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Agents_RAGAgent_1_GetPipelineInfo_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This provides a human-readable description of how the agent is configured,
+useful for debugging and understanding the pipeline.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Agents_RAGAgent_1_RunAsync_" data-uid="AiDotNet.Agents.RAGAgent`1.RunAsync*"></a>
+
+  <h3 id="AiDotNet_Agents_RAGAgent_1_RunAsync_System_String_System_Int32_" data-uid="AiDotNet.Agents.RAGAgent`1.RunAsync(System.String,System.Int32)">
+  RunAsync(string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Agents/RAGAgent.cs/#L172"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes the agent's reasoning and action loop to answer a query or complete a task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Task&lt;string&gt; RunAsync(string query, int maxIterations = 3)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The question or task for the agent to solve.</p>
+</dd>
+    <dt><code>maxIterations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of thought-action-observation cycles to prevent infinite loops.
+Default is 5.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A task that represents the asynchronous operation. The task result contains
+the agent's final answer or response.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Agents_RAGAgent_1_RunAsync_System_String_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+The Run method is where the magic happens. When you give the agent a query like
+&quot;What is the square root of 144 plus 5?&quot;, it will:</p>
+<ol>
+<li>Think about what needs to be done</li>
+<li>Decide which tool to use (Calculator)</li>
+<li>Execute the tool with the right input (&quot;sqrt(144)&quot;)</li>
+<li>Observe the result (&quot;12&quot;)</li>
+<li>Think about the next step</li>
+<li>Use the calculator again (&quot;12 + 5&quot;)</li>
+<li>Observe the result (&quot;17&quot;)</li>
+<li>Conclude and provide the final answer</li>
+</ol>
+<p>The maxIterations parameter is a safety feature. It prevents the agent from getting stuck
+in an endless loop if something goes wrong. If the agent can't solve the problem within
+the maximum iterations, it will stop and return what it has learned so far.</p>
+<p>Implementation notes for developers:</p>
+<ul>
+<li>Maintain a &quot;scratchpad&quot; or conversation history throughout the iterations</li>
+<li>Format prompts to instruct the LLM to respond in a structured format (e.g., JSON)</li>
+<li>Parse the LLM's response to extract thoughts and actions</li>
+<li>Execute the specified tool and capture the observation</li>
+<li>Continue until the LLM indicates it has a final answer or max iterations is reached</li>
+<li>Handle errors gracefully and provide meaningful error messages</li>
+</ul>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Agents/RAGAgent.cs/#L70" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

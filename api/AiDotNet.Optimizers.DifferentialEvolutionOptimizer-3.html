@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DifferentialEvolutionOptimizer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DifferentialEvolutionOptimizer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements the Differential Evolution optimization algorithm for numerical optimization problems.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3.md&amp;value=---%0Auid%3A%20AiDotNet.Optimizers.DifferentialEvolutionOptimizer%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Optimizers.DifferentialEvolutionOptimizer`3">
+
+
+
+  <h1 id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3" data-uid="AiDotNet.Optimizers.DifferentialEvolutionOptimizer`3" class="text-break">
+Class DifferentialEvolutionOptimizer&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/DifferentialEvolutionOptimizer.cs/#L19"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Optimizers.html">Optimizers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements the Differential Evolution optimization algorithm for numerical optimization problems.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class DifferentialEvolutionOptimizer&lt;T, TInput, TOutput&gt; : OptimizerBase&lt;T, TInput, TOutput&gt;, IOptimizer&lt;T, TInput, TOutput&gt;, IModelSerializer</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html">OptimizerBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">DifferentialEvolutionOptimizer&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_Engine">OptimizerBase&lt;T, TInput, TOutput&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_NumOps">OptimizerBase&lt;T, TInput, TOutput&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_Random">OptimizerBase&lt;T, TInput, TOutput&gt;.Random</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_Options">OptimizerBase&lt;T, TInput, TOutput&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_PredictionOptions">OptimizerBase&lt;T, TInput, TOutput&gt;.PredictionOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_ModelStatsOptions">OptimizerBase&lt;T, TInput, TOutput&gt;.ModelStatsOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_ModelEvaluator">OptimizerBase&lt;T, TInput, TOutput&gt;.ModelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_FitDetector">OptimizerBase&lt;T, TInput, TOutput&gt;.FitDetector</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_FitnessCalculator">OptimizerBase&lt;T, TInput, TOutput&gt;.FitnessCalculator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_FitnessList">OptimizerBase&lt;T, TInput, TOutput&gt;.FitnessList</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_IterationHistoryList">OptimizerBase&lt;T, TInput, TOutput&gt;.IterationHistoryList</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_ModelCache">OptimizerBase&lt;T, TInput, TOutput&gt;.ModelCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_CurrentLearningRate">OptimizerBase&lt;T, TInput, TOutput&gt;.CurrentLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_CurrentMomentum">OptimizerBase&lt;T, TInput, TOutput&gt;.CurrentMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_IterationsWithoutImprovement">OptimizerBase&lt;T, TInput, TOutput&gt;.IterationsWithoutImprovement</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_IterationsWithImprovement">OptimizerBase&lt;T, TInput, TOutput&gt;.IterationsWithImprovement</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_Model">OptimizerBase&lt;T, TInput, TOutput&gt;.Model</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_Optimize_AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__">OptimizerBase&lt;T, TInput, TOutput&gt;.Optimize(OptimizationInputData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_GetCachedStepData_System_String_">OptimizerBase&lt;T, TInput, TOutput&gt;.GetCachedStepData(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_CacheStepData_System_String_AiDotNet_Models_OptimizationStepData__0__1__2__">OptimizerBase&lt;T, TInput, TOutput&gt;.CacheStepData(string, OptimizationStepData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_AdjustModelParameters_AiDotNet_Interfaces_IFullModel__0__1__2__System_Double_System_Double_">OptimizerBase&lt;T, TInput, TOutput&gt;.AdjustModelParameters(IFullModel&lt;T, TInput, TOutput&gt;, double, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_RandomlySelectFeatures_System_Int32_System_Nullable_System_Int32__System_Nullable_System_Int32__">OptimizerBase&lt;T, TInput, TOutput&gt;.RandomlySelectFeatures(int, int?, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_ApplyFeatureSelection_AiDotNet_Interfaces_IFullModel__0__1__2__System_Collections_Generic_List_System_Int32__">OptimizerBase&lt;T, TInput, TOutput&gt;.ApplyFeatureSelection(IFullModel&lt;T, TInput, TOutput&gt;, List&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_AdjustParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Double_System_Double_">OptimizerBase&lt;T, TInput, TOutput&gt;.AdjustParameters(Vector&lt;T&gt;, double, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_EvaluateSolution_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__">OptimizerBase&lt;T, TInput, TOutput&gt;.EvaluateSolution(IFullModel&lt;T, TInput, TOutput&gt;, OptimizationInputData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_PrepareAndEvaluateSolution_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__">OptimizerBase&lt;T, TInput, TOutput&gt;.PrepareAndEvaluateSolution(IFullModel&lt;T, TInput, TOutput&gt;, OptimizationInputData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_CalculateLoss_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__">OptimizerBase&lt;T, TInput, TOutput&gt;.CalculateLoss(IFullModel&lt;T, TInput, TOutput&gt;, OptimizationInputData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_CreateOptimizationResult_AiDotNet_Models_OptimizationStepData__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__">OptimizerBase&lt;T, TInput, TOutput&gt;.CreateOptimizationResult(OptimizationStepData&lt;T, TInput, TOutput&gt;, OptimizationInputData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_ApplyFeatureSelection_AiDotNet_Interfaces_IFullModel__0__1__2__System_Int32_">OptimizerBase&lt;T, TInput, TOutput&gt;.ApplyFeatureSelection(IFullModel&lt;T, TInput, TOutput&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_CreateSolution__1_">OptimizerBase&lt;T, TInput, TOutput&gt;.CreateSolution(TInput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_GenerateCacheKey_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__">OptimizerBase&lt;T, TInput, TOutput&gt;.GenerateCacheKey(IFullModel&lt;T, TInput, TOutput&gt;, OptimizationInputData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_UpdateBestSolution_AiDotNet_Models_OptimizationStepData__0__1__2__AiDotNet_Models_OptimizationStepData__0__1__2___">OptimizerBase&lt;T, TInput, TOutput&gt;.UpdateBestSolution(OptimizationStepData&lt;T, TInput, TOutput&gt;, ref OptimizationStepData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_InitializeAdaptiveParameters">OptimizerBase&lt;T, TInput, TOutput&gt;.InitializeAdaptiveParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_Reset">OptimizerBase&lt;T, TInput, TOutput&gt;.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_ResetAdaptiveParameters">OptimizerBase&lt;T, TInput, TOutput&gt;.ResetAdaptiveParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_UpdateAdaptiveParameters_AiDotNet_Models_OptimizationStepData__0__1__2__AiDotNet_Models_OptimizationStepData__0__1__2__">OptimizerBase&lt;T, TInput, TOutput&gt;.UpdateAdaptiveParameters(OptimizationStepData&lt;T, TInput, TOutput&gt;, OptimizationStepData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_UpdateIterationHistoryAndCheckEarlyStopping_System_Int32_AiDotNet_Models_OptimizationStepData__0__1__2__">OptimizerBase&lt;T, TInput, TOutput&gt;.UpdateIterationHistoryAndCheckEarlyStopping(int, OptimizationStepData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_ShouldEarlyStop">OptimizerBase&lt;T, TInput, TOutput&gt;.ShouldEarlyStop()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_Serialize">OptimizerBase&lt;T, TInput, TOutput&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_Deserialize_System_Byte___">OptimizerBase&lt;T, TInput, TOutput&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_SerializeAdditionalData_System_IO_BinaryWriter_">OptimizerBase&lt;T, TInput, TOutput&gt;.SerializeAdditionalData(BinaryWriter)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_DeserializeAdditionalData_System_IO_BinaryReader_">OptimizerBase&lt;T, TInput, TOutput&gt;.DeserializeAdditionalData(BinaryReader)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_UpdateOptions_AiDotNet_Models_Options_OptimizationAlgorithmOptions__0__1__2__">OptimizerBase&lt;T, TInput, TOutput&gt;.UpdateOptions(OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_Step">OptimizerBase&lt;T, TInput, TOutput&gt;.Step()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_CalculateUpdate_System_Collections_Generic_Dictionary_System_String_AiDotNet_Tensors_LinearAlgebra_Vector__0___">OptimizerBase&lt;T, TInput, TOutput&gt;.CalculateUpdate(Dictionary&lt;string, Vector&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_GetOptions">OptimizerBase&lt;T, TInput, TOutput&gt;.GetOptions()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_CalculateUpdate_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">OptimizerBase&lt;T, TInput, TOutput&gt;.CalculateUpdate(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_InitializeRandomSolution_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">OptimizerBase&lt;T, TInput, TOutput&gt;.InitializeRandomSolution(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_InitializeRandomSolution__1_">OptimizerBase&lt;T, TInput, TOutput&gt;.InitializeRandomSolution(TInput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_SaveModel_System_String_">OptimizerBase&lt;T, TInput, TOutput&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_LoadModel_System_String_">OptimizerBase&lt;T, TInput, TOutput&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IOptimizer___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IOptimizer&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IOptimizer___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IOptimizer&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Differential Evolution is a population-based optimization algorithm that is particularly well-suited
+for solving non-linear, non-differentiable continuous space functions. It's known for its simplicity,
+robustness, and effectiveness in various optimization scenarios.
+</p>
+<p><b>For Beginners:</b> This optimizer works by evolving a population of candidate solutions over time.
+It's inspired by biological evolution and is good at finding global optima in complex problem spaces.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3__ctor_" data-uid="AiDotNet.Optimizers.DifferentialEvolutionOptimizer`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3__ctor_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Options_DifferentialEvolutionOptions__0__1__2__AiDotNet_Tensors_Engines_IEngine_" data-uid="AiDotNet.Optimizers.DifferentialEvolutionOptimizer`3.#ctor(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Models.Options.DifferentialEvolutionOptions{`0,`1,`2},AiDotNet.Tensors.Engines.IEngine)">
+  DifferentialEvolutionOptimizer(IFullModel&lt;T, TInput, TOutput&gt;, DifferentialEvolutionOptions&lt;T, TInput, TOutput&gt;?, IEngine?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/DifferentialEvolutionOptimizer.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the DifferentialEvolutionOptimizer class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DifferentialEvolutionOptimizer(IFullModel&lt;T, TInput, TOutput&gt; model, DifferentialEvolutionOptions&lt;T, TInput, TOutput&gt;? options = null, IEngine? engine = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to be optimized.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.DifferentialEvolutionOptions-3.html">DifferentialEvolutionOptions</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The options for configuring the Differential Evolution algorithm.</p>
+</dd>
+    <dt><code>engine</code> <a class="xref" href="AiDotNet.Tensors.Engines.IEngine.html">IEngine</a></dt>
+    <dd><p>The computation engine (CPU or GPU) for vectorized operations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3__ctor_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Options_DifferentialEvolutionOptions__0__1__2__AiDotNet_Tensors_Engines_IEngine__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This constructor sets up the Differential Evolution optimizer with its initial configuration.
+You can customize various aspects of how it works, or use default settings.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3_Deserialize_" data-uid="AiDotNet.Optimizers.DifferentialEvolutionOptimizer`3.Deserialize*"></a>
+
+  <h3 id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3_Deserialize_System_Byte___" data-uid="AiDotNet.Optimizers.DifferentialEvolutionOptimizer`3.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/DifferentialEvolutionOptimizer.cs/#L332"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes the Differential Evolution optimizer from a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Deserialize(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized optimizer state.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method reconstructs the optimizer's state from a series of bytes.
+It's used to restore a previously saved state of the optimizer, allowing you to continue from where you left off.
+</p>
+<p>The deserialization process includes:
+<ul><li>Restoring base class data (from the parent OptimizerBase class)</li><li>Reconstructing the DifferentialEvolutionOptions</li><li>Resetting the random number generator to its previous state</li><li>Reinitializing adaptive parameters</li></ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when deserialization of optimizer options fails.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3_GetOptions_" data-uid="AiDotNet.Optimizers.DifferentialEvolutionOptimizer`3.GetOptions*"></a>
+
+  <h3 id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3_GetOptions" data-uid="AiDotNet.Optimizers.DifferentialEvolutionOptimizer`3.GetOptions">
+  GetOptions()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/DifferentialEvolutionOptimizer.cs/#L275"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves the current options of the Differential Evolution optimizer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt; GetOptions()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The current optimization algorithm options.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3_GetOptions_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method allows you to check the current settings of the optimizer.
+It's useful if you need to inspect or copy the current configuration.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3_Optimize_" data-uid="AiDotNet.Optimizers.DifferentialEvolutionOptimizer`3.Optimize*"></a>
+
+  <h3 id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3_Optimize_AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__" data-uid="AiDotNet.Optimizers.DifferentialEvolutionOptimizer`3.Optimize(AiDotNet.Models.Inputs.OptimizationInputData{`0,`1,`2})">
+  Optimize(OptimizationInputData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/DifferentialEvolutionOptimizer.cs/#L133"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the main optimization process using the Differential Evolution algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override OptimizationResult&lt;T, TInput, TOutput&gt; Optimize(OptimizationInputData&lt;T, TInput, TOutput&gt; inputData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputData</code> <a class="xref" href="AiDotNet.Models.Inputs.OptimizationInputData-3.html">OptimizationInputData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The input data for the optimization process.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.OptimizationResult-3.html">OptimizationResult</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The result of the optimization process.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3_Optimize_AiDotNet_Models_Inputs_OptimizationInputData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the heart of the Differential Evolution algorithm. It creates an initial population
+of solutions and then evolves them over multiple generations. In each generation, it creates new trial solutions,
+evaluates them, and keeps the best ones.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3_Serialize_" data-uid="AiDotNet.Optimizers.DifferentialEvolutionOptimizer`3.Serialize*"></a>
+
+  <h3 id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3_Serialize" data-uid="AiDotNet.Optimizers.DifferentialEvolutionOptimizer`3.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/DifferentialEvolutionOptimizer.cs/#L297"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the Differential Evolution optimizer to a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array representing the serialized state of the optimizer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method converts the current state of the optimizer into a series of bytes.
+This is useful for saving the optimizer's state to a file or sending it over a network. It allows you to
+recreate the exact state of the optimizer later.
+</p>
+<p>The serialization process includes:
+<ul><li>Base class data (from the parent OptimizerBase class)</li><li>The DifferentialEvolutionOptions</li><li>The current state of the random number generator</li></ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3_UpdateAdaptiveParameters_" data-uid="AiDotNet.Optimizers.DifferentialEvolutionOptimizer`3.UpdateAdaptiveParameters*"></a>
+
+  <h3 id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3_UpdateAdaptiveParameters_AiDotNet_Models_OptimizationStepData__0__1__2__AiDotNet_Models_OptimizationStepData__0__1__2__" data-uid="AiDotNet.Optimizers.DifferentialEvolutionOptimizer`3.UpdateAdaptiveParameters(AiDotNet.Models.OptimizationStepData{`0,`1,`2},AiDotNet.Models.OptimizationStepData{`0,`1,`2})">
+  UpdateAdaptiveParameters(OptimizationStepData&lt;T, TInput, TOutput&gt;, OptimizationStepData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/DifferentialEvolutionOptimizer.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the adaptive parameters based on the optimization progress.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void UpdateAdaptiveParameters(OptimizationStepData&lt;T, TInput, TOutput&gt; currentStepData, OptimizationStepData&lt;T, TInput, TOutput&gt; previousStepData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>currentStepData</code> <a class="xref" href="AiDotNet.Models.OptimizationStepData-3.html">OptimizationStepData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Data from the current optimization step.</p>
+</dd>
+    <dt><code>previousStepData</code> <a class="xref" href="AiDotNet.Models.OptimizationStepData-3.html">OptimizationStepData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Data from the previous optimization step.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3_UpdateAdaptiveParameters_AiDotNet_Models_OptimizationStepData__0__1__2__AiDotNet_Models_OptimizationStepData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method adjusts the crossover and mutation rates during the optimization process.
+It helps the algorithm adapt its behavior based on how well it's performing.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3_UpdateOptions_" data-uid="AiDotNet.Optimizers.DifferentialEvolutionOptimizer`3.UpdateOptions*"></a>
+
+  <h3 id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3_UpdateOptions_AiDotNet_Models_Options_OptimizationAlgorithmOptions__0__1__2__" data-uid="AiDotNet.Optimizers.DifferentialEvolutionOptimizer`3.UpdateOptions(AiDotNet.Models.Options.OptimizationAlgorithmOptions{`0,`1,`2})">
+  UpdateOptions(OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/DifferentialEvolutionOptimizer.cs/#L254"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the options for the Differential Evolution optimizer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void UpdateOptions(OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt; options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The new options to be set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_DifferentialEvolutionOptimizer_3_UpdateOptions_AiDotNet_Models_Options_OptimizationAlgorithmOptions__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method allows you to change the settings of the optimizer during runtime.
+It ensures that only the correct type of options (specific to Differential Evolution) can be used.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the provided options are not of type DifferentialEvolutionOptions.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/DifferentialEvolutionOptimizer.cs/#L19" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

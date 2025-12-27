@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class JitCompilerOptions | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class JitCompilerOptions | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the JIT compiler.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_JitCompiler_JitCompilerOptions.md&amp;value=---%0Auid%3A%20AiDotNet.JitCompiler.JitCompilerOptions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.JitCompiler.JitCompilerOptions">
+
+
+
+  <h1 id="AiDotNet_JitCompiler_JitCompilerOptions" data-uid="AiDotNet.JitCompiler.JitCompilerOptions" class="text-break">
+Class JitCompilerOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompilerOptions.cs/#L18"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.JitCompiler.html">JitCompiler</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the JIT compiler.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class JitCompilerOptions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">JitCompilerOptions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_JitCompiler_JitCompilerOptions_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Settings to control how the JIT compiler works.
+<p>You can:</p>
+<ul>
+<li>Enable/disable specific optimizations</li>
+<li>Turn caching on/off</li>
+<li>Configure compilation behavior</li>
+<li>Control how unsupported operations are handled</li>
+</ul>
+<p>For most users, the defaults work great!</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_JitCompiler_JitCompilerOptions_EnableAdaptiveFusion_" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.EnableAdaptiveFusion*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompilerOptions_EnableAdaptiveFusion" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.EnableAdaptiveFusion">
+  EnableAdaptiveFusion
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompilerOptions.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether to enable adaptive fusion strategies.
+Default: false (currently uses standard fusion when enabled).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableAdaptiveFusion { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_JitCompilerOptions_EnableAdaptiveFusion_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Status:</b> Architecture implemented, delegates to standard fusion.
+Adaptive fusion will intelligently select which operations to fuse based on
+graph structure, tensor sizes, and hardware characteristics.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompilerOptions_EnableAutoTuning_" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.EnableAutoTuning*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompilerOptions_EnableAutoTuning" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.EnableAutoTuning">
+  EnableAutoTuning
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompilerOptions.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether to enable auto-tuning of optimizations.
+Default: true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableAutoTuning { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_JitCompilerOptions_EnableAutoTuning_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Auto-tuning automatically determines the best optimization configuration for
+each graph based on graph analysis, tensor sizes, and operation types. It selects
+the optimal combination of fusion, unrolling, and vectorization strategies.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompilerOptions_EnableCaching_" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.EnableCaching*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompilerOptions_EnableCaching" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.EnableCaching">
+  EnableCaching
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompilerOptions.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether to enable caching of compiled graphs.
+Default: true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableCaching { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompilerOptions_EnableConstantFolding_" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.EnableConstantFolding*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompilerOptions_EnableConstantFolding" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.EnableConstantFolding">
+  EnableConstantFolding
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompilerOptions.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether to enable constant folding optimization.
+Default: true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableConstantFolding { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompilerOptions_EnableDeadCodeElimination_" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.EnableDeadCodeElimination*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompilerOptions_EnableDeadCodeElimination" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.EnableDeadCodeElimination">
+  EnableDeadCodeElimination
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompilerOptions.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether to enable dead code elimination.
+Default: true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableDeadCodeElimination { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompilerOptions_EnableLoopUnrolling_" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.EnableLoopUnrolling*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompilerOptions_EnableLoopUnrolling" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.EnableLoopUnrolling">
+  EnableLoopUnrolling
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompilerOptions.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether to enable loop unrolling optimization.
+Default: true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableLoopUnrolling { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_JitCompilerOptions_EnableLoopUnrolling_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Loop unrolling improves performance for small, fixed-size loops by eliminating
+loop overhead and enabling better instruction pipelining. The optimizer automatically
+determines which loops benefit from unrolling based on tensor size and operation type.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompilerOptions_EnableMemoryPooling_" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.EnableMemoryPooling*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompilerOptions_EnableMemoryPooling" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.EnableMemoryPooling">
+  EnableMemoryPooling
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompilerOptions.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether to enable memory pooling for tensors.
+Default: true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableMemoryPooling { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_JitCompilerOptions_EnableMemoryPooling_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Reuses tensor memory to reduce allocations.
+<p>Memory pooling improves performance by:</p>
+<ul>
+<li>Reducing garbage collection pauses</li>
+<li>Avoiding repeated memory allocations</li>
+<li>Improving cache locality</li>
+</ul>
+<p>This is especially beneficial for training loops that create many temporary tensors.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompilerOptions_EnableOperationFusion_" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.EnableOperationFusion*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompilerOptions_EnableOperationFusion" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.EnableOperationFusion">
+  EnableOperationFusion
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompilerOptions.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether to enable operation fusion.
+Default: true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableOperationFusion { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompilerOptions_EnableSIMDHints_" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.EnableSIMDHints*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompilerOptions_EnableSIMDHints" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.EnableSIMDHints">
+  EnableSIMDHints
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompilerOptions.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether to enable SIMD vectorization hints.
+Default: false (not yet fully implemented).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableSIMDHints { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_JitCompilerOptions_EnableSIMDHints_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Status:</b> Architecture planned, implementation pending.
+SIMD hints guide the code generator to use vector instructions (AVX, AVX-512)
+for better performance on element-wise operations.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompilerOptions_LogUnsupportedOperations_" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.LogUnsupportedOperations*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompilerOptions_LogUnsupportedOperations" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.LogUnsupportedOperations">
+  LogUnsupportedOperations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompilerOptions.cs/#L155"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to log warnings for unsupported operations.
+Default: true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool LogUnsupportedOperations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_JitCompilerOptions_LogUnsupportedOperations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> When enabled, you'll see warnings in logs when
+operations can't be JIT compiled. This helps you:
+- Identify which operations need fallback
+- Understand performance implications
+- Know when to request JIT support for new operation types
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompilerOptions_MaxElementsToPool_" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.MaxElementsToPool*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompilerOptions_MaxElementsToPool" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.MaxElementsToPool">
+  MaxElementsToPool
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompilerOptions.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum total elements in a tensor to pool.
+Tensors larger than this will not be pooled.
+Default: 10,000,000 (about 40MB for float32).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxElementsToPool { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompilerOptions_MaxPoolSizePerShape_" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.MaxPoolSizePerShape*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompilerOptions_MaxPoolSizePerShape" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.MaxPoolSizePerShape">
+  MaxPoolSizePerShape
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompilerOptions.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of tensor buffers to keep per shape.
+Default: 10.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxPoolSizePerShape { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompilerOptions_UnsupportedLayerHandling_" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.UnsupportedLayerHandling*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompilerOptions_UnsupportedLayerHandling" data-uid="AiDotNet.JitCompiler.JitCompilerOptions.UnsupportedLayerHandling">
+  UnsupportedLayerHandling
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompilerOptions.cs/#L141"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets how the JIT compiler handles unsupported operations.
+Default: Fallback (use interpreted execution for entire graph if any op is unsupported).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnsupportedLayerHandling UnsupportedLayerHandling { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.JitCompiler.UnsupportedLayerHandling.html">UnsupportedLayerHandling</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_JitCompilerOptions_UnsupportedLayerHandling_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> When your model has operations the JIT can't compile,
+this setting controls what happens:
+<ul>
+<li><b>Throw:</b> Stop with an error - use when you need all ops compiled</li>
+<li><b>Fallback:</b> (Default) Run the whole graph interpreted - always works</li>
+<li><b>Hybrid:</b> JIT the supported ops, interpret the rest - best performance</li>
+<li><b>Skip:</b> Ignore unsupported ops - dangerous, may give wrong results</li>
+</ul>
+<p>Hybrid mode is recommended for production when you have mixed-support graphs.
+It gives you JIT speed for supported operations while still handling all ops correctly.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompilerOptions.cs/#L18" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

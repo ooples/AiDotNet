@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class FLARERetriever&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class FLARERetriever&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="FLARE (Forward-Looking Active REtrieval) pattern that actively decides when and what to retrieve during generation.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_FLARERetriever_1.md&amp;value=---%0Auid%3A%20AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.FLARERetriever%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.FLARERetriever`1">
+
+
+
+  <h1 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_FLARERetriever_1" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.FLARERetriever`1" class="text-break">
+Class FLARERetriever&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/FLARERetriever.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.html">RetrievalAugmentedGeneration</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.html">AdvancedPatterns</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>FLARE (Forward-Looking Active REtrieval) pattern that actively decides when and what to retrieve during generation.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class FLARERetriever&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">FLARERetriever&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_FLARERetriever_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+FLARE (Forward-Looking Active REtrieval augmented generation) is an advanced RAG pattern that monitors
+the language model's confidence during generation. When uncertainty is detected (low confidence on
+next tokens), FLARE automatically retrieves additional relevant information to improve answer quality.
+This creates a dynamic retrieval loop where retrieval happens only when needed, rather than all upfront.
+</p>
+<p><b>For Beginners:</b> Think of FLARE like asking follow-up questions when you're unsure.
+<p>Normal RAG:</p>
+<ul>
+<li>Question: &quot;What is quantum computing?&quot;</li>
+<li>Step 1: Retrieve all documents about quantum computing</li>
+<li>Step 2: Generate complete answer from those documents</li>
+<li>Problem: Might miss specific details or retrieve too much irrelevant info</li>
+</ul>
+<p>FLARE:</p>
+<ul>
+<li>Question: &quot;What is quantum computing?&quot;</li>
+<li>Step 1: Start generating answer...</li>
+<li>Step 2: &quot;Quantum computing uses quantum bits or...&quot; (confident, keep going)</li>
+<li>Step 3: &quot;...which leverage principles like...&quot; (uncertain - what principles exactly?)</li>
+<li>Step 4: RETRIEVE more docs about &quot;quantum principles superposition entanglement&quot;</li>
+<li>Step 5: Continue with new information: &quot;...superposition and entanglement...&quot;</li>
+<li>Result: More focused retrieval, better coverage of uncertainty areas</li>
+</ul>
+<p>It's like having a conversation where you ask for clarification only when you need it,
+rather than reading an entire encyclopedia upfront.</p>
+
+<p><b>Example Usage:</b>
+<pre><code class="lang-csharp">// Setup
+var generator = new StubGenerator&lt;double&gt;(); // Or real LLM
+var retriever = new DenseRetriever&lt;double&gt;(embeddingModel, documentStore);
+
+// Create FLARE retriever with uncertainty threshold
+var flare = new FLARERetriever&lt;double&gt;(
+    generator,
+    retriever,
+    uncertaintyThreshold: 0.5  // Retrieve when confidence drops below 50%
+);
+
+// Generate answer with active retrieval
+var answer = flare.GenerateWithActiveRetrieval(
+    "Explain how CRISPR gene editing works and its applications"
+);
+
+// FLARE will:
+// 1. Start generating about CRISPR
+// 2. Detect uncertainty about specific mechanisms
+// 3. Retrieve more docs about "CRISPR Cas9 mechanism"
+// 4. Continue generating with new info
+// 5. Detect uncertainty about applications
+// 6. Retrieve docs about "CRISPR medical applications"
+// 7. Complete answer with all retrieved knowledge</code></pre>
+
+<p><b>How It Works:</b>
+The retrieval process is:
+1. Initial retrieval - Get top-3 relevant documents
+2. Start generating answer with initial context
+3. Monitor confidence - Check for uncertainty signals (keywords like "I'm not sure", "unclear")
+4. Active retrieval - When uncertain, extract missing topics and retrieve more docs
+5. Integrate new information - Continue generating with expanded context
+6. Repeat - Maximum 5 iterations to prevent infinite loops
+7. Return complete answer assembled from all iterations
+<p>Current implementation uses keyword detection for uncertainty. Production version would use:</p>
+<ul>
+<li>Token-level confidence scores (logprobs from LLM)</li>
+<li>Attention weights to identify knowledge gaps</li>
+<li>Explicit uncertainty statements from the model</li>
+</ul>
+
+<p><b>Benefits:</b>
+- More efficient retrieval - Only fetches what's needed
+- Better coverage - Addresses uncertainty areas specifically
+- Reduced noise - Avoids retrieving irrelevant documents upfront
+- Adaptive - Responds to complexity of the question dynamically
+- Cost-effective - Fewer total documents retrieved vs exhaustive upfront retrieval
+</p>
+<p><b>Limitations:</b>
+- Requires LLM with confidence scores (logprobs) for best results
+- Multiple LLM calls increase latency
+- May miss information if uncertainty detection fails
+- Current implementation uses simple keyword matching (needs improvement with real LLM logprobs)
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_FLARERetriever_1__ctor_" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.FLARERetriever`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_FLARERetriever_1__ctor_AiDotNet_Interfaces_IGenerator__0__AiDotNet_RetrievalAugmentedGeneration_Retrievers_RetrieverBase__0__System_Double_" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.FLARERetriever`1.#ctor(AiDotNet.Interfaces.IGenerator{`0},AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase{`0},System.Double)">
+  FLARERetriever(IGenerator&lt;T&gt;, RetrieverBase&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/FLARERetriever.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.FLARERetriever-1.html">FLARERetriever&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FLARERetriever(IGenerator&lt;T&gt; generator, RetrieverBase&lt;T&gt; baseRetriever, double uncertaintyThreshold = 0.5)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>generator</code> <a class="xref" href="AiDotNet.Interfaces.IGenerator-1.html">IGenerator</a>&lt;T&gt;</dt>
+    <dd><p>The LLM generator (use StubGenerator or real LLM).</p>
+</dd>
+    <dt><code>baseRetriever</code> <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase-1.html">RetrieverBase</a>&lt;T&gt;</dt>
+    <dd><p>The underlying retriever to use.</p>
+</dd>
+    <dt><code>uncertaintyThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Threshold for triggering retrieval (0.0-1.0, default 0.5).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_FLARERetriever_1_GenerateWithActiveRetrieval_" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.FLARERetriever`1.GenerateWithActiveRetrieval*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_FLARERetriever_1_GenerateWithActiveRetrieval_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.FLARERetriever`1.GenerateWithActiveRetrieval(System.String)">
+  GenerateWithActiveRetrieval(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/FLARERetriever.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates an answer with active retrieval triggered by detected uncertainty.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string GenerateWithActiveRetrieval(string query)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The user's question to answer.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Complete answer generated iteratively with active retrieval when needed.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_FLARERetriever_1_GenerateWithActiveRetrieval_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the FLARE algorithm: it generates an answer incrementally,
+monitoring for signs of uncertainty at each step. When uncertainty exceeds the threshold,
+it retrieves additional relevant documents and continues generation with the new context.
+</p>
+<p><b>For Beginners:</b> This is the main method that implements "generate with retrieval on demand".
+<p>Process:</p>
+<ol>
+<li>Initial Setup: Retrieve top-3 documents for the query</li>
+<li>Generate Partial Answer: Create answer segment with current context</li>
+<li>Check Confidence: Look for uncertainty signals (&quot;I'm not sure&quot;, &quot;unclear&quot;, etc.)</li>
+<li>If Uncertain:
+<ul>
+<li>Extract what information is missing</li>
+<li>Retrieve documents about that specific topic</li>
+<li>Add to context</li>
+</ul>
+</li>
+<li>Repeat: Up to 5 times or until confident</li>
+<li>Return: Complete answer assembled from all iterations</li>
+</ol>
+<p>Example Flow:</p>
+<ul>
+<li>Query: &quot;How does photosynthesis work?&quot;</li>
+<li>Iteration 1: &quot;Photosynthesis is...&quot; (confident)</li>
+<li>Iteration 2: &quot;...but the exact chemical process of...&quot; (UNCERTAIN!)</li>
+<li>Retrieval: Get docs about &quot;photosynthesis chemical reactions&quot;</li>
+<li>Iteration 3: &quot;...the light-dependent reactions convert...&quot; (confident with new info)</li>
+<li>Done: Return complete answer</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when query is null or whitespace.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/FLARERetriever.cs/#L101" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

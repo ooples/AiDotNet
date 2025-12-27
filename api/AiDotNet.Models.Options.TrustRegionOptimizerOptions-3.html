@@ -1,0 +1,1266 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TrustRegionOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TrustRegionOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Trust Region optimization algorithms, which are robust methods for solving nonlinear optimization problems.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_TrustRegionOptimizerOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.TrustRegionOptimizerOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3" class="text-break">
+Class TrustRegionOptimizerOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrustRegionOptimizerOptions.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Trust Region optimization algorithms, which are robust methods for
+solving nonlinear optimization problems.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class TrustRegionOptimizerOptions&lt;T, TInput, TOutput&gt; : GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html">GradientBasedOptimizerOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">TrustRegionOptimizerOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientCache">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.GradientCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LossFunction">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_Regularization">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.Regularization</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DataSampler">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.DataSampler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_ShuffleData">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.ShuffleData</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DropLastBatch">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.DropLastBatch</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_RandomSeed">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.RandomSeed</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_EnableGradientClipping">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.EnableGradientClipping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientClippingMethod">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.GradientClippingMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientNorm">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxGradientNorm</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientValue">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxGradientValue</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LearningRateScheduler">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.LearningRateScheduler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_SchedulerStepMode">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.SchedulerStepMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxIterations">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseEarlyStopping">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseEarlyStopping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_EarlyStoppingPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.EarlyStoppingPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_BadFitPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.BadFitPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinimumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinimumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaximumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaximumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseExpressionTrees">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseExpressionTrees</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_LearningRateDecay">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.LearningRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumIncreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumIncreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumDecreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumDecreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_Tolerance">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_OptimizationMode">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.OptimizationMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentScale">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentScale</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_SignFlipProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.SignFlipProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FeatureSelectionProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FeatureSelectionProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_PredictionOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.PredictionOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelStatsOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelStatsOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelEvaluator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitDetector">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitDetector</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitnessCalculator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitnessCalculator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelCache">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_CreateDefaults_AiDotNet_Enums_OptimizerType_">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.CreateDefaults(OptimizerType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Trust Region methods are iterative optimization techniques designed to find local minima or maxima of objective 
+functions, particularly in nonlinear problems. Unlike line search methods, which determine the step size along 
+a predefined direction, trust region methods concurrently optimize both the direction and the magnitude of the 
+step within a specified neighborhood (the "trust region") around the current iterate. The central idea is to 
+construct a simplified model—often a quadratic approximation—that represents the objective function near the 
+current point. This model serves as a surrogate, guiding the search for the optimum within a bounded region. 
+The size of the trust region is dynamically adjusted based on how well the model predicts the actual behavior 
+of the objective function. This class inherits from GradientBasedOptimizerOptions and adds parameters specific 
+to Trust Region optimization.
+</p>
+<p><b>For Beginners:</b> Trust Region methods are like exploring with a map that's only accurate near your current location.
+<p>When solving optimization problems:</p>
+<ul>
+<li>We often use approximations of the objective function to determine the next step</li>
+<li>But these approximations are only reliable within a certain distance</li>
+</ul>
+<p>Trust Region methods solve this by:</p>
+<ul>
+<li>Creating a simplified model of the function around the current point</li>
+<li>Defining a &quot;trust region&quot; where this model is considered reliable</li>
+<li>Finding the best step within this region</li>
+<li>Adjusting the region size based on how well the model predicts actual function behavior</li>
+</ul>
+<p>This approach offers several benefits:</p>
+<ul>
+<li>More robust than many other methods, especially for difficult problems</li>
+<li>Handles non-convex functions well</li>
+<li>Can make progress even when the Hessian is not positive definite</li>
+<li>Naturally limits step sizes to prevent erratic behavior</li>
+</ul>
+<p>This class lets you configure how the Trust Region algorithm behaves.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_AcceptanceThreshold_" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.AcceptanceThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_AcceptanceThreshold" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.AcceptanceThreshold">
+  AcceptanceThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrustRegionOptimizerOptions.cs/#L217"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for accepting a step.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AcceptanceThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A double value between 0 and 1, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_AcceptanceThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the minimum ratio of actual improvement to predicted improvement required for a step 
+to be accepted. The ratio is calculated as (actual reduction in objective function) / (predicted reduction 
+by quadratic model). If this ratio is greater than the acceptance threshold, the step is accepted and the 
+algorithm moves to the new point. A higher threshold is more strict, requiring better agreement between the 
+model and the actual function, while a lower threshold is more lenient. The default value of 0.1 means that 
+a step is accepted if the actual improvement is at least 10% of what was predicted by the model. This 
+provides a moderate criterion suitable for many applications, allowing progress even when the model is not 
+perfectly accurate. The optimal value depends on the accuracy of the quadratic model and the desired balance 
+between progress and reliability.
+</p>
+<p><b>For Beginners:</b> This setting determines how good a step must be to be accepted.
+<p>The acceptance threshold:</p>
+<ul>
+<li>Determines when a proposed step is good enough to accept</li>
+<li>Compares the actual improvement to what the model predicted</li>
+<li>Affects how strict the algorithm is about model accuracy</li>
+</ul>
+<p>The default value of 0.1 means:</p>
+<ul>
+<li>A step is accepted if the actual improvement is at least 10% of what was predicted</li>
+<li>This allows progress even when the model isn't perfectly accurate</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 0.3): More strict, requires better agreement between model and reality</li>
+<li>Lower values (e.g., 0.01): More lenient, accepts steps with minimal improvement</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when you want to ensure more reliable progress</li>
+<li>Decrease it when you want to accept more steps, even if they're not as good as predicted</li>
+<li>Lower values can help escape flat regions but may accept poor steps</li>
+</ul>
+<p>For example, in a noisy optimization problem where function evaluations have some randomness,
+you might decrease this to 0.05 to be more tolerant of discrepancies.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_AdaptationRate_" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.AdaptationRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_AdaptationRate" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.AdaptationRate">
+  AdaptationRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrustRegionOptimizerOptions.cs/#L464"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the rate at which the trust region radius adapts to new information.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AdaptationRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A double value between 0 and 1, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_AdaptationRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the rate at which the trust region radius adapts to new information when adaptive 
+adjustment is enabled. It controls the balance between using historical information and recent performance 
+to determine the trust region radius. A higher adaptation rate gives more weight to recent performance, 
+leading to faster adaptation but potentially more erratic behavior. A lower adaptation rate gives more weight 
+to historical information, leading to more stable but potentially slower adaptation. The default value of 0.1 
+provides a relatively low adaptation rate suitable for many applications, ensuring stable adaptation while 
+still responding to changes in the objective function landscape. The optimal value depends on the variability 
+of the objective function and the desired balance between responsiveness and stability.
+</p>
+<p><b>For Beginners:</b> This setting controls how quickly the algorithm adapts the trust region based on new information.
+<p>The adaptation rate:</p>
+<ul>
+<li>Determines how much weight is given to recent performance versus history</li>
+<li>Affects how quickly the trust region adapts to changing conditions</li>
+<li>Only relevant when UseAdaptiveTrustRegionRadius is true</li>
+</ul>
+<p>The default value of 0.1 means:</p>
+<ul>
+<li>The algorithm gives 10% weight to new information and 90% to historical information</li>
+<li>This provides stable adaptation that doesn't overreact to individual steps</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 0.3): Faster adaptation, more responsive to recent performance</li>
+<li>Lower values (e.g., 0.05): Slower adaptation, more stable behavior</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when you want the algorithm to adapt more quickly to changing conditions</li>
+<li>Decrease it when you want more stable, consistent behavior</li>
+<li>Higher values can help in problems with distinct regions of different characteristics</li>
+</ul>
+<p>For example, in an optimization problem where the function characteristics change significantly
+in different regions, you might increase this to 0.2 for faster adaptation.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_BatchSize_" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.BatchSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_BatchSize" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrustRegionOptimizerOptions.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the batch size for gradient computation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to -1 (full batch).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_BatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The batch size controls how many examples are used to calculate gradients.
+Trust Region methods use full-batch gradients (batch size -1) because they construct a local quadratic
+model of the objective function that requires accurate gradient and Hessian information from the
+entire dataset. Using mini-batches would introduce noise that makes the quadratic model unreliable,
+compromising the trust region's ability to accurately predict function behavior.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_CGTolerance_" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.CGTolerance*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_CGTolerance" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.CGTolerance">
+  CGTolerance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrustRegionOptimizerOptions.cs/#L546"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the convergence tolerance for the Conjugate Gradient method used to solve the trust region subproblem.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double CGTolerance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value, defaulting to 1e-6.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_CGTolerance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the convergence tolerance for the Conjugate Gradient (CG) method, which is commonly 
+used to solve the trust region subproblem (finding the best step within the trust region). The CG method is 
+considered to have converged when the residual norm is less than this tolerance. A smaller tolerance requires 
+more precise convergence, potentially leading to more accurate solutions to the subproblem but requiring more 
+iterations. The default value of 1e-6 (0.000001) provides a relatively strict convergence criterion suitable 
+for many applications, ensuring accurate solutions to the subproblem while allowing the algorithm to terminate 
+in a reasonable number of iterations. The optimal value depends on the desired precision of the subproblem 
+solutions and the computational resources available.
+</p>
+<p><b>For Beginners:</b> This setting determines how precisely the algorithm solves each trust region subproblem.
+<p>The CG tolerance:</p>
+<ul>
+<li>Defines when the subproblem solver considers itself &quot;done&quot;</li>
+<li>Smaller values require more precise solutions to each subproblem</li>
+<li>Affects both the quality of each step and the computation required</li>
+</ul>
+<p>The default value of 1e-6 (0.000001) means:</p>
+<ul>
+<li>The subproblem solver stops when the error is very small</li>
+<li>This provides good precision for most applications</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Smaller values (e.g., 1e-8): More precise subproblem solutions, but may take more iterations</li>
+<li>Larger values (e.g., 1e-4): Faster subproblem solutions, but potentially less optimal steps</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Decrease it when you need very precise steps within each trust region</li>
+<li>Increase it when computational efficiency is more important than precision</li>
+<li>For most applications, the default value works well</li>
+</ul>
+<p>For example, in a scientific computing application requiring high precision,
+you might decrease this to 1e-8 for more precise subproblem solutions.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_ContractionFactor_" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.ContractionFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_ContractionFactor" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.ContractionFactor">
+  ContractionFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrustRegionOptimizerOptions.cs/#L383"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which to contract the trust region radius after an unsuccessful step.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ContractionFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A double value between 0 and 1, defaulting to 0.5.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_ContractionFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the factor by which the trust region radius is decreased after an unsuccessful step 
+(one where the ratio of actual improvement to predicted improvement falls below the UnsuccessfulThreshold). 
+A smaller contraction factor leads to more aggressive shrinking of the trust region, quickly reducing step 
+sizes when the model is inaccurate. A larger contraction factor leads to more conservative shrinking, with 
+more gradual decreases in step size. The default value of 0.5 means that the trust region radius is halved 
+after an unsuccessful step, providing a moderate rate of contraction suitable for many applications. The 
+optimal value depends on the characteristics of the objective function and the desired balance between quick 
+adaptation to model inaccuracies and avoiding excessive shrinking of the trust region.
+</p>
+<p><b>For Beginners:</b> This setting controls how much the trust region shrinks after an unsuccessful step.
+<p>The contraction factor:</p>
+<ul>
+<li>Determines how much the trust region shrinks after a poor step</li>
+<li>Affects how quickly the algorithm becomes more conservative</li>
+<li>Lower values lead to faster contraction and more caution</li>
+</ul>
+<p>The default value of 0.5 means:</p>
+<ul>
+<li>After an unsuccessful step, the trust region radius is halved</li>
+<li>This allows for reasonably quick adjustment when the model is inaccurate</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Lower values (e.g., 0.25): More aggressive contraction, quickly becoming more cautious</li>
+<li>Higher values (e.g., 0.75): More conservative contraction, maintaining larger steps longer</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Decrease it when you want faster contraction of the trust region after poor steps</li>
+<li>Increase it when you want more gradual reduction in step size</li>
+<li>Lower values can help quickly recover from bad steps but may slow convergence</li>
+</ul>
+<p>For example, in a highly nonlinear optimization problem where large steps often fail,
+you might decrease this to 0.3 to more quickly reduce the trust region after poor steps.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_ExpansionFactor_" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.ExpansionFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_ExpansionFactor" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.ExpansionFactor">
+  ExpansionFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrustRegionOptimizerOptions.cs/#L342"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which to expand the trust region radius after a very successful step.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ExpansionFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A double value greater than 1, defaulting to 2.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_ExpansionFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the factor by which the trust region radius is increased after a very successful step 
+(one where the ratio of actual improvement to predicted improvement exceeds the VerySuccessfulThreshold). A 
+larger expansion factor leads to more aggressive growth of the trust region, potentially accelerating convergence 
+but with a higher risk of taking steps that are too large. A smaller expansion factor leads to more conservative 
+growth, with more gradual increases in step size. The default value of 2.0 means that the trust region radius 
+is doubled after a very successful step, providing a moderate rate of expansion suitable for many applications. 
+The optimal value depends on the characteristics of the objective function and the desired balance between 
+aggressive exploration and stability.
+</p>
+<p><b>For Beginners:</b> This setting controls how much the trust region grows after a very successful step.
+<p>The expansion factor:</p>
+<ul>
+<li>Determines how much the trust region expands after an excellent step</li>
+<li>Affects how quickly the algorithm becomes more aggressive</li>
+<li>Higher values lead to faster expansion but potentially less stability</li>
+</ul>
+<p>The default value of 2.0 means:</p>
+<ul>
+<li>After a very successful step, the trust region radius is doubled</li>
+<li>This allows for reasonably quick expansion when the model is accurate</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 3.0): More aggressive expansion, faster potential convergence</li>
+<li>Lower values (e.g., 1.5): More conservative expansion, more stable behavior</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when you want faster expansion of the trust region after successful steps</li>
+<li>Decrease it when you want more gradual, conservative growth</li>
+<li>Higher values can speed convergence but may lead to overshooting</li>
+</ul>
+<p>For example, in a well-behaved optimization problem where you want faster convergence,
+you might increase this to 2.5 or 3.0 to expand the trust region more aggressively.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_InitialTrustRegionRadius_" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.InitialTrustRegionRadius*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_InitialTrustRegionRadius" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.InitialTrustRegionRadius">
+  InitialTrustRegionRadius
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrustRegionOptimizerOptions.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial radius of the trust region.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialTrustRegionRadius { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_InitialTrustRegionRadius_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the initial size of the trust region, which defines the maximum distance the algorithm 
+can move from the current point in a single iteration. The trust region is a neighborhood around the current 
+point within which the quadratic model is considered to be a good approximation of the objective function. 
+A larger initial radius allows for more aggressive initial steps, potentially accelerating convergence if the 
+quadratic model is accurate over a larger region. A smaller initial radius is more conservative, ensuring that 
+the algorithm makes smaller, more reliable steps initially. The default value of 1.0 provides a moderate 
+initial radius suitable for many applications. The optimal value depends on the scale and characteristics of 
+the objective function.
+</p>
+<p><b>For Beginners:</b> This setting determines how far the algorithm can move in the first iteration.
+<p>The initial trust region radius:</p>
+<ul>
+<li>Sets the starting size of the area where the simplified model is trusted</li>
+<li>Limits how far the algorithm can move in the first step</li>
+<li>Affects the initial balance between exploration and caution</li>
+</ul>
+<p>The default value of 1.0 means:</p>
+<ul>
+<li>The algorithm starts with a moderate-sized trust region</li>
+<li>This provides a balanced approach for many problems</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Larger values (e.g., 5.0): More aggressive initial steps, faster progress if the model is good</li>
+<li>Smaller values (e.g., 0.1): More cautious initial steps, more reliable but potentially slower</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when you're confident the function is well-behaved and want faster initial progress</li>
+<li>Decrease it when dealing with highly nonlinear or poorly scaled functions</li>
+<li>Scale it according to the typical magnitude of variables in your problem</li>
+</ul>
+<p>For example, if your variables typically have values around 100, you might
+increase this to 10.0 to allow appropriately scaled steps.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_MaxCGIterations_" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.MaxCGIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_MaxCGIterations" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.MaxCGIterations">
+  MaxCGIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrustRegionOptimizerOptions.cs/#L505"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of iterations for the Conjugate Gradient method used to solve the trust region subproblem.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxCGIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 100.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_MaxCGIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the maximum number of iterations for the Conjugate Gradient (CG) method, which is 
+commonly used to solve the trust region subproblem (finding the best step within the trust region). The CG 
+method is an iterative algorithm, and this parameter limits how many iterations it can perform before returning 
+the best solution found so far. A higher limit allows for more iterations and potentially more accurate solutions 
+to the subproblem, but increases the computational cost per trust region iteration. The default value of 100 
+provides a reasonable upper limit for many applications, allowing sufficient iterations for convergence while 
+preventing excessive computation. The optimal value depends on the size and complexity of the problem and the 
+desired trade-off between subproblem accuracy and computational efficiency.
+</p>
+<p><b>For Beginners:</b> This setting limits how many iterations the algorithm spends solving each trust region subproblem.
+<p>The maximum CG iterations:</p>
+<ul>
+<li>Limits the computational effort spent finding the best step within each trust region</li>
+<li>Affects the balance between accuracy of each step and overall speed</li>
+<li>CG (Conjugate Gradient) is the method used to solve the trust region subproblem</li>
+</ul>
+<p>The default value of 100 means:</p>
+<ul>
+<li>The algorithm will perform at most 100 iterations to find the best step within each trust region</li>
+<li>This is sufficient for many problems while preventing excessive computation</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 200): More accurate steps within each trust region, but more computation per iteration</li>
+<li>Lower values (e.g., 50): Less computation per iteration, but potentially less optimal steps</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it for complex problems where accurate subproblem solutions are important</li>
+<li>Decrease it when computational efficiency is critical or for simpler problems</li>
+<li>Scale it with the dimensionality of your problem</li>
+</ul>
+<p>For example, for a high-dimensional optimization problem with hundreds of variables,
+you might increase this to 200-300 to ensure accurate steps within each trust region.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_MaxTrustRegionRadius_" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.MaxTrustRegionRadius*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_MaxTrustRegionRadius" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.MaxTrustRegionRadius">
+  MaxTrustRegionRadius
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrustRegionOptimizerOptions.cs/#L175"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum allowed radius of the trust region.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxTrustRegionRadius { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value, defaulting to 10.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_MaxTrustRegionRadius_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the upper bound for the trust region radius. It prevents the trust region from 
+becoming too large, which could lead to steps that are too aggressive and potentially destabilize the 
+optimization process. A larger maximum radius allows for more aggressive steps when the quadratic model 
+is accurate over a larger region, potentially accelerating convergence. A smaller maximum radius is more 
+conservative, ensuring that the algorithm never takes excessively large steps. The default value of 10.0 
+provides a moderate upper bound suitable for many applications. The optimal value depends on the scale and 
+characteristics of the objective function and the desired balance between aggressive exploration and 
+stability.
+</p>
+<p><b>For Beginners:</b> This setting sets an upper limit on how large the trust region can become.
+<p>The maximum trust region radius:</p>
+<ul>
+<li>Prevents the trust region from becoming too large</li>
+<li>Limits how aggressive the algorithm can be, even when successful</li>
+<li>Helps maintain stability in the optimization process</li>
+</ul>
+<p>The default value of 10.0 means:</p>
+<ul>
+<li>The trust region won't expand beyond this size</li>
+<li>This prevents excessively large steps that might overshoot good solutions</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Larger values (e.g., 50.0): Allow more aggressive exploration when the model is good</li>
+<li>Smaller values (e.g., 5.0): More conservative, never taking very large steps</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it for well-behaved functions where large steps might be beneficial</li>
+<li>Decrease it for highly nonlinear or poorly scaled functions</li>
+<li>Scale it according to the typical magnitude of variables in your problem</li>
+</ul>
+<p>For example, if your variables typically have values around 1000, you might
+increase this to 100.0 to allow appropriately scaled steps.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_MinTrustRegionRadius_" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.MinTrustRegionRadius*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_MinTrustRegionRadius" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.MinTrustRegionRadius">
+  MinTrustRegionRadius
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrustRegionOptimizerOptions.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum allowed radius of the trust region.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinTrustRegionRadius { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value, defaulting to 1e-6.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_MinTrustRegionRadius_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the lower bound for the trust region radius. If the trust region radius becomes 
+smaller than this value, it might indicate that the algorithm has converged to a solution or is unable to 
+make further progress. A very small minimum radius allows the algorithm to take very small steps when 
+necessary, potentially achieving higher precision at the cost of more iterations. The default value of 1e-6 
+provides a small minimum radius suitable for many applications, allowing for fine-grained convergence while 
+preventing numerical issues associated with extremely small steps. The optimal value depends on the desired 
+precision and the numerical characteristics of the problem.
+</p>
+<p><b>For Beginners:</b> This setting sets a lower limit on how small the trust region can become.
+<p>The minimum trust region radius:</p>
+<ul>
+<li>Prevents the trust region from becoming too small</li>
+<li>Acts as a stopping criterion when the algorithm can't make further progress</li>
+<li>Affects the precision of the final solution</li>
+</ul>
+<p>The default value of 1e-6 (0.000001) means:</p>
+<ul>
+<li>The trust region won't shrink below this very small value</li>
+<li>This allows for high precision while avoiding numerical issues</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Smaller values (e.g., 1e-8): Allow for higher precision but may require more iterations</li>
+<li>Larger values (e.g., 1e-4): May terminate earlier with slightly less precision</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Decrease it when you need extremely high precision in the solution</li>
+<li>Increase it when you're willing to accept slightly less precision for faster termination</li>
+<li>Consider the scale of your problem and numerical precision of your system</li>
+</ul>
+<p>For example, in a scientific computing application requiring high precision,
+you might decrease this to 1e-8 or 1e-10.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_UnsuccessfulThreshold_" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.UnsuccessfulThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_UnsuccessfulThreshold" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.UnsuccessfulThreshold">
+  UnsuccessfulThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrustRegionOptimizerOptions.cs/#L301"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for considering a step unsuccessful.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double UnsuccessfulThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A double value between 0 and 1, defaulting to 0.25.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_UnsuccessfulThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the ratio of actual improvement to predicted improvement below which a step is 
+considered unsuccessful. If this ratio falls below the threshold, the trust region radius is typically 
+decreased for the next iteration, leading to more conservative steps. A higher threshold is more strict, 
+more readily declaring steps as unsuccessful and shrinking the trust region, while a lower threshold is 
+more lenient. The default value of 0.25 means that a step is considered unsuccessful if the actual 
+improvement is less than 25% of what was predicted by the model. This provides a moderate criterion 
+suitable for many applications, ensuring that the trust region is shrunk when the model is not very 
+accurate. The optimal value depends on the accuracy of the quadratic model and the desired balance between 
+progress and reliability.
+</p>
+<p><b>For Beginners:</b> This setting determines when a step is considered poor, leading to a smaller trust region.
+<p>The unsuccessful threshold:</p>
+<ul>
+<li>Determines when a step is considered poor</li>
+<li>When not met, the trust region is usually contracted</li>
+<li>Affects how quickly the algorithm becomes more conservative</li>
+</ul>
+<p>The default value of 0.25 means:</p>
+<ul>
+<li>A step is &quot;unsuccessful&quot; if the actual improvement is less than 25% of what was predicted</li>
+<li>This indicates the model isn't very accurate and we should be more cautious</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 0.4): More strict, contracts the trust region more readily</li>
+<li>Lower values (e.g., 0.1): More lenient, keeps the trust region larger even with mediocre steps</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when you want to be more conservative when steps aren't as good as predicted</li>
+<li>Decrease it when you want to maintain larger steps even when the model isn't very accurate</li>
+<li>Higher values lead to more cautious but potentially slower convergence</li>
+</ul>
+<p>For example, in a highly nonlinear optimization problem where the model might be inaccurate,
+you might increase this to 0.4 to be more cautious when the model predictions are off.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_UseAdaptiveTrustRegionRadius_" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.UseAdaptiveTrustRegionRadius*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_UseAdaptiveTrustRegionRadius" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.UseAdaptiveTrustRegionRadius">
+  UseAdaptiveTrustRegionRadius
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrustRegionOptimizerOptions.cs/#L423"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether to use adaptive trust region radius adjustment.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseAdaptiveTrustRegionRadius { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>A boolean value, defaulting to true.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_UseAdaptiveTrustRegionRadius_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies whether the algorithm should adaptively adjust the trust region radius based on the 
+performance history, rather than using fixed expansion and contraction factors. Adaptive adjustment can lead 
+to more efficient optimization by learning appropriate step sizes from the optimization history. When enabled, 
+the algorithm might use techniques such as interpolation or extrapolation based on past performance to determine 
+the next trust region radius. The default value of true enables adaptive adjustment, which is suitable for many 
+applications, especially those with complex or poorly scaled objective functions. Disabling adaptive adjustment 
+might be preferred for simpler problems or when more predictable behavior is desired.
+</p>
+<p><b>For Beginners:</b> This setting determines whether the algorithm learns from past steps to adjust the trust region size.
+<p>Adaptive trust region radius:</p>
+<ul>
+<li>When enabled, the algorithm learns from past performance to adjust the trust region</li>
+<li>Can lead to more efficient optimization by adapting to the specific problem</li>
+<li>Uses more sophisticated strategies than simple expansion/contraction</li>
+</ul>
+<p>The default value of true means:</p>
+<ul>
+<li>The algorithm will adaptively adjust the trust region based on optimization history</li>
+<li>This is generally more efficient for complex problems</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Enabled: More intelligent adjustment based on past performance, potentially faster convergence</li>
+<li>Disabled: Simpler, more predictable behavior using fixed expansion/contraction factors</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Keep enabled (true) for most problems, especially complex ones</li>
+<li>Disable (false) when you want more predictable, deterministic behavior</li>
+<li>Disable if you're debugging and want simpler algorithm behavior</li>
+</ul>
+<p>For example, for a complex optimization problem with varying characteristics in different regions,
+keeping this enabled helps the algorithm adapt to each region appropriately.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_VerySuccessfulThreshold_" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.VerySuccessfulThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_VerySuccessfulThreshold" data-uid="AiDotNet.Models.Options.TrustRegionOptimizerOptions`3.VerySuccessfulThreshold">
+  VerySuccessfulThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrustRegionOptimizerOptions.cs/#L259"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for considering a step very successful.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double VerySuccessfulThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A double value between 0 and 1, defaulting to 0.75.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrustRegionOptimizerOptions_3_VerySuccessfulThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the ratio of actual improvement to predicted improvement above which a step is 
+considered very successful. If this ratio exceeds the threshold, the trust region radius is typically 
+increased for the next iteration, allowing for more aggressive steps. A higher threshold is more strict, 
+requiring better agreement between the model and the actual function before expanding the trust region, 
+while a lower threshold is more lenient. The default value of 0.75 means that a step is considered very 
+successful if the actual improvement is at least 75% of what was predicted by the model. This provides a 
+relatively strict criterion suitable for many applications, ensuring that the trust region is expanded only 
+when the model is quite accurate. The optimal value depends on the accuracy of the quadratic model and the 
+desired balance between aggressive exploration and stability.
+</p>
+<p><b>For Beginners:</b> This setting determines when a step is considered excellent, leading to a larger trust region.
+<p>The very successful threshold:</p>
+<ul>
+<li>Determines when a step is considered excellent</li>
+<li>When exceeded, the trust region is usually expanded</li>
+<li>Affects how quickly the algorithm becomes more aggressive</li>
+</ul>
+<p>The default value of 0.75 means:</p>
+<ul>
+<li>A step is &quot;very successful&quot; if the actual improvement is at least 75% of what was predicted</li>
+<li>This indicates the model is quite accurate and we can trust it over a larger region</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 0.9): More strict, requires excellent agreement before expanding</li>
+<li>Lower values (e.g., 0.6): More lenient, expands the trust region more readily</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when you want to be more conservative about expanding the trust region</li>
+<li>Decrease it when you want to be more aggressive in exploring larger regions</li>
+<li>Higher values lead to more stable but potentially slower convergence</li>
+</ul>
+<p>For example, in a well-behaved optimization problem where you want faster convergence,
+you might decrease this to 0.6 to expand the trust region more aggressively.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrustRegionOptimizerOptions.cs/#L40" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,2913 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class AutoMLModelBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class AutoMLModelBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for AutoML models that automatically search for optimal model configurations">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_AutoML_AutoMLModelBase_3.md&amp;value=---%0Auid%3A%20AiDotNet.AutoML.AutoMLModelBase%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.AutoML.AutoMLModelBase`3">
+
+
+
+  <h1 id="AiDotNet_AutoML_AutoMLModelBase_3" data-uid="AiDotNet.AutoML.AutoMLModelBase`3" class="text-break">
+Class AutoMLModelBase&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.AutoML.html">AutoML</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for AutoML models that automatically search for optimal model configurations</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class AutoMLModelBase&lt;T, TInput, TOutput&gt; : IAutoMLModel&lt;T, TInput, TOutput&gt;, IFullModel&lt;T, TInput, TOutput&gt;, IModel&lt;TInput, TOutput, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, TInput, TOutput&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, TInput, TOutput&gt;&gt;, IGradientComputable&lt;T, TInput, TOutput&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">AutoMLModelBase&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IAutoMLModel-3.html">IAutoMLModel</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;TInput, TOutput, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.AutoML.DiffusionAutoML-1.html">DiffusionAutoML&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.AutoML.NAS.NasAutoMLModelBase-1.html">NasAutoMLModelBase&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.AutoML.SupervisedAutoMLModelBase-3.html">SupervisedAutoMLModelBase&lt;T, TInput, TOutput&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3__candidateModels" data-uid="AiDotNet.AutoML.AutoMLModelBase`3._candidateModels">
+  _candidateModels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly List&lt;ModelType&gt; _candidateModels</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Enums.ModelType.html">ModelType</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3__constraints" data-uid="AiDotNet.AutoML.AutoMLModelBase`3._constraints">
+  _constraints
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly List&lt;SearchConstraint&gt; _constraints</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.AutoML.SearchConstraint.html">SearchConstraint</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3__earlyStoppingMinDelta" data-uid="AiDotNet.AutoML.AutoMLModelBase`3._earlyStoppingMinDelta">
+  _earlyStoppingMinDelta
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected double _earlyStoppingMinDelta</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3__earlyStoppingPatience" data-uid="AiDotNet.AutoML.AutoMLModelBase`3._earlyStoppingPatience">
+  _earlyStoppingPatience
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int? _earlyStoppingPatience</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3__lock" data-uid="AiDotNet.AutoML.AutoMLModelBase`3._lock">
+  _lock
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly object _lock</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3__maximize" data-uid="AiDotNet.AutoML.AutoMLModelBase`3._maximize">
+  _maximize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected bool _maximize</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3__modelEvaluator" data-uid="AiDotNet.AutoML.AutoMLModelBase`3._modelEvaluator">
+  _modelEvaluator
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IModelEvaluator&lt;T, TInput, TOutput&gt;? _modelEvaluator</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IModelEvaluator-3.html">IModelEvaluator</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3__optimizationMetric" data-uid="AiDotNet.AutoML.AutoMLModelBase`3._optimizationMetric">
+  _optimizationMetric
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected MetricType _optimizationMetric</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.MetricType.html">MetricType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3__optimizationMetricExplicitlySet" data-uid="AiDotNet.AutoML.AutoMLModelBase`3._optimizationMetricExplicitlySet">
+  _optimizationMetricExplicitlySet
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected bool _optimizationMetricExplicitlySet</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3__searchSpace" data-uid="AiDotNet.AutoML.AutoMLModelBase`3._searchSpace">
+  _searchSpace
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly Dictionary&lt;string, ParameterRange&gt; _searchSpace</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="AiDotNet.AutoML.ParameterRange.html">ParameterRange</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3__trialHistory" data-uid="AiDotNet.AutoML.AutoMLModelBase`3._trialHistory">
+  _trialHistory
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly List&lt;TrialResult&gt; _trialHistory</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.AutoML.TrialResult.html">TrialResult</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3__trialsSinceImprovement" data-uid="AiDotNet.AutoML.AutoMLModelBase`3._trialsSinceImprovement">
+  _trialsSinceImprovement
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int _trialsSinceImprovement</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_BestModel_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.BestModel*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_BestModel" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.BestModel">
+  BestModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the best model found so far</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt;? BestModel { get; protected set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_BestScore_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.BestScore*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_BestScore" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.BestScore">
+  BestScore
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the best score achieved</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double BestScore { get; protected set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_DefaultLossFunction_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.DefaultLossFunction*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_DefaultLossFunction" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.DefaultLossFunction">
+  DefaultLossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L841"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the default loss function for gradient computation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual ILossFunction&lt;T&gt; DefaultLossFunction { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_AutoML_AutoMLModelBase_3_DefaultLossFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>AutoML delegates to the best model found during search. If no best model exists yet,
+returns Mean Squared Error as a sensible default.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_FeatureNames_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.FeatureNames*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_FeatureNames" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.FeatureNames">
+  FeatureNames
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L480"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the feature names</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual string[] FeatureNames { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_MaximizeOptimizationMetric_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.MaximizeOptimizationMetric*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_MaximizeOptimizationMetric" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.MaximizeOptimizationMetric">
+  MaximizeOptimizationMetric
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a value indicating whether higher metric values are better.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool MaximizeOptimizationMetric { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_AutoML_AutoMLModelBase_3_MaximizeOptimizationMetric_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> For some metrics higher is better (Accuracy). For error metrics lower is better (RMSE).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_OptimizationMetric_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.OptimizationMetric*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_OptimizationMetric" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.OptimizationMetric">
+  OptimizationMetric
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the optimization metric used to rank trials.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MetricType OptimizationMetric { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.MetricType.html">MetricType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_AutoML_AutoMLModelBase_3_OptimizationMetric_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This is safe to expose and does not reveal proprietary hyperparameter values or model internals.
+</p>
+<p><b>For Beginners:</b> This is the score AutoML tries to make better (like Accuracy or RMSE).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_ParameterCount_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.ParameterCount*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_ParameterCount" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.ParameterCount">
+  ParameterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L457"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of parameters</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual int ParameterCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_Status_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Status*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_Status" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Status">
+  Status
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current optimization status</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AutoMLStatus Status { get; protected set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.AutoMLStatus.html">AutoMLStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_SupportsJitCompilation_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_SupportsJitCompilation" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L892"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model currently supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the best model found supports JIT compilation, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_AutoML_AutoMLModelBase_3_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+AutoML models delegate JIT compilation support to their best model.
+If no best model has been found yet, JIT compilation is not supported.
+</p>
+<p><b>For Beginners:</b> AutoML models can only be JIT compiled if the best model they found supports it.
+<p>Since AutoML searches across multiple model types, JIT support depends on:</p>
+<ul>
+<li>Whether a best model has been selected</li>
+<li>Whether that specific model supports JIT compilation</li>
+</ul>
+<p>Before running SearchAsync, this will return false.
+After finding a best model, it delegates to that model's JIT support.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_TimeLimit_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.TimeLimit*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_TimeLimit" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.TimeLimit">
+  TimeLimit
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the time limit for the AutoML search</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TimeSpan TimeLimit { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_TrialLimit_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.TrialLimit*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_TrialLimit" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.TrialLimit">
+  TrialLimit
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of trials to run</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TrialLimit { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_Type_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Type*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_Type" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Type">
+  Type
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the model type</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual ModelType Type { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.ModelType.html">ModelType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_ApplyGradients_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.ApplyGradients*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.ApplyGradients(AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0)">
+  ApplyGradients(Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L861"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies gradients by delegating to the best model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void ApplyGradients(Vector&lt;T&gt; gradients, T learningRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>learningRate</code> <span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_Clone_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Clone*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_Clone" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L538"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a memberwise clone of the AutoML model using MemberwiseClone().
+This performs a shallow copy where reference types are shared between the original and clone.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IFullModel&lt;T, TInput, TOutput&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A memberwise clone of the current AutoML model</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_AutoML_AutoMLModelBase_3_Clone_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For a deep copy with independent collections and state, use DeepCopy() instead.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_ComputeGradients_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.ComputeGradients*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_ComputeGradients__1__2_AiDotNet_Interfaces_ILossFunction__0__" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.ComputeGradients(`1,`2,AiDotNet.Interfaces.ILossFunction{`0})">
+  ComputeGradients(TInput, TOutput, ILossFunction&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L849"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes gradients by delegating to the best model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Vector&lt;T&gt; ComputeGradients(TInput input, TOutput target, ILossFunction&lt;T&gt;? lossFunction = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">TInput</span></dt>
+    <dd></dd>
+    <dt><code>target</code> <span class="xref">TOutput</span></dt>
+    <dd></dd>
+    <dt><code>lossFunction</code> <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_ConfigureSearchSpace_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.ConfigureSearchSpace*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_ConfigureSearchSpace_System_Collections_Generic_Dictionary_System_String_AiDotNet_AutoML_ParameterRange__" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.ConfigureSearchSpace(System.Collections.Generic.Dictionary{System.String,AiDotNet.AutoML.ParameterRange})">
+  ConfigureSearchSpace(Dictionary&lt;string, ParameterRange&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L717"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configures the search space for hyperparameter optimization</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void ConfigureSearchSpace(Dictionary&lt;string, ParameterRange&gt; searchSpace)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>searchSpace</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="AiDotNet.AutoML.ParameterRange.html">ParameterRange</a>&gt;</dt>
+    <dd><p>Dictionary defining parameter ranges to search</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_CreateInstanceForCopy_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.CreateInstanceForCopy*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_CreateInstanceForCopy" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.CreateInstanceForCopy">
+  CreateInstanceForCopy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L611"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Factory method for creating a new instance for deep copy.
+Derived classes must implement this to return a new instance of themselves.
+This ensures each copy has its own collections and lock object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract AutoMLModelBase&lt;T, TInput, TOutput&gt; CreateInstanceForCopy()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html">AutoMLModelBase</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A fresh instance of the derived class with default parameters</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_AutoML_AutoMLModelBase_3_CreateInstanceForCopy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>When implementing this method, derived classes should create a fresh instance with default parameters,
+and should not attempt to preserve runtime or initialization state from the original instance.
+The deep copy logic will transfer relevant state (trial history, search space, etc.) after construction.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_CreateModelAsync_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.CreateModelAsync*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_CreateModelAsync_AiDotNet_Enums_ModelType_System_Collections_Generic_Dictionary_System_String_System_Object__" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.CreateModelAsync(AiDotNet.Enums.ModelType,System.Collections.Generic.Dictionary{System.String,System.Object})">
+  CreateModelAsync(ModelType, Dictionary&lt;string, object&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L298"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a model instance for the given type and parameters</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract Task&lt;IFullModel&lt;T, TInput, TOutput&gt;&gt; CreateModelAsync(ModelType modelType, Dictionary&lt;string, object&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelType</code> <a class="xref" href="AiDotNet.Enums.ModelType.html">ModelType</a></dt>
+    <dd></dd>
+    <dt><code>parameters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_DeepCopy_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.DeepCopy*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_DeepCopy" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.DeepCopy">
+  DeepCopy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L546"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of the AutoML model</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IFullModel&lt;T, TInput, TOutput&gt; DeepCopy()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_Deserialize_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Deserialize*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_Deserialize_System_Byte___" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L417"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes the model from bytes</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Deserialize(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_EnableEarlyStopping_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.EnableEarlyStopping*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_EnableEarlyStopping_System_Int32_System_Double_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.EnableEarlyStopping(System.Int32,System.Double)">
+  EnableEarlyStopping(int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L211"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enables early stopping</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void EnableEarlyStopping(int patience, double minDelta = 0.001)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>patience</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>minDelta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_EnableNAS_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.EnableNAS*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_EnableNAS_System_Boolean_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.EnableNAS(System.Boolean)">
+  EnableNAS(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L744"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enables Neural Architecture Search (NAS) for automatic network design</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void EnableNAS(bool enabled = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>enabled</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to enable NAS</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_EvaluateModelAsync_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.EvaluateModelAsync*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_EvaluateModelAsync_AiDotNet_Interfaces_IFullModel__0__1__2___1__2_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.EvaluateModelAsync(AiDotNet.Interfaces.IFullModel{`0,`1,`2},`1,`2)">
+  EvaluateModelAsync(IFullModel&lt;T, TInput, TOutput&gt;, TInput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L303"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates a model on the validation set</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual Task&lt;double&gt; EvaluateModelAsync(IFullModel&lt;T, TInput, TOutput&gt; model, TInput validationInputs, TOutput validationTargets)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>validationInputs</code> <span class="xref">TInput</span></dt>
+    <dd></dd>
+    <dt><code>validationTargets</code> <span class="xref">TOutput</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_ExportComputationGraph_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.ExportComputationGraph*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.ExportComputationGraph(System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{`0}})">
+  ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L930"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exports the computation graph for JIT compilation by delegating to the best model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputNodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List to populate with input computation nodes.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output computation node representing the model's prediction.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_AutoML_AutoMLModelBase_3_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+AutoML models delegate graph export to their best model found during search.
+The graph structure and complexity depends on the specific best model type.
+</p>
+<p><b>For Beginners:</b> This creates a computation graph from the best model found.
+<p>AutoML itself doesn't have a fixed computation structure since it tries multiple model types.
+Instead, it delegates to the best model it found:</p>
+<ul>
+<li>If the best model is a neural network, you get a neural network graph</li>
+<li>If it's a regression model, you get a regression graph</li>
+<li>And so on</li>
+</ul>
+<p>This only works after SearchAsync has found and selected a best model.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when no best model exists (SearchAsync not called yet).</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Thrown when the best model does not support JIT compilation.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_ExtractMetricFromEvaluation_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.ExtractMetricFromEvaluation*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_ExtractMetricFromEvaluation_AiDotNet_Models_ModelEvaluationData__0__1__2__" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.ExtractMetricFromEvaluation(AiDotNet.Models.ModelEvaluationData{`0,`1,`2})">
+  ExtractMetricFromEvaluation(ModelEvaluationData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L627"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts the appropriate metric value from the evaluation results</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual double ExtractMetricFromEvaluation(ModelEvaluationData&lt;T, TInput, TOutput&gt; evaluationData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>evaluationData</code> <a class="xref" href="AiDotNet.Models.ModelEvaluationData-3.html">ModelEvaluationData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_GetActiveFeatureIndices_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.GetActiveFeatureIndices*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_GetActiveFeatureIndices" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.GetActiveFeatureIndices">
+  GetActiveFeatureIndices()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L496"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the indices of active features</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IEnumerable&lt;int&gt; GetActiveFeatureIndices()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_GetDefaultSearchSpace_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.GetDefaultSearchSpace*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_GetDefaultSearchSpace_AiDotNet_Enums_ModelType_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.GetDefaultSearchSpace(AiDotNet.Enums.ModelType)">
+  GetDefaultSearchSpace(ModelType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L348"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the default search space for a model type</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract Dictionary&lt;string, ParameterRange&gt; GetDefaultSearchSpace(ModelType modelType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelType</code> <a class="xref" href="AiDotNet.Enums.ModelType.html">ModelType</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="AiDotNet.AutoML.ParameterRange.html">ParameterRange</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_GetFeatureImportance_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.GetFeatureImportance*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_GetFeatureImportance" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.GetFeatureImportance">
+  GetFeatureImportance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L485"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the feature importance scores</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Dictionary&lt;string, T&gt; GetFeatureImportance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_GetFeatureImportanceAsync_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.GetFeatureImportanceAsync*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_GetFeatureImportanceAsync" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.GetFeatureImportanceAsync">
+  GetFeatureImportanceAsync()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets feature importance from the best model</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task&lt;Dictionary&lt;int, double&gt;&gt; GetFeatureImportanceAsync()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_GetModelMetadata_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_GetModelMetadata" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L251"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets model metadata</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_GetParameters_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.GetParameters*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_GetParameters" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L435"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the model parameters</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_GetResults_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.GetResults*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_GetResults" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.GetResults">
+  GetResults()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L804"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the results of all trials performed during search</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual List&lt;TrialResult&gt; GetResults()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.AutoML.TrialResult.html">TrialResult</a>&gt;</dt>
+    <dd><p>List of trial results with scores and parameters</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_GetTrialHistory_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.GetTrialHistory*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_GetTrialHistory" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.GetTrialHistory">
+  GetTrialHistory()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L141"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the history of all trials</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual List&lt;TrialResult&gt; GetTrialHistory()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.AutoML.TrialResult.html">TrialResult</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_IsFeatureUsed_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.IsFeatureUsed*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_IsFeatureUsed_System_Int32_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.IsFeatureUsed(System.Int32)">
+  IsFeatureUsed(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L507"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if a feature is used</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool IsFeatureUsed(int featureIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_LoadModel_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.LoadModel*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_LoadModel_System_String_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.LoadModel(System.String)">
+  LoadModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L392"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the model from a file</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void LoadModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_LoadState_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.LoadState*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_LoadState_System_IO_Stream_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.LoadState(System.IO.Stream)">
+  LoadState(Stream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L1035"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the AutoML model's state from a stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void LoadState(Stream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream to read the model state from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_AutoML_AutoMLModelBase_3_LoadState_System_IO_Stream__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method deserializes a best model that was previously saved with SaveState.
+It uses the existing Deserialize method after reading data from the stream.
+</p>
+<p><b>For Beginners:</b> This is like loading a saved snapshot of your best AutoML model.
+<p>When you call LoadState:</p>
+<ul>
+<li>The best model is read from the stream</li>
+<li>All parameters and configuration are restored</li>
+</ul>
+<p>After loading, the model can:</p>
+<ul>
+<li>Make predictions using the restored best model</li>
+<li>Be further optimized if needed</li>
+<li>Be deployed to production</li>
+</ul>
+<p>This is essential for:</p>
+<ul>
+<li>Loading the best model after AutoML search</li>
+<li>Deploying optimized models to production</li>
+<li>Knowledge distillation workflows</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when stream is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.ioexception">IOException</a></dt>
+    <dd><p>Thrown when there's an error reading from the stream.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the stream contains invalid or incompatible data, or when BestModel is not initialized.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_Predict_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Predict*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_Predict_System_Double_____" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Predict(System.Double[][])">
+  Predict(double[][])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L242"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Makes predictions using the best model (legacy method)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual double[] Predict(double[][] inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[][]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_Predict_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Predict*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_Predict__1_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Predict(`1)">
+  Predict(TInput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L365"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Makes predictions using the best model found</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual TOutput Predict(TInput input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">TInput</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_ReportTrialFailureAsync_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.ReportTrialFailureAsync*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_ReportTrialFailureAsync_System_Collections_Generic_Dictionary_System_String_System_Object__System_Exception_System_TimeSpan_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.ReportTrialFailureAsync(System.Collections.Generic.Dictionary{System.String,System.Object},System.Exception,System.TimeSpan)">
+  ReportTrialFailureAsync(Dictionary&lt;string, object&gt;, Exception, TimeSpan)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L667"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reports a failed trial result without terminating the full AutoML run.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual Task ReportTrialFailureAsync(Dictionary&lt;string, object&gt; parameters, Exception error, TimeSpan duration)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>The parameters used in the trial.</p>
+</dd>
+    <dt><code>error</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.exception">Exception</a></dt>
+    <dd><p>The exception that caused the trial to fail.</p>
+</dd>
+    <dt><code>duration</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd><p>The duration of the failed trial.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_ReportTrialResultAsync_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.ReportTrialResultAsync*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_ReportTrialResultAsync_System_Collections_Generic_Dictionary_System_String_System_Object__System_Double_System_TimeSpan_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.ReportTrialResultAsync(System.Collections.Generic.Dictionary{System.String,System.Object},System.Double,System.TimeSpan)">
+  ReportTrialResultAsync(Dictionary&lt;string, object&gt;, double, TimeSpan)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L174"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reports the result of a trial</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task ReportTrialResultAsync(Dictionary&lt;string, object&gt; parameters, double score, TimeSpan duration)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>score</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>duration</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_Run_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Run*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_Run__1__2__1__2_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Run(`1,`2,`1,`2)">
+  Run(TInput, TOutput, TInput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L816"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runs the AutoML optimization process (alternative name for Search)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Run(TInput inputs, TOutput targets, TInput validationInputs, TOutput validationTargets)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <span class="xref">TInput</span></dt>
+    <dd><p>Training inputs</p>
+</dd>
+    <dt><code>targets</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Training targets</p>
+</dd>
+    <dt><code>validationInputs</code> <span class="xref">TInput</span></dt>
+    <dd><p>Validation inputs</p>
+</dd>
+    <dt><code>validationTargets</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Validation targets</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_SaveModel_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SaveModel*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_SaveModel_System_String_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SaveModel(System.String)">
+  SaveModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L381"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the model to a file</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SaveModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_SaveState_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SaveState*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_SaveState_System_IO_Stream_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SaveState(System.IO.Stream)">
+  SaveState(Stream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L977"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the AutoML model's current state to a stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SaveState(Stream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream to write the model state to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_AutoML_AutoMLModelBase_3_SaveState_System_IO_Stream__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method serializes the best model found during the AutoML search.
+It uses the existing Serialize method and writes the data to the provided stream.
+</p>
+<p><b>For Beginners:</b> This is like creating a snapshot of your best AutoML model.
+<p>When you call SaveState:</p>
+<ul>
+<li>The best model found during search is written to the stream</li>
+<li>All model parameters and configuration are preserved</li>
+</ul>
+<p>This is particularly useful for:</p>
+<ul>
+<li>Saving the best model after AutoML search</li>
+<li>Checkpointing during long-running searches</li>
+<li>Knowledge distillation from AutoML-optimized models</li>
+<li>Deploying optimized models to production</li>
+</ul>
+<p>You can later use LoadState to restore the model.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when stream is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when no best model exists.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.ioexception">IOException</a></dt>
+    <dd><p>Thrown when there's an error writing to the stream.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_Search_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Search*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_Search__1__2__1__2_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Search(`1,`2,`1,`2)">
+  Search(TInput, TOutput, TInput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L788"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the AutoML search process (synchronous version)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Search(TInput inputs, TOutput targets, TInput validationInputs, TOutput validationTargets)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <span class="xref">TInput</span></dt>
+    <dd><p>Training inputs</p>
+</dd>
+    <dt><code>targets</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Training targets</p>
+</dd>
+    <dt><code>validationInputs</code> <span class="xref">TInput</span></dt>
+    <dd><p>Validation inputs</p>
+</dd>
+    <dt><code>validationTargets</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Validation targets</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_SearchAsync_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SearchAsync*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_SearchAsync__1__2__1__2_System_TimeSpan_System_Threading_CancellationToken_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SearchAsync(`1,`2,`1,`2,System.TimeSpan,System.Threading.CancellationToken)">
+  SearchAsync(TInput, TOutput, TInput, TOutput, TimeSpan, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Searches for the best model configuration</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract Task&lt;IFullModel&lt;T, TInput, TOutput&gt;&gt; SearchAsync(TInput inputs, TOutput targets, TInput validationInputs, TOutput validationTargets, TimeSpan timeLimit, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <span class="xref">TInput</span></dt>
+    <dd></dd>
+    <dt><code>targets</code> <span class="xref">TOutput</span></dt>
+    <dd></dd>
+    <dt><code>validationInputs</code> <span class="xref">TInput</span></dt>
+    <dd></dd>
+    <dt><code>validationTargets</code> <span class="xref">TOutput</span></dt>
+    <dd></dd>
+    <dt><code>timeLimit</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd></dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_SearchBestModel_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SearchBestModel*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_SearchBestModel__1__2__1__2_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SearchBestModel(`1,`2,`1,`2)">
+  SearchBestModel(TInput, TOutput, TInput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L769"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Searches for the best model configuration (synchronous version)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IFullModel&lt;T, TInput, TOutput&gt; SearchBestModel(TInput inputs, TOutput targets, TInput validationInputs, TOutput validationTargets)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <span class="xref">TInput</span></dt>
+    <dd><p>Training inputs</p>
+</dd>
+    <dt><code>targets</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Training targets</p>
+</dd>
+    <dt><code>validationInputs</code> <span class="xref">TInput</span></dt>
+    <dd><p>Validation inputs</p>
+</dd>
+    <dt><code>validationTargets</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Validation targets</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Best model found</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_Serialize_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Serialize*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_Serialize" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L406"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the model to bytes</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_SetActiveFeatureIndices_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SetActiveFeatureIndices*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SetActiveFeatureIndices(System.Collections.Generic.IEnumerable{System.Int32})">
+  SetActiveFeatureIndices(IEnumerable&lt;int&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L518"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the active feature indices</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetActiveFeatureIndices(IEnumerable&lt;int&gt; featureIndices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_SetCandidateModels_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SetCandidateModels*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_SetCandidateModels_System_Collections_Generic_List_AiDotNet_Enums_ModelType__" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SetCandidateModels(System.Collections.Generic.List{AiDotNet.Enums.ModelType})">
+  SetCandidateModels(List&lt;ModelType&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the models to consider in the search</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetCandidateModels(List&lt;ModelType&gt; modelTypes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelTypes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Enums.ModelType.html">ModelType</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_SetConstraints_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SetConstraints*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_SetConstraints_System_Collections_Generic_List_AiDotNet_AutoML_SearchConstraint__" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SetConstraints(System.Collections.Generic.List{AiDotNet.AutoML.SearchConstraint})">
+  SetConstraints(List&lt;SearchConstraint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L221"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets constraints for the search</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetConstraints(List&lt;SearchConstraint&gt; constraints)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>constraints</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.AutoML.SearchConstraint.html">SearchConstraint</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_SetModelEvaluator_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SetModelEvaluator*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_SetModelEvaluator_AiDotNet_Interfaces_IModelEvaluator__0__1__2__" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SetModelEvaluator(AiDotNet.Interfaces.IModelEvaluator{`0,`1,`2})">
+  SetModelEvaluator(IModelEvaluator&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L619"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the model evaluator to use for evaluating candidate models</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetModelEvaluator(IModelEvaluator&lt;T, TInput, TOutput&gt; evaluator)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>evaluator</code> <a class="xref" href="AiDotNet.Interfaces.IModelEvaluator-3.html">IModelEvaluator</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_SetModelsToTry_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SetModelsToTry*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_SetModelsToTry_System_Collections_Generic_List_AiDotNet_Enums_ModelType__" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SetModelsToTry(System.Collections.Generic.List{AiDotNet.Enums.ModelType})">
+  SetModelsToTry(List&lt;ModelType&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L829"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets which model types should be considered during the search</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetModelsToTry(List&lt;ModelType&gt; modelTypes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelTypes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Enums.ModelType.html">ModelType</a>&gt;</dt>
+    <dd><p>List of model types to evaluate</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_SetOptimizationMetric_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SetOptimizationMetric*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_SetOptimizationMetric_AiDotNet_Enums_MetricType_System_Boolean_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SetOptimizationMetric(AiDotNet.Enums.MetricType,System.Boolean)">
+  SetOptimizationMetric(MetricType, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L128"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the optimization metric</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetOptimizationMetric(MetricType metric, bool maximize = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>metric</code> <a class="xref" href="AiDotNet.Enums.MetricType.html">MetricType</a></dt>
+    <dd></dd>
+    <dt><code>maximize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_SetParameters_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SetParameters*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L446"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the model parameters</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_SetSearchSpace_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SetSearchSpace*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_SetSearchSpace_System_Collections_Generic_Dictionary_System_String_AiDotNet_AutoML_ParameterRange__" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SetSearchSpace(System.Collections.Generic.Dictionary{System.String,AiDotNet.AutoML.ParameterRange})">
+  SetSearchSpace(Dictionary&lt;string, ParameterRange&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the search space for hyperparameters</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetSearchSpace(Dictionary&lt;string, ParameterRange&gt; searchSpace)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>searchSpace</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="AiDotNet.AutoML.ParameterRange.html">ParameterRange</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_SetTimeLimit_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SetTimeLimit*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_SetTimeLimit_System_TimeSpan_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SetTimeLimit(System.TimeSpan)">
+  SetTimeLimit(TimeSpan)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L726"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the time limit for the AutoML search process</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetTimeLimit(TimeSpan timeLimit)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>timeLimit</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd><p>Maximum time to spend searching for optimal models</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_SetTrialLimit_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SetTrialLimit*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_SetTrialLimit_System_Int32_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SetTrialLimit(System.Int32)">
+  SetTrialLimit(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L735"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the maximum number of trials to execute during search</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetTrialLimit(int maxTrials)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>maxTrials</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of model configurations to try</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_ShouldStop_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.ShouldStop*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_ShouldStop" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.ShouldStop">
+  ShouldStop()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L277"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if early stopping criteria is met</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected bool ShouldStop()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_SuggestNextTrialAsync_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SuggestNextTrialAsync*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_SuggestNextTrialAsync" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.SuggestNextTrialAsync">
+  SuggestNextTrialAsync()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L169"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Suggests the next hyperparameters to try</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract Task&lt;Dictionary&lt;string, object&gt;&gt; SuggestNextTrialAsync()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_Train_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Train*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_Train_System_Double_____System_Double___" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Train(System.Double[][],System.Double[])">
+  Train(double[][], double[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L233"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the model (legacy method - use SearchAsync instead)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Train(double[][] inputs, double[] outputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[][]</dt>
+    <dd></dd>
+    <dt><code>outputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_Train_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Train*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_Train__1__2_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.Train(`1,`2)">
+  Train(TInput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L355"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the AutoML model by searching for the best configuration</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Train(TInput input, TOutput expectedOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">TInput</span></dt>
+    <dd></dd>
+    <dt><code>expectedOutput</code> <span class="xref">TOutput</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_ValidateConstraints_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.ValidateConstraints*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_ValidateConstraints_System_Collections_Generic_Dictionary_System_String_System_Object__AiDotNet_Interfaces_IFullModel__0__1__2__" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.ValidateConstraints(System.Collections.Generic.Dictionary{System.String,System.Object},AiDotNet.Interfaces.IFullModel{`0,`1,`2})">
+  ValidateConstraints(Dictionary&lt;string, object&gt;, IFullModel&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L288"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates constraints for a given configuration</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected bool ValidateConstraints(Dictionary&lt;string, object&gt; parameters, IFullModel&lt;T, TInput, TOutput&gt;? model = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_AutoMLModelBase_3_WithParameters_" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.WithParameters*"></a>
+
+  <h3 id="AiDotNet_AutoML_AutoMLModelBase_3_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.AutoML.AutoMLModelBase`3.WithParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  WithParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L462"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance with the given parameters</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IFullModel&lt;T, TInput, TOutput&gt; WithParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/AutoMLModelBase.cs/#L22" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

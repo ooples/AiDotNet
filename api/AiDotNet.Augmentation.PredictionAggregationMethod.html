@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum PredictionAggregationMethod | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum PredictionAggregationMethod | AiDotNet Documentation ">
+      
+      <meta name="description" content="Specifies how to combine predictions from multiple augmented versions of the same input.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Augmentation_PredictionAggregationMethod.md&amp;value=---%0Auid%3A%20AiDotNet.Augmentation.PredictionAggregationMethod%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Augmentation.PredictionAggregationMethod">
+
+
+
+
+  <h1 id="AiDotNet_Augmentation_PredictionAggregationMethod" data-uid="AiDotNet.Augmentation.PredictionAggregationMethod" class="text-break">
+Enum PredictionAggregationMethod  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/PredictionAggregationMethod.cs/#L17"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Augmentation.html">Augmentation</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Specifies how to combine predictions from multiple augmented versions of the same input.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum PredictionAggregationMethod</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Augmentation_PredictionAggregationMethod_GeometricMean"><code>GeometricMean = 6</code></dt>
+  <dd><p>Multiply predictions together (then take the Nth root). Best for probability products.</p>
+<p>Use this when predictions represent independent probabilities that should be combined.
+Less common but useful in specialized scenarios like combining class probabilities.</p>
+</dd>
+  
+    <dt id="AiDotNet_Augmentation_PredictionAggregationMethod_Max"><code>Max = 2</code></dt>
+  <dd><p>Take the highest prediction. Useful for object detection confidence scores.</p>
+<p>Use this when you want to capture the &quot;best case&quot; prediction.
+Common in object detection where you want the most confident bounding box.</p>
+</dd>
+  
+    <dt id="AiDotNet_Augmentation_PredictionAggregationMethod_Mean"><code>Mean = 0</code></dt>
+  <dd><p>Average all predictions together. Best for regression and probability outputs.</p>
+<p>This is the most common choice. Works well for:</p>
+<ul>
+<li>Predicting prices, temperatures, or any continuous value</li>
+<li>Classification confidence scores (e.g., &quot;80% confident this is a cat&quot;)</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Augmentation_PredictionAggregationMethod_Median"><code>Median = 1</code></dt>
+  <dd><p>Take the middle prediction when sorted. More robust when some predictions are outliers.</p>
+<p>Use this when you suspect some augmentations might give bad predictions.
+For example, if 4 predictions are around 100 but one is 1000, median ignores the outlier.</p>
+</dd>
+  
+    <dt id="AiDotNet_Augmentation_PredictionAggregationMethod_Min"><code>Min = 3</code></dt>
+  <dd><p>Take the lowest prediction. Useful for conservative estimates.</p>
+<p>Use this when you want the most conservative prediction.
+For example, when estimating costs where you'd rather underestimate.</p>
+</dd>
+  
+    <dt id="AiDotNet_Augmentation_PredictionAggregationMethod_Vote"><code>Vote = 4</code></dt>
+  <dd><p>Count votes from each prediction and pick the winner. Best for classification.</p>
+<p>Use this for classification tasks. Each augmented prediction &quot;votes&quot; for a class,
+and the class with the most votes wins. Like a democratic election for predictions.</p>
+</dd>
+  
+    <dt id="AiDotNet_Augmentation_PredictionAggregationMethod_WeightedMean"><code>WeightedMean = 5</code></dt>
+  <dd><p>Like Mean, but gives more weight to higher-confidence predictions.</p>
+<p>Use this when some augmentations produce more reliable predictions than others.
+Predictions with higher confidence scores contribute more to the final answer.</p>
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Augmentation_PredictionAggregationMethod_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> When you make predictions on several variations of an image
+(flipped, rotated, etc.), you need a way to combine those predictions into one final answer.
+This enum controls how that combination happens.
+<p>Think of it like asking 5 friends to estimate the price of a used car:</p>
+<ul>
+<li><b>Mean:</b> Take the average of all estimates ($15K + $18K + $16K + $14K + $17K) / 5 = $16K</li>
+<li><b>Median:</b> Take the middle value when sorted ($14K, $15K, [$16K], $17K, $18K) = $16K</li>
+<li><b>Vote:</b> If 3 friends say &quot;buy&quot; and 2 say &quot;don't buy&quot;, go with &quot;buy&quot;</li>
+</ul>
+
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/PredictionAggregationMethod.cs/#L17" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

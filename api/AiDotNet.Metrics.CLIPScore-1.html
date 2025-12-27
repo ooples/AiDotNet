@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CLIPScore&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CLIPScore&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="CLIPScore metric for evaluating text-image alignment and image quality.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Metrics_CLIPScore_1.md&amp;value=---%0Auid%3A%20AiDotNet.Metrics.CLIPScore%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Metrics.CLIPScore`1">
+
+
+
+  <h1 id="AiDotNet_Metrics_CLIPScore_1" data-uid="AiDotNet.Metrics.CLIPScore`1" class="text-break">
+Class CLIPScore&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Metrics/CLIPScore.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Metrics.html">Metrics</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>CLIPScore metric for evaluating text-image alignment and image quality.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class CLIPScore&lt;T&gt; where T : struct</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for computations</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">CLIPScore&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Metrics_CLIPScore_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+CLIPScore measures how well an image matches a text description (or reference image)
+using CLIP embeddings. It's widely used for evaluating text-to-image generation models.
+</p>
+<p>
+Two main variants:
+- CLIPScore (text-image): Measures alignment between generated images and text prompts
+- RefCLIPScore (image-image): Measures similarity between generated and reference images
+</p>
+<p>
+Typical CLIPScore values (0-100 scale):
+- &gt;30: Excellent alignment (image matches text well)
+- 25-30: Good alignment
+- 20-25: Moderate alignment
+- &lt;20: Poor alignment
+</p>
+<p>
+Based on "CLIPScore: A Reference-free Evaluation Metric for Image Captioning"
+by Hessel et al. (2021)
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Metrics_CLIPScore_1__ctor_" data-uid="AiDotNet.Metrics.CLIPScore`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Metrics_CLIPScore_1__ctor_AiDotNet_Interfaces_IMultimodalEmbedding__0__" data-uid="AiDotNet.Metrics.CLIPScore`1.#ctor(AiDotNet.Interfaces.IMultimodalEmbedding{`0})">
+  CLIPScore(IMultimodalEmbedding&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Metrics/CLIPScore.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of CLIPScore calculator.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CLIPScore(IMultimodalEmbedding&lt;T&gt; clipModel)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>clipModel</code> <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html">IMultimodalEmbedding</a>&lt;T&gt;</dt>
+    <dd><p>A CLIP model implementing IMultimodalEmbedding interface</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Metrics_CLIPScore_1_ClipModel_" data-uid="AiDotNet.Metrics.CLIPScore`1.ClipModel*"></a>
+
+  <h3 id="AiDotNet_Metrics_CLIPScore_1_ClipModel" data-uid="AiDotNet.Metrics.CLIPScore`1.ClipModel">
+  ClipModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Metrics/CLIPScore.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the CLIP model used for computing embeddings.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IMultimodalEmbedding&lt;T&gt; ClipModel { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html">IMultimodalEmbedding</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Metrics_CLIPScore_1_ComputeCaptionScore_" data-uid="AiDotNet.Metrics.CLIPScore`1.ComputeCaptionScore*"></a>
+
+  <h3 id="AiDotNet_Metrics_CLIPScore_1_ComputeCaptionScore_System_Double___System_String_System_Collections_Generic_IEnumerable_System_String__" data-uid="AiDotNet.Metrics.CLIPScore`1.ComputeCaptionScore(System.Double[],System.String,System.Collections.Generic.IEnumerable{System.String})">
+  ComputeCaptionScore(double[], string, IEnumerable&lt;string&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Metrics/CLIPScore.cs/#L180"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes CLIPScore for image captioning evaluation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ComputeCaptionScore(double[] imageData, string candidateCaption, IEnumerable&lt;string&gt;? referenceCaptions = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>imageData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>Image data</p>
+</dd>
+    <dt><code>candidateCaption</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Generated caption to evaluate</p>
+</dd>
+    <dt><code>referenceCaptions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Reference captions (optional, for RefCLIPScore)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>CLIPScore for the caption.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Metrics_CLIPScore_1_ComputeCombinedScore_" data-uid="AiDotNet.Metrics.CLIPScore`1.ComputeCombinedScore*"></a>
+
+  <h3 id="AiDotNet_Metrics_CLIPScore_1_ComputeCombinedScore_System_Double___System_String_System_Double___System_Double_" data-uid="AiDotNet.Metrics.CLIPScore`1.ComputeCombinedScore(System.Double[],System.String,System.Double[],System.Double)">
+  ComputeCombinedScore(double[], string, double[]?, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Metrics/CLIPScore.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes combined CLIPScore using both text-image and image-image similarity.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ComputeCombinedScore(double[] generatedImageData, string text, double[]? referenceImageData = null, double textWeight = 0.7)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>generatedImageData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>Generated image data</p>
+</dd>
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text description used for generation</p>
+</dd>
+    <dt><code>referenceImageData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>Reference image (optional)</p>
+</dd>
+    <dt><code>textWeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Weight for text-image score (default 0.7)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Combined CLIPScore on a 0-100 scale.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Metrics_CLIPScore_1_ComputeDirectionalSimilarity_" data-uid="AiDotNet.Metrics.CLIPScore`1.ComputeDirectionalSimilarity*"></a>
+
+  <h3 id="AiDotNet_Metrics_CLIPScore_1_ComputeDirectionalSimilarity_System_Double___System_Double___System_String_System_String_" data-uid="AiDotNet.Metrics.CLIPScore`1.ComputeDirectionalSimilarity(System.Double[],System.Double[],System.String,System.String)">
+  ComputeDirectionalSimilarity(double[], double[], string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Metrics/CLIPScore.cs/#L230"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes directional similarity for image editing evaluation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ComputeDirectionalSimilarity(double[] sourceImageData, double[] editedImageData, string sourceText, string editText)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sourceImageData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>Original image data</p>
+</dd>
+    <dt><code>editedImageData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>Edited image data</p>
+</dd>
+    <dt><code>sourceText</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Source text description</p>
+</dd>
+    <dt><code>editText</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Target/edit text description</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Directional similarity score on a 0-100 scale.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Metrics_CLIPScore_1_ComputeDirectionalSimilarity_System_Double___System_Double___System_String_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This measures whether the edit direction in image space matches the edit direction in text space.
+Used for evaluating text-guided image editing models.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Metrics_CLIPScore_1_ComputeImageImageScore_" data-uid="AiDotNet.Metrics.CLIPScore`1.ComputeImageImageScore*"></a>
+
+  <h3 id="AiDotNet_Metrics_CLIPScore_1_ComputeImageImageScore_System_Double___System_Double___" data-uid="AiDotNet.Metrics.CLIPScore`1.ComputeImageImageScore(System.Double[],System.Double[])">
+  ComputeImageImageScore(double[], double[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Metrics/CLIPScore.cs/#L121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes RefCLIPScore between a generated image and a reference image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ComputeImageImageScore(double[] generatedImageData, double[] referenceImageData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>generatedImageData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>Generated image data</p>
+</dd>
+    <dt><code>referenceImageData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>Reference image data</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>RefCLIPScore on a 0-100 scale. Higher is better.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Metrics_CLIPScore_1_ComputeScoreImprovement_" data-uid="AiDotNet.Metrics.CLIPScore`1.ComputeScoreImprovement*"></a>
+
+  <h3 id="AiDotNet_Metrics_CLIPScore_1_ComputeScoreImprovement_System_Double___System_Double___System_String_" data-uid="AiDotNet.Metrics.CLIPScore`1.ComputeScoreImprovement(System.Double[],System.Double[],System.String)">
+  ComputeScoreImprovement(double[], double[], string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Metrics/CLIPScore.cs/#L265"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes CLIPScore improvement between before and after images.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ComputeScoreImprovement(double[] beforeImageData, double[] afterImageData, string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>beforeImageData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>Image before processing</p>
+</dd>
+    <dt><code>afterImageData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>Image after processing</p>
+</dd>
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text description to measure alignment against</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Improvement in CLIPScore (positive = after is better aligned).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Metrics_CLIPScore_1_ComputeTextImageScore_" data-uid="AiDotNet.Metrics.CLIPScore`1.ComputeTextImageScore*"></a>
+
+  <h3 id="AiDotNet_Metrics_CLIPScore_1_ComputeTextImageScore_System_Double___System_String_" data-uid="AiDotNet.Metrics.CLIPScore`1.ComputeTextImageScore(System.Double[],System.String)">
+  ComputeTextImageScore(double[], string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Metrics/CLIPScore.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes CLIPScore between an image and a text description.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ComputeTextImageScore(double[] imageData, string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>imageData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>Image data as a flattened array (CHW format, normalized to [0,1] or [-1,1])</p>
+</dd>
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text description to compare against</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>CLIPScore on a 0-100 scale. Higher is better.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Metrics_CLIPScore_1_ComputeTextImageScoreBatch_" data-uid="AiDotNet.Metrics.CLIPScore`1.ComputeTextImageScoreBatch*"></a>
+
+  <h3 id="AiDotNet_Metrics_CLIPScore_1_ComputeTextImageScoreBatch_System_Collections_Generic_IList_System_Double____System_Collections_Generic_IList_System_String__" data-uid="AiDotNet.Metrics.CLIPScore`1.ComputeTextImageScoreBatch(System.Collections.Generic.IList{System.Double[]},System.Collections.Generic.IList{System.String})">
+  ComputeTextImageScoreBatch(IList&lt;double[]&gt;, IList&lt;string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Metrics/CLIPScore.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes CLIPScore for a batch of images and their corresponding text descriptions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ComputeTextImageScoreBatch(IList&lt;double[]&gt; images, IList&lt;string&gt; texts)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>images</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ilist-1">IList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]&gt;</dt>
+    <dd><p>List of image data arrays</p>
+</dd>
+    <dt><code>texts</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ilist-1">IList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>List of text descriptions (same length as images)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Average CLIPScore across all pairs.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Metrics/CLIPScore.cs/#L35" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

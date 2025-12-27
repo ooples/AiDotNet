@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class Connection&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class Connection&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a connection between two nodes in a neural network, particularly used in evolving neural networks.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_NeuralNetworks_Connection_1.md&amp;value=---%0Auid%3A%20AiDotNet.NeuralNetworks.Connection%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.NeuralNetworks.Connection`1">
+
+
+
+  <h1 id="AiDotNet_NeuralNetworks_Connection_1" data-uid="AiDotNet.NeuralNetworks.Connection`1" class="text-break">
+Class Connection&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Connection.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.NeuralNetworks.html">NeuralNetworks</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a connection between two nodes in a neural network, particularly used in evolving neural networks.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class Connection&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for the weight, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">Connection&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_NeuralNetworks_Connection_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A Connection represents a weighted link between two nodes in a neural network. Connections are fundamental
+elements in neural networks, allowing signals to flow from one node to another with a specific weight.
+This class is particularly designed for use in evolutionary algorithms like NEAT (NeuroEvolution of Augmenting 
+Topologies), which evolve both the weights and structure of neural networks. The Innovation number serves as 
+a historical marker to track the evolutionary lineage of connections.
+</p>
+<p><b>For Beginners:</b> A Connection is like a wire connecting two parts of a neural network.
+<p>Think of a neural network as a system of connected nodes (like neurons in a brain):</p>
+<ul>
+<li>Each Connection is like a wire that passes signals from one node to another</li>
+<li>The Weight determines how strong the signal is (like a volume knob)</li>
+<li>IsEnabled acts like an on/off switch for the connection</li>
+<li>The Innovation number is like a birth certificate that shows when this connection first appeared</li>
+</ul>
+<p>For example, if node 3 connects to node 5 with a weight of 0.7, signals from node 3 will reach node 5,
+but their strength will be multiplied by 0.7 (either amplified or reduced depending on the original value).</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Connection_1__ctor_" data-uid="AiDotNet.NeuralNetworks.Connection`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Connection_1__ctor_System_Int32_System_Int32__0_System_Boolean_System_Int32_" data-uid="AiDotNet.NeuralNetworks.Connection`1.#ctor(System.Int32,System.Int32,`0,System.Boolean,System.Int32)">
+  Connection(int, int, T, bool, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Connection.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.NeuralNetworks.Connection-1.html">Connection&lt;T&gt;</a> class with the specified parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Connection(int fromNode, int toNode, T weight, bool isEnabled, int innovation)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>fromNode</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The identifier of the source node.</p>
+</dd>
+    <dt><code>toNode</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The identifier of the target node.</p>
+</dd>
+    <dt><code>weight</code> <span class="xref">T</span></dt>
+    <dd><p>The weight of the connection.</p>
+</dd>
+    <dt><code>isEnabled</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>A value indicating whether the connection is enabled.</p>
+</dd>
+    <dt><code>innovation</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The innovation number of the connection.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Connection_1__ctor_System_Int32_System_Int32__0_System_Boolean_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new Connection with the specified parameters. It sets up all properties
+of the connection, including which nodes it connects, its weight, whether it's enabled, and its
+innovation number for evolutionary tracking.
+</p>
+<p><b>For Beginners:</b> This is the "recipe" for creating a new connection between two nodes.
+<p>When creating a new connection, you need to specify:</p>
+<ul>
+<li>fromNode: The ID of the starting node</li>
+<li>toNode: The ID of the ending node</li>
+<li>weight: How strong the connection is</li>
+<li>isEnabled: Whether the connection is turned on</li>
+<li>innovation: The unique ID number for this connection type</li>
+</ul>
+<p>For example, new Connection(3, 5, 0.7, true, 42) creates a connection:</p>
+<ul>
+<li>From node 3 to node 5</li>
+<li>With a weight of 0.7</li>
+<li>That is currently enabled (active)</li>
+<li>With innovation number 42 (tracking its evolutionary origin)</li>
+</ul>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Connection_1_FromNode_" data-uid="AiDotNet.NeuralNetworks.Connection`1.FromNode*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Connection_1_FromNode" data-uid="AiDotNet.NeuralNetworks.Connection`1.FromNode">
+  FromNode
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Connection.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the identifier of the node from which the connection originates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int FromNode { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The identifier of the source node.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Connection_1_FromNode_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The FromNode property identifies the node where the connection begins. In the context of signal flow,
+this is the source node that sends a signal through the connection to the target node.
+</p>
+<p><b>For Beginners:</b> This is the ID number of the starting point of the connection.
+<p>Think of it like the address of the house where a mail delivery begins:</p>
+<ul>
+<li>Each node in the network has a unique ID number (like a house address)</li>
+<li>The FromNode tells you where the signal starts its journey</li>
+<li>In a diagram, this would be the node on the left side of an arrow</li>
+</ul>
+<p>For example, if FromNode is 3, the connection starts at node #3 in the network.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Connection_1_Innovation_" data-uid="AiDotNet.NeuralNetworks.Connection`1.Innovation*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Connection_1_Innovation" data-uid="AiDotNet.NeuralNetworks.Connection`1.Innovation">
+  Innovation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Connection.cs/#L144"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the innovation number, a historical marker that uniquely identifies the connection in the context of evolution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Innovation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The innovation number of the connection.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Connection_1_Innovation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The Innovation property is a unique identifier assigned to each new connection during the evolution process.
+It serves as a historical marker that helps track the origin of connections across different generations
+and individuals. This is crucial in evolutionary algorithms like NEAT, where matching genes (connections)
+across individuals is necessary for effective crossover operations.
+</p>
+<p><b>For Beginners:</b> The Innovation number is like a birth certificate or ID for the connection.
+<p>Think of it as a timestamp or serial number:</p>
+<ul>
+<li>Each time a new type of connection appears during evolution, it gets a unique Innovation number</li>
+<li>Two connections with the same Innovation number in different networks represent the same &quot;genetic innovation&quot;</li>
+<li>This helps when combining two networks (like parents having a child):
+<ul>
+<li>If both parent networks have a connection with Innovation #42, the child will inherit one of them</li>
+<li>If only one parent has a connection with Innovation #86, the child might inherit that unique connection</li>
+</ul>
+</li>
+</ul>
+<p>This tracking system helps maintain diversity while allowing networks to share successful innovations.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Connection_1_IsEnabled_" data-uid="AiDotNet.NeuralNetworks.Connection`1.IsEnabled*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Connection_1_IsEnabled" data-uid="AiDotNet.NeuralNetworks.Connection`1.IsEnabled">
+  IsEnabled
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Connection.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether the connection is enabled and actively transmitting signals.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsEnabled { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the connection is enabled; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Connection_1_IsEnabled_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The IsEnabled property determines whether the connection actively participates in signal transmission.
+When disabled, the connection is still part of the network structure but does not pass any signal.
+This is particularly useful in evolutionary algorithms, where disabling connections (rather than removing them)
+allows for potential reactivation in future generations.
+</p>
+<p><b>For Beginners:</b> IsEnabled works like an on/off switch for the connection.
+<p>Think of it like a light switch:</p>
+<ul>
+<li>When IsEnabled is true, the connection is active and passes signals</li>
+<li>When IsEnabled is false, the connection is inactive and blocks signals</li>
+</ul>
+<p>This feature is especially useful in evolving neural networks because:</p>
+<ul>
+<li>It allows the network to &quot;turn off&quot; connections that aren't helpful</li>
+<li>The connection can be turned back on later if needed</li>
+<li>This is often better than completely removing the connection</li>
+</ul>
+<p>For example, during evolution, a connection might be disabled if it leads to poor performance,
+but could be re-enabled in a later generation if the network's structure changes.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Connection_1_ToNode_" data-uid="AiDotNet.NeuralNetworks.Connection`1.ToNode*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Connection_1_ToNode" data-uid="AiDotNet.NeuralNetworks.Connection`1.ToNode">
+  ToNode
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Connection.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the identifier of the node to which the connection leads.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ToNode { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The identifier of the target node.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Connection_1_ToNode_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The ToNode property identifies the node where the connection ends. In the context of signal flow,
+this is the target node that receives a signal from the source node through the connection.
+</p>
+<p><b>For Beginners:</b> This is the ID number of the end point of the connection.
+<p>Think of it like the destination address for a mail delivery:</p>
+<ul>
+<li>The ToNode tells you where the signal ends its journey</li>
+<li>In a diagram, this would be the node on the right side of an arrow</li>
+</ul>
+<p>For example, if ToNode is 5, the connection ends at node #5 in the network.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Connection_1_Weight_" data-uid="AiDotNet.NeuralNetworks.Connection`1.Weight*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Connection_1_Weight" data-uid="AiDotNet.NeuralNetworks.Connection`1.Weight">
+  Weight
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Connection.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the weight of the connection, which determines the strength of the signal transmission.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Weight { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The weight of the connection.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Connection_1_Weight_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The Weight property determines how strongly the signal from the source node influences the target node.
+Positive weights enhance the signal, negative weights inhibit it, and the magnitude indicates the strength
+of the effect. During learning or evolution, weights are adjusted to improve the network's performance.
+</p>
+<p><b>For Beginners:</b> The Weight is like a volume knob for the signal passing through the connection.
+<p>Think of the weight as a multiplier:</p>
+<ul>
+<li>A positive weight (like 0.7) passes the signal through, but might reduce its strength</li>
+<li>A negative weight (like -0.3) reverses the signal (if it was &quot;turn right&quot;, it becomes &quot;turn left&quot;)</li>
+<li>A weight with larger magnitude (like 2.5) amplifies the signal, making it more influential</li>
+<li>A weight near zero (like 0.01) makes the signal very weak, almost ignoring it</li>
+</ul>
+<p>When a neural network learns, it's mostly adjusting these weight values to get better results.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Connection.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

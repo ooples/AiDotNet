@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DistributedExtensions | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DistributedExtensions | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides extension methods for easily enabling distributed training on models and optimizers.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_DistributedTraining_DistributedExtensions.md&amp;value=---%0Auid%3A%20AiDotNet.DistributedTraining.DistributedExtensions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.DistributedTraining.DistributedExtensions">
+
+
+
+  <h1 id="AiDotNet_DistributedTraining_DistributedExtensions" data-uid="AiDotNet.DistributedTraining.DistributedExtensions" class="text-break">
+Class DistributedExtensions  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/DistributedExtensions.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.DistributedTraining.html">DistributedTraining</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides extension methods for easily enabling distributed training on models and optimizers.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class DistributedExtensions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">DistributedExtensions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_DistributedTraining_DistributedExtensions_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b>
+Extension methods allow you to add new functionality to existing classes without modifying them.
+These extensions add a simple .AsDistributed() method to models and optimizers,
+making it incredibly easy to enable distributed training with just one line of code!
+</p>
+<p>
+Example:
+<pre><code class="lang-csharp">// Original model
+var model = new NeuralNetworkModel&lt;double&gt;(...);
+<p>// Make it distributed with one line!
+var distributedModel = model.AsDistributed(backend);</p>
+<p>// That's it! Now train as usual
+distributedModel.Train(inputs, outputs);</p></code></pre>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth_" data-uid="AiDotNet.DistributedTraining.DistributedExtensions.AsDistributedForHighBandwidth*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__" data-uid="AiDotNet.DistributedTraining.DistributedExtensions.AsDistributedForHighBandwidth``3(AiDotNet.Interfaces.IFullModel{``0,``1,``2},AiDotNet.DistributedTraining.ICommunicationBackend{``0})">
+  AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/DistributedExtensions.cs/#L225"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a distributed model with optimized settings for high-bandwidth networks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IShardedModel&lt;T, TInput, TOutput&gt; AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(this IFullModel&lt;T, TInput, TOutput&gt; model, ICommunicationBackend&lt;T&gt; communicationBackend)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to make distributed</p>
+</dd>
+    <dt><code>communicationBackend</code> <a class="xref" href="AiDotNet.DistributedTraining.ICommunicationBackend-1.html">ICommunicationBackend</a>&lt;T&gt;</dt>
+    <dd><p>The communication backend to use</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.DistributedTraining.IShardedModel-3.html">IShardedModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A distributed model optimized for high-bandwidth networks</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input type for the model</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output type for the model</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+Use this when your GPUs are connected with fast connections (like NVLink).
+It automatically configures settings optimized for high-speed networks.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth_" data-uid="AiDotNet.DistributedTraining.DistributedExtensions.AsDistributedForLowBandwidth*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__" data-uid="AiDotNet.DistributedTraining.DistributedExtensions.AsDistributedForLowBandwidth``3(AiDotNet.Interfaces.IFullModel{``0,``1,``2},AiDotNet.DistributedTraining.ICommunicationBackend{``0})">
+  AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/DistributedExtensions.cs/#L248"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a distributed model with optimized settings for low-bandwidth networks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IShardedModel&lt;T, TInput, TOutput&gt; AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(this IFullModel&lt;T, TInput, TOutput&gt; model, ICommunicationBackend&lt;T&gt; communicationBackend)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to make distributed</p>
+</dd>
+    <dt><code>communicationBackend</code> <a class="xref" href="AiDotNet.DistributedTraining.ICommunicationBackend-1.html">ICommunicationBackend</a>&lt;T&gt;</dt>
+    <dd><p>The communication backend to use</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.DistributedTraining.IShardedModel-3.html">IShardedModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A distributed model optimized for low-bandwidth networks</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input type for the model</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output type for the model</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+Use this when your machines are connected over slower networks (like ethernet).
+It automatically configures settings to minimize network traffic.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed_" data-uid="AiDotNet.DistributedTraining.DistributedExtensions.AsDistributed*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__" data-uid="AiDotNet.DistributedTraining.DistributedExtensions.AsDistributed``3(AiDotNet.Interfaces.IFullModel{``0,``1,``2},AiDotNet.DistributedTraining.ICommunicationBackend{``0})">
+  AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/DistributedExtensions.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Wraps a model with distributed training capabilities using the specified communication backend.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IShardedModel&lt;T, TInput, TOutput&gt; AsDistributed&lt;T, TInput, TOutput&gt;(this IFullModel&lt;T, TInput, TOutput&gt; model, ICommunicationBackend&lt;T&gt; communicationBackend)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to make distributed</p>
+</dd>
+    <dt><code>communicationBackend</code> <a class="xref" href="AiDotNet.DistributedTraining.ICommunicationBackend-1.html">ICommunicationBackend</a>&lt;T&gt;</dt>
+    <dd><p>The communication backend to use</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.DistributedTraining.IShardedModel-3.html">IShardedModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A distributed version of the model</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input type for the model</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output type for the model</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This is the "magic" method that makes any model distributed. Just call:
+myModel.AsDistributed(backend)
+</p>
+<p>
+What it does:
+1. Creates a configuration for distributed training
+2. Wraps your model in a ShardedModel
+3. Returns the distributed version of your model
+</p>
+<p>
+The distributed model works exactly like the original, but automatically:
+- Shards parameters across processes
+- Synchronizes gradients during training
+- Coordinates with other processes
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown if model or backend is null</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed_" data-uid="AiDotNet.DistributedTraining.DistributedExtensions.AsDistributed*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__" data-uid="AiDotNet.DistributedTraining.DistributedExtensions.AsDistributed``3(AiDotNet.Interfaces.IFullModel{``0,``1,``2},AiDotNet.DistributedTraining.IShardingConfiguration{``0})">
+  AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/DistributedExtensions.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Wraps a model with distributed training capabilities using a custom configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IShardedModel&lt;T, TInput, TOutput&gt; AsDistributed&lt;T, TInput, TOutput&gt;(this IFullModel&lt;T, TInput, TOutput&gt; model, IShardingConfiguration&lt;T&gt; configuration)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to make distributed</p>
+</dd>
+    <dt><code>configuration</code> <a class="xref" href="AiDotNet.DistributedTraining.IShardingConfiguration-1.html">IShardingConfiguration</a>&lt;T&gt;</dt>
+    <dd><p>The sharding configuration to use</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.DistributedTraining.IShardedModel-3.html">IShardedModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A distributed version of the model</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input type for the model</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output type for the model</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This is the same as the basic AsDistributed(), but lets you customize settings.
+Use this when you need more control over how distributed training works.
+</p>
+<p>
+Example:
+<pre><code class="lang-csharp">var config = new ShardingConfiguration&lt;double&gt;(backend)
+{
+    AutoSyncGradients = true,
+    MinimumParameterGroupSize = 2048,
+    EnableGradientCompression = true
+};
+var distributedModel = myModel.AsDistributed(config);</code></pre>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown if model or configuration is null</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed_" data-uid="AiDotNet.DistributedTraining.DistributedExtensions.AsDistributed*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IOptimizer___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__" data-uid="AiDotNet.DistributedTraining.DistributedExtensions.AsDistributed``3(AiDotNet.Interfaces.IOptimizer{``0,``1,``2},AiDotNet.DistributedTraining.ICommunicationBackend{``0})">
+  AsDistributed&lt;T, TInput, TOutput&gt;(IOptimizer&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/DistributedExtensions.cs/#L150"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Wraps an optimizer with distributed training capabilities.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IShardedOptimizer&lt;T, TInput, TOutput&gt; AsDistributed&lt;T, TInput, TOutput&gt;(this IOptimizer&lt;T, TInput, TOutput&gt; optimizer, ICommunicationBackend&lt;T&gt; communicationBackend)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>optimizer</code> <a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The optimizer to make distributed</p>
+</dd>
+    <dt><code>communicationBackend</code> <a class="xref" href="AiDotNet.DistributedTraining.ICommunicationBackend-1.html">ICommunicationBackend</a>&lt;T&gt;</dt>
+    <dd><p>The communication backend to use</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.DistributedTraining.IShardedOptimizer-3.html">IShardedOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A distributed version of the optimizer</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input type for the model</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output type for the model</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IOptimizer___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+Just like models, optimizers can be made distributed with one line:
+myOptimizer.AsDistributed(backend)
+</p>
+<p>
+What it does:
+1. Creates a configuration for distributed training
+2. Wraps your optimizer in a ShardedOptimizer
+3. Returns the distributed version
+</p>
+<p>
+The distributed optimizer coordinates optimization across all processes,
+ensuring they stay synchronized.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown if optimizer or backend is null</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed_" data-uid="AiDotNet.DistributedTraining.DistributedExtensions.AsDistributed*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IOptimizer___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__" data-uid="AiDotNet.DistributedTraining.DistributedExtensions.AsDistributed``3(AiDotNet.Interfaces.IOptimizer{``0,``1,``2},AiDotNet.DistributedTraining.IShardingConfiguration{``0})">
+  AsDistributed&lt;T, TInput, TOutput&gt;(IOptimizer&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/DistributedExtensions.cs/#L192"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Wraps an optimizer with distributed training capabilities using a custom configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IShardedOptimizer&lt;T, TInput, TOutput&gt; AsDistributed&lt;T, TInput, TOutput&gt;(this IOptimizer&lt;T, TInput, TOutput&gt; optimizer, IShardingConfiguration&lt;T&gt; configuration)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>optimizer</code> <a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The optimizer to make distributed</p>
+</dd>
+    <dt><code>configuration</code> <a class="xref" href="AiDotNet.DistributedTraining.IShardingConfiguration-1.html">IShardingConfiguration</a>&lt;T&gt;</dt>
+    <dd><p>The sharding configuration to use</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.DistributedTraining.IShardedOptimizer-3.html">IShardedOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A distributed version of the optimizer</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input type for the model</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output type for the model</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IOptimizer___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+Same as the basic AsDistributed() for optimizers, but with custom settings.
+</p>
+<p>
+Example:
+<pre><code class="lang-csharp">var config = ShardingConfiguration&lt;double&gt;.CreateForLowBandwidth(backend);
+var distributedOptimizer = myOptimizer.AsDistributed(config);</code></pre>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown if optimizer or configuration is null</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/DistributedExtensions.cs/#L28" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

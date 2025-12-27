@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GpuAccelerationConfig | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GpuAccelerationConfig | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration for GPU-accelerated training and inference.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Engines_GpuAccelerationConfig.md&amp;value=---%0Auid%3A%20AiDotNet.Engines.GpuAccelerationConfig%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Engines.GpuAccelerationConfig">
+
+
+
+  <h1 id="AiDotNet_Engines_GpuAccelerationConfig" data-uid="AiDotNet.Engines.GpuAccelerationConfig" class="text-break">
+Class GpuAccelerationConfig  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Engines/GpuAccelerationConfig.cs/#L95"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Engines.html">Engines</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration for GPU-accelerated training and inference.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class GpuAccelerationConfig</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">GpuAccelerationConfig</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Engines_GpuAccelerationConfig_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>Phase B: GPU Acceleration Configuration</b></p>
+<p>
+This configuration controls when and how GPU acceleration is used during training and inference.
+The default settings work well for most desktop GPUs - just call ConfigureGpuAcceleration()
+without parameters for automatic GPU detection and sensible defaults.
+</p>
+<p><b>For Beginners:</b> GPU makes training 10-100x faster for large models by using your
+graphics card for parallel computation. This config lets you:
+- Enable/disable GPU acceleration
+- Choose which GPU to use (if you have multiple)
+- Control when to use GPU vs CPU based on operation size
+- Enable debug logging to see what's running where
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Engines_GpuAccelerationConfig__ctor_" data-uid="AiDotNet.Engines.GpuAccelerationConfig.#ctor*"></a>
+
+  <h3 id="AiDotNet_Engines_GpuAccelerationConfig__ctor" data-uid="AiDotNet.Engines.GpuAccelerationConfig.#ctor">
+  GpuAccelerationConfig()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Engines/GpuAccelerationConfig.cs/#L170"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a configuration with default GPU settings.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GpuAccelerationConfig()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Engines_GpuAccelerationConfig_DeviceIndex_" data-uid="AiDotNet.Engines.GpuAccelerationConfig.DeviceIndex*"></a>
+
+  <h3 id="AiDotNet_Engines_GpuAccelerationConfig_DeviceIndex" data-uid="AiDotNet.Engines.GpuAccelerationConfig.DeviceIndex">
+  DeviceIndex
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Engines/GpuAccelerationConfig.cs/#L139"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the GPU device index to use if multiple GPUs are available (default: 0).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int DeviceIndex { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Engines_GpuAccelerationConfig_DeviceIndex_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> If you have multiple GPUs, specify which one to use:
+- 0: First GPU (default)
+- 1: Second GPU
+- etc.
+<p>The system will enumerate available GPUs and select the one at this index.
+If the specified index doesn't exist, falls back to the first available GPU.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Engines_GpuAccelerationConfig_DeviceType_" data-uid="AiDotNet.Engines.GpuAccelerationConfig.DeviceType*"></a>
+
+  <h3 id="AiDotNet_Engines_GpuAccelerationConfig_DeviceType" data-uid="AiDotNet.Engines.GpuAccelerationConfig.DeviceType">
+  DeviceType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Engines/GpuAccelerationConfig.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the GPU device type to use (default: Auto).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GpuDeviceType DeviceType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Engines.GpuDeviceType.html">GpuDeviceType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Engines_GpuAccelerationConfig_DeviceType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Specifies which type of GPU to use:
+- **Auto**: Automatically select best available (CUDA → OpenCL → CPU)
+- **CUDA**: Force NVIDIA CUDA (fails if not available)
+- **OpenCL**: Force OpenCL (AMD/Intel/NVIDIA GPUs)
+- **CPU**: Force CPU execution (disable GPU)
+<p>Leave as Auto unless you have specific requirements.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Engines_GpuAccelerationConfig_EnableForInference_" data-uid="AiDotNet.Engines.GpuAccelerationConfig.EnableForInference*"></a>
+
+  <h3 id="AiDotNet_Engines_GpuAccelerationConfig_EnableForInference" data-uid="AiDotNet.Engines.GpuAccelerationConfig.EnableForInference">
+  EnableForInference
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Engines/GpuAccelerationConfig.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable GPU acceleration for inference (prediction) as well as training (default: true).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableForInference { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Engines_GpuAccelerationConfig_EnableForInference_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> GPU can accelerate both training AND inference.
+Set to false if you only want GPU during training but CPU during inference,
+for example when deploying to CPU-only servers.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Engines_GpuAccelerationConfig_UsageLevel_" data-uid="AiDotNet.Engines.GpuAccelerationConfig.UsageLevel*"></a>
+
+  <h3 id="AiDotNet_Engines_GpuAccelerationConfig_UsageLevel" data-uid="AiDotNet.Engines.GpuAccelerationConfig.UsageLevel">
+  UsageLevel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Engines/GpuAccelerationConfig.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the GPU usage level (default: Default).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GpuUsageLevel UsageLevel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Engines.GpuUsageLevel.html">GpuUsageLevel</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Engines_GpuAccelerationConfig_UsageLevel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Controls how aggressively GPU is used:
+- **Default**: Balanced for typical GPUs (recommended)
+- **Conservative**: Only use GPU for very large operations (older GPUs)
+- **Aggressive**: Use GPU more often (high-end GPUs like RTX 4090/A100)
+- **AlwaysGpu**: Force all operations to GPU
+- **AlwaysCpu**: Force all operations to CPU
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Engines_GpuAccelerationConfig_VerboseLogging_" data-uid="AiDotNet.Engines.GpuAccelerationConfig.VerboseLogging*"></a>
+
+  <h3 id="AiDotNet_Engines_GpuAccelerationConfig_VerboseLogging" data-uid="AiDotNet.Engines.GpuAccelerationConfig.VerboseLogging">
+  VerboseLogging
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Engines/GpuAccelerationConfig.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable verbose logging of GPU operations (default: false).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool VerboseLogging { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Engines_GpuAccelerationConfig_VerboseLogging_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> When true, logs information about:
+- GPU initialization and device selection
+- Which operations run on GPU vs CPU
+- Memory transfers and sizes
+- Performance metrics
+<p>Useful for debugging and optimization, but can produce a lot of output.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Engines_GpuAccelerationConfig_ToString_" data-uid="AiDotNet.Engines.GpuAccelerationConfig.ToString*"></a>
+
+  <h3 id="AiDotNet_Engines_GpuAccelerationConfig_ToString" data-uid="AiDotNet.Engines.GpuAccelerationConfig.ToString">
+  ToString()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Engines/GpuAccelerationConfig.cs/#L178"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a string representation of this configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string ToString()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string describing the configuration settings.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Engines/GpuAccelerationConfig.cs/#L95" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class NaiveBayesBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class NaiveBayesBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides a base implementation for Naive Bayes classifiers.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.Classification.NaiveBayes.NaiveBayesBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1">
+
+
+
+  <h1 id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1" class="text-break">
+Class NaiveBayesBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/NaiveBayes/NaiveBayesBase.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Classification.html">Classification</a>.<a class="xref" href="AiDotNet.Classification.NaiveBayes.html">NaiveBayes</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides a base implementation for Naive Bayes classifiers.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class NaiveBayesBase&lt;T&gt; : ProbabilisticClassifierBase&lt;T&gt;, IProbabilisticClassifier&lt;T&gt;, IClassifier&lt;T&gt;, IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html">ClassifierBase</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Classification.ProbabilisticClassifierBase-1.html">ProbabilisticClassifierBase</a>&lt;T&gt;</div>
+      <div><span class="xref">NaiveBayesBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IProbabilisticClassifier-1.html">IProbabilisticClassifier</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IClassifier-1.html">IClassifier</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Classification.NaiveBayes.BernoulliNaiveBayes-1.html">BernoulliNaiveBayes&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Classification.NaiveBayes.CategoricalNaiveBayes-1.html">CategoricalNaiveBayes&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Classification.NaiveBayes.ComplementNaiveBayes-1.html">ComplementNaiveBayes&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Classification.NaiveBayes.GaussianNaiveBayes-1.html">GaussianNaiveBayes&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Classification.NaiveBayes.MultinomialNaiveBayes-1.html">MultinomialNaiveBayes&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ProbabilisticClassifierBase-1.html#AiDotNet_Classification_ProbabilisticClassifierBase_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0__">ProbabilisticClassifierBase&lt;T&gt;.Predict(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ProbabilisticClassifierBase-1.html#AiDotNet_Classification_ProbabilisticClassifierBase_1_ApplySoftmax_AiDotNet_Tensors_LinearAlgebra_Matrix__0__">ProbabilisticClassifierBase&lt;T&gt;.ApplySoftmax(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ProbabilisticClassifierBase-1.html#AiDotNet_Classification_ProbabilisticClassifierBase_1_ApplySigmoid_AiDotNet_Tensors_LinearAlgebra_Vector__0__">ProbabilisticClassifierBase&lt;T&gt;.ApplySigmoid(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_NumOps">ClassifierBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_Engine">ClassifierBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_Regularization">ClassifierBase&lt;T&gt;.Regularization</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_NumClasses">ClassifierBase&lt;T&gt;.NumClasses</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_TaskType">ClassifierBase&lt;T&gt;.TaskType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_ClassLabels">ClassifierBase&lt;T&gt;.ClassLabels</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_NumFeatures">ClassifierBase&lt;T&gt;.NumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_FeatureNames">ClassifierBase&lt;T&gt;.FeatureNames</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_ExpectedParameterCount">ClassifierBase&lt;T&gt;.ExpectedParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_InferTaskType_AiDotNet_Tensors_LinearAlgebra_Vector__0__">ClassifierBase&lt;T&gt;.InferTaskType(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_ExtractClassLabels_AiDotNet_Tensors_LinearAlgebra_Vector__0__">ClassifierBase&lt;T&gt;.ExtractClassLabels(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_ComputeClassWeights_AiDotNet_Tensors_LinearAlgebra_Vector__0__">ClassifierBase&lt;T&gt;.ComputeClassWeights(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_GetClassIndexFromLabel__0_">ClassifierBase&lt;T&gt;.GetClassIndexFromLabel(T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_GetModelType">ClassifierBase&lt;T&gt;.GetModelType()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_Serialize">ClassifierBase&lt;T&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_Deserialize_System_Byte___">ClassifierBase&lt;T&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_GetActiveFeatureIndices">ClassifierBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_IsFeatureUsed_System_Int32_">ClassifierBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">ClassifierBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_GetFeatureImportance">ClassifierBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_DeepCopy">ClassifierBase&lt;T&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_CreateNewInstance">ClassifierBase&lt;T&gt;.CreateNewInstance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_Clone">ClassifierBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_ParameterCount">ClassifierBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_DefaultLossFunction">ClassifierBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_SaveModel_System_String_">ClassifierBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_LoadModel_System_String_">ClassifierBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_SaveState_System_IO_Stream_">ClassifierBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_LoadState_System_IO_Stream_">ClassifierBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_SupportsJitCompilation">ClassifierBase&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Classification.ClassifierBase-1.html#AiDotNet_Classification_ClassifierBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">ClassifierBase&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Naive Bayes classifiers are probabilistic classifiers based on Bayes' theorem with
+strong (naive) independence assumptions between the features. Despite these assumptions,
+Naive Bayes classifiers often perform very well in practice.
+</p>
+<p>
+<b>For Beginners:</b>
+Naive Bayes uses probability to make predictions. It learns from training data:
+1. How common each class is (prior probability)
+2. How likely each feature value is given each class (likelihood)
+<p>Then for a new sample, it calculates: P(class|features) ∝ P(class) × P(features|class)
+and picks the class with the highest probability.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1__ctor_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1__ctor_AiDotNet_Models_Options_NaiveBayesOptions__0__AiDotNet_Interfaces_IRegularization__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.#ctor(AiDotNet.Models.Options.NaiveBayesOptions{`0},AiDotNet.Interfaces.IRegularization{`0,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})">
+  NaiveBayesBase(NaiveBayesOptions&lt;T&gt;?, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/NaiveBayes/NaiveBayesBase.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the NaiveBayesBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected NaiveBayesBase(NaiveBayesOptions&lt;T&gt;? options = null, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;? regularization = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.NaiveBayesOptions-1.html">NaiveBayesOptions</a>&lt;T&gt;</dt>
+    <dd><p>Configuration options for the Naive Bayes classifier.</p>
+</dd>
+    <dt><code>regularization</code> <a class="xref" href="AiDotNet.Interfaces.IRegularization-3.html">IRegularization</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Optional regularization strategy.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_ClassCounts_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.ClassCounts*"></a>
+
+  <h3 id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_ClassCounts" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.ClassCounts">
+  ClassCounts
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/NaiveBayes/NaiveBayesBase.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Stores the count of samples per class during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int[]? ClassCounts { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_LogPriors_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.LogPriors*"></a>
+
+  <h3 id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_LogPriors" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.LogPriors">
+  LogPriors
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/NaiveBayes/NaiveBayesBase.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Stores the log prior probabilities for each class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Vector&lt;T&gt;? LogPriors { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_Options_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.Options*"></a>
+
+  <h3 id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_Options" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.Options">
+  Options
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/NaiveBayes/NaiveBayesBase.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Naive Bayes specific options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected NaiveBayesOptions&lt;T&gt; Options { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.NaiveBayesOptions-1.html">NaiveBayesOptions</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_ApplyGradients_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.ApplyGradients*"></a>
+
+  <h3 id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.ApplyGradients(AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0)">
+  ApplyGradients(Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/NaiveBayes/NaiveBayesBase.cs/#L294"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies pre-computed gradients to update the model parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void ApplyGradients(Vector&lt;T&gt; gradients, T learningRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The gradient vector to apply.</p>
+</dd>
+    <dt><code>learningRate</code> <span class="xref">T</span></dt>
+    <dd><p>The learning rate for the update.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Updates parameters using: θ = θ - learningRate * gradients
+</p>
+<p><b>For Beginners:</b>
+After computing gradients (seeing which direction to move),
+this method actually moves the model in that direction.
+The learning rate controls how big of a step to take.
+</p>
+<p><b>Distributed Training:</b>
+In DDP/ZeRO-2, this applies the synchronized (averaged) gradients after
+communication across workers. Each worker applies the same averaged gradients
+to keep parameters consistent.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_ComputeClassParameters_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.ComputeClassParameters*"></a>
+
+  <h3 id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_ComputeClassParameters_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.ComputeClassParameters(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ComputeClassParameters(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/NaiveBayes/NaiveBayesBase.cs/#L132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes class-specific parameters during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract void ComputeClassParameters(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target class labels vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_ComputeClassParameters_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Derived classes must implement this to compute their specific parameters
+(e.g., mean/variance for Gaussian, feature counts for Multinomial).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_ComputeGradients_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.ComputeGradients*"></a>
+
+  <h3 id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0__" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.ComputeGradients(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Interfaces.ILossFunction{`0})">
+  ComputeGradients(Matrix&lt;T&gt;, Vector&lt;T&gt;, ILossFunction&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/NaiveBayes/NaiveBayesBase.cs/#L286"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes gradients of the loss function with respect to model parameters for the given data,
+WITHOUT updating the model parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; ComputeGradients(Matrix&lt;T&gt; input, Vector&lt;T&gt; target, ILossFunction&lt;T&gt;? lossFunction = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input data.</p>
+</dd>
+    <dt><code>target</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target/expected output.</p>
+</dd>
+    <dt><code>lossFunction</code> <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>The loss function to use for gradient computation. If null, uses the model's default loss function.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing gradients with respect to all model parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs a forward pass, computes the loss, and back-propagates to compute gradients,
+but does NOT update the model's parameters. The parameters remain unchanged after this call.
+</p>
+<p><b>Distributed Training:</b>
+In DDP/ZeRO-2, each worker calls this to compute local gradients on its data batch.
+These gradients are then synchronized (averaged) across workers before applying updates.
+This ensures all workers compute the same parameter updates despite having different data.
+</p>
+<p><b>For Meta-Learning:</b>
+After adapting a model on a support set, you can use this method to compute gradients
+on the query set. These gradients become the meta-gradients for updating the meta-parameters.
+</p>
+<p><b>For Beginners:</b>
+Think of this as "dry run" training:
+- The model sees what direction it should move (the gradients)
+- But it doesn't actually move (parameters stay the same)
+- You get to decide what to do with this information (average with others, inspect, modify, etc.)
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>If lossFunction is null and the model has no default loss function.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_ComputeLogLikelihood_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.ComputeLogLikelihood*"></a>
+
+  <h3 id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_ComputeLogLikelihood_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.ComputeLogLikelihood(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32)">
+  ComputeLogLikelihood(Vector&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/NaiveBayes/NaiveBayesBase.cs/#L198"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the log-likelihood of a sample given a class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract T ComputeLogLikelihood(Vector&lt;T&gt; sample, int classIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sample</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The feature vector for a single sample.</p>
+</dd>
+    <dt><code>classIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The class index.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The log-likelihood log P(sample|class).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_ComputeLogPriors_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.ComputeLogPriors*"></a>
+
+  <h3 id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_ComputeLogPriors_System_Int32_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.ComputeLogPriors(System.Int32)">
+  ComputeLogPriors(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/NaiveBayes/NaiveBayesBase.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the log prior probabilities for each class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void ComputeLogPriors(int totalSamples)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>totalSamples</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Total number of training samples.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_GetClassIndex_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.GetClassIndex*"></a>
+
+  <h3 id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_GetClassIndex__0_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.GetClassIndex(`0)">
+  GetClassIndex(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/NaiveBayes/NaiveBayesBase.cs/#L233"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the class index for a given label value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int GetClassIndex(T label)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>label</code> <span class="xref">T</span></dt>
+    <dd><p>The label value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The zero-based class index.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_GetModelMetadata_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_GetModelMetadata" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/NaiveBayes/NaiveBayesBase.cs/#L301"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets metadata about the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>A ModelMetadata object containing information about the model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns metadata about the model, including its type, feature count, complexity,
+description, and additional information specific to classification.
+</p>
+<p>
+<b>For Beginners:</b>
+Model metadata provides information about the model itself, rather than the predictions it makes.
+This includes details about the model's structure (like how many features it uses) and characteristics
+(like how many classes it can predict). This information can be useful for understanding and
+comparing different models.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_GetParameters_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_GetParameters" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/NaiveBayes/NaiveBayesBase.cs/#L253"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all model parameters as a single vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing all model parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_GetParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns a vector containing all model parameters for use with
+optimization algorithms or model comparison.
+</p>
+<p><b>For Beginners:</b> This method packages all the model's parameters into a single collection.
+This is useful for optimization algorithms that need to work with all parameters at once.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_LogSumExp_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.LogSumExp*"></a>
+
+  <h3 id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_LogSumExp_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.LogSumExp(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  LogSumExp(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/NaiveBayes/NaiveBayesBase.cs/#L205"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the log-sum-exp for numerical stability.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected T LogSumExp(Vector&lt;T&gt; values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of log values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>log(sum(exp(values))).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_PredictLogProbabilities_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.PredictLogProbabilities*"></a>
+
+  <h3 id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_PredictLogProbabilities_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.PredictLogProbabilities(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  PredictLogProbabilities(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/NaiveBayes/NaiveBayesBase.cs/#L139"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts log-probabilities for each class (more numerically stable than probabilities).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Matrix&lt;T&gt; PredictLogProbabilities(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix of log-probabilities.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_PredictProbabilities_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.PredictProbabilities*"></a>
+
+  <h3 id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_PredictProbabilities_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.PredictProbabilities(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  PredictProbabilities(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/NaiveBayes/NaiveBayesBase.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts class probabilities for each sample.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Matrix&lt;T&gt; PredictProbabilities(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix of probabilities.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_SetParameters_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.SetParameters*"></a>
+
+  <h3 id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/NaiveBayes/NaiveBayesBase.cs/#L272"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the parameters for this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void SetParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing all model parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the parameters vector has an incorrect length.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_Train_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.Train*"></a>
+
+  <h3 id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.Train(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/NaiveBayes/NaiveBayesBase.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the Naive Bayes classifier on the provided data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Train(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target class labels vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_WithParameters_" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.WithParameters*"></a>
+
+  <h3 id="AiDotNet_Classification_NaiveBayes_NaiveBayesBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Classification.NaiveBayes.NaiveBayesBase`1.WithParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  WithParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/NaiveBayes/NaiveBayesBase.cs/#L264"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the model with specified parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; WithParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing all model parameters.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new model instance with the specified parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the parameters vector has an incorrect length.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Classification/NaiveBayes/NaiveBayesBase.cs/#L25" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

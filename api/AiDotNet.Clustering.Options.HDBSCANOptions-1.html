@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class HDBSCANOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class HDBSCANOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for HDBSCAN (Hierarchical DBSCAN).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Clustering_Options_HDBSCANOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Clustering.Options.HDBSCANOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Clustering.Options.HDBSCANOptions`1">
+
+
+
+  <h1 id="AiDotNet_Clustering_Options_HDBSCANOptions_1" data-uid="AiDotNet.Clustering.Options.HDBSCANOptions`1" class="text-break">
+Class HDBSCANOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/HDBSCANOptions.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Clustering.html">Clustering</a>.<a class="xref" href="AiDotNet.Clustering.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for HDBSCAN (Hierarchical DBSCAN).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class HDBSCANOptions&lt;T&gt; : ClusteringOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.ClusteringOptions-1.html">ClusteringOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">HDBSCANOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Clustering.Options.ClusteringOptions-1.html#AiDotNet_Clustering_Options_ClusteringOptions_1_MaxIterations">ClusteringOptions&lt;T&gt;.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Clustering.Options.ClusteringOptions-1.html#AiDotNet_Clustering_Options_ClusteringOptions_1_Tolerance">ClusteringOptions&lt;T&gt;.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Clustering.Options.ClusteringOptions-1.html#AiDotNet_Clustering_Options_ClusteringOptions_1_RandomState">ClusteringOptions&lt;T&gt;.RandomState</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Clustering.Options.ClusteringOptions-1.html#AiDotNet_Clustering_Options_ClusteringOptions_1_NumInitializations">ClusteringOptions&lt;T&gt;.NumInitializations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Clustering.Options.ClusteringOptions-1.html#AiDotNet_Clustering_Options_ClusteringOptions_1_Verbose">ClusteringOptions&lt;T&gt;.Verbose</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Clustering_Options_HDBSCANOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+HDBSCAN extends DBSCAN by constructing a hierarchy of clusters at different
+density levels, then extracting flat clusters using a stability-based method.
+It handles clusters of varying densities better than DBSCAN.
+</p>
+<p><b>For Beginners:</b> HDBSCAN finds clusters at all density levels.
+<p>Problems with DBSCAN:</p>
+<ul>
+<li>Need to pick epsilon (cluster radius) - hard to choose!</li>
+<li>One epsilon can't handle both dense and sparse areas</li>
+</ul>
+<p>HDBSCAN solution:</p>
+<ul>
+<li>Try ALL possible epsilon values automatically</li>
+<li>Build a tree of how clusters merge as density changes</li>
+<li>Pick the most &quot;stable&quot; clusters from this tree</li>
+</ul>
+<p>Benefits:</p>
+<ul>
+<li>No epsilon parameter needed</li>
+<li>Finds clusters of varying densities</li>
+<li>Only need minClusterSize (intuitive parameter)</li>
+<li>Robust noise detection</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Clustering_Options_HDBSCANOptions_1_AllowSingleCluster_" data-uid="AiDotNet.Clustering.Options.HDBSCANOptions`1.AllowSingleCluster*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_HDBSCANOptions_1_AllowSingleCluster" data-uid="AiDotNet.Clustering.Options.HDBSCANOptions`1.AllowSingleCluster">
+  AllowSingleCluster
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/HDBSCANOptions.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to allow single-cluster result.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool AllowSingleCluster { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to allow. Default is false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_HDBSCANOptions_1_Alpha_" data-uid="AiDotNet.Clustering.Options.HDBSCANOptions`1.Alpha*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_HDBSCANOptions_1_Alpha" data-uid="AiDotNet.Clustering.Options.HDBSCANOptions`1.Alpha">
+  Alpha
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/HDBSCANOptions.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the alpha value for metric.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Alpha { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Alpha parameter. Default is 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_HDBSCANOptions_1_ClusterSelection_" data-uid="AiDotNet.Clustering.Options.HDBSCANOptions`1.ClusterSelection*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_HDBSCANOptions_1_ClusterSelection" data-uid="AiDotNet.Clustering.Options.HDBSCANOptions`1.ClusterSelection">
+  ClusterSelection
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/HDBSCANOptions.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the cluster selection method.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public HDBSCANClusterSelection ClusterSelection { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Clustering.Options.HDBSCANClusterSelection.html">HDBSCANClusterSelection</a></dt>
+    <dd><p>Selection method. Default is EOM (Excess of Mass).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_HDBSCANOptions_1_ClusterSelectionEpsilon_" data-uid="AiDotNet.Clustering.Options.HDBSCANOptions`1.ClusterSelectionEpsilon*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_HDBSCANOptions_1_ClusterSelectionEpsilon" data-uid="AiDotNet.Clustering.Options.HDBSCANOptions`1.ClusterSelectionEpsilon">
+  ClusterSelectionEpsilon
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/HDBSCANOptions.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the cluster selection epsilon.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ClusterSelectionEpsilon { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Epsilon for cluster selection. Default is 0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Clustering_Options_HDBSCANOptions_1_ClusterSelectionEpsilon_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+A distance threshold below which clusters are merged.
+Only used with EOM cluster selection.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_HDBSCANOptions_1_DistanceMetric_" data-uid="AiDotNet.Clustering.Options.HDBSCANOptions`1.DistanceMetric*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_HDBSCANOptions_1_DistanceMetric" data-uid="AiDotNet.Clustering.Options.HDBSCANOptions`1.DistanceMetric">
+  DistanceMetric
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/HDBSCANOptions.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the distance metric.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IDistanceMetric&lt;T&gt;? DistanceMetric { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Clustering.Interfaces.IDistanceMetric-1.html">IDistanceMetric</a>&lt;T&gt;</dt>
+    <dd><p>Distance metric, or null for Euclidean.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_HDBSCANOptions_1_MinClusterSize_" data-uid="AiDotNet.Clustering.Options.HDBSCANOptions`1.MinClusterSize*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_HDBSCANOptions_1_MinClusterSize" data-uid="AiDotNet.Clustering.Options.HDBSCANOptions`1.MinClusterSize">
+  MinClusterSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/HDBSCANOptions.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum cluster size.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MinClusterSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Minimum points for a cluster. Default is 5.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Clustering_Options_HDBSCANOptions_1_MinClusterSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The smallest group you'd consider a cluster.
+Smaller values find more clusters; larger values find fewer, bigger clusters.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_HDBSCANOptions_1_MinSamples_" data-uid="AiDotNet.Clustering.Options.HDBSCANOptions`1.MinSamples*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_HDBSCANOptions_1_MinSamples" data-uid="AiDotNet.Clustering.Options.HDBSCANOptions`1.MinSamples">
+  MinSamples
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/HDBSCANOptions.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum samples for core points.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? MinSamples { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Min samples, or null to use MinClusterSize.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Clustering_Options_HDBSCANOptions_1_MinSamples_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Controls how conservative cluster formation is.
+Higher values make the algorithm more conservative.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/HDBSCANOptions.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

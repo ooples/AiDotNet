@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class AudioAugmentationSettings | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class AudioAugmentationSettings | AiDotNet Documentation ">
+      
+      <meta name="description" content="Audio-specific augmentation settings with industry-standard defaults.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Augmentation_AudioAugmentationSettings.md&amp;value=---%0Auid%3A%20AiDotNet.Augmentation.AudioAugmentationSettings%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Augmentation.AudioAugmentationSettings">
+
+
+
+  <h1 id="AiDotNet_Augmentation_AudioAugmentationSettings" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings" class="text-break">
+Class AudioAugmentationSettings  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/AugmentationConfig.cs/#L548"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Augmentation.html">Augmentation</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Audio-specific augmentation settings with industry-standard defaults.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class AudioAugmentationSettings</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">AudioAugmentationSettings</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Augmentation_AudioAugmentationSettings_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> These settings control how audio data is augmented.
+Defaults are based on best practices from audiomentations and torchaudio.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Augmentation_AudioAugmentationSettings_EnableNoise_" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.EnableNoise*"></a>
+
+  <h3 id="AiDotNet_Augmentation_AudioAugmentationSettings_EnableNoise" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.EnableNoise">
+  EnableNoise
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/AugmentationConfig.cs/#L599"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether background noise is enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableNoise { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Augmentation_AudioAugmentationSettings_EnableNoise_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: <code>true</code></p>
+<p>Adds random noise to simulate different recording conditions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Augmentation_AudioAugmentationSettings_EnablePitchShift_" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.EnablePitchShift*"></a>
+
+  <h3 id="AiDotNet_Augmentation_AudioAugmentationSettings_EnablePitchShift" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.EnablePitchShift">
+  EnablePitchShift
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/AugmentationConfig.cs/#L557"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether pitch shifting is enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnablePitchShift { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Augmentation_AudioAugmentationSettings_EnablePitchShift_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: <code>true</code></p>
+<p>Changes the pitch without changing tempo. Good for speech/music tasks.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Augmentation_AudioAugmentationSettings_EnableTimeShift_" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.EnableTimeShift*"></a>
+
+  <h3 id="AiDotNet_Augmentation_AudioAugmentationSettings_EnableTimeShift" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.EnableTimeShift">
+  EnableTimeShift
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/AugmentationConfig.cs/#L634"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether time shift is enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableTimeShift { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Augmentation_AudioAugmentationSettings_EnableTimeShift_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: <code>true</code></p>
+<p>Shifts the audio forward or backward in time.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Augmentation_AudioAugmentationSettings_EnableTimeStretch_" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.EnableTimeStretch*"></a>
+
+  <h3 id="AiDotNet_Augmentation_AudioAugmentationSettings_EnableTimeStretch" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.EnableTimeStretch">
+  EnableTimeStretch
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/AugmentationConfig.cs/#L574"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether time stretching is enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableTimeStretch { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Augmentation_AudioAugmentationSettings_EnableTimeStretch_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: <code>true</code></p>
+<p>Changes tempo without changing pitch.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Augmentation_AudioAugmentationSettings_EnableVolumeChange_" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.EnableVolumeChange*"></a>
+
+  <h3 id="AiDotNet_Augmentation_AudioAugmentationSettings_EnableVolumeChange" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.EnableVolumeChange">
+  EnableVolumeChange
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/AugmentationConfig.cs/#L617"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether volume change is enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableVolumeChange { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Augmentation_AudioAugmentationSettings_EnableVolumeChange_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: <code>true</code></p>
+<p>Randomly adjusts volume to simulate different recording levels.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Augmentation_AudioAugmentationSettings_MaxTimeShift_" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.MaxTimeShift*"></a>
+
+  <h3 id="AiDotNet_Augmentation_AudioAugmentationSettings_MaxTimeShift" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.MaxTimeShift">
+  MaxTimeShift
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/AugmentationConfig.cs/#L642"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum time shift as a fraction of audio length.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxTimeShift { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Augmentation_AudioAugmentationSettings_MaxTimeShift_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: <code>0.1</code> (10% of audio length)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Augmentation_AudioAugmentationSettings_MaxTimeStretch_" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.MaxTimeStretch*"></a>
+
+  <h3 id="AiDotNet_Augmentation_AudioAugmentationSettings_MaxTimeStretch" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.MaxTimeStretch">
+  MaxTimeStretch
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/AugmentationConfig.cs/#L590"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum time stretch factor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxTimeStretch { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Augmentation_AudioAugmentationSettings_MaxTimeStretch_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: <code>1.2</code> (120% speed, faster)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Augmentation_AudioAugmentationSettings_MinTimeStretch_" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.MinTimeStretch*"></a>
+
+  <h3 id="AiDotNet_Augmentation_AudioAugmentationSettings_MinTimeStretch" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.MinTimeStretch">
+  MinTimeStretch
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/AugmentationConfig.cs/#L582"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum time stretch factor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinTimeStretch { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Augmentation_AudioAugmentationSettings_MinTimeStretch_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: <code>0.8</code> (80% speed, slower)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Augmentation_AudioAugmentationSettings_NoiseSNR_" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.NoiseSNR*"></a>
+
+  <h3 id="AiDotNet_Augmentation_AudioAugmentationSettings_NoiseSNR" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.NoiseSNR">
+  NoiseSNR
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/AugmentationConfig.cs/#L608"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the signal-to-noise ratio in decibels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double NoiseSNR { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Augmentation_AudioAugmentationSettings_NoiseSNR_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: <code>20.0</code> (dB)</p>
+<p>Higher values mean less noise relative to signal.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Augmentation_AudioAugmentationSettings_PitchShiftRange_" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.PitchShiftRange*"></a>
+
+  <h3 id="AiDotNet_Augmentation_AudioAugmentationSettings_PitchShiftRange" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.PitchShiftRange">
+  PitchShiftRange
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/AugmentationConfig.cs/#L565"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the pitch shift range in semitones.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double PitchShiftRange { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Augmentation_AudioAugmentationSettings_PitchShiftRange_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: <code>2.0</code> (+/- 2 semitones)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Augmentation_AudioAugmentationSettings_VolumeChangeRange_" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.VolumeChangeRange*"></a>
+
+  <h3 id="AiDotNet_Augmentation_AudioAugmentationSettings_VolumeChangeRange" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.VolumeChangeRange">
+  VolumeChangeRange
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/AugmentationConfig.cs/#L625"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the volume change range in decibels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double VolumeChangeRange { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Augmentation_AudioAugmentationSettings_VolumeChangeRange_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: <code>6.0</code> (+/- 6 dB)</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Augmentation_AudioAugmentationSettings_GetConfiguration_" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.GetConfiguration*"></a>
+
+  <h3 id="AiDotNet_Augmentation_AudioAugmentationSettings_GetConfiguration" data-uid="AiDotNet.Augmentation.AudioAugmentationSettings.GetConfiguration">
+  GetConfiguration()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/AugmentationConfig.cs/#L647"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the configuration as a dictionary.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IDictionary&lt;string, object&gt; GetConfiguration()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.idictionary-2">IDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/AugmentationConfig.cs/#L548" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

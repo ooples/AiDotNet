@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CommunicationManager | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CommunicationManager | AiDotNet Documentation ">
+      
+      <meta name="description" content="Central manager for distributed communication operations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_DistributedTraining_CommunicationManager.md&amp;value=---%0Auid%3A%20AiDotNet.DistributedTraining.CommunicationManager%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.DistributedTraining.CommunicationManager">
+
+
+
+  <h1 id="AiDotNet_DistributedTraining_CommunicationManager" data-uid="AiDotNet.DistributedTraining.CommunicationManager" class="text-break">
+Class CommunicationManager  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/CommunicationManager.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.DistributedTraining.html">DistributedTraining</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Central manager for distributed communication operations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class CommunicationManager</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">CommunicationManager</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_DistributedTraining_CommunicationManager_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>⚠️ WARNING - Static Mutable State:</b> This class uses static mutable state for managing
+communication backends. This design choice has important implications for concurrent usage:
+- Only ONE backend can be active per process
+- Unit tests using this class CANNOT run in parallel
+- Multiple training sessions in the same process share the same backend
+See detailed thread-safety notes below for proper usage patterns.
+</p>
+<p>
+Provides a static API for collective communication in distributed training scenarios.
+</p>
+<p><b>For Beginners:</b>
+This is your main entry point for distributed training communication.
+It's a "wrapper" that makes it easy to communicate between different processes/GPUs
+without worrying about the underlying implementation details.
+</p>
+<p>
+Example usage:
+<pre><code class="lang-csharp">// Initialize communication (do this once at startup)
+CommunicationManager.Initialize(new InMemoryCommunicationBackend&lt;double&gt;());
+<p>// Get your process ID and total number of processes
+int myRank = CommunicationManager.GetRank();
+int totalProcesses = CommunicationManager.GetWorldSize();</p>
+<p>// Average gradients across all processes
+Vector&lt;double&gt; gradients = ...; // Your local gradients
+CommunicationManager.AllReduce(gradients, ReductionOperation.Sum);
+// Now 'gradients' contains the sum from all processes</p>
+<p>// Clean up when done
+CommunicationManager.Shutdown();</p></code></pre>
+<p>IMPORTANT - Thread Safety and Testing Limitations:
+This class uses STATIC MUTABLE STATE which has the following implications:</p>
+<ol>
+<li><p>SINGLE GLOBAL INSTANCE: Only ONE backend can be active per process at a time.
+Multiple training sessions in the same process will share the same backend instance.</p>
+</li>
+<li><p>PARALLEL TEST EXECUTION: Tests that use this class CANNOT run in parallel.
+Use [Collection] attributes in xUnit or similar mechanisms to enforce sequential execution.</p>
+</li>
+<li><p>TEST ISOLATION: Always call Shutdown() in test cleanup to reset state.
+For better isolation in tests, use InMemoryCommunicationBackend with unique environment IDs
+and inject the backend directly instead of using this static manager.</p>
+</li>
+<li><p>CONCURRENT INITIALIZATION: Attempting to Initialize() from multiple threads concurrently
+is protected by locks, but may result in exceptions if already initialized.</p>
+</li>
+</ol>
+<p>Recommended Test Pattern:</p>
+<pre><code class="lang-csharp">// Option 1: Use environment isolation (recommended for parallel tests)
+var backend = new InMemoryCommunicationBackend&lt;double&gt;(rank: 0, worldSize: 4, environmentId: "test-123");
+// Use backend directly, don't call CommunicationManager.Initialize()
+
+// Option 2: Sequential tests with proper cleanup
+[Collection("DistributedTraining")] // Force sequential execution
+public class MyDistributedTests
+{
+    [Fact]
+    public void MyTest()
+    {
+        try
+        {
+            CommunicationManager.Initialize(...);
+            // Test code
+        }
+        finally
+        {
+            CommunicationManager.Shutdown(); // CRITICAL: Always cleanup
+        }
+    }
+}</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_DistributedTraining_CommunicationManager_IsInitialized_" data-uid="AiDotNet.DistributedTraining.CommunicationManager.IsInitialized*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_CommunicationManager_IsInitialized" data-uid="AiDotNet.DistributedTraining.CommunicationManager.IsInitialized">
+  IsInitialized
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/CommunicationManager.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether the communication manager has been initialized.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool IsInitialized { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_DistributedTraining_CommunicationManager_AllGather_" data-uid="AiDotNet.DistributedTraining.CommunicationManager.AllGather*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_CommunicationManager_AllGather__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__" data-uid="AiDotNet.DistributedTraining.CommunicationManager.AllGather``1(AiDotNet.Tensors.LinearAlgebra.Vector{``0})">
+  AllGather&lt;T&gt;(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/CommunicationManager.cs/#L290"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gathers data from all processes and returns the concatenated result.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; AllGather&lt;T&gt;(Vector&lt;T&gt; sendData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sendData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The local data to contribute</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The concatenated data from all processes</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_CommunicationManager_AllGather__1_AiDotNet_Tensors_LinearAlgebra_Vector___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This collects data from all processes and combines it into one big array.
+Everyone gets the full combined result. Useful when you need to see
+all the pieces together (like reconstructing full parameters from shards).
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if not initialized</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown if sendData is null</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_CommunicationManager_AllReduce_" data-uid="AiDotNet.DistributedTraining.CommunicationManager.AllReduce*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_CommunicationManager_AllReduce__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_DistributedTraining_ReductionOperation_" data-uid="AiDotNet.DistributedTraining.CommunicationManager.AllReduce``1(AiDotNet.Tensors.LinearAlgebra.Vector{``0},AiDotNet.DistributedTraining.ReductionOperation)">
+  AllReduce&lt;T&gt;(Vector&lt;T&gt;, ReductionOperation)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/CommunicationManager.cs/#L264"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs an AllReduce operation - combines data from all processes and
+distributes the result to all processes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void AllReduce&lt;T&gt;(Vector&lt;T&gt; data, ReductionOperation operation)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The data to reduce (will be modified to contain the result)</p>
+</dd>
+    <dt><code>operation</code> <a class="xref" href="AiDotNet.DistributedTraining.ReductionOperation.html">ReductionOperation</a></dt>
+    <dd><p>How to combine the data (Sum, Average, Max, etc.)</p>
+</dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_CommunicationManager_AllReduce__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_DistributedTraining_ReductionOperation__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This is the key operation for distributed training. It combines values
+from all processes (like adding gradients from all GPUs) and gives
+everyone the result. After this, everyone has the same combined data.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if not initialized</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown if data is null</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_CommunicationManager_Barrier_" data-uid="AiDotNet.DistributedTraining.CommunicationManager.Barrier*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_CommunicationManager_Barrier__1" data-uid="AiDotNet.DistributedTraining.CommunicationManager.Barrier``1">
+  Barrier&lt;T&gt;()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/CommunicationManager.cs/#L242"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Blocks until all processes reach this synchronization point.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void Barrier&lt;T&gt;()</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_CommunicationManager_Barrier__1_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This is a "wait for everyone" checkpoint. All processes must reach
+this point before any can continue. Useful for making sure everyone
+is ready before starting the next step.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if not initialized</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_CommunicationManager_Broadcast_" data-uid="AiDotNet.DistributedTraining.CommunicationManager.Broadcast*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_CommunicationManager_Broadcast__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__System_Int32_" data-uid="AiDotNet.DistributedTraining.CommunicationManager.Broadcast``1(AiDotNet.Tensors.LinearAlgebra.Vector{``0},System.Int32)">
+  Broadcast&lt;T&gt;(Vector&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/CommunicationManager.cs/#L315"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Broadcasts data from one process (root) to all other processes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; Broadcast&lt;T&gt;(Vector&lt;T&gt; data, int root = 0)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The data to broadcast (only meaningful on root)</p>
+</dd>
+    <dt><code>root</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Which process is broadcasting (default: 0)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The broadcast data</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_CommunicationManager_Broadcast__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+One process (the root) sends data to everyone else. Everyone ends up
+with the same data. Useful for distributing initial parameters or settings.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if not initialized</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_CommunicationManager_GetRank_" data-uid="AiDotNet.DistributedTraining.CommunicationManager.GetRank*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_CommunicationManager_GetRank__1" data-uid="AiDotNet.DistributedTraining.CommunicationManager.GetRank``1">
+  GetRank&lt;T&gt;()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/CommunicationManager.cs/#L207"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the rank (ID) of the current process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static int GetRank&lt;T&gt;()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The rank of the current process (0-based index)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_CommunicationManager_GetRank__1_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This tells you which process you are. If you're running on 4 GPUs,
+one will be rank 0, one will be rank 1, etc.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if not initialized</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_CommunicationManager_GetWorldSize_" data-uid="AiDotNet.DistributedTraining.CommunicationManager.GetWorldSize*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_CommunicationManager_GetWorldSize__1" data-uid="AiDotNet.DistributedTraining.CommunicationManager.GetWorldSize``1">
+  GetWorldSize&lt;T&gt;()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/CommunicationManager.cs/#L224"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of processes in the distributed group.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static int GetWorldSize&lt;T&gt;()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The total number of processes</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_CommunicationManager_GetWorldSize__1_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This tells you how many processes (or GPUs) are working together total.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if not initialized</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_CommunicationManager_Initialize_" data-uid="AiDotNet.DistributedTraining.CommunicationManager.Initialize*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_CommunicationManager_Initialize__1_AiDotNet_DistributedTraining_ICommunicationBackend___0__" data-uid="AiDotNet.DistributedTraining.CommunicationManager.Initialize``1(AiDotNet.DistributedTraining.ICommunicationBackend{``0})">
+  Initialize&lt;T&gt;(ICommunicationBackend&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/CommunicationManager.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes the communication manager with the specified backend.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void Initialize&lt;T&gt;(ICommunicationBackend&lt;T&gt; backend)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>backend</code> <a class="xref" href="AiDotNet.DistributedTraining.ICommunicationBackend-1.html">ICommunicationBackend</a>&lt;T&gt;</dt>
+    <dd><p>The communication backend to use</p>
+</dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type (float or double)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_CommunicationManager_Initialize__1_AiDotNet_DistributedTraining_ICommunicationBackend___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This must be called before any other operations.
+</p>
+<p><b>For Beginners:</b>
+This sets up the communication system. You need to provide a "backend"
+which is the actual implementation that does the communication.
+For testing, use InMemoryCommunicationBackend. For real distributed training,
+you would use an MPI backend.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown if backend is null</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if already initialized</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_CommunicationManager_ReduceScatter_" data-uid="AiDotNet.DistributedTraining.CommunicationManager.ReduceScatter*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_CommunicationManager_ReduceScatter__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_DistributedTraining_ReductionOperation_" data-uid="AiDotNet.DistributedTraining.CommunicationManager.ReduceScatter``1(AiDotNet.Tensors.LinearAlgebra.Vector{``0},AiDotNet.DistributedTraining.ReductionOperation)">
+  ReduceScatter&lt;T&gt;(Vector&lt;T&gt;, ReductionOperation)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/CommunicationManager.cs/#L356"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs a reduce-scatter operation - combines data and distributes chunks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; ReduceScatter&lt;T&gt;(Vector&lt;T&gt; data, ReductionOperation operation)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The data to reduce and scatter</p>
+</dd>
+    <dt><code>operation</code> <a class="xref" href="AiDotNet.DistributedTraining.ReductionOperation.html">ReductionOperation</a></dt>
+    <dd><p>How to combine the data</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The reduced chunk for this process</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_CommunicationManager_ReduceScatter__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_DistributedTraining_ReductionOperation__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This is a combined operation that's more efficient than doing
+AllReduce followed by Scatter. It reduces the data and immediately
+gives each process only their chunk of the result.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if not initialized</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_CommunicationManager_Scatter_" data-uid="AiDotNet.DistributedTraining.CommunicationManager.Scatter*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_CommunicationManager_Scatter__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__System_Int32_" data-uid="AiDotNet.DistributedTraining.CommunicationManager.Scatter``1(AiDotNet.Tensors.LinearAlgebra.Vector{``0},System.Int32)">
+  Scatter&lt;T&gt;(Vector&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/CommunicationManager.cs/#L335"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Scatters different chunks of data from root to each process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; Scatter&lt;T&gt;(Vector&lt;T&gt; sendData, int root = 0)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sendData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The data to scatter (only used on root)</p>
+</dd>
+    <dt><code>root</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Which process is scattering (default: 0)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The chunk received by this process</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_CommunicationManager_Scatter__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+The root process splits data into chunks and gives each process
+a different chunk. This is how we distribute work across processes.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if not initialized</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_CommunicationManager_Shutdown_" data-uid="AiDotNet.DistributedTraining.CommunicationManager.Shutdown*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_CommunicationManager_Shutdown" data-uid="AiDotNet.DistributedTraining.CommunicationManager.Shutdown">
+  Shutdown()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/CommunicationManager.cs/#L177"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Shuts down the communication manager and releases all resources.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void Shutdown()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_CommunicationManager_Shutdown_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Should be called when distributed training is complete.
+</p>
+<p><b>For Beginners:</b>
+This is cleanup - call it when you're done with distributed training
+to free up resources and properly close connections.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/CommunicationManager.cs/#L87" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

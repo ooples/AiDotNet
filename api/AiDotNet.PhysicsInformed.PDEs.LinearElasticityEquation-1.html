@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class LinearElasticityEquation&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class LinearElasticityEquation&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents the 2D Linear Elasticity Equations (Navier-Cauchy equations): (λ + μ)∂(∂u/∂x + ∂v/∂y)/∂x + μ∇&#178;u + fₓ = 0 (λ + μ)∂(∂u/∂x + ∂v/∂y)/∂y + μ∇&#178;v + fᵧ = 0">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_PhysicsInformed_PDEs_LinearElasticityEquation_1.md&amp;value=---%0Auid%3A%20AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation`1">
+
+
+
+  <h1 id="AiDotNet_PhysicsInformed_PDEs_LinearElasticityEquation_1" data-uid="AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation`1" class="text-break">
+Class LinearElasticityEquation&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/LinearElasticityEquation.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.PhysicsInformed.html">PhysicsInformed</a>.<a class="xref" href="AiDotNet.PhysicsInformed.PDEs.html">PDEs</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents the 2D Linear Elasticity Equations (Navier-Cauchy equations):
+(λ + μ)∂(∂u/∂x + ∂v/∂y)/∂x + μ∇²u + fₓ = 0
+(λ + μ)∂(∂u/∂x + ∂v/∂y)/∂y + μ∇²v + fᵧ = 0</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class LinearElasticityEquation&lt;T&gt; : PDESpecificationBase&lt;T&gt;, IPDESpecification&lt;T&gt;, IPDEResidualGradient&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase-1.html">PDESpecificationBase</a>&lt;T&gt;</div>
+      <div><span class="xref">LinearElasticityEquation&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.IPDESpecification-1.html">IPDESpecification</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.IPDEResidualGradient-1.html">IPDEResidualGradient</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase-1.html#AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_NumOps">PDESpecificationBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase-1.html#AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_ValidateFirstDerivatives_AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0__">PDESpecificationBase&lt;T&gt;.ValidateFirstDerivatives(PDEDerivatives&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase-1.html#AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_ValidateSecondDerivatives_AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0__">PDESpecificationBase&lt;T&gt;.ValidateSecondDerivatives(PDEDerivatives&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase-1.html#AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_ValidateThirdDerivatives_AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0__">PDESpecificationBase&lt;T&gt;.ValidateThirdDerivatives(PDEDerivatives&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase-1.html#AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_ValidatePositive__0_System_String_">PDESpecificationBase&lt;T&gt;.ValidatePositive(T, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase-1.html#AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_ValidateNonNegative__0_System_String_">PDESpecificationBase&lt;T&gt;.ValidateNonNegative(T, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase-1.html#AiDotNet_PhysicsInformed_PDEs_PDESpecificationBase_1_CreateGradient">PDESpecificationBase&lt;T&gt;.CreateGradient()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_PhysicsInformed_PDEs_LinearElasticityEquation_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>For Beginners:
+The Linear Elasticity equations describe how solid materials deform under stress.</p>
+<p>Variables:</p>
+<ul>
+<li>u(x,y) = Displacement in x-direction</li>
+<li>v(x,y) = Displacement in y-direction</li>
+<li>λ (lambda) = First Lamé parameter (related to bulk modulus)</li>
+<li>μ (mu) = Second Lamé parameter (shear modulus, measures resistance to shearing)</li>
+<li>fₓ, fᵧ = Body forces (like gravity)</li>
+</ul>
+<p>Physical Interpretation:</p>
+<ul>
+<li>When you push or pull on a solid object, it deforms</li>
+<li>The equations balance internal stresses with external forces</li>
+<li>The Lamé parameters describe how stiff the material is</li>
+</ul>
+<p>Material Properties:</p>
+<ul>
+<li>λ and μ can be computed from Young's modulus E and Poisson's ratio ν:
+<ul>
+<li>λ = Eν / ((1+ν)(1-2ν))</li>
+<li>μ = E / (2(1+ν))</li>
+</ul>
+</li>
+</ul>
+<p>Applications:</p>
+<ul>
+<li>Structural engineering (buildings, bridges)</li>
+<li>Mechanical design (stress analysis)</li>
+<li>Geology (tectonic plate deformation)</li>
+<li>Biomechanics (bone and tissue mechanics)</li>
+</ul>
+<p>Example: A beam bending under load, a pressure vessel expanding,
+or a rubber band stretching.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_PhysicsInformed_PDEs_LinearElasticityEquation_1__ctor_" data-uid="AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PDEs_LinearElasticityEquation_1__ctor_System_Double_System_Double_System_Double_System_Double_" data-uid="AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation`1.#ctor(System.Double,System.Double,System.Double,System.Double)">
+  LinearElasticityEquation(double, double, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/LinearElasticityEquation.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the Linear Elasticity Equation with double parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public LinearElasticityEquation(double lambda = 1, double mu = 1, double bodyForceX = 0, double bodyForceY = 0)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>lambda</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>First Lamé parameter λ (default 1.0 for normalized problems).</p>
+</dd>
+    <dt><code>mu</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Second Lamé parameter μ (shear modulus, default 1.0, must be positive).</p>
+</dd>
+    <dt><code>bodyForceX</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Body force in x-direction (default 0).</p>
+</dd>
+    <dt><code>bodyForceY</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Body force in y-direction (default 0).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_PDEs_LinearElasticityEquation_1__ctor_" data-uid="AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PDEs_LinearElasticityEquation_1__ctor__0__0__0__0_" data-uid="AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation`1.#ctor(`0,`0,`0,`0)">
+  LinearElasticityEquation(T, T, T?, T?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/LinearElasticityEquation.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the Linear Elasticity Equation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public LinearElasticityEquation(T lambda, T mu, T? bodyForceX = default, T? bodyForceY = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>lambda</code> <span class="xref">T</span></dt>
+    <dd><p>First Lamé parameter λ.</p>
+</dd>
+    <dt><code>mu</code> <span class="xref">T</span></dt>
+    <dd><p>Second Lamé parameter μ (shear modulus, must be positive).</p>
+</dd>
+    <dt><code>bodyForceX</code> <span class="xref">T</span></dt>
+    <dd><p>Body force in x-direction (default 0).</p>
+</dd>
+    <dt><code>bodyForceY</code> <span class="xref">T</span></dt>
+    <dd><p>Body force in y-direction (default 0, use -ρg for gravity).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_PhysicsInformed_PDEs_LinearElasticityEquation_1_InputDimension_" data-uid="AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation`1.InputDimension*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PDEs_LinearElasticityEquation_1_InputDimension" data-uid="AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation`1.InputDimension">
+  InputDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/LinearElasticityEquation.cs/#L232"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the dimension of the input space (e.g., 2 for 2D spatial problems, 3 for 2D space + time).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int InputDimension { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_PDEs_LinearElasticityEquation_1_Name_" data-uid="AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation`1.Name*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PDEs_LinearElasticityEquation_1_Name" data-uid="AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/LinearElasticityEquation.cs/#L238"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name or description of the PDE (e.g., &quot;Heat Equation&quot;, &quot;Navier-Stokes&quot;).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_PDEs_LinearElasticityEquation_1_OutputDimension_" data-uid="AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation`1.OutputDimension*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PDEs_LinearElasticityEquation_1_OutputDimension" data-uid="AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation`1.OutputDimension">
+  OutputDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/LinearElasticityEquation.cs/#L235"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the dimension of the output space (e.g., 1 for scalar fields like temperature, 3 for vector fields like velocity).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int OutputDimension { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_PhysicsInformed_PDEs_LinearElasticityEquation_1_ComputeResidual_" data-uid="AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation`1.ComputeResidual*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PDEs_LinearElasticityEquation_1_ComputeResidual__0____0___AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0__" data-uid="AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation`1.ComputeResidual(`0[],`0[],AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives{`0})">
+  ComputeResidual(T[], T[], PDEDerivatives&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/LinearElasticityEquation.cs/#L118"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the PDE residual at the given point.
+The residual is how much the PDE equation is violated at that point.
+For a true solution, the residual should be zero everywhere.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T ComputeResidual(T[] inputs, T[] outputs, PDEDerivatives&lt;T&gt; derivatives)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> T[]</dt>
+    <dd><p>The spatial and temporal coordinates where to evaluate the PDE.</p>
+</dd>
+    <dt><code>outputs</code> T[]</dt>
+    <dd><p>The predicted solution values at those coordinates.</p>
+</dd>
+    <dt><code>derivatives</code> <a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives-1.html">PDEDerivatives</a>&lt;T&gt;</dt>
+    <dd><p>The derivatives of the solution (gradient, Hessian, etc.).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The PDE residual value (should be zero for a perfect solution).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_PDEs_LinearElasticityEquation_1_ComputeResidualGradient_" data-uid="AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation`1.ComputeResidualGradient*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PDEs_LinearElasticityEquation_1_ComputeResidualGradient__0____0___AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0__" data-uid="AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation`1.ComputeResidualGradient(`0[],`0[],AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives{`0})">
+  ComputeResidualGradient(T[], T[], PDEDerivatives&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/LinearElasticityEquation.cs/#L171"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes gradients of the PDE residual with respect to outputs and derivatives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PDEResidualGradient&lt;T&gt; ComputeResidualGradient(T[] inputs, T[] outputs, PDEDerivatives&lt;T&gt; derivatives)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> T[]</dt>
+    <dd><p>The spatial and temporal coordinates.</p>
+</dd>
+    <dt><code>outputs</code> T[]</dt>
+    <dd><p>The predicted solution values.</p>
+</dd>
+    <dt><code>derivatives</code> <a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives-1.html">PDEDerivatives</a>&lt;T&gt;</dt>
+    <dd><p>The derivatives of the solution.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.PDEResidualGradient-1.html">PDEResidualGradient</a>&lt;T&gt;</dt>
+    <dd><p>Residual gradients for outputs and derivatives.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PhysicsInformed_PDEs_LinearElasticityEquation_1_ComputeResidualGradient__0____0___AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>The gradient is computed for R = R₁² + R₂² where:</p>
+<ul>
+<li>R₁ = (λ+2μ)∂²u/∂x² + μ∂²u/∂y² + (λ+μ)∂²v/∂x∂y + fₓ</li>
+<li>R₂ = (λ+μ)∂²u/∂x∂y + μ∂²v/∂x² + (λ+2μ)∂²v/∂y² + fᵧ</li>
+</ul>
+<p>The gradient includes both same-equation and cross-equation coupling terms.
+For example, ∂²u/∂x∂y appears in R₂, so its gradient is 2<em>R₂</em>(λ+μ),
+while ∂²v/∂x∂y appears in R₁, so its gradient is 2<em>R₁</em>(λ+μ).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_PDEs_LinearElasticityEquation_1_FromEngineeringConstants_" data-uid="AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation`1.FromEngineeringConstants*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PDEs_LinearElasticityEquation_1_FromEngineeringConstants_System_Double_System_Double_System_Double_System_Double_" data-uid="AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation`1.FromEngineeringConstants(System.Double,System.Double,System.Double,System.Double)">
+  FromEngineeringConstants(double, double, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/LinearElasticityEquation.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a Linear Elasticity Equation from Young's modulus and Poisson's ratio.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static LinearElasticityEquation&lt;T&gt; FromEngineeringConstants(double youngsModulus, double poissonsRatio, double bodyForceX = 0, double bodyForceY = 0)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>youngsModulus</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Young's modulus E (must be positive).</p>
+</dd>
+    <dt><code>poissonsRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Poisson's ratio ν (must be between -1 and 0.5).</p>
+</dd>
+    <dt><code>bodyForceX</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Body force in x-direction (default 0).</p>
+</dd>
+    <dt><code>bodyForceY</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Body force in y-direction (default 0).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation-1.html">LinearElasticityEquation</a>&lt;T&gt;</dt>
+    <dd><p>A new LinearElasticityEquation instance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PDEs/LinearElasticityEquation.cs/#L44" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

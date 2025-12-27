@@ -1,0 +1,1856 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class AdversarialRobustnessOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class AdversarialRobustnessOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Unified configuration options for adversarial robustness and AI safety.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_AdversarialRobustnessOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.AdversarialRobustnessOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1" class="text-break">
+Class AdversarialRobustnessOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Unified configuration options for adversarial robustness and AI safety.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class AdversarialRobustnessOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">AdversarialRobustnessOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This comprehensive options class consolidates all adversarial robustness settings including:
+- Safety filtering (input validation, output filtering, harmful content detection)
+- Adversarial attacks (for robustness testing and evaluation)
+- Adversarial defenses (training and preprocessing)
+- Certified robustness (provable guarantees)
+- Content moderation (for LLM applications)
+</p>
+<p><b>For Beginners:</b> This is your one-stop shop for all AI safety and robustness settings.
+You can configure how strictly inputs are validated, how the model is protected against attacks,
+and what guarantees you want about model predictions.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_AdversarialTrainingRatio_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.AdversarialTrainingRatio*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_AdversarialTrainingRatio" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.AdversarialTrainingRatio">
+  AdversarialTrainingRatio
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the ratio of adversarial examples to include in training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AdversarialTrainingRatio { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_AttackEpsilon_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.AttackEpsilon*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_AttackEpsilon" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.AttackEpsilon">
+  AttackEpsilon
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum perturbation budget (epsilon) for attacks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AttackEpsilon { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_AttackIterations_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.AttackIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_AttackIterations" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.AttackIterations">
+  AttackIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of iterations for iterative attacks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int AttackIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_AttackMethods_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.AttackMethods*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_AttackMethods" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.AttackMethods">
+  AttackMethods
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L145"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets which attack methods to use for testing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string[] AttackMethods { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_AttackNormType_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.AttackNormType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_AttackNormType" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.AttackNormType">
+  AttackNormType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L125"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the norm type for perturbation constraints.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string AttackNormType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>&quot;L-infinity&quot;, &quot;L2&quot;, or &quot;L1&quot;</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_AttackStepSize_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.AttackStepSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_AttackStepSize" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.AttackStepSize">
+  AttackStepSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the step size for iterative attacks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AttackStepSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_BatchSize_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.BatchSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_BatchSize" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L323"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the batch size for robustness operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_BlockPromptInjections_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.BlockPromptInjections*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_BlockPromptInjections" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.BlockPromptInjections">
+  BlockPromptInjections
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L256"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to detect and block prompt injection attacks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool BlockPromptInjections { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_CertificationConfidence_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.CertificationConfidence*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_CertificationConfidence" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.CertificationConfidence">
+  CertificationConfidence
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L227"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the confidence level for certification.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double CertificationConfidence { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_CertificationMethod_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.CertificationMethod*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_CertificationMethod" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.CertificationMethod">
+  CertificationMethod
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L212"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the certification method to use.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string CertificationMethod { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>&quot;RandomizedSmoothing&quot;, &quot;IBP&quot;, or &quot;CROWN&quot;</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_CertificationNoiseSigma_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.CertificationNoiseSigma*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_CertificationNoiseSigma" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.CertificationNoiseSigma">
+  CertificationNoiseSigma
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L222"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the noise standard deviation for randomized smoothing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double CertificationNoiseSigma { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_CertificationNormType_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.CertificationNormType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_CertificationNormType" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.CertificationNormType">
+  CertificationNormType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L237"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the norm type for certification.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string CertificationNormType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_CertificationSamples_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.CertificationSamples*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_CertificationSamples" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.CertificationSamples">
+  CertificationSamples
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L217"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of samples for randomized smoothing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CertificationSamples { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_DefenseEpsilon_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.DefenseEpsilon*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_DefenseEpsilon" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.DefenseEpsilon">
+  DefenseEpsilon
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the perturbation budget for adversarial training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double DefenseEpsilon { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableAdversarialTraining_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.EnableAdversarialTraining*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableAdversarialTraining" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.EnableAdversarialTraining">
+  EnableAdversarialTraining
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L158"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable adversarial training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableAdversarialTraining { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableAdversarialTraining_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Adversarial training makes the model more robust by training
+on both clean and adversarial examples.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableCertifiedRobustness_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.EnableCertifiedRobustness*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableCertifiedRobustness" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.EnableCertifiedRobustness">
+  EnableCertifiedRobustness
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L206"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable certified robustness.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableCertifiedRobustness { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableCertifiedRobustness_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Certified robustness provides provable guarantees that the model's
+prediction won't change within a certain perturbation radius.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableContentModeration_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.EnableContentModeration*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableContentModeration" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.EnableContentModeration">
+  EnableContentModeration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L246"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable content moderation for LLM outputs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableContentModeration { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableFactualityChecking_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.EnableFactualityChecking*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableFactualityChecking" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.EnableFactualityChecking">
+  EnableFactualityChecking
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L278"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable factuality checking.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableFactualityChecking { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableInputValidation_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.EnableInputValidation*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableInputValidation" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.EnableInputValidation">
+  EnableInputValidation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable input validation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableInputValidation { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableOutputFiltering_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.EnableOutputFiltering*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableOutputFiltering" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.EnableOutputFiltering">
+  EnableOutputFiltering
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable output filtering.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableOutputFiltering { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableRedTeaming_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.EnableRedTeaming*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableRedTeaming" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.EnableRedTeaming">
+  EnableRedTeaming
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L292"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable red teaming during evaluation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableRedTeaming { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableRobustnessTesting_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.EnableRobustnessTesting*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableRobustnessTesting" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.EnableRobustnessTesting">
+  EnableRobustnessTesting
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable adversarial robustness testing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableRobustnessTesting { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableRobustnessTesting_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> When enabled, the model is tested against adversarial attacks
+during evaluation to measure its robustness.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableSafetyFiltering_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.EnableSafetyFiltering*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableSafetyFiltering" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.EnableSafetyFiltering">
+  EnableSafetyFiltering
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether safety filtering is enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableSafetyFiltering { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnableSafetyFiltering_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the master switch for safety filtering.
+When enabled, inputs and outputs are validated for safety.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnsembleSize_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.EnsembleSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_EnsembleSize" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.EnsembleSize">
+  EnsembleSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L188"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of models in the ensemble.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int EnsembleSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_FilterPII_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.FilterPII*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_FilterPII" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.FilterPII">
+  FilterPII
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L261"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to filter PII (personally identifiable information).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool FilterPII { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_HallucinationThreshold_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.HallucinationThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_HallucinationThreshold" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.HallucinationThreshold">
+  HallucinationThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L283"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the hallucination detection threshold.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double HallucinationThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_HarmfulContentCategories_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.HarmfulContentCategories*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_HarmfulContentCategories" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.HarmfulContentCategories">
+  HarmfulContentCategories
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the harmful content categories to check for.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string[] HarmfulContentCategories { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_JailbreakSensitivity_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.JailbreakSensitivity*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_JailbreakSensitivity" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.JailbreakSensitivity">
+  JailbreakSensitivity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the jailbreak detection sensitivity.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double JailbreakSensitivity { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The sensitivity (0-1), defaulting to 0.7.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_LogFilteredContent_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.LogFilteredContent*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_LogFilteredContent" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.LogFilteredContent">
+  LogFilteredContent
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to log filtered content for review.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool LogFilteredContent { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_MaxInputLength_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.MaxInputLength*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_MaxInputLength" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.MaxInputLength">
+  MaxInputLength
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum input length to process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxInputLength { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_PIITypes_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.PIITypes*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_PIITypes" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.PIITypes">
+  PIITypes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L266"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the types of PII to filter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string[] PIITypes { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_PreprocessingMethod_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.PreprocessingMethod*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_PreprocessingMethod" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.PreprocessingMethod">
+  PreprocessingMethod
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L178"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the preprocessing method to use.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string PreprocessingMethod { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_PromptInjectionSensitivity_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.PromptInjectionSensitivity*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_PromptInjectionSensitivity" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.PromptInjectionSensitivity">
+  PromptInjectionSensitivity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L251"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the prompt injection detection sensitivity.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double PromptInjectionSensitivity { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_RandomSeed_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.RandomSeed*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_RandomSeed" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.RandomSeed">
+  RandomSeed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L318"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the random seed for reproducibility.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? RandomSeed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_RedTeamingCategories_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.RedTeamingCategories*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_RedTeamingCategories" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.RedTeamingCategories">
+  RedTeamingCategories
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L302"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the red teaming categories to test.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string[] RedTeamingCategories { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_RedTeamingPromptCount_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.RedTeamingPromptCount*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_RedTeamingPromptCount" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.RedTeamingPromptCount">
+  RedTeamingPromptCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L297"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of red teaming prompts to generate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int RedTeamingPromptCount { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_SafetyLogFilePath_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.SafetyLogFilePath*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_SafetyLogFilePath" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.SafetyLogFilePath">
+  SafetyLogFilePath
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the file path for filtered content logging.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? SafetyLogFilePath { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_SafetyThreshold_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.SafetyThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_SafetyThreshold" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.SafetyThreshold">
+  SafetyThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the safety threshold for content filtering.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double SafetyThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The threshold (0-1), defaulting to 0.8.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_TargetClass_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.TargetClass*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_TargetClass" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.TargetClass">
+  TargetClass
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the target class for targeted attacks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TargetClass { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_TrainingAttackMethod_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.TrainingAttackMethod*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_TrainingAttackMethod" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.TrainingAttackMethod">
+  TrainingAttackMethod
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L193"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the attack method to use during adversarial training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string TrainingAttackMethod { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_UseContentClassifier_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.UseContentClassifier*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_UseContentClassifier" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.UseContentClassifier">
+  UseContentClassifier
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use a classifier for harmful content detection.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseContentClassifier { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_UseEnsembleDefense_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.UseEnsembleDefense*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_UseEnsembleDefense" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.UseEnsembleDefense">
+  UseEnsembleDefense
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L183"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use ensemble defenses.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseEnsembleDefense { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_UseInputPreprocessing_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.UseInputPreprocessing*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_UseInputPreprocessing" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.UseInputPreprocessing">
+  UseInputPreprocessing
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L173"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use input preprocessing for defense.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseInputPreprocessing { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_UseRandomStartForAttacks_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.UseRandomStartForAttacks*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_UseRandomStartForAttacks" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.UseRandomStartForAttacks">
+  UseRandomStartForAttacks
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use random initialization for attacks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseRandomStartForAttacks { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_UseTargetedAttacks_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.UseTargetedAttacks*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_UseTargetedAttacks" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.UseTargetedAttacks">
+  UseTargetedAttacks
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use targeted attacks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseTargetedAttacks { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_UseTightCertificationBounds_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.UseTightCertificationBounds*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_UseTightCertificationBounds" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.UseTightCertificationBounds">
+  UseTightCertificationBounds
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L232"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use tight bounds computation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseTightCertificationBounds { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_VerboseLogging_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.VerboseLogging*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_VerboseLogging" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.VerboseLogging">
+  VerboseLogging
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L328"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable verbose logging.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool VerboseLogging { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_AdversarialTrainingFocus_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.AdversarialTrainingFocus*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_AdversarialTrainingFocus" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.AdversarialTrainingFocus">
+  AdversarialTrainingFocus()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L387"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates options for adversarial training focus.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static AdversarialRobustnessOptions&lt;T&gt; AdversarialTrainingFocus()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.AdversarialRobustnessOptions-1.html">AdversarialRobustnessOptions</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_BasicSafety_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.BasicSafety*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_BasicSafety" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.BasicSafety">
+  BasicSafety()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L337"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates options for basic safety filtering only.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static AdversarialRobustnessOptions&lt;T&gt; BasicSafety()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.AdversarialRobustnessOptions-1.html">AdversarialRobustnessOptions</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_ComprehensiveRobustness_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.ComprehensiveRobustness*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_ComprehensiveRobustness" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.ComprehensiveRobustness">
+  ComprehensiveRobustness()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L352"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates options for comprehensive robustness with certified guarantees.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static AdversarialRobustnessOptions&lt;T&gt; ComprehensiveRobustness()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.AdversarialRobustnessOptions-1.html">AdversarialRobustnessOptions</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_LLMSafety_" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.LLMSafety*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AdversarialRobustnessOptions_1_LLMSafety" data-uid="AiDotNet.Models.Options.AdversarialRobustnessOptions`1.LLMSafety">
+  LLMSafety()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L368"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates options for LLM safety with content moderation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static AdversarialRobustnessOptions&lt;T&gt; LLMSafety()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.AdversarialRobustnessOptions-1.html">AdversarialRobustnessOptions</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AdversarialRobustnessOptions.cs/#L22" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

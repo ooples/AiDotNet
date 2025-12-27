@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class FedProxAggregationStrategy&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class FedProxAggregationStrategy&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements the Federated Proximal (FedProx) aggregation strategy.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_FederatedLearning_Aggregators_FedProxAggregationStrategy_1.md&amp;value=---%0Auid%3A%20AiDotNet.FederatedLearning.Aggregators.FedProxAggregationStrategy%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.FederatedLearning.Aggregators.FedProxAggregationStrategy`1">
+
+
+
+  <h1 id="AiDotNet_FederatedLearning_Aggregators_FedProxAggregationStrategy_1" data-uid="AiDotNet.FederatedLearning.Aggregators.FedProxAggregationStrategy`1" class="text-break">
+Class FedProxAggregationStrategy&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Aggregators/FedProxAggregationStrategy.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.FederatedLearning.html">FederatedLearning</a>.<a class="xref" href="AiDotNet.FederatedLearning.Aggregators.html">Aggregators</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements the Federated Proximal (FedProx) aggregation strategy.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class FedProxAggregationStrategy&lt;T&gt; : ParameterDictionaryAggregationStrategyBase&lt;T&gt;, IAggregationStrategy&lt;Dictionary&lt;string, T[]&gt;&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for model parameters (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.FederatedLearning.Infrastructure.FederatedLearningComponentBase-1.html">FederatedLearningComponentBase</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.FederatedLearning.Aggregators.AggregationStrategyBase-2.html">AggregationStrategyBase</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T[]&gt;, T&gt;</div>
+      <div><a class="xref" href="AiDotNet.FederatedLearning.Aggregators.ParameterDictionaryAggregationStrategyBase-1.html">ParameterDictionaryAggregationStrategyBase</a>&lt;T&gt;</div>
+      <div><span class="xref">FedProxAggregationStrategy&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IAggregationStrategy-1.html">IAggregationStrategy</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T[]&gt;&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.FederatedLearning.Aggregators.ParameterDictionaryAggregationStrategyBase-1.html#AiDotNet_FederatedLearning_Aggregators_ParameterDictionaryAggregationStrategyBase_1_AggregateWeightedAverage_System_Collections_Generic_Dictionary_System_Int32_System_Collections_Generic_Dictionary_System_String__0_____System_Collections_Generic_Dictionary_System_Int32_System_Double__">ParameterDictionaryAggregationStrategyBase&lt;T&gt;.AggregateWeightedAverage(Dictionary&lt;int, Dictionary&lt;string, T[]&gt;&gt;, Dictionary&lt;int, double&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FederatedLearning.Aggregators.ParameterDictionaryAggregationStrategyBase-1.html#AiDotNet_FederatedLearning_Aggregators_ParameterDictionaryAggregationStrategyBase_1_AggregateLayerWeightedAverageInto_System_String_System_Collections_Generic_Dictionary_System_Int32_System_Collections_Generic_Dictionary_System_String__0_____System_Collections_Generic_Dictionary_System_Int32_System_Double__System_Double__0___">ParameterDictionaryAggregationStrategyBase&lt;T&gt;.AggregateLayerWeightedAverageInto(string, Dictionary&lt;int, Dictionary&lt;string, T[]&gt;&gt;, Dictionary&lt;int, double&gt;, double, T[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FederatedLearning.Aggregators.ParameterDictionaryAggregationStrategyBase-1.html#AiDotNet_FederatedLearning_Aggregators_ParameterDictionaryAggregationStrategyBase_1_CreateZeroInitializedLayer_System_Int32_">ParameterDictionaryAggregationStrategyBase&lt;T&gt;.CreateZeroInitializedLayer(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FederatedLearning.Aggregators.AggregationStrategyBase-2.html#AiDotNet_FederatedLearning_Aggregators_AggregationStrategyBase_2_Aggregate_System_Collections_Generic_Dictionary_System_Int32__0__System_Collections_Generic_Dictionary_System_Int32_System_Double__">AggregationStrategyBase&lt;Dictionary&lt;string, T[]&gt;, T&gt;.Aggregate(Dictionary&lt;int, Dictionary&lt;string, T[]&gt;&gt;, Dictionary&lt;int, double&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FederatedLearning.Aggregators.AggregationStrategyBase-2.html#AiDotNet_FederatedLearning_Aggregators_AggregationStrategyBase_2_GetStrategyName">AggregationStrategyBase&lt;Dictionary&lt;string, T[]&gt;, T&gt;.GetStrategyName()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FederatedLearning.Aggregators.AggregationStrategyBase-2.html#AiDotNet_FederatedLearning_Aggregators_AggregationStrategyBase_2_GetTotalWeightOrThrow_System_Collections_Generic_Dictionary_System_Int32_System_Double__System_Collections_Generic_IEnumerable_System_Int32__System_String_">AggregationStrategyBase&lt;Dictionary&lt;string, T[]&gt;, T&gt;.GetTotalWeightOrThrow(Dictionary&lt;int, double&gt;, IEnumerable&lt;int&gt;, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FederatedLearning.Infrastructure.FederatedLearningComponentBase-1.html#AiDotNet_FederatedLearning_Infrastructure_FederatedLearningComponentBase_1_NumOps">FederatedLearningComponentBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_FederatedLearning_Aggregators_FedProxAggregationStrategy_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>FedProx is an extension of FedAvg that handles system and statistical heterogeneity
+in federated learning. It was proposed by Li et al. in 2020 to address challenges
+when clients have different computational capabilities or data distributions.</p>
+<p><b>For Beginners:</b> FedProx is like FedAvg with a &quot;safety rope&quot; that prevents
+individual clients from pulling the shared model too far in their own direction.</p>
+<p>Key differences from FedAvg:</p>
+<ol>
+<li>Adds a proximal term to local training objective</li>
+<li>Prevents client models from deviating too much from global model</li>
+<li>Improves convergence when clients have heterogeneous data or capabilities</li>
+</ol>
+<p>How FedProx works:
+During local training, each client minimizes:
+Local Loss + (μ/2) × ||w - w_global||²</p>
+<p>where:</p>
+<ul>
+<li>Local Loss: Standard loss on client's data</li>
+<li>μ (mu): Proximal term coefficient (controls constraint strength)</li>
+<li>w: Client's current model weights</li>
+<li>w_global: Global model weights received from server</li>
+<li>||w - w_global||²: Squared distance between client and global model</li>
+</ul>
+<p>For example, with μ = 0.01:</p>
+<ul>
+<li>Client trains on local data</li>
+<li>Proximal term penalizes large deviations from global model</li>
+<li>If client's data is very different, can still adapt but with limitation</li>
+<li>Prevents overfitting to local data distribution</li>
+</ul>
+<p>When to use FedProx:</p>
+<ul>
+<li>Non-IID data (different distributions across clients)</li>
+<li>System heterogeneity (some clients much slower/faster)</li>
+<li>Want more stable convergence than FedAvg</li>
+<li>Stragglers problem (some clients take much longer)</li>
+</ul>
+<p>Benefits:</p>
+<ul>
+<li>Better convergence on non-IID data</li>
+<li>More robust to stragglers</li>
+<li>Theoretically proven convergence guarantees</li>
+<li>Small computational overhead</li>
+</ul>
+<p>Limitations:</p>
+<ul>
+<li>Requires tuning μ parameter</li>
+<li>Slightly slower local training per iteration</li>
+<li>May converge slower if μ is too large</li>
+</ul>
+<p>Reference: Li, T., et al. (2020). &quot;Federated Optimization in Heterogeneous Networks.&quot;
+MLSys 2020.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_FederatedLearning_Aggregators_FedProxAggregationStrategy_1__ctor_" data-uid="AiDotNet.FederatedLearning.Aggregators.FedProxAggregationStrategy`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Aggregators_FedProxAggregationStrategy_1__ctor_System_Double_" data-uid="AiDotNet.FederatedLearning.Aggregators.FedProxAggregationStrategy`1.#ctor(System.Double)">
+  FedProxAggregationStrategy(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Aggregators/FedProxAggregationStrategy.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.FederatedLearning.Aggregators.FedProxAggregationStrategy-1.html">FedProxAggregationStrategy&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FedProxAggregationStrategy(double mu = 0.01)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>mu</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The proximal term coefficient (typically 0.01 to 1.0).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FederatedLearning_Aggregators_FedProxAggregationStrategy_1__ctor_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Creates a FedProx aggregator with a specified proximal term strength.</p>
+<p>The μ (mu) parameter controls the trade-off between local adaptation and global consistency:</p>
+<ul>
+<li>μ = 0: Equivalent to FedAvg (no constraint)</li>
+<li>μ = 0.01: Mild constraint (recommended starting point)</li>
+<li>μ = 0.1: Moderate constraint</li>
+<li>μ = 1.0+: Strong constraint (may be too restrictive)</li>
+</ul>
+<p>Recommendations:</p>
+<ul>
+<li>Start with μ = 0.01</li>
+<li>Increase if convergence is unstable</li>
+<li>Decrease if convergence is too slow</li>
+</ul>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_FederatedLearning_Aggregators_FedProxAggregationStrategy_1_Aggregate_" data-uid="AiDotNet.FederatedLearning.Aggregators.FedProxAggregationStrategy`1.Aggregate*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Aggregators_FedProxAggregationStrategy_1_Aggregate_System_Collections_Generic_Dictionary_System_Int32_System_Collections_Generic_Dictionary_System_String__0_____System_Collections_Generic_Dictionary_System_Int32_System_Double__" data-uid="AiDotNet.FederatedLearning.Aggregators.FedProxAggregationStrategy`1.Aggregate(System.Collections.Generic.Dictionary{System.Int32,System.Collections.Generic.Dictionary{System.String,`0[]}},System.Collections.Generic.Dictionary{System.Int32,System.Double})">
+  Aggregate(Dictionary&lt;int, Dictionary&lt;string, T[]&gt;&gt;, Dictionary&lt;int, double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Aggregators/FedProxAggregationStrategy.cs/#L113"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Aggregates client models using FedProx weighted averaging.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Dictionary&lt;string, T[]&gt; Aggregate(Dictionary&lt;int, Dictionary&lt;string, T[]&gt;&gt; clientModels, Dictionary&lt;int, double&gt; clientWeights)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>clientModels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T[]&gt;&gt;</dt>
+    <dd><p>Dictionary mapping client IDs to their model parameters.</p>
+</dd>
+    <dt><code>clientWeights</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Dictionary mapping client IDs to their sample counts (weights).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T[]&gt;</dt>
+    <dd><p>The aggregated global model parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FederatedLearning_Aggregators_FedProxAggregationStrategy_1_Aggregate_System_Collections_Generic_Dictionary_System_Int32_System_Collections_Generic_Dictionary_System_String__0_____System_Collections_Generic_Dictionary_System_Int32_System_Double___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>The aggregation step in FedProx is identical to FedAvg. The key difference is in
+the local training objective (which includes the proximal term), not in aggregation.</p>
+<p><b>For Beginners:</b> At the server side, FedProx aggregates just like FedAvg.
+The magic happens during client-side training where the proximal term keeps
+client models from straying too far.</p>
+<p>Aggregation formula (same as FedAvg):
+w_global = Σ(n_k / n_total) × w_k</p>
+<p>The proximal term μ affects how w_k is computed during local training, but not
+how we aggregate the models here.</p>
+<p>For implementation in local training (not shown here):</p>
+<ul>
+<li>Gradient = ∇Loss + μ(w - w_global)</li>
+<li>This additional term pulls weights towards global model</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_FederatedLearning_Aggregators_FedProxAggregationStrategy_1_GetMu_" data-uid="AiDotNet.FederatedLearning.Aggregators.FedProxAggregationStrategy`1.GetMu*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Aggregators_FedProxAggregationStrategy_1_GetMu" data-uid="AiDotNet.FederatedLearning.Aggregators.FedProxAggregationStrategy`1.GetMu">
+  GetMu()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Aggregators/FedProxAggregationStrategy.cs/#L137"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the proximal term coefficient μ.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double GetMu()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The μ parameter value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FederatedLearning_Aggregators_FedProxAggregationStrategy_1_GetMu_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Returns the strength of the constraint that keeps client
+models from deviating too far from the global model.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_FederatedLearning_Aggregators_FedProxAggregationStrategy_1_GetStrategyName_" data-uid="AiDotNet.FederatedLearning.Aggregators.FedProxAggregationStrategy`1.GetStrategyName*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Aggregators_FedProxAggregationStrategy_1_GetStrategyName" data-uid="AiDotNet.FederatedLearning.Aggregators.FedProxAggregationStrategy`1.GetStrategyName">
+  GetStrategyName()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Aggregators/FedProxAggregationStrategy.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of the aggregation strategy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string GetStrategyName()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string indicating &quot;FedProx&quot; with the μ parameter value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Aggregators/FedProxAggregationStrategy.cs/#L57" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

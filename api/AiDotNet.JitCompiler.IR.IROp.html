@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class IROp | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class IROp | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for all IR operations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_JitCompiler_IR_IROp.md&amp;value=---%0Auid%3A%20AiDotNet.JitCompiler.IR.IROp%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.JitCompiler.IR.IROp">
+
+
+
+  <h1 id="AiDotNet_JitCompiler_IR_IROp" data-uid="AiDotNet.JitCompiler.IR.IROp" class="text-break">
+Class IROp  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/IROp.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.JitCompiler.html">JitCompiler</a>.<a class="xref" href="AiDotNet.JitCompiler.IR.html">IR</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for all IR operations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class IROp</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">IROp</span></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.AbsOp.html">AbsOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.AddOp.html">AddOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.AffineGridOp.html">AffineGridOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ApplyActivationOp.html">ApplyActivationOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.AttentionOp.html">AttentionOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.AvgPool2DOp.html">AvgPool2DOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.BackwardOp.html">BackwardOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.BatchNormOp.html">BatchNormOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.BentIdentityOp.html">BentIdentityOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.CELUOp.html">CELUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ComplexMatMulOp.html">ComplexMatMulOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ComplexMultiplyOp.html">ComplexMultiplyOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ConcatOp.html">ConcatOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ConstantOp.html">ConstantOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.Conv2DOp.html">Conv2DOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ConvTranspose2DOp.html">ConvTranspose2DOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.CropOp.html">CropOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.DepthwiseConv2DOp.html">DepthwiseConv2DOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.DilatedConv2DOp.html">DilatedConv2DOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.DivideOp.html">DivideOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.DropoutOp.html">DropoutOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ELUOp.html">ELUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ElementwiseMultiplyOp.html">ElementwiseMultiplyOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.EmbeddingOp.html">EmbeddingOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ExpOp.html">ExpOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FakeQuantizationOp.html">FakeQuantizationOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedAddLayerNormOp.html">FusedAddLayerNormOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedAddReLUOp.html">FusedAddReLUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedAttentionOp.html">FusedAttentionOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedBatchNormActivationOp.html">FusedBatchNormActivationOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedBiasActivationOp.html">FusedBiasActivationOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedConvBatchNormActivationOp.html">FusedConvBatchNormActivationOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedConvBatchNormOp.html">FusedConvBatchNormOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedDenseLayerOp.html">FusedDenseLayerOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedElementwiseActivationOp.html">FusedElementwiseActivationOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedElementwiseChainOp.html">FusedElementwiseChainOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedGELUOp.html">FusedGELUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedLayerNormAddOp.html">FusedLayerNormAddOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedLinearActivationOp.html">FusedLinearActivationOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedLinearOp.html">FusedLinearOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedLinearReLUOp.html">FusedLinearReLUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedMatMulAddOp.html">FusedMatMulAddOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedMultiHeadAttentionOp.html">FusedMultiHeadAttentionOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedResidualBlockOp.html">FusedResidualBlockOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedSwishOp.html">FusedSwishOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GELUOp.html">GELUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GRUCellOp.html">GRUCellOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GaussianOp.html">GaussianOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GeometricProductOp.html">GeometricProductOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradGeometricProductOp.html">GradGeometricProductOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradMobiusAddOp.html">GradMobiusAddOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradOctonionMultiplyOp.html">GradOctonionMultiplyOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradPoincareExpMapOp.html">GradPoincareExpMapOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSpMMOp.html">GradSpMMOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSpMVOp.html">GradSpMVOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GraphConvOp.html">GraphConvOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GridSampleOp.html">GridSampleOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.HardSigmoidOp.html">HardSigmoidOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.HardTanhOp.html">HardTanhOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.HierarchicalSoftmaxOp.html">HierarchicalSoftmaxOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ISRUOp.html">ISRUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.LSTMCellOp.html">LSTMCellOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.LayerNormOp.html">LayerNormOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.LeakyReLUOp.html">LeakyReLUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.LiSHTOp.html">LiSHTOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.LocallyConnectedConv2DOp.html">LocallyConnectedConv2DOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.LogOp.html">LogOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.LogSoftmaxOp.html">LogSoftmaxOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.LogSoftminOp.html">LogSoftminOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.MatMulOp.html">MatMulOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.MaxPool2DOp.html">MaxPool2DOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.MaxoutOp.html">MaxoutOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.MeanOp.html">MeanOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.MishOp.html">MishOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.MobiusAddOp.html">MobiusAddOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.MultiHeadAttentionOp.html">MultiHeadAttentionOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.NegateOp.html">NegateOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.NormOp.html">NormOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.OctonionMatMulOp.html">OctonionMatMulOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.OctonionMultiplyOp.html">OctonionMultiplyOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.PReLUOp.html">PReLUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.PadOp.html">PadOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.PixelShuffleOp.html">PixelShuffleOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.PoincareExpMapOp.html">PoincareExpMapOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.PoincareLogMapOp.html">PoincareLogMapOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.PowerOp.html">PowerOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.RBFKernelOp.html">RBFKernelOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.RReLUOp.html">RReLUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ReLUOp.html">ReLUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ReduceLogVarianceOp.html">ReduceLogVarianceOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ReduceMaxOp.html">ReduceMaxOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ReduceMeanOp.html">ReduceMeanOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ReshapeOp.html">ReshapeOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SELUOp.html">SELUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SQRBFOp.html">SQRBFOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ScalarConstantOp.html">ScalarConstantOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ScaledDotProductAttentionOp.html">ScaledDotProductAttentionOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ScaledTanhOp.html">ScaledTanhOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SigmoidOp.html">SigmoidOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SignOp.html">SignOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SliceOp.html">SliceOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SoftKNNOp.html">SoftKNNOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SoftLocallyWeightedOp.html">SoftLocallyWeightedOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SoftPlusOp.html">SoftPlusOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SoftSignOp.html">SoftSignOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SoftSplitOp.html">SoftSplitOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SoftmaxOp.html">SoftmaxOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SoftminOp.html">SoftminOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SpMMOp.html">SpMMOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SpMVOp.html">SpMVOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SparsemaxOp.html">SparsemaxOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SphericalSoftmaxOp.html">SphericalSoftmaxOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SplitOp.html">SplitOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SqrtOp.html">SqrtOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SquareOp.html">SquareOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SquashOp.html">SquashOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SubtractOp.html">SubtractOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SumOp.html">SumOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SwishOp.html">SwishOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.TanhOp.html">TanhOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.TaylorSoftmaxOp.html">TaylorSoftmaxOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ThresholdedReLUOp.html">ThresholdedReLUOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.TransposeOp.html">TransposeOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.UnrolledElementwiseOp.html">UnrolledElementwiseOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.UnrolledReductionOp.html">UnrolledReductionOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.UnrolledSequenceOp.html">UnrolledSequenceOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.UpsampleOp.html">UpsampleOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.VectorizedBinaryOp.html">VectorizedBinaryOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.VectorizedMatMulOp.html">VectorizedMatMulOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.VectorizedReductionOp.html">VectorizedReductionOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.VectorizedUnaryOp.html">VectorizedUnaryOp</a></div>
+      <div><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.WedgeProductOp.html">WedgeProductOp</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_JitCompiler_IR_IROp_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+IROp represents a single operation in the intermediate representation graph.
+Each operation has inputs (tensor IDs), produces an output (tensor ID), and
+has metadata about types and shapes.
+</p>
+<p><b>For Beginners:</b> An IROp is like a single step in a recipe.
+<p>Each operation:</p>
+<ul>
+<li>Takes some inputs (the tensor IDs it needs)</li>
+<li>Performs a calculation (add, multiply, etc.)</li>
+<li>Produces an output (a new tensor ID)</li>
+<li>Knows what type and shape the output will be</li>
+</ul>
+<p>For example, an &quot;Add&quot; operation might:</p>
+<ul>
+<li>Take inputs: tensor 0 and tensor 1</li>
+<li>Perform: element-wise addition</li>
+<li>Produce: tensor 2</li>
+<li>Know: output has the same shape as the inputs</li>
+</ul>
+<p>The JIT compiler uses this information to generate optimized code.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_JitCompiler_IR_IROp_InputIds_" data-uid="AiDotNet.JitCompiler.IR.IROp.InputIds*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_IROp_InputIds" data-uid="AiDotNet.JitCompiler.IR.IROp.InputIds">
+  InputIds
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/IROp.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the identifiers of the input tensors to this operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[] InputIds { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_IROp_InputIds_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Input IDs reference tensors that must be computed before this operation.
+They can be graph inputs, constants, or outputs from earlier operations.
+</p>
+<p><b>For Beginners:</b> These are the inputs this operation needs.
+<p>For a binary operation like addition:</p>
+<ul>
+<li>InputIds = [0, 1] means &quot;add tensor 0 and tensor 1&quot;</li>
+</ul>
+<p>For a unary operation like ReLU:</p>
+<ul>
+<li>InputIds = [5] means &quot;apply ReLU to tensor 5&quot;</li>
+</ul>
+<p>The order matters! For subtraction, [0, 1] means &quot;0 - 1&quot;, not &quot;1 - 0&quot;.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_IR_IROp_OpType_" data-uid="AiDotNet.JitCompiler.IR.IROp.OpType*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_IROp_OpType" data-uid="AiDotNet.JitCompiler.IR.IROp.OpType">
+  OpType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/IROp.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the operation type name for debugging and visualization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual string OpType { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_IROp_OpType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+By default, this returns the class name without the "Op" suffix.
+For example, "MatMulOp" becomes "MatMul".
+</p>
+<p><b>For Beginners:</b> This is a human-readable name for the operation.
+<p>Used for:</p>
+<ul>
+<li>Debugging (see what operations are in the graph)</li>
+<li>Visualization (draw a graph diagram)</li>
+<li>Logging (track what the compiler is doing)</li>
+</ul>
+<p>Examples: &quot;Add&quot;, &quot;MatMul&quot;, &quot;ReLU&quot;, &quot;Conv2D&quot;</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_IR_IROp_OutputId_" data-uid="AiDotNet.JitCompiler.IR.IROp.OutputId*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_IROp_OutputId" data-uid="AiDotNet.JitCompiler.IR.IROp.OutputId">
+  OutputId
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/IROp.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the primary output ID (first element of OutputIds).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int OutputId { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_IROp_OutputId_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This is a convenience property for operations that produce a single output.
+For multi-output operations like gradient ops, use OutputIds directly.
+</p>
+<p><b>For Beginners:</b> Most operations produce just one result.
+This property makes it easy to work with the common case.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_IR_IROp_OutputIds_" data-uid="AiDotNet.JitCompiler.IR.IROp.OutputIds*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_IROp_OutputIds" data-uid="AiDotNet.JitCompiler.IR.IROp.OutputIds">
+  OutputIds
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/IROp.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the identifiers for the outputs of this operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[] OutputIds { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_IROp_OutputIds_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The output IDs identify the tensors produced by this operation.
+They're used by subsequent operations to reference these results.
+Most operations produce a single output, but gradient operations
+may produce multiple outputs (one gradient per input).
+</p>
+<p><b>For Beginners:</b> These are like variable names for the results.
+<p>For example, if this operation computes &quot;c = a + b&quot;:</p>
+<ul>
+<li>OutputIds might be [2] (representing &quot;c&quot;)</li>
+<li>InputIds might be [0, 1] (representing &quot;a&quot; and &quot;b&quot;)</li>
+</ul>
+<p>For gradient operations like &quot;grad(a * b)&quot;:</p>
+<ul>
+<li>OutputIds might be [3, 4] (representing &quot;d_a&quot; and &quot;d_b&quot;)</li>
+<li>InputIds might be [0, 1, 2] (representing &quot;a&quot;, &quot;b&quot;, &quot;d_c&quot;)</li>
+</ul>
+<p>Later operations can use these tensor IDs as their inputs.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_IR_IROp_OutputShape_" data-uid="AiDotNet.JitCompiler.IR.IROp.OutputShape*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_IROp_OutputShape" data-uid="AiDotNet.JitCompiler.IR.IROp.OutputShape">
+  OutputShape
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/IROp.cs/#L140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the shape of the output tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[] OutputShape { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_IROp_OutputShape_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The output shape is represented as an int[] array matching the existing
+Tensor&lt;T&gt;.Shape format. Each element is the size of that dimension.
+</p>
+<p><b>For Beginners:</b> This tells us the size and dimensions of the result.
+<p>Examples:</p>
+<ul>
+<li>[] = scalar (single number)</li>
+<li>[10] = vector with 10 elements</li>
+<li>[3, 4] = 3×4 matrix</li>
+<li>[32, 3, 224, 224] = batch of 32 RGB images, each 224×224 pixels</li>
+</ul>
+<p>The shape is determined by the operation:</p>
+<ul>
+<li>Adding [3, 4] + [3, 4] → [3, 4] (same shape)</li>
+<li>Matrix multiply [3, 4] × [4, 5] → [3, 5] (rows from left, cols from right)</li>
+<li>Sum [3, 4] along axis 1 → [3] (reduces one dimension)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_IR_IROp_OutputType_" data-uid="AiDotNet.JitCompiler.IR.IROp.OutputType*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_IROp_OutputType" data-uid="AiDotNet.JitCompiler.IR.IROp.OutputType">
+  OutputType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/IROp.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the data type of the output tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IRType OutputType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.JitCompiler.IR.IRType.html">IRType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_IROp_OutputType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The output type determines what numeric type (float, double, int, etc.)
+the result tensor will use. This affects memory usage and precision.
+</p>
+<p><b>For Beginners:</b> This tells us what kind of numbers the result contains.
+<p>Common types:</p>
+<ul>
+<li>Float32: Single-precision floating point (most common for neural networks)</li>
+<li>Float64: Double-precision floating point (higher precision, more memory)</li>
+<li>Int32: 32-bit integers</li>
+</ul>
+<p>The type affects:</p>
+<ul>
+<li>Memory usage (float32 uses half the memory of float64)</li>
+<li>Precision (how accurate calculations are)</li>
+<li>Performance (some operations are faster with certain types)</li>
+</ul>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_JitCompiler_IR_IROp_ToString_" data-uid="AiDotNet.JitCompiler.IR.IROp.ToString*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_IROp_ToString" data-uid="AiDotNet.JitCompiler.IR.IROp.ToString">
+  ToString()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/IROp.cs/#L225"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a string representation of this operation for debugging.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string ToString()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string describing this operation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_IROp_ToString_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The string format is: "tOutput = OpType(tInput1, tInput2, ...) : Type [Shape]"
+</p>
+<p><b>For Beginners:</b> This creates a readable description of the operation.
+<p>Example outputs:</p>
+<ul>
+<li>&quot;t2 = Add(t0, t1) : Float32 [3, 4]&quot;</li>
+<li>&quot;t5 = MatMul(t3, t4) : Float32 [128, 256]&quot;</li>
+<li>&quot;t8 = ReLU(t7) : Float32 [32, 128]&quot;</li>
+</ul>
+<p>This is super helpful for debugging - you can see exactly what each
+operation does and what shape tensors flow through the graph.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_IR_IROp_Validate_" data-uid="AiDotNet.JitCompiler.IR.IROp.Validate*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_IROp_Validate" data-uid="AiDotNet.JitCompiler.IR.IROp.Validate">
+  Validate()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/IROp.cs/#L186"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that this operation is correctly formed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool Validate()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if valid, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_IROp_Validate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Basic validation checks that the operation has required information.
+Derived classes can override to add operation-specific validation.
+</p>
+<p><b>For Beginners:</b> This checks that the operation makes sense.
+<p>Basic checks:</p>
+<ul>
+<li>Output ID is valid (non-negative)</li>
+<li>Has the right number of inputs</li>
+<li>Shapes are compatible</li>
+</ul>
+<p>Specific operations add their own checks:</p>
+<ul>
+<li>MatMul: inner dimensions must match</li>
+<li>Conv2D: kernel size must be valid</li>
+<li>Reshape: total elements must be preserved</li>
+</ul>
+<p>If validation fails, the operation can't be compiled.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/IROp.cs/#L29" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

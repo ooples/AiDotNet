@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class UnobservedComponentsOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class UnobservedComponentsOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Unobserved Components Models (UCM), which decompose time series into trend, seasonal, cycle, and irregular components.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_UnobservedComponentsOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.UnobservedComponentsOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.UnobservedComponentsOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_UnobservedComponentsOptions_3" data-uid="AiDotNet.Models.Options.UnobservedComponentsOptions`3" class="text-break">
+Class UnobservedComponentsOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UnobservedComponentsOptions.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Unobserved Components Models (UCM), which decompose time series into
+trend, seasonal, cycle, and irregular components.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class UnobservedComponentsOptions&lt;T, TInput, TOutput&gt; : TimeSeriesRegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html">TimeSeriesRegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">UnobservedComponentsOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LagOrder">TimeSeriesRegressionOptions&lt;T&gt;.LagOrder</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_IncludeTrend">TimeSeriesRegressionOptions&lt;T&gt;.IncludeTrend</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_AutocorrelationCorrection">TimeSeriesRegressionOptions&lt;T&gt;.AutocorrelationCorrection</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_ModelType">TimeSeriesRegressionOptions&lt;T&gt;.ModelType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LossFunction">TimeSeriesRegressionOptions&lt;T&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Unobserved Components Models (UCM), also known as Structural Time Series Models, provide a flexible 
+framework for decomposing time series data into distinct components that are not directly observable. 
+These components typically include trend (long-term movement), seasonal (regular patterns at fixed 
+intervals), cycle (irregular fluctuations of varying length), and irregular (random noise) components. 
+UCM is particularly useful for understanding the underlying structure of time series data, forecasting, 
+and detecting structural changes. This approach is based on state space models and is often estimated 
+using the Kalman filter. This class provides configuration options for controlling the components 
+included in the model and the estimation process.
+</p>
+<p><b>For Beginners:</b> Unobserved Components Models help you break down time series data into meaningful parts.
+<p>When analyzing time series data:</p>
+<ul>
+<li>It's often useful to separate the data into different components</li>
+<li>These components aren't directly observable but can be estimated</li>
+</ul>
+<p>UCM decomposes time series into:</p>
+<ul>
+<li>Trend: The long-term direction (upward, downward, or stable)</li>
+<li>Seasonal: Regular patterns that repeat at fixed intervals (daily, weekly, monthly, etc.)</li>
+<li>Cycle: Irregular fluctuations that don't have a fixed period</li>
+<li>Irregular: Random noise or unexplained variation</li>
+</ul>
+<p>This approach offers several benefits:</p>
+<ul>
+<li>Better understanding of what drives the time series</li>
+<li>Improved forecasting by modeling each component separately</li>
+<li>Ability to detect structural changes over time</li>
+<li>Flexibility to include or exclude components based on domain knowledge</li>
+</ul>
+<p>This class lets you configure which components to include and how to estimate them.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_CycleLambda_" data-uid="AiDotNet.Models.Options.UnobservedComponentsOptions`3.CycleLambda*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_CycleLambda" data-uid="AiDotNet.Models.Options.UnobservedComponentsOptions`3.CycleLambda">
+  CycleLambda
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UnobservedComponentsOptions.cs/#L284"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the smoothing parameter for the cycle component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double CycleLambda { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value, defaulting to 1600.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_CycleLambda_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the smoothing parameter (lambda) for the cycle component in the Unobserved 
+Components Model. This parameter controls the smoothness of the estimated cycle, with larger values 
+resulting in smoother cycles. The default value of 1600 is a common choice for quarterly data, based on 
+the Hodrick-Prescott filter literature. For monthly data, a value of 14400 is often used, while for annual 
+data, a value of 100 is common. This parameter is only relevant when IncludeCycle is set to true. The 
+optimal value depends on the frequency of the data and the expected smoothness of the cycle component.
+</p>
+<p><b>For Beginners:</b> This setting controls how smooth the cycle component should be.
+<p>The cycle lambda parameter:</p>
+<ul>
+<li>Controls the smoothness of the estimated cycle component</li>
+<li>Higher values produce smoother cycles with less variation</li>
+<li>Only relevant when IncludeCycle is true</li>
+</ul>
+<p>The default value of 1600 means:</p>
+<ul>
+<li>The cycle will be moderately smooth</li>
+<li>This is a standard value for quarterly economic data</li>
+</ul>
+<p>Common values for different data frequencies:</p>
+<ul>
+<li>Annual data: 100</li>
+<li>Quarterly data: 1600</li>
+<li>Monthly data: 14400</li>
+<li>Daily data: 107000</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when you want smoother, more gradual cycles</li>
+<li>Decrease it when you want to allow more variation in the cycle</li>
+<li>Adjust based on the frequency of your data</li>
+</ul>
+<p>For example, for monthly data with business cycles,
+you would typically increase this to 14400 to get appropriate smoothing.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_CycleMaxPeriod_" data-uid="AiDotNet.Models.Options.UnobservedComponentsOptions`3.CycleMaxPeriod*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_CycleMaxPeriod" data-uid="AiDotNet.Models.Options.UnobservedComponentsOptions`3.CycleMaxPeriod">
+  CycleMaxPeriod
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UnobservedComponentsOptions.cs/#L364"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum period for the cycle component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CycleMaxPeriod { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 40.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_CycleMaxPeriod_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the maximum period (in terms of the time unit of the data) for the cycle component 
+in the Unobserved Components Model. It sets an upper bound on how long the stochastic cycle can be. For 
+example, with quarterly data, a maximum period of 40 means the cycle cannot be longer than 40 quarters 
+(10 years). This parameter is only relevant when IncludeCycle is true. The default value of 40 provides a 
+reasonable upper bound for many applications, particularly for quarterly economic data where business cycles 
+typically don't exceed 10 years. The optimal value depends on the frequency of the data and the maximum cycle 
+length that is meaningful in the specific application.
+</p>
+<p><b>For Beginners:</b> This setting sets an upper limit on how long the cycles can be.
+<p>The cycle maximum period:</p>
+<ul>
+<li>Sets the longest possible length for a cycle</li>
+<li>Prevents very long fluctuations from being considered cycles</li>
+<li>Only relevant when IncludeCycle is true</li>
+</ul>
+<p>The default value of 40 means:</p>
+<ul>
+<li>Cycles must be no longer than 40 time units</li>
+<li>For quarterly data, this corresponds to 10 years</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 60): Allows longer cycles to be modeled</li>
+<li>Lower values (e.g., 20): Only shorter cycles will be captured</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when you want to model very long cycles</li>
+<li>Decrease it when you only want to focus on shorter cycles</li>
+<li>Should be set based on domain knowledge about meaningful cycle lengths</li>
+</ul>
+<p>For example, for monthly data where you want to capture cycles up to 8 years,
+you would set this to 96 (96 months = 8 years).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_CycleMinPeriod_" data-uid="AiDotNet.Models.Options.UnobservedComponentsOptions`3.CycleMinPeriod*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_CycleMinPeriod" data-uid="AiDotNet.Models.Options.UnobservedComponentsOptions`3.CycleMinPeriod">
+  CycleMinPeriod
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UnobservedComponentsOptions.cs/#L324"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum period for the cycle component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CycleMinPeriod { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 2.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_CycleMinPeriod_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the minimum period (in terms of the time unit of the data) for the cycle component 
+in the Unobserved Components Model. It sets a lower bound on how short the stochastic cycle can be. For 
+example, with quarterly data, a minimum period of 2 means the cycle cannot be shorter than 2 quarters 
+(6 months). This parameter is only relevant when IncludeCycle is set to true. The default value of 2 
+provides a reasonable lower bound for many applications, preventing very high-frequency fluctuations from 
+being modeled as cycles. The optimal value depends on the frequency of the data and the minimum cycle 
+length that is meaningful in the specific application.
+</p>
+<p><b>For Beginners:</b> This setting sets a lower limit on how short the cycles can be.
+<p>The cycle minimum period:</p>
+<ul>
+<li>Sets the shortest possible length for a cycle</li>
+<li>Prevents very short fluctuations from being considered cycles</li>
+<li>Only relevant when IncludeCycle is true</li>
+</ul>
+<p>The default value of 2 means:</p>
+<ul>
+<li>Cycles must be at least 2 time units long</li>
+<li>This prevents very short-term fluctuations from being modeled as cycles</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 4): Only longer cycles will be modeled</li>
+<li>Lower values (e.g., 2): Allows shorter cycles to be captured</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when you only want to model medium to long-term cycles</li>
+<li>Keep at the default for most applications</li>
+<li>Should be set based on domain knowledge about meaningful cycle lengths</li>
+</ul>
+<p>For example, for quarterly economic data where business cycles are typically at least 2 years,
+you might increase this to 8 (8 quarters = 2 years) to focus on business cycles.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_Decomposition_" data-uid="AiDotNet.Models.Options.UnobservedComponentsOptions`3.Decomposition*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_Decomposition" data-uid="AiDotNet.Models.Options.UnobservedComponentsOptions`3.Decomposition">
+  Decomposition
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UnobservedComponentsOptions.cs/#L407"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the matrix decomposition method used in the estimation algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IMatrixDecomposition&lt;T&gt;? Decomposition { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IMatrixDecomposition-1.html">IMatrixDecomposition</a>&lt;T&gt;</dt>
+    <dd><p>An instance of a class implementing IMatrixDecomposition&lt;T&gt;, or null to use the default decomposition.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_Decomposition_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the matrix decomposition method used in the estimation algorithm for the Unobserved 
+Components Model. Matrix decomposition is used to solve linear systems that arise during the Kalman filter 
+and smoother steps of the estimation process. Different decomposition methods have different numerical 
+properties and computational requirements. The default value of null indicates that a default decomposition 
+method appropriate for the specific model implementation should be used. Common decomposition methods include 
+Cholesky decomposition (efficient for positive definite matrices), QR decomposition (more stable for 
+ill-conditioned matrices), and SVD (Singular Value Decomposition, the most stable but also the most 
+computationally expensive). The optimal choice depends on the numerical properties of the specific problem 
+and the desired trade-off between numerical stability and computational efficiency.
+</p>
+<p><b>For Beginners:</b> This setting determines the mathematical method used to solve equations during model estimation.
+<p>The matrix decomposition:</p>
+<ul>
+<li>Affects how certain mathematical operations are performed during estimation</li>
+<li>Different methods have different trade-offs between speed and numerical stability</li>
+<li>Most users don't need to change this setting</li>
+</ul>
+<p>The default value of null means:</p>
+<ul>
+<li>The system will choose an appropriate default decomposition method</li>
+<li>This is suitable for most applications</li>
+</ul>
+<p>Common decomposition methods include:</p>
+<ul>
+<li>Cholesky: Efficient for well-behaved problems</li>
+<li>QR: More stable for difficult numerical problems</li>
+<li>SVD: Most numerically stable, but significantly slower</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Specify a different decomposition when the default causes numerical issues</li>
+<li>Choose based on whether you prioritize speed or numerical stability</li>
+<li>This is an advanced setting that rarely needs adjustment</li>
+</ul>
+<p>For example, if your model estimation process fails with numerical errors,
+you might specify a more stable decomposition method like SVD.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_IncludeCycle_" data-uid="AiDotNet.Models.Options.UnobservedComponentsOptions`3.IncludeCycle*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_IncludeCycle" data-uid="AiDotNet.Models.Options.UnobservedComponentsOptions`3.IncludeCycle">
+  IncludeCycle
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UnobservedComponentsOptions.cs/#L243"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether to include a cycle component in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IncludeCycle { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>A boolean value, defaulting to false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_IncludeCycle_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies whether a cycle component should be included in the Unobserved Components Model. 
+Unlike the seasonal component, which has a fixed period, the cycle component models irregular fluctuations 
+with a stochastic period that can vary over time. Cycles are often used to model business cycles or other 
+medium to long-term fluctuations that don't have a fixed periodicity. The default value of false excludes 
+the cycle component, which is appropriate for many applications where such irregular cycles are not present 
+or not of interest. Including a cycle component increases the flexibility of the model but also the number 
+of parameters to estimate and the risk of overfitting.
+</p>
+<p><b>For Beginners:</b> This setting determines whether the model includes irregular cyclical patterns.
+<p>The cycle component:</p>
+<ul>
+<li>Models irregular fluctuations that don't have a fixed period</li>
+<li>Different from seasonality, which has a constant period</li>
+<li>Useful for business cycles, economic cycles, or other varying-length patterns</li>
+</ul>
+<p>The default value of false means:</p>
+<ul>
+<li>No cycle component is included in the model</li>
+<li>This is appropriate for many time series without irregular cycles</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Enabled (true): Include a component for irregular cycles with varying length</li>
+<li>Disabled (false): Don't model irregular cyclical patterns</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Enable (true) when your data shows irregular cycles beyond seasonality</li>
+<li>Keep disabled (false) for simpler models or when cycles aren't present</li>
+<li>Enable for economic data, which often exhibits business cycles</li>
+</ul>
+<p>For example, for GDP or unemployment data that shows business cycle fluctuations,
+you would set this to true to capture these irregular cycles.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_MaxIterations_" data-uid="AiDotNet.Models.Options.UnobservedComponentsOptions`3.MaxIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_MaxIterations" data-uid="AiDotNet.Models.Options.UnobservedComponentsOptions`3.MaxIterations">
+  MaxIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UnobservedComponentsOptions.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of iterations for the estimation algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 100.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_MaxIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the maximum number of iterations for the estimation algorithm used to fit the 
+Unobserved Components Model. The estimation process iteratively refines the parameter estimates until 
+convergence is reached or the maximum number of iterations is exceeded. A larger value allows for more 
+iterations and potentially better parameter estimates but increases the computation time. The default 
+value of 100 provides a reasonable upper limit for many applications, allowing sufficient iterations 
+for convergence while preventing excessive computation. The optimal value depends on the complexity of 
+the data and the desired trade-off between accuracy and computation time.
+</p>
+<p><b>For Beginners:</b> This setting limits how long the model will spend trying to find the best parameters.
+<p>The maximum iterations:</p>
+<ul>
+<li>Sets an upper limit on the number of optimization steps</li>
+<li>Prevents the algorithm from running indefinitely</li>
+<li>Balances computation time with parameter quality</li>
+</ul>
+<p>The default value of 100 means:</p>
+<ul>
+<li>The algorithm will perform at most 100 iterations to find optimal parameters</li>
+<li>This is sufficient for many time series problems</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 200): More opportunity to find better parameters, but longer runtime</li>
+<li>Lower values (e.g., 50): Faster results, but potentially suboptimal parameters</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it for complex time series with multiple components</li>
+<li>Decrease it when computational resources are limited or for simpler time series</li>
+<li>If the algorithm frequently hits this limit, consider increasing it</li>
+</ul>
+<p>For example, for a complex time series with strong seasonal and cyclical patterns,
+you might increase this to 200 to ensure the model has enough iterations to converge.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_OptimizeParameters_" data-uid="AiDotNet.Models.Options.UnobservedComponentsOptions`3.OptimizeParameters*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_OptimizeParameters" data-uid="AiDotNet.Models.Options.UnobservedComponentsOptions`3.OptimizeParameters">
+  OptimizeParameters
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UnobservedComponentsOptions.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether to optimize the model parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool OptimizeParameters { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>A boolean value, defaulting to true.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_OptimizeParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies whether the model parameters should be optimized during the estimation process. 
+When set to true, the algorithm will search for the parameter values that maximize the likelihood of the 
+observed data. When set to false, the algorithm will use the initial parameter values without optimization, 
+which can be useful when the parameters are known or when performing sensitivity analysis. The default 
+value of true enables parameter optimization, which is appropriate for most applications where the optimal 
+parameter values are unknown. Disabling optimization might be preferred when the parameters have been 
+pre-determined based on domain knowledge or when computational efficiency is a priority.
+</p>
+<p><b>For Beginners:</b> This setting determines whether the model searches for the best parameters or uses the ones you provide.
+<p>Parameter optimization:</p>
+<ul>
+<li>When enabled, the model finds the best parameters to fit your data</li>
+<li>When disabled, the model uses the initial parameters without changing them</li>
+<li>Affects both model quality and computation time</li>
+</ul>
+<p>The default value of true means:</p>
+<ul>
+<li>The model will automatically search for the optimal parameters</li>
+<li>This is appropriate for most situations where you don't know the best parameters</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Enabled (true): Let the model find the best parameters (recommended for most cases)</li>
+<li>Disabled (false): Use fixed parameters that you specify</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Keep enabled (true) for most applications</li>
+<li>Disable (false) when you have specific parameters you want to use</li>
+<li>Disable for sensitivity analysis or when parameters are known from domain knowledge</li>
+</ul>
+<p>For example, if you're an expert who knows the exact variance parameters for each component,
+you might set this to false and provide those specific parameters.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_Optimizer_" data-uid="AiDotNet.Models.Options.UnobservedComponentsOptions`3.Optimizer*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_Optimizer" data-uid="AiDotNet.Models.Options.UnobservedComponentsOptions`3.Optimizer">
+  Optimizer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UnobservedComponentsOptions.cs/#L161"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the optimizer used for parameter estimation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IOptimizer&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;? Optimizer { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>An instance of a class implementing IOptimizer&lt;T&gt;, or null to use the default optimizer.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_Optimizer_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the optimization algorithm used to estimate the parameters of the Unobserved 
+Components Model. Different optimizers have different strengths and weaknesses in terms of convergence 
+speed, ability to escape local optima, and sensitivity to initial conditions. The default value of null 
+indicates that a default optimizer appropriate for the specific model implementation should be used. 
+Common optimization algorithms for UCM include maximum likelihood estimation via BFGS or L-BFGS, EM 
+(Expectation-Maximization), and Bayesian methods. The optimal choice depends on the specific characteristics 
+of the data and the desired trade-off between estimation accuracy and computational efficiency.
+</p>
+<p><b>For Beginners:</b> This setting determines the algorithm used to find the best model parameters.
+<p>The optimizer:</p>
+<ul>
+<li>Controls how the model finds the optimal parameter values</li>
+<li>Different optimizers have different strengths and weaknesses</li>
+<li>Can significantly affect both the quality of results and computation time</li>
+</ul>
+<p>The default value of null means:</p>
+<ul>
+<li>The system will choose an appropriate default optimizer</li>
+<li>This is suitable for most applications</li>
+</ul>
+<p>Common optimizer types include:</p>
+<ul>
+<li>BFGS: Efficient for smooth likelihood functions</li>
+<li>EM: Often used for state space models like UCM</li>
+<li>Bayesian: Provides uncertainty estimates for parameters</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Specify a different optimizer when the default doesn't converge well</li>
+<li>Choose based on whether you prioritize speed or solution quality</li>
+<li>This is an advanced setting that most users can leave as default</li>
+</ul>
+<p>For example, if the default optimizer struggles with your complex model,
+you might specify a more robust optimizer that's less likely to get
+stuck in local optima.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_SeasonalPeriod_" data-uid="AiDotNet.Models.Options.UnobservedComponentsOptions`3.SeasonalPeriod*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_SeasonalPeriod" data-uid="AiDotNet.Models.Options.UnobservedComponentsOptions`3.SeasonalPeriod">
+  SeasonalPeriod
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UnobservedComponentsOptions.cs/#L203"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the seasonal period for the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SeasonalPeriod { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 1 (no seasonality).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_UnobservedComponentsOptions_3_SeasonalPeriod_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the length of the seasonal cycle in the Unobserved Components Model. A value 
+greater than 1 indicates that a seasonal component should be included in the model, with the specified 
+period. For example, a value of 4 for quarterly data would model annual seasonality, while a value of 12 
+for monthly data would also model annual seasonality. A value of 1 (the default) indicates that no 
+seasonal component should be included. This property overrides the SeasonalPeriod property inherited 
+from the base class to provide a more appropriate default value for UCM. The optimal value depends on 
+the known or expected seasonal patterns in the data and the frequency of the observations.
+</p>
+<p><b>For Beginners:</b> This setting specifies the length of seasonal patterns in your data.
+<p>The seasonal period:</p>
+<ul>
+<li>Defines the length of repeating patterns in your data</li>
+<li>Determines whether and how seasonality is modeled</li>
+<li>Should match the known or expected seasonal cycle in your data</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>No seasonality is included in the model</li>
+<li>This is appropriate for data without seasonal patterns</li>
+</ul>
+<p>Common values for different data frequencies:</p>
+<ul>
+<li>Monthly data: 12 (annual seasonality)</li>
+<li>Quarterly data: 4 (annual seasonality)</li>
+<li>Daily data: 7 (weekly seasonality) or 365 (annual seasonality)</li>
+<li>Hourly data: 24 (daily seasonality)</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Set based on your knowledge of the data and its natural cycles</li>
+<li>Set to 1 to exclude seasonality from the model</li>
+<li>This setting overrides the value inherited from the base class</li>
+</ul>
+<p>For example, for monthly sales data with annual patterns,
+you would set this to 12 to capture the yearly seasonality.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UnobservedComponentsOptions.cs/#L39" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

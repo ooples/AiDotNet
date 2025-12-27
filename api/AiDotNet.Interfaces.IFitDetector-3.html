@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IFitDetector&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IFitDetector&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines an interface for detecting how well a machine learning model fits the data.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IFitDetector_3.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IFitDetector%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IFitDetector`3">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IFitDetector_3" data-uid="AiDotNet.Interfaces.IFitDetector`3" class="text-break">
+Interface IFitDetector&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFitDetector.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines an interface for detecting how well a machine learning model fits the data.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IFitDetector&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., double, float).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IFitDetector_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> This interface helps determine if your model is learning properly or has problems.</p>
+<p>When training machine learning models, three common problems can occur:</p>
+<ol>
+<li><p>Underfitting: The model is too simple and doesn't capture important patterns in the data.</p>
+<ul>
+<li>Like using only a house's age to predict its price, ignoring size, location, etc.</li>
+<li>Signs: Poor performance on both training and new data</li>
+</ul>
+</li>
+<li><p>Overfitting: The model memorizes the training data instead of learning general patterns.</p>
+<ul>
+<li>Like memorizing specific houses and their prices instead of understanding what makes houses valuable</li>
+<li>Signs: Excellent performance on training data but poor performance on new data</li>
+</ul>
+</li>
+<li><p>Good fit: The model captures the important patterns without memorizing noise.</p>
+<ul>
+<li>Like understanding that location, size, and condition affect house prices</li>
+<li>Signs: Good performance on both training data and new data</li>
+</ul>
+</li>
+</ol>
+<p>This interface provides methods to analyze your model's performance and detect which
+of these situations you're dealing with, so you can make appropriate adjustments.</p>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IFitDetector_3_DetectFit_" data-uid="AiDotNet.Interfaces.IFitDetector`3.DetectFit*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFitDetector_3_DetectFit_AiDotNet_Models_ModelEvaluationData__0__1__2__" data-uid="AiDotNet.Interfaces.IFitDetector`3.DetectFit(AiDotNet.Models.ModelEvaluationData{`0,`1,`2})">
+  DetectFit(ModelEvaluationData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFitDetector.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Analyzes model evaluation data to detect whether the model is underfitting, overfitting, or has a good fit.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">FitDetectorResult&lt;T&gt; DetectFit(ModelEvaluationData&lt;T, TInput, TOutput&gt; evaluationData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>evaluationData</code> <a class="xref" href="AiDotNet.Models.ModelEvaluationData-3.html">ModelEvaluationData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Data containing model performance metrics on training and validation datasets.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.FitDetectorResult-1.html">FitDetectorResult</a>&lt;T&gt;</dt>
+    <dd><p>A FitDetectorResult object containing the detected fit type and relevant metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IFitDetector_3_DetectFit_AiDotNet_Models_ModelEvaluationData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method examines how your model performs on different data sets to diagnose problems.</p>
+<p>The input parameter:</p>
+<ul>
+<li>evaluationData: Contains information about how well your model performs on:
+<ul>
+<li>Training data (the data your model learned from)</li>
+<li>Validation data (new data your model hasn't seen before)</li>
+</ul>
+</li>
+</ul>
+<p>The method compares these performances to determine if your model:</p>
+<ul>
+<li>Is underfitting (performs poorly on both training and validation data)</li>
+<li>Is overfitting (performs very well on training data but poorly on validation data)</li>
+<li>Has a good fit (performs well on both training and validation data)</li>
+</ul>
+<p>The returned FitDetectorResult contains:</p>
+<ul>
+<li>The detected fit type (underfitting, overfitting, or good fit)</li>
+<li>Relevant metrics that support this conclusion</li>
+<li>Possibly recommendations for how to improve the model</li>
+</ul>
+<p>This information helps you decide what to do next:</p>
+<ul>
+<li>If underfitting: Try a more complex model or add more features</li>
+<li>If overfitting: Try regularization, get more training data, or simplify the model</li>
+<li>If good fit: Your model is ready to use!</li>
+</ul>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFitDetector.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

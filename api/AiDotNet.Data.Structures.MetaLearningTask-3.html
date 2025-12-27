@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MetaLearningTask&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MetaLearningTask&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a single meta-learning task for few-shot learning, containing support and query sets.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Data_Structures_MetaLearningTask_3.md&amp;value=---%0Auid%3A%20AiDotNet.Data.Structures.MetaLearningTask%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Data.Structures.MetaLearningTask`3">
+
+
+
+  <h1 id="AiDotNet_Data_Structures_MetaLearningTask_3" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3" class="text-break">
+Class MetaLearningTask&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/MetaLearningTask.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Data.html">Data</a>.<a class="xref" href="AiDotNet.Data.Structures.html">Structures</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a single meta-learning task for few-shot learning, containing support and query sets.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MetaLearningTask&lt;T, TInput, TOutput&gt; : IMetaLearningTask&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;, double[]).</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;, double[]).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MetaLearningTask&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IMetaLearningTask-3.html">IMetaLearningTask</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Data_Structures_MetaLearningTask_3_examples">Examples</h2>
+  <pre><code class="lang-csharp">// Create a 5-way 3-shot task
+// Support set: 5 classes × 3 shots = 15 examples
+// Query set: 5 classes × 10 queries = 50 examples
+
+var supportX = new Tensor&lt;double&gt;(new[] { 15, 784 }); // 15 images, 784 pixels each
+var supportY = new Tensor&lt;double&gt;(new[] { 15, 5 });   // 15 one-hot labels, 5 classes
+var queryX = new Tensor&lt;double&gt;(new[] { 50, 784 });   // 50 query images
+var queryY = new Tensor&lt;double&gt;(new[] { 50, 5 });     // 50 query labels
+
+var task = new MetaLearningTask&lt;double&gt;
+{
+    SupportSetX = supportX,
+    SupportSetY = supportY,
+    QuerySetX = queryX,
+    QuerySetY = queryY
+};
+
+// Use with MAML, Reptile, or SEAL algorithms
+var innerLoss = model.Train(task.SupportSetX, task.SupportSetY);
+var outerLoss = model.Evaluate(task.QuerySetX, task.QuerySetY);</code></pre>
+
+
+  <h2 id="AiDotNet_Data_Structures_MetaLearningTask_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+In meta-learning, particularly few-shot learning, a task is a small classification or regression problem
+sampled from a larger dataset. Each task contains a support set (for adapting/learning) and a query set
+(for evaluating the adaptation).
+</p>
+<p><b>For Beginners:</b> Meta-learning is about "learning to learn" - training a model to quickly adapt
+to new tasks with only a few examples. Think of it like learning a language:
+- Traditional learning: Learn one specific language from thousands of examples
+- Meta-learning: Learn the general skill of language acquisition so you can learn new languages faster
+<p>A MetaLearningTask represents one mini-problem in this process:</p>
+<ul>
+<li><b>Support Set:</b> A few labeled examples the model can study (like a mini training set)</li>
+<li><b>Query Set:</b> Examples to test how well the model adapted (like a mini test set)</li>
+</ul>
+<p>For example, in 5-way 3-shot classification:</p>
+<ul>
+<li>The support set has 5 classes with 3 examples each (15 total examples)</li>
+<li>The query set has examples from those same 5 classes to test performance</li>
+</ul>
+<p>The model learns from many such tasks, developing the ability to quickly adapt to new tasks.</p>
+
+<p>
+<b>Thread Safety:</b> This class is not thread-safe. Create separate instances for concurrent access.
+</p>
+<p>
+<b>Performance:</b> This is a lightweight container class with O(1) property access.
+Memory usage depends on the size of the tensors stored.
+</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Data_Structures_MetaLearningTask_3_Metadata_" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.Metadata*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_MetaLearningTask_3_Metadata" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.Metadata">
+  Metadata
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/MetaLearningTask.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the additional metadata about the task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, object&gt;? Metadata { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_MetaLearningTask_3_Name_" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.Name*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_MetaLearningTask_3_Name" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/MetaLearningTask.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets an optional name or identifier for the task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? Name { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_MetaLearningTask_3_NumQueryPerClass_" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.NumQueryPerClass*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_MetaLearningTask_3_NumQueryPerClass" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.NumQueryPerClass">
+  NumQueryPerClass
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/MetaLearningTask.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of query examples per class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumQueryPerClass { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_MetaLearningTask_3_NumQueryPerClass_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>The number of examples in the query set for each class.
+Used for evaluating performance after adaptation.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_MetaLearningTask_3_NumShots_" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.NumShots*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_MetaLearningTask_3_NumShots" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.NumShots">
+  NumShots
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/MetaLearningTask.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of shots (examples per class) in the support set.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumShots { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_MetaLearningTask_3_NumShots_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>In N-way K-shot learning, this represents K (number of examples per class).
+For example, in 5-way 1-shot learning, NumShots = 1.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_MetaLearningTask_3_NumWays_" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.NumWays*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_MetaLearningTask_3_NumWays" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.NumWays">
+  NumWays
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/MetaLearningTask.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of ways (classes) in this task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumWays { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_MetaLearningTask_3_NumWays_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>In N-way K-shot learning, this represents N (number of classes per task).
+For example, in 5-way 1-shot learning, NumWays = 5.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_MetaLearningTask_3_QueryInput_" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.QueryInput*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_MetaLearningTask_3_QueryInput" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.QueryInput">
+  QueryInput
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/MetaLearningTask.cs/#L208"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the input features for the query set (alias for QuerySetX).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TInput QueryInput { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TInput</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_MetaLearningTask_3_QueryOutput_" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.QueryOutput*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_MetaLearningTask_3_QueryOutput" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.QueryOutput">
+  QueryOutput
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/MetaLearningTask.cs/#L213"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the target labels for the query set (alias for QuerySetY).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TOutput QueryOutput { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_MetaLearningTask_3_QuerySetX_" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.QuerySetX*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_MetaLearningTask_3_QuerySetX" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.QuerySetX">
+  QuerySetX
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/MetaLearningTask.cs/#L171"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the input features for the query set.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TInput QuerySetX { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TInput</span></dt>
+    <dd><p>Input data containing the examples used for evaluating task adaptation.
+Shape depends on TInput type, typically larger than the support set size.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_MetaLearningTask_3_QuerySetX_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> These are the examples used to test how well the model adapted to this task.
+Think of them as the "quiz questions" after studying the practice problems (support set).
+<p>Continuing the 5-way example:</p>
+<ul>
+<li>After studying the 3 examples per class (support set)</li>
+<li>The model is tested on new, unseen examples from those same classes</li>
+<li>Typically 10-15 queries per class (50-75 total examples)</li>
+</ul>
+<p>The model must correctly classify these new examples based only on what it learned
+from the few support examples. This tests the model's ability to quickly adapt.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_MetaLearningTask_3_QuerySetY_" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.QuerySetY*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_MetaLearningTask_3_QuerySetY" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.QuerySetY">
+  QuerySetY
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/MetaLearningTask.cs/#L193"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the target labels for the query set.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TOutput QuerySetY { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>Output data containing the true labels for evaluating predictions on the query set.
+Shape depends on TOutput type.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_MetaLearningTask_3_QuerySetY_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> These are the correct answers for the query set examples.
+They're used to calculate how accurately the model can classify new examples after
+adapting to the task using only the support set.
+<p>The query accuracy is the key metric in few-shot learning:</p>
+<ul>
+<li>High query accuracy = Model successfully adapted from few examples</li>
+<li>Low query accuracy = Model struggled to generalize from limited data</li>
+</ul>
+<p>During meta-training, the model learns to maximize query set performance across
+many different tasks, developing strong few-shot learning abilities.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_MetaLearningTask_3_SupportInput_" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.SupportInput*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_MetaLearningTask_3_SupportInput" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.SupportInput">
+  SupportInput
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/MetaLearningTask.cs/#L198"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the input features for the support set (alias for SupportSetX).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TInput SupportInput { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TInput</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_MetaLearningTask_3_SupportOutput_" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.SupportOutput*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_MetaLearningTask_3_SupportOutput" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.SupportOutput">
+  SupportOutput
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/MetaLearningTask.cs/#L203"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the target labels for the support set (alias for SupportSetY).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TOutput SupportOutput { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_MetaLearningTask_3_SupportSetX_" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.SupportSetX*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_MetaLearningTask_3_SupportSetX" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.SupportSetX">
+  SupportSetX
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/MetaLearningTask.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the input features for the support set.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TInput SupportSetX { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TInput</span></dt>
+    <dd><p>Input data containing the examples used for task adaptation.
+Shape depends on TInput type (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;, double[]).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_MetaLearningTask_3_SupportSetX_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> These are the input examples the model can study to adapt to this task.
+Think of them as the "practice problems" before a quiz. In a 5-way 3-shot image classification task:
+- You have 5 different categories (ways)
+- With 3 example images each (shots)
+- Total: 15 example images to learn from
+<p>The model looks at these examples to quickly understand what makes each class unique.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_MetaLearningTask_3_SupportSetY_" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.SupportSetY*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_MetaLearningTask_3_SupportSetY" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.SupportSetY">
+  SupportSetY
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/MetaLearningTask.cs/#L149"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the target labels for the support set.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TOutput SupportSetY { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>Output data containing the labels corresponding to each example in the support set.
+Shape depends on TOutput type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;, double[]).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_MetaLearningTask_3_SupportSetY_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> These are the correct answers for each example in the support set.
+They tell the model which category each example belongs to.
+<p>For example, in animal classification:</p>
+<ul>
+<li>If SupportSetX contains images of cats, dogs, and birds</li>
+<li>SupportSetY tells which images are cats (label 0), dogs (label 1), or birds (label 2)</li>
+</ul>
+<p>Labels can be:</p>
+<ul>
+<li>Class indices: [0, 0, 0, 1, 1, 1, 2, 2, 2, ...] for 3-shot</li>
+<li>One-hot encoded: [[1,0,0], [1,0,0], [1,0,0], [0,1,0], ...] for 3-shot</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_MetaLearningTask_3_TaskId_" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.TaskId*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_MetaLearningTask_3_TaskId" data-uid="AiDotNet.Data.Structures.MetaLearningTask`3.TaskId">
+  TaskId
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/MetaLearningTask.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets an optional task identifier.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? TaskId { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/MetaLearningTask.cs/#L66" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

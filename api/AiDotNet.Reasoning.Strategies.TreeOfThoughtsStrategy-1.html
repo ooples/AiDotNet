@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TreeOfThoughtsStrategy&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TreeOfThoughtsStrategy&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements Tree-of-Thoughts (ToT) reasoning that explores multiple reasoning paths in a tree structure.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Reasoning_Strategies_TreeOfThoughtsStrategy_1.md&amp;value=---%0Auid%3A%20AiDotNet.Reasoning.Strategies.TreeOfThoughtsStrategy%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Reasoning.Strategies.TreeOfThoughtsStrategy`1">
+
+
+
+  <h1 id="AiDotNet_Reasoning_Strategies_TreeOfThoughtsStrategy_1" data-uid="AiDotNet.Reasoning.Strategies.TreeOfThoughtsStrategy`1" class="text-break">
+Class TreeOfThoughtsStrategy&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Strategies/TreeOfThoughtsStrategy.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Reasoning.html">Reasoning</a>.<a class="xref" href="AiDotNet.Reasoning.Strategies.html">Strategies</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements Tree-of-Thoughts (ToT) reasoning that explores multiple reasoning paths in a tree structure.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class TreeOfThoughtsStrategy&lt;T&gt; : ReasoningStrategyBase&lt;T&gt;, IReasoningStrategy&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for scoring (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html">ReasoningStrategyBase</a>&lt;T&gt;</div>
+      <div><span class="xref">TreeOfThoughtsStrategy&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IReasoningStrategy-1.html">IReasoningStrategy</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html#AiDotNet_Reasoning_ReasoningStrategyBase_1_ChatModel">ReasoningStrategyBase&lt;T&gt;.ChatModel</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html#AiDotNet_Reasoning_ReasoningStrategyBase_1_Tools">ReasoningStrategyBase&lt;T&gt;.Tools</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html#AiDotNet_Reasoning_ReasoningStrategyBase_1_ReasoningTrace">ReasoningStrategyBase&lt;T&gt;.ReasoningTrace</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html#AiDotNet_Reasoning_ReasoningStrategyBase_1_ReasonAsync_System_String_AiDotNet_Reasoning_Models_ReasoningConfig_System_Threading_CancellationToken_">ReasoningStrategyBase&lt;T&gt;.ReasonAsync(string, ReasoningConfig, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html#AiDotNet_Reasoning_ReasoningStrategyBase_1_AppendTrace_System_String_">ReasoningStrategyBase&lt;T&gt;.AppendTrace(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html#AiDotNet_Reasoning_ReasoningStrategyBase_1_ClearTrace">ReasoningStrategyBase&lt;T&gt;.ClearTrace()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html#AiDotNet_Reasoning_ReasoningStrategyBase_1_FindTool_System_String_">ReasoningStrategyBase&lt;T&gt;.FindTool(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html#AiDotNet_Reasoning_ReasoningStrategyBase_1_GetToolDescriptions">ReasoningStrategyBase&lt;T&gt;.GetToolDescriptions()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html#AiDotNet_Reasoning_ReasoningStrategyBase_1_ExecuteTool_System_String_System_String_">ReasoningStrategyBase&lt;T&gt;.ExecuteTool(string, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html#AiDotNet_Reasoning_ReasoningStrategyBase_1_ValidateConfig_AiDotNet_Reasoning_Models_ReasoningConfig_">ReasoningStrategyBase&lt;T&gt;.ValidateConfig(ReasoningConfig)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Reasoning_Strategies_TreeOfThoughtsStrategy_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Tree-of-Thoughts (ToT) is like exploring a maze where you can try
+multiple paths and backtrack if you hit a dead end. Unlike Chain-of-Thought which follows one
+linear path, ToT explores a tree of possibilities.
+<p><strong>How it works:</strong></p>
+<pre><code>Problem: &quot;How can we reduce carbon emissions?&quot;
+
+  ├─ Renewable Energy (score: 0.9)
+  │  ├─ Solar panels on buildings (score: 0.85)
+  │  ├─ Wind farm expansion (score: 0.80)
+  │  └─ Hydroelectric upgrades (score: 0.75)
+  │
+  ├─ Transportation (score: 0.85)
+  │  ├─ Electric vehicles (score: 0.90) ← Best path
+  │  └─ Public transit (score: 0.82)
+  │
+  └─ Industrial (score: 0.75)
+     ├─ Carbon capture (score: 0.70)
+     └─ Process efficiency (score: 0.65)
+</code></pre>
+<p>The search algorithm explores this tree to find the best reasoning path.</p>
+<p><strong>Key features:</strong></p>
+<ul>
+<li><strong>Explores multiple paths</strong>: Not limited to one direction</li>
+<li><strong>Can backtrack</strong>: If a path looks bad, try another</li>
+<li><strong>Evaluation at each step</strong>: Score thoughts as you go</li>
+<li><strong>Configurable search</strong>: BFS, Beam Search, or other algorithms</li>
+</ul>
+<p><strong>Compared to other strategies:</strong></p>
+<ul>
+<li><strong>Chain-of-Thought</strong>: Linear, one path only</li>
+<li><strong>Self-Consistency</strong>: Multiple independent paths, no tree structure</li>
+<li><strong>Tree-of-Thoughts</strong>: Structured exploration with evaluation and backtracking</li>
+</ul>
+<p><strong>Research basis:</strong>
+&quot;Tree of Thoughts: Deliberate Problem Solving with Large Language Models&quot; (Yao et al., 2023)
+showed significant improvements on planning, math, and creative tasks.</p>
+<p><strong>When to use:</strong></p>
+<ul>
+<li>Complex problems with multiple viable approaches</li>
+<li>When you need to explore and compare alternatives</li>
+<li>Planning tasks with branching possibilities</li>
+<li>Creative problem-solving</li>
+<li>Strategic decision-making</li>
+</ul>
+
+<p><b>Example Usage:</b>
+<pre><code class="lang-csharp">var chatModel = new OpenAIChatModel&lt;double&gt;("gpt-4");
+var strategy = new TreeOfThoughtsStrategy&lt;double&gt;(
+    chatModel,
+    searchAlgorithm: SearchAlgorithmType.BeamSearch
+);
+
+var config = new ReasoningConfig
+{
+    ExplorationDepth = 3,      // Explore 3 levels deep
+    BranchingFactor = 3,       // Generate 3 alternatives at each node
+    BeamWidth = 5              // Keep top 5 paths (for Beam Search)
+};
+
+var result = await strategy.ReasonAsync(
+    "Design a sustainable city transportation system",
+    config
+);
+
+// Result includes the best reasoning path found
+Console.WriteLine(result.FinalAnswer);
+Console.WriteLine($"Explored {result.Metrics["nodes_explored"]} possibilities");</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_Strategies_TreeOfThoughtsStrategy_1__ctor_" data-uid="AiDotNet.Reasoning.Strategies.TreeOfThoughtsStrategy`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Strategies_TreeOfThoughtsStrategy_1__ctor_AiDotNet_Interfaces_IChatModel__0__System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_ITool__AiDotNet_Reasoning_Strategies_SearchAlgorithmType_" data-uid="AiDotNet.Reasoning.Strategies.TreeOfThoughtsStrategy`1.#ctor(AiDotNet.Interfaces.IChatModel{`0},System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.ITool},AiDotNet.Reasoning.Strategies.SearchAlgorithmType)">
+  TreeOfThoughtsStrategy(IChatModel&lt;T&gt;, IEnumerable&lt;ITool&gt;?, SearchAlgorithmType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Strategies/TreeOfThoughtsStrategy.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Reasoning.Strategies.TreeOfThoughtsStrategy-1.html">TreeOfThoughtsStrategy&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TreeOfThoughtsStrategy(IChatModel&lt;T&gt; chatModel, IEnumerable&lt;ITool&gt;? tools = null, SearchAlgorithmType searchAlgorithmType = SearchAlgorithmType.BeamSearch)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>chatModel</code> <a class="xref" href="AiDotNet.Interfaces.IChatModel-1.html">IChatModel</a>&lt;T&gt;</dt>
+    <dd><p>The chat model used for reasoning.</p>
+</dd>
+    <dt><code>tools</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ITool.html">ITool</a>&gt;</dt>
+    <dd><p>Optional tools available during reasoning.</p>
+</dd>
+    <dt><code>searchAlgorithmType</code> <a class="xref" href="AiDotNet.Reasoning.Strategies.SearchAlgorithmType.html">SearchAlgorithmType</a></dt>
+    <dd><p>The search algorithm to use (default: BeamSearch).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Strategies_TreeOfThoughtsStrategy_1__ctor_AiDotNet_Interfaces_IChatModel__0__System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_ITool__AiDotNet_Reasoning_Strategies_SearchAlgorithmType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Creates a Tree-of-Thoughts strategy. You can customize:
+- The search algorithm (how to explore the tree)
+- The thought generator (how to create alternatives)
+- The thought evaluator (how to score thoughts)
+<p>If you don't specify custom components, sensible defaults are used.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_Strategies_TreeOfThoughtsStrategy_1_Description_" data-uid="AiDotNet.Reasoning.Strategies.TreeOfThoughtsStrategy`1.Description*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Strategies_TreeOfThoughtsStrategy_1_Description" data-uid="AiDotNet.Reasoning.Strategies.TreeOfThoughtsStrategy`1.Description">
+  Description
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Strategies/TreeOfThoughtsStrategy.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a description of what this reasoning strategy does and when to use it.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string Description { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Strategies_TreeOfThoughtsStrategy_1_Description_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This provides information about what makes this strategy unique
+and what types of problems it's best suited for. For example, Chain-of-Thought might describe
+itself as "Best for problems requiring step-by-step logical deduction."
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Strategies_TreeOfThoughtsStrategy_1_StrategyName_" data-uid="AiDotNet.Reasoning.Strategies.TreeOfThoughtsStrategy`1.StrategyName*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Strategies_TreeOfThoughtsStrategy_1_StrategyName" data-uid="AiDotNet.Reasoning.Strategies.TreeOfThoughtsStrategy`1.StrategyName">
+  StrategyName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Strategies/TreeOfThoughtsStrategy.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of this reasoning strategy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string StrategyName { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Strategies_TreeOfThoughtsStrategy_1_StrategyName_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is a human-readable name that identifies the strategy,
+like "Chain-of-Thought" or "Tree-of-Thoughts". It's useful for logging, debugging,
+or displaying to users which reasoning approach was used.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_Strategies_TreeOfThoughtsStrategy_1_ReasonCoreAsync_" data-uid="AiDotNet.Reasoning.Strategies.TreeOfThoughtsStrategy`1.ReasonCoreAsync*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Strategies_TreeOfThoughtsStrategy_1_ReasonCoreAsync_System_String_AiDotNet_Reasoning_Models_ReasoningConfig_System_Threading_CancellationToken_" data-uid="AiDotNet.Reasoning.Strategies.TreeOfThoughtsStrategy`1.ReasonCoreAsync(System.String,AiDotNet.Reasoning.Models.ReasoningConfig,System.Threading.CancellationToken)">
+  ReasonCoreAsync(string, ReasoningConfig, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Strategies/TreeOfThoughtsStrategy.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core reasoning logic to be implemented by derived strategies.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Task&lt;ReasoningResult&lt;T&gt;&gt; ReasonCoreAsync(string query, ReasoningConfig config, CancellationToken cancellationToken)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The problem or question to reason about.</p>
+</dd>
+    <dt><code>config</code> <a class="xref" href="AiDotNet.Reasoning.Models.ReasoningConfig.html">ReasoningConfig</a></dt>
+    <dd><p>Configuration options for the reasoning process.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Token to cancel the operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Reasoning.Models.ReasoningResult-1.html">ReasoningResult</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A reasoning result containing the answer and reasoning process.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Strategies_TreeOfThoughtsStrategy_1_ReasonCoreAsync_System_String_AiDotNet_Reasoning_Models_ReasoningConfig_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is where the actual reasoning happens - and it's different
+for each strategy. Derived classes must implement this method with their specific approach:
+- ChainOfThoughtStrategy: Linear step-by-step reasoning
+- TreeOfThoughtsStrategy: Explores multiple paths in a tree
+- SelfConsistencyStrategy: Multiple attempts with voting
+<p>The base class handles setup, timing, and error handling; derived classes focus on
+implementing their unique reasoning algorithm.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Strategies/TreeOfThoughtsStrategy.cs/#L85" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

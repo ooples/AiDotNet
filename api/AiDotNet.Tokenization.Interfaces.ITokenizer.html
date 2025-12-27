@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface ITokenizer | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface ITokenizer | AiDotNet Documentation ">
+      
+      <meta name="description" content="Interface for text tokenizers.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tokenization_Interfaces_ITokenizer.md&amp;value=---%0Auid%3A%20AiDotNet.Tokenization.Interfaces.ITokenizer%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer">
+
+
+
+  <h1 id="AiDotNet_Tokenization_Interfaces_ITokenizer" data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer" class="text-break">
+Interface ITokenizer  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/Interfaces/ITokenizer.cs/#L9"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tokenization.html">Tokenization</a>.<a class="xref" href="AiDotNet.Tokenization.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Interface for text tokenizers.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface ITokenizer</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tokenization_Interfaces_ITokenizer_SpecialTokens_" data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer.SpecialTokens*"></a>
+
+  <h3 id="AiDotNet_Tokenization_Interfaces_ITokenizer_SpecialTokens" data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer.SpecialTokens">
+  SpecialTokens
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/Interfaces/ITokenizer.cs/#L19"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the special tokens.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">SpecialTokens SpecialTokens { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tokenization.Models.SpecialTokens.html">SpecialTokens</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tokenization_Interfaces_ITokenizer_Vocabulary_" data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer.Vocabulary*"></a>
+
+  <h3 id="AiDotNet_Tokenization_Interfaces_ITokenizer_Vocabulary" data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer.Vocabulary">
+  Vocabulary
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/Interfaces/ITokenizer.cs/#L14"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the vocabulary.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IVocabulary Vocabulary { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tokenization.Interfaces.IVocabulary.html">IVocabulary</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tokenization_Interfaces_ITokenizer_VocabularySize_" data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer.VocabularySize*"></a>
+
+  <h3 id="AiDotNet_Tokenization_Interfaces_ITokenizer_VocabularySize" data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer.VocabularySize">
+  VocabularySize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/Interfaces/ITokenizer.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the vocabulary size.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int VocabularySize { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tokenization_Interfaces_ITokenizer_ConvertIdsToTokens_" data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer.ConvertIdsToTokens*"></a>
+
+  <h3 id="AiDotNet_Tokenization_Interfaces_ITokenizer_ConvertIdsToTokens_System_Collections_Generic_List_System_Int32__" data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer.ConvertIdsToTokens(System.Collections.Generic.List{System.Int32})">
+  ConvertIdsToTokens(List&lt;int&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/Interfaces/ITokenizer.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts token IDs to tokens.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">List&lt;string&gt; ConvertIdsToTokens(List&lt;int&gt; ids)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>ids</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>The token IDs to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>The tokens.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tokenization_Interfaces_ITokenizer_ConvertTokensToIds_" data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer.ConvertTokensToIds*"></a>
+
+  <h3 id="AiDotNet_Tokenization_Interfaces_ITokenizer_ConvertTokensToIds_System_Collections_Generic_List_System_String__" data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer.ConvertTokensToIds(System.Collections.Generic.List{System.String})">
+  ConvertTokensToIds(List&lt;string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/Interfaces/ITokenizer.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts tokens to token IDs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">List&lt;int&gt; ConvertTokensToIds(List&lt;string&gt; tokens)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tokens</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>The tokens to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>The token IDs.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tokenization_Interfaces_ITokenizer_Decode_" data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer.Decode*"></a>
+
+  <h3 id="AiDotNet_Tokenization_Interfaces_ITokenizer_Decode_System_Collections_Generic_List_System_Int32__System_Boolean_" data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer.Decode(System.Collections.Generic.List{System.Int32},System.Boolean)">
+  Decode(List&lt;int&gt;, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/Interfaces/ITokenizer.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Decodes token IDs back into text.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string Decode(List&lt;int&gt; tokenIds, bool skipSpecialTokens = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tokenIds</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>The token IDs to decode.</p>
+</dd>
+    <dt><code>skipSpecialTokens</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to skip special tokens in the output.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The decoded text.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tokenization_Interfaces_ITokenizer_DecodeBatch_" data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer.DecodeBatch*"></a>
+
+  <h3 id="AiDotNet_Tokenization_Interfaces_ITokenizer_DecodeBatch_System_Collections_Generic_List_System_Collections_Generic_List_System_Int32___System_Boolean_" data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer.DecodeBatch(System.Collections.Generic.List{System.Collections.Generic.List{System.Int32}},System.Boolean)">
+  DecodeBatch(List&lt;List&lt;int&gt;&gt;, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/Interfaces/ITokenizer.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Decodes multiple sequences of token IDs back into text.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">List&lt;string&gt; DecodeBatch(List&lt;List&lt;int&gt;&gt; tokenIdsBatch, bool skipSpecialTokens = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tokenIdsBatch</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;&gt;</dt>
+    <dd><p>The batch of token IDs to decode.</p>
+</dd>
+    <dt><code>skipSpecialTokens</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to skip special tokens in the output.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>The decoded texts.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tokenization_Interfaces_ITokenizer_Encode_" data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer.Encode*"></a>
+
+  <h3 id="AiDotNet_Tokenization_Interfaces_ITokenizer_Encode_System_String_AiDotNet_Tokenization_Models_EncodingOptions_" data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer.Encode(System.String,AiDotNet.Tokenization.Models.EncodingOptions)">
+  Encode(string, EncodingOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/Interfaces/ITokenizer.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Encodes text into tokens.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">TokenizationResult Encode(string text, EncodingOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text to encode.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Tokenization.Models.EncodingOptions.html">EncodingOptions</a></dt>
+    <dd><p>Encoding options.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tokenization.Models.TokenizationResult.html">TokenizationResult</a></dt>
+    <dd><p>The tokenization result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tokenization_Interfaces_ITokenizer_EncodeBatch_" data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer.EncodeBatch*"></a>
+
+  <h3 id="AiDotNet_Tokenization_Interfaces_ITokenizer_EncodeBatch_System_Collections_Generic_List_System_String__AiDotNet_Tokenization_Models_EncodingOptions_" data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer.EncodeBatch(System.Collections.Generic.List{System.String},AiDotNet.Tokenization.Models.EncodingOptions)">
+  EncodeBatch(List&lt;string&gt;, EncodingOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/Interfaces/ITokenizer.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Encodes multiple texts into tokens.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">List&lt;TokenizationResult&gt; EncodeBatch(List&lt;string&gt; texts, EncodingOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>texts</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>The texts to encode.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Tokenization.Models.EncodingOptions.html">EncodingOptions</a></dt>
+    <dd><p>Encoding options.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Tokenization.Models.TokenizationResult.html">TokenizationResult</a>&gt;</dt>
+    <dd><p>The tokenization results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tokenization_Interfaces_ITokenizer_Tokenize_" data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer.Tokenize*"></a>
+
+  <h3 id="AiDotNet_Tokenization_Interfaces_ITokenizer_Tokenize_System_String_" data-uid="AiDotNet.Tokenization.Interfaces.ITokenizer.Tokenize(System.String)">
+  Tokenize(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/Interfaces/ITokenizer.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Tokenizes text into subword tokens (without converting to IDs).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">List&lt;string&gt; Tokenize(string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text to tokenize.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>The list of tokens.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/Interfaces/ITokenizer.cs/#L9" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

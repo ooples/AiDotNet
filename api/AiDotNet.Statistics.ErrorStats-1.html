@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ErrorStats&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ErrorStats&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Calculates and stores various error metrics for evaluating prediction model performance.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Statistics_ErrorStats_1.md&amp;value=---%0Auid%3A%20AiDotNet.Statistics.ErrorStats%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Statistics.ErrorStats`1">
+
+
+
+  <h1 id="AiDotNet_Statistics_ErrorStats_1" data-uid="AiDotNet.Statistics.ErrorStats`1" class="text-break">
+Class ErrorStats&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Statistics.html">Statistics</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Calculates and stores various error metrics for evaluating prediction model performance.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ErrorStats&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double, decimal).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ErrorStats&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Statistics_ErrorStats_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class provides a comprehensive set of error metrics to assess how well predicted values 
+match actual values.
+</p>
+<p><b>For Beginners:</b>
+When building AI or machine learning models, you need ways to measure how accurate your predictions are.
+Think of these metrics like different ways to score a test:</p>
+<ul><li>Some look at the average error (MAE, MSE)</li><li>Some look at percentage differences (MAPE, SMAPE)</li><li>Some help detect if your model is consistently overestimating or underestimating (MeanBiasError)</li><li>Some are specialized for specific types of predictions (AUCROC, AUCPR for classification)</li></ul>
+<p>The "T" in ErrorStats&lt;T&gt; means this class works with different number types like decimal,
+double, or float without needing separate implementations for each.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_AIC_" data-uid="AiDotNet.Statistics.ErrorStats`1.AIC*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_AIC" data-uid="AiDotNet.Statistics.ErrorStats`1.AIC">
+  AIC
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L169"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Akaike Information Criterion - A measure that balances model accuracy and complexity.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T AIC { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_AIC_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+AIC helps you compare different models by considering both how well they fit the data
+and how complex they are. Lower values are better.</p>
+<p>Think of it like buying a car: You want good performance (accuracy) but don't want to
+pay too much (complexity). AIC helps you find the best balance.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_AICAlt_" data-uid="AiDotNet.Statistics.ErrorStats`1.AICAlt*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_AICAlt" data-uid="AiDotNet.Statistics.ErrorStats`1.AICAlt">
+  AICAlt
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L192"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Alternative Akaike Information Criterion - A variant of AIC with a different penalty term.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T AICAlt { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_AICAlt_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+AICAlt is another version of AIC that uses a slightly different approach to penalize
+model complexity. It's particularly useful when sample sizes are small.
+Like AIC and BIC, lower values are better.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_AUC_" data-uid="AiDotNet.Statistics.ErrorStats`1.AUC*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_AUC" data-uid="AiDotNet.Statistics.ErrorStats`1.AUC">
+  AUC
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L325"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Area Under the Curve (ROC) - Alias for AUCROC property.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T AUC { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_AUC_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This is an alternative name for the AUCROC property, providing the same value.
+In many contexts, "AUC" specifically refers to the area under the ROC curve.
+This metric is commonly used to evaluate classification models.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_AUCPR_" data-uid="AiDotNet.Statistics.ErrorStats`1.AUCPR*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_AUCPR" data-uid="AiDotNet.Statistics.ErrorStats`1.AUCPR">
+  AUCPR
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L227"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Area Under the Precision-Recall Curve - Measures classification accuracy focusing on positive cases.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T AUCPR { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_AUCPR_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+AUCPR is especially useful for imbalanced classification problems (where one class is rare).
+It ranges from 0 to 1, with higher values indicating better performance.</p>
+<p>Precision measures how many of your positive predictions were correct.
+Recall measures what fraction of actual positives your model identified.
+AUCPR considers how these trade off across different threshold settings.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_AUCROC_" data-uid="AiDotNet.Statistics.ErrorStats`1.AUCROC*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_AUCROC" data-uid="AiDotNet.Statistics.ErrorStats`1.AUCROC">
+  AUCROC
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L242"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Area Under the Receiver Operating Characteristic Curve - Measures classification accuracy across thresholds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T AUCROC { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_AUCROC_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+AUCROC is a common metric for classification models. It ranges from 0 to 1:</p>
+<ul><li>0.5 means the model is no better than random guessing</li><li>1.0 means perfect classification</li><li>Values below 0.5 suggest the model is worse than random</li></ul>
+<p>It measures how well your model can distinguish between classes across different threshold settings.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_Accuracy_" data-uid="AiDotNet.Statistics.ErrorStats`1.Accuracy*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_Accuracy" data-uid="AiDotNet.Statistics.ErrorStats`1.Accuracy">
+  Accuracy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L341"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Classification accuracy - The proportion of correct predictions (for classification tasks).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Accuracy { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_Accuracy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+Accuracy is a simple metric for classification problems. It's the percentage of predictions
+that match the actual values.</p>
+<p>For example, if your model correctly classifies 90 out of 100 samples, the accuracy is 0.9 or 90%.</p>
+<p>Note: This property is typically used for classification tasks. For regression tasks,
+other metrics like MAE, MSE, or R-squared (R2) are more appropriate.</p>
+<p>While intuitive, accuracy can be misleading for imbalanced classes. For example, if 95% of your
+data belongs to class A, a model that always predicts class A would have 95% accuracy
+despite being useless for class B.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_BIC_" data-uid="AiDotNet.Statistics.ErrorStats`1.BIC*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_BIC" data-uid="AiDotNet.Statistics.ErrorStats`1.BIC">
+  BIC
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L181"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Bayesian Information Criterion - Similar to AIC but penalizes model complexity more strongly.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T BIC { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_BIC_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+BIC is similar to AIC but tends to prefer simpler models. It helps you compare different
+models while avoiding overfitting (when a model memorizes training data instead of learning
+general patterns). Lower values are better.</p>
+<p>BIC is more cautious about adding complexity than AIC, like a budget-conscious car buyer.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_CRPS_" data-uid="AiDotNet.Statistics.ErrorStats`1.CRPS*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_CRPS" data-uid="AiDotNet.Statistics.ErrorStats`1.CRPS">
+  CRPS
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L281"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Continuous Ranked Probability Score - Evaluates probabilistic forecast accuracy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T CRPS { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_CRPS_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+CRPS measures how well a probabilistic forecast matches reality. Unlike MAE which only looks
+at point predictions, CRPS considers the entire predicted probability distribution.</p>
+<p>For deterministic predictions (no uncertainty estimates), CRPS equals MAE.
+For probabilistic predictions, CRPS rewards well-calibrated uncertainty estimates.
+Lower values indicate better probabilistic forecasts.</p>
+<p>CRPS is especially important for evaluating time series models like DeepAR, TFT, and Chronos
+that provide uncertainty estimates along with their predictions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_DurbinWatsonStatistic_" data-uid="AiDotNet.Statistics.ErrorStats`1.DurbinWatsonStatistic*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_DurbinWatsonStatistic" data-uid="AiDotNet.Statistics.ErrorStats`1.DurbinWatsonStatistic">
+  DurbinWatsonStatistic
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Durbin-Watson Statistic - Detects autocorrelation in prediction errors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T DurbinWatsonStatistic { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_DurbinWatsonStatistic_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+DurbinWatsonStatistic helps identify if there are patterns in your prediction errors over time.
+Values range from 0 to 4:</p>
+<ul><li>Values near 2 suggest no autocorrelation (good)</li><li>Values toward 0 suggest positive autocorrelation (errors tend to be followed by similar errors)</li><li>Values toward 4 suggest negative autocorrelation (errors tend to be followed by opposite errors)</li></ul>
+<p>Autocorrelation in errors suggests your model might be missing important patterns in the data.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_ErrorList_" data-uid="AiDotNet.Statistics.ErrorStats`1.ErrorList*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_ErrorList" data-uid="AiDotNet.Statistics.ErrorStats`1.ErrorList">
+  ErrorList
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L214"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>List of individual prediction errors (residuals).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;T&gt; ErrorList { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_ErrorList_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+ErrorList contains the difference between each predicted value and the corresponding actual value.
+This lets you examine individual errors, create visualizations like histograms,
+or perform additional analyses beyond summary statistics.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_F1Score_" data-uid="AiDotNet.Statistics.ErrorStats`1.F1Score*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_F1Score" data-uid="AiDotNet.Statistics.ErrorStats`1.F1Score">
+  F1Score
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L387"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The harmonic mean of precision and recall (for classification).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T F1Score { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_F1Score_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+F1Score balances precision and recall in a single metric, which is helpful because
+there's often a trade-off between them.</p>
+<p>It ranges from 0 to 1, with 1 being perfect.</p>
+<p>F1Score is particularly useful when:</p>
+<ul><li>You need a single metric to compare models</li><li>Classes are imbalanced (one class is much more common than others)</li><li>You care equally about false positives and false negatives</li></ul>
+<p>It's calculated as 2 * (precision * recall) / (precision + recall).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_MAE_" data-uid="AiDotNet.Statistics.ErrorStats`1.MAE*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_MAE" data-uid="AiDotNet.Statistics.ErrorStats`1.MAE">
+  MAE
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Mean Absolute Error - The average absolute difference between predicted and actual values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T MAE { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_MAE_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+MAE measures the average size of errors without considering their direction (positive or negative).
+Lower values indicate better accuracy. If MAE = 5, your predictions are off by 5 units on average.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_MAPE_" data-uid="AiDotNet.Statistics.ErrorStats`1.MAPE*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_MAPE" data-uid="AiDotNet.Statistics.ErrorStats`1.MAPE">
+  MAPE
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Mean Absolute Percentage Error - The average percentage difference between predicted and actual values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T MAPE { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_MAPE_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+MAPE expresses error as a percentage, which helps you understand the relative size of errors.
+MAPE = 10 means that, on average, your predictions are off by 10% from the actual values.
+Note: MAPE can be problematic when actual values are close to zero.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_MSE_" data-uid="AiDotNet.Statistics.ErrorStats`1.MSE*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_MSE" data-uid="AiDotNet.Statistics.ErrorStats`1.MSE">
+  MSE
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Mean Squared Error - The average of squared differences between predicted and actual values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T MSE { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_MSE_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+MSE squares the errors before averaging them, which penalizes large errors more heavily than small ones.
+Lower values indicate better accuracy. Because of squaring, the value is not in the same units as your data.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_MaxError_" data-uid="AiDotNet.Statistics.ErrorStats`1.MaxError*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_MaxError" data-uid="AiDotNet.Statistics.ErrorStats`1.MaxError">
+  MaxError
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Maximum Error - The largest absolute difference between any predicted and actual value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T MaxError { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_MaxError_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+MaxError tells you the worst-case error in your predictions.
+It can help you understand the potential maximum impact of prediction errors.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_MeanAbsoluteError_" data-uid="AiDotNet.Statistics.ErrorStats`1.MeanAbsoluteError*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_MeanAbsoluteError" data-uid="AiDotNet.Statistics.ErrorStats`1.MeanAbsoluteError">
+  MeanAbsoluteError
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L292"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Mean Absolute Error - Alias for MAE property.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T MeanAbsoluteError { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_MeanAbsoluteError_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This is an alternative name for the MAE property, providing the same value.
+Some frameworks and documentation prefer the full name "MeanAbsoluteError" while others use "MAE".
+Both refer to the average absolute difference between predicted and actual values.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_MeanBiasError_" data-uid="AiDotNet.Statistics.ErrorStats`1.MeanBiasError*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_MeanBiasError" data-uid="AiDotNet.Statistics.ErrorStats`1.MeanBiasError">
+  MeanBiasError
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Mean Bias Error - The average of prediction errors (predicted - actual).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T MeanBiasError { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_MeanBiasError_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+MeanBiasError helps determine if your model tends to overestimate (positive value) or
+underestimate (negative value). Ideally, it should be close to zero, indicating no systematic bias.
+Unlike MAE, this doesn't take the absolute value, so positive and negative errors can cancel out.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_MeanSquaredError_" data-uid="AiDotNet.Statistics.ErrorStats`1.MeanSquaredError*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_MeanSquaredError" data-uid="AiDotNet.Statistics.ErrorStats`1.MeanSquaredError">
+  MeanSquaredError
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L303"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Mean Squared Error - Alias for MSE property.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T MeanSquaredError { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_MeanSquaredError_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This is an alternative name for the MSE property, providing the same value.
+Some frameworks and documentation prefer the full name "MeanSquaredError" while others use "MSE".
+Both refer to the average of squared differences between predicted and actual values.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_MeanSquaredLogError_" data-uid="AiDotNet.Statistics.ErrorStats`1.MeanSquaredLogError*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_MeanSquaredLogError" data-uid="AiDotNet.Statistics.ErrorStats`1.MeanSquaredLogError">
+  MeanSquaredLogError
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L266"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Mean Squared Logarithmic Error - Penalizes underestimates more than overestimates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T MeanSquaredLogError { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_MeanSquaredLogError_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+MeanSquaredLogError is useful when you care more about relative errors than absolute ones.
+It's calculated by applying logarithms to actual and predicted values before computing MSE.</p>
+<p>MSLE penalizes underestimation (predicting too low) more heavily than overestimation.
+This is useful in scenarios where underestimating would be more problematic, like inventory forecasting.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_MedianAbsoluteError_" data-uid="AiDotNet.Statistics.ErrorStats`1.MedianAbsoluteError*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_MedianAbsoluteError" data-uid="AiDotNet.Statistics.ErrorStats`1.MedianAbsoluteError">
+  MedianAbsoluteError
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Median Absolute Error - The middle value of all absolute differences between predicted and actual values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T MedianAbsoluteError { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_MedianAbsoluteError_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+Unlike MAE which uses the average, MedianAbsoluteError uses the middle value of all absolute errors.
+This makes it less sensitive to outliers (extreme errors) than MAE.
+For example, if you have errors of [1, 2, 100], the median is 2, while the mean would be 34.3.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_PopulationStandardError_" data-uid="AiDotNet.Statistics.ErrorStats`1.PopulationStandardError*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_PopulationStandardError" data-uid="AiDotNet.Statistics.ErrorStats`1.PopulationStandardError">
+  PopulationStandardError
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Population Standard Error - The standard deviation of prediction errors without adjustment for model complexity.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T PopulationStandardError { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_PopulationStandardError_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+PopulationStandardError measures how much prediction errors typically vary, but unlike
+SampleStandardError, it doesn't adjust for model complexity. It gives you an idea of the
+typical size of the errors your model makes.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_Precision_" data-uid="AiDotNet.Statistics.ErrorStats`1.Precision*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_Precision" data-uid="AiDotNet.Statistics.ErrorStats`1.Precision">
+  Precision
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L355"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The proportion of positive predictions that were actually correct (for classification).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Precision { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_Precision_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+Precision answers the question: "Of all the items labeled as positive, how many actually were positive?"</p>
+<p>It ranges from 0 to 1, with 1 being perfect.</p>
+<p>For example, if your model identifies 100 emails as spam, and 90 of them actually are spam,
+the precision is 0.9 or 90%.</p>
+<p>Precision is important when the cost of false positives is high. In the spam example,
+high precision means fewer important emails mistakenly marked as spam.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_RMSE_" data-uid="AiDotNet.Statistics.ErrorStats`1.RMSE*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_RMSE" data-uid="AiDotNet.Statistics.ErrorStats`1.RMSE">
+  RMSE
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Root Mean Squared Error - The square root of the Mean Squared Error.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T RMSE { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_RMSE_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+RMSE converts MSE back to the original units of your data by taking the square root.
+It's often preferred over MSE for interpretation because it's in the same units as your data.
+Like MAE, lower values indicate better accuracy.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_RSS_" data-uid="AiDotNet.Statistics.ErrorStats`1.RSS*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_RSS" data-uid="AiDotNet.Statistics.ErrorStats`1.RSS">
+  RSS
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L203"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Residual Sum of Squares - The sum of squared differences between predicted and actual values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T RSS { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_RSS_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+RSS is the total squared error of your model. It's the basis for many other metrics like MSE
+(which is just RSS divided by the number of observations).
+Lower values indicate a better fit. It's used in calculating metrics like AIC and BIC.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_Recall_" data-uid="AiDotNet.Statistics.ErrorStats`1.Recall*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_Recall" data-uid="AiDotNet.Statistics.ErrorStats`1.Recall">
+  Recall
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L369"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The proportion of actual positive cases that were correctly identified (for classification).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Recall { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_Recall_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+Recall answers the question: "Of all the actual positive items, how many did the model identify?"</p>
+<p>It ranges from 0 to 1, with 1 being perfect.</p>
+<p>For example, if there are 100 spam emails, and your model identifies 80 of them,
+the recall is 0.8 or 80%.</p>
+<p>Recall is important when the cost of false negatives is high. In a medical context,
+high recall means catching most cases of a disease, even if it means some false alarms.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_RootMeanSquaredError_" data-uid="AiDotNet.Statistics.ErrorStats`1.RootMeanSquaredError*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_RootMeanSquaredError" data-uid="AiDotNet.Statistics.ErrorStats`1.RootMeanSquaredError">
+  RootMeanSquaredError
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L314"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Root Mean Squared Error - Alias for RMSE property.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T RootMeanSquaredError { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_RootMeanSquaredError_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This is an alternative name for the RMSE property, providing the same value.
+Some frameworks and documentation prefer the full name "RootMeanSquaredError" while others use "RMSE".
+Both refer to the square root of the Mean Squared Error.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_SMAPE_" data-uid="AiDotNet.Statistics.ErrorStats`1.SMAPE*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_SMAPE" data-uid="AiDotNet.Statistics.ErrorStats`1.SMAPE">
+  SMAPE
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L254"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Symmetric Mean Absolute Percentage Error - A variant of MAPE that handles zero or near-zero values better.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T SMAPE { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_SMAPE_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+SMAPE is similar to MAPE but uses a different formula that handles cases where actual values are zero
+or very small. It's bounded between 0% and 200%, with lower values indicating better performance.</p>
+<p>SMAPE treats positive and negative errors more symmetrically than MAPE,
+which can be important in some forecasting applications.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_SampleStandardError_" data-uid="AiDotNet.Statistics.ErrorStats`1.SampleStandardError*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_SampleStandardError" data-uid="AiDotNet.Statistics.ErrorStats`1.SampleStandardError">
+  SampleStandardError
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L146"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sample Standard Error - An estimate of the standard deviation of prediction errors, adjusted for model complexity.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T SampleStandardError { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_SampleStandardError_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+SampleStandardError estimates how much prediction errors typically vary, taking into account
+how many parameters (features) your model uses. It's useful for constructing confidence intervals
+around predictions and is adjusted downward based on the number of parameters in your model.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_TheilUStatistic_" data-uid="AiDotNet.Statistics.ErrorStats`1.TheilUStatistic*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_TheilUStatistic" data-uid="AiDotNet.Statistics.ErrorStats`1.TheilUStatistic">
+  TheilUStatistic
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Theil's U Statistic - A measure of forecast accuracy relative to a naive forecasting method.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T TheilUStatistic { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_TheilUStatistic_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+TheilUStatistic compares your model's accuracy to a simple "no-change" prediction.</p>
+<ul><li>Values less than 1 mean your model is better than the naive approach.</li><li>Values equal to 1 mean your model performs the same as the naive approach.</li><li>Values greater than 1 mean your model performs worse than the naive approach.</li></ul>
+<p>This is especially useful for time series forecasting evaluation.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_Empty_" data-uid="AiDotNet.Statistics.ErrorStats`1.Empty*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_Empty" data-uid="AiDotNet.Statistics.ErrorStats`1.Empty">
+  Empty()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L447"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an empty ErrorStats instance with all metrics set to zero.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ErrorStats&lt;T&gt; Empty()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Statistics.ErrorStats-1.html">ErrorStats</a>&lt;T&gt;</dt>
+    <dd><p>An ErrorStats instance with all metrics initialized to zero.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_Empty_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This static method creates an ErrorStats object where all metrics are set to zero.
+It's useful when you need a placeholder or default instance, or when you want to
+compare against a baseline of "no errors."</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_GetMetric_" data-uid="AiDotNet.Statistics.ErrorStats`1.GetMetric*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_GetMetric_AiDotNet_Enums_MetricType_" data-uid="AiDotNet.Statistics.ErrorStats`1.GetMetric(AiDotNet.Enums.MetricType)">
+  GetMetric(MetricType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L542"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves the value of a specific error metric.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetMetric(MetricType metricType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>metricType</code> <a class="xref" href="AiDotNet.Enums.MetricType.html">MetricType</a></dt>
+    <dd><p>The type of metric to retrieve.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The value of the requested metric.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_GetMetric_AiDotNet_Enums_MetricType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method allows you to retrieve any of the calculated error metrics by specifying the desired metric type.
+It provides a flexible way to access individual metrics without needing to reference specific properties.
+</p>
+<p><b>For Beginners:</b> This method is like a vending machine for error metrics.
+<p>You tell it which error metric you want (using the MetricType), and it gives you the value.
+For example:</p>
+<ul>
+<li>If you ask for MetricType.MAE, it gives you the Mean Absolute Error</li>
+<li>If you ask for MetricType.RMSE, it gives you the Root Mean Squared Error</li>
+</ul>
+<p>This is useful when you want to work with different error metrics in a flexible way,
+especially if you don't know in advance which metric you'll need.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when an unsupported MetricType is provided.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Statistics_ErrorStats_1_HasMetric_" data-uid="AiDotNet.Statistics.ErrorStats`1.HasMetric*"></a>
+
+  <h3 id="AiDotNet_Statistics_ErrorStats_1_HasMetric_AiDotNet_Enums_MetricType_" data-uid="AiDotNet.Statistics.ErrorStats`1.HasMetric(AiDotNet.Enums.MetricType)">
+  HasMetric(MetricType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L595"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if a specific metric is available in this ErrorStats instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool HasMetric(MetricType metricType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>metricType</code> <a class="xref" href="AiDotNet.Enums.MetricType.html">MetricType</a></dt>
+    <dd><p>The type of metric to check for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the metric is available, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_ErrorStats_1_HasMetric_AiDotNet_Enums_MetricType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This method allows you to check if a particular metric is available before trying to get its value.
+It's useful when you're not sure if a specific metric was calculated for this set of errors.</p>
+<p>For example:</p>
+<pre><code class="lang-csharp">if (stats.HasMetric(MetricType.MAE))
+{
+    var maeValue = stats.GetMetric(MetricType.MAE);
+    // Use maeValue...
+}</code></pre>
+<p>This prevents errors that might occur if you try to access a metric that wasn't calculated.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/ErrorStats.cs/#L25" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

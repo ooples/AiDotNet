@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MLPNTMController&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MLPNTMController&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="MLP-based NTM controller implementation with learnable parameters.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_MetaLearning_Algorithms_MLPNTMController_3.md&amp;value=---%0Auid%3A%20AiDotNet.MetaLearning.Algorithms.MLPNTMController%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3">
+
+
+
+  <h1 id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3" data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3" class="text-break">
+Class MLPNTMController&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/NTMAlgorithm.cs/#L1671"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.MetaLearning.html">MetaLearning</a>.<a class="xref" href="AiDotNet.MetaLearning.Algorithms.html">Algorithms</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>MLP-based NTM controller implementation with learnable parameters.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MLPNTMController&lt;T, TInput, TOutput&gt; : INTMController&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MLPNTMController&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.MetaLearning.Algorithms.INTMController-1.html">INTMController</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This controller uses a multi-layer perceptron to process inputs and generate
+addressing parameters for the NTM memory. Unlike LSTM, MLP is stateless and
+processes each timestep independently.
+</p>
+<p><b>Architecture:</b>
+<pre><code class="lang-csharp">Input (inputSize + numReadHeads * memoryWidth)
+  ↓
+Hidden Layer 1 (hiddenSize) + ReLU
+  ↓
+Hidden Layer 2 (hiddenSize) + ReLU
+  ↓
+Linear projections → ReadKeys, WriteKey, Erase, Add, Output</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3__ctor_" data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3__ctor_AiDotNet_MetaLearning_Options_NTMOptions__0__1__2__" data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3.#ctor(AiDotNet.MetaLearning.Options.NTMOptions{`0,`1,`2})">
+  MLPNTMController(NTMOptions&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/NTMAlgorithm.cs/#L1708"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of MLPNTMController with learnable weights.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MLPNTMController(NTMOptions&lt;T, TInput, TOutput&gt; options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.MetaLearning.Options.NTMOptions-3.html">NTMOptions</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The NTM options.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3_Forward_" data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3.Forward*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Collections_Generic_List_AiDotNet_Tensors_LinearAlgebra_Tensor__0___" data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Collections.Generic.List{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}})">
+  Forward(Tensor&lt;T&gt;, List&lt;Tensor&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/NTMAlgorithm.cs/#L1773"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Forward pass through the controller.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Forward(Tensor&lt;T&gt; input, List&lt;Tensor&lt;T&gt;&gt; readContents)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input tensor.</p>
+</dd>
+    <dt><code>readContents</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The previous read contents.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The controller output.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3_GenerateAddVector_" data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3.GenerateAddVector*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3_GenerateAddVector_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3.GenerateAddVector(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  GenerateAddVector(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/NTMAlgorithm.cs/#L1902"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates add vector for writing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; GenerateAddVector(Tensor&lt;T&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>output</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The controller output.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The add vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3_GenerateEraseVector_" data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3.GenerateEraseVector*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3_GenerateEraseVector_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3.GenerateEraseVector(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  GenerateEraseVector(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/NTMAlgorithm.cs/#L1883"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates erase vector for writing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; GenerateEraseVector(Tensor&lt;T&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>output</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The controller output.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The erase vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3_GenerateOutput_" data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3.GenerateOutput*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3_GenerateOutput_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Collections_Generic_List_AiDotNet_Tensors_LinearAlgebra_Tensor__0___" data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3.GenerateOutput(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Collections.Generic.List{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}})">
+  GenerateOutput(Tensor&lt;T&gt;, List&lt;Tensor&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/NTMAlgorithm.cs/#L1921"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates final output.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; GenerateOutput(Tensor&lt;T&gt; output, List&lt;Tensor&lt;T&gt;&gt; readContents)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>output</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The controller output.</p>
+</dd>
+    <dt><code>readContents</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The current read contents.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The final output.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3_GenerateReadKeys_" data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3.GenerateReadKeys*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3_GenerateReadKeys_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3.GenerateReadKeys(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  GenerateReadKeys(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/NTMAlgorithm.cs/#L1838"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates read keys for all read heads.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;Tensor&lt;T&gt;&gt; GenerateReadKeys(Tensor&lt;T&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>output</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The controller output.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List of read keys.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3_GenerateWriteKey_" data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3.GenerateWriteKey*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3_GenerateWriteKey_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3.GenerateWriteKey(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  GenerateWriteKey(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/NTMAlgorithm.cs/#L1865"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates write key.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; GenerateWriteKey(Tensor&lt;T&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>output</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The controller output.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The write key.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3_GetParameters_" data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3.GetParameters*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3_GetParameters" data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/NTMAlgorithm.cs/#L1959"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets controller parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The parameter vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3_Reset_" data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3.Reset*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3_Reset" data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/NTMAlgorithm.cs/#L2044"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets controller state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3_SetParameters_" data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3.SetParameters*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_MLPNTMController_3_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.MetaLearning.Algorithms.MLPNTMController`3.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/NTMAlgorithm.cs/#L2022"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets controller parameters (updates internal weights).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The parameter vector to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/NTMAlgorithm.cs/#L1671" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

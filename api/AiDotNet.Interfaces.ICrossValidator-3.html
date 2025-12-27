@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface ICrossValidator&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface ICrossValidator&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for cross-validation implementations in machine learning models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_ICrossValidator_3.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.ICrossValidator%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.ICrossValidator`3">
+
+
+
+  <h1 id="AiDotNet_Interfaces_ICrossValidator_3" data-uid="AiDotNet.Interfaces.ICrossValidator`3" class="text-break">
+Interface ICrossValidator&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ICrossValidator.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for cross-validation implementations in machine learning models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface ICrossValidator&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double, decimal).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The type of input data (e.g., Matrix&lt;T&gt; for tabular data, custom types for other formats).</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The type of output data (e.g., Vector&lt;T&gt; for predictions, custom types for other formats).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_ICrossValidator_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This interface specifies the method signature for performing cross-validation on machine learning models.
+Cross-validation is a crucial technique for assessing how the results of a statistical analysis will generalize
+to an independent data set. It's particularly important in contexts where the goal is prediction, and one wants
+to estimate how accurately a predictive model will perform in practice.
+</p>
+<p><b>For Beginners:</b> This interface is like a blueprint for creating cross-validation tools.
+<p>What it does:</p>
+<ul>
+<li>Defines a standard way to perform cross-validation on any machine learning model</li>
+<li>Ensures that all cross-validation implementations will work the same way, regardless of the specific details</li>
+<li>Works with any data format (matrices, tensors, custom structures) through generic type parameters</li>
+</ul>
+<p>It's like setting a standard recipe that all cross-validation methods must follow, ensuring consistency
+and ease of use across different types of models and data.</p>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_ICrossValidator_3_Validate_" data-uid="AiDotNet.Interfaces.ICrossValidator`3.Validate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ICrossValidator_3_Validate_AiDotNet_Interfaces_IFullModel__0__1__2___1__2_AiDotNet_Interfaces_IOptimizer__0__1__2__" data-uid="AiDotNet.Interfaces.ICrossValidator`3.Validate(AiDotNet.Interfaces.IFullModel{`0,`1,`2},`1,`2,AiDotNet.Interfaces.IOptimizer{`0,`1,`2})">
+  Validate(IFullModel&lt;T, TInput, TOutput&gt;, TInput, TOutput, IOptimizer&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ICrossValidator.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs cross-validation on the given model using the provided data and optimizer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">CrossValidationResult&lt;T, TInput, TOutput&gt; Validate(IFullModel&lt;T, TInput, TOutput&gt; model, TInput X, TOutput y, IOptimizer&lt;T, TInput, TOutput&gt; optimizer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The machine learning model to validate.</p>
+</dd>
+    <dt><code>X</code> <span class="xref">TInput</span></dt>
+    <dd><p>The input data containing the features.</p>
+</dd>
+    <dt><code>y</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The output data containing the targets.</p>
+</dd>
+    <dt><code>optimizer</code> <a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The optimizer to use for training the model on each fold.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.CrossValidationResult-3.html">CrossValidationResult</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A CrossValidationResult containing the results of the validation process.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ICrossValidator_3_Validate_AiDotNet_Interfaces_IFullModel__0__1__2___1__2_AiDotNet_Interfaces_IOptimizer__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the core cross-validation logic. It typically involves splitting the data into folds,
+training and evaluating the model on different combinations of these folds using the provided optimizer,
+and aggregating the results. The specific implementation details may vary depending on the type of
+cross-validation being performed.
+</p>
+<p><b>For Beginners:</b> This method is where the actual cross-validation happens.
+<p>What it does:</p>
+<ul>
+<li>Takes your model, your data (X and y), and an optimizer for training</li>
+<li>Splits your data into parts based on your options</li>
+<li>Trains your model using the optimizer multiple times on different parts</li>
+<li>Tests the trained model on held-out data for each fold</li>
+<li>Collects and summarizes the results of all these tests</li>
+</ul>
+<p>The optimizer parameter allows you to use advanced optimization techniques (like genetic algorithms,
+Bayesian optimization, etc.) during cross-validation, ensuring consistent training across all folds.</p>
+<p>It's like putting your model through a series of tests using a standardized training procedure
+and then giving you a report card that shows how well it performed overall.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ICrossValidator.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TokenCountAnalyzer | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TokenCountAnalyzer | AiDotNet Documentation ">
+      
+      <meta name="description" content="Analyzer that provides accurate token counting and cost estimation for prompts.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_PromptEngineering_Analysis_TokenCountAnalyzer.md&amp;value=---%0Auid%3A%20AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer">
+
+
+
+  <h1 id="AiDotNet_PromptEngineering_Analysis_TokenCountAnalyzer" data-uid="AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer" class="text-break">
+Class TokenCountAnalyzer  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Analysis/TokenCountAnalyzer.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.PromptEngineering.html">PromptEngineering</a>.<a class="xref" href="AiDotNet.PromptEngineering.Analysis.html">Analysis</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Analyzer that provides accurate token counting and cost estimation for prompts.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class TokenCountAnalyzer : PromptAnalyzerBase, IPromptAnalyzer</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.PromptEngineering.Analysis.PromptAnalyzerBase.html">PromptAnalyzerBase</a></div>
+      <div><span class="xref">TokenCountAnalyzer</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IPromptAnalyzer.html">IPromptAnalyzer</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Analysis.PromptAnalyzerBase.html#AiDotNet_PromptEngineering_Analysis_PromptAnalyzerBase_Name">PromptAnalyzerBase.Name</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Analysis.PromptAnalyzerBase.html#AiDotNet_PromptEngineering_Analysis_PromptAnalyzerBase_Analyze_System_String_">PromptAnalyzerBase.Analyze(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Analysis.PromptAnalyzerBase.html#AiDotNet_PromptEngineering_Analysis_PromptAnalyzerBase_AnalyzeAsync_System_String_System_Threading_CancellationToken_">PromptAnalyzerBase.AnalyzeAsync(string, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Analysis.PromptAnalyzerBase.html#AiDotNet_PromptEngineering_Analysis_PromptAnalyzerBase_ValidatePrompt_System_String_AiDotNet_PromptEngineering_Analysis_ValidationOptions_">PromptAnalyzerBase.ValidatePrompt(string, ValidationOptions)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Analysis.PromptAnalyzerBase.html#AiDotNet_PromptEngineering_Analysis_PromptAnalyzerBase_CountTokens_System_String_">PromptAnalyzerBase.CountTokens(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Analysis.PromptAnalyzerBase.html#AiDotNet_PromptEngineering_Analysis_PromptAnalyzerBase_CountWords_System_String_">PromptAnalyzerBase.CountWords(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Analysis.PromptAnalyzerBase.html#AiDotNet_PromptEngineering_Analysis_PromptAnalyzerBase_CountVariables_System_String_">PromptAnalyzerBase.CountVariables(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Analysis.PromptAnalyzerBase.html#AiDotNet_PromptEngineering_Analysis_PromptAnalyzerBase_CountExamples_System_String_">PromptAnalyzerBase.CountExamples(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Analysis.PromptAnalyzerBase.html#AiDotNet_PromptEngineering_Analysis_PromptAnalyzerBase_DetectPatterns_System_String_">PromptAnalyzerBase.DetectPatterns(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Analysis.PromptAnalyzerBase.html#AiDotNet_PromptEngineering_Analysis_PromptAnalyzerBase_CalculateComplexity_System_String_System_Int32_System_Int32_System_Int32_">PromptAnalyzerBase.CalculateComplexity(string, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Analysis.PromptAnalyzerBase.html#AiDotNet_PromptEngineering_Analysis_PromptAnalyzerBase_CalculateCost_System_Int32_">PromptAnalyzerBase.CalculateCost(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Analysis.PromptAnalyzerBase.html#AiDotNet_PromptEngineering_Analysis_PromptAnalyzerBase_ValidateVariables_System_String_">PromptAnalyzerBase.ValidateVariables(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Analysis.PromptAnalyzerBase.html#AiDotNet_PromptEngineering_Analysis_PromptAnalyzerBase_CheckForInjection_System_String_">PromptAnalyzerBase.CheckForInjection(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Analysis.PromptAnalyzerBase.html#AiDotNet_PromptEngineering_Analysis_PromptAnalyzerBase_EnhanceMetrics_System_String_AiDotNet_PromptEngineering_Analysis_PromptMetrics_">PromptAnalyzerBase.EnhanceMetrics(string, PromptMetrics)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Analysis.PromptAnalyzerBase.html#AiDotNet_PromptEngineering_Analysis_PromptAnalyzerBase_CustomValidation_System_String_AiDotNet_PromptEngineering_Analysis_ValidationOptions_">PromptAnalyzerBase.CustomValidation(string, ValidationOptions)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_PromptEngineering_Analysis_TokenCountAnalyzer_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This analyzer focuses on token counting and cost estimation, supporting various
+tokenization methods and model-specific pricing.
+</p>
+<p><b>For Beginners:</b> Counts how many tokens your prompt uses and estimates costs.
+<p>Example:</p>
+<pre><code class="lang-csharp">var analyzer = new TokenCountAnalyzer("gpt-4");
+var metrics = analyzer.Analyze("Explain quantum computing in simple terms");
+
+Console.WriteLine($"Tokens: {metrics.TokenCount}");
+Console.WriteLine($"Estimated cost: ${metrics.EstimatedCost}");</code></pre>
+<p>Supports different models with their pricing:</p>
+<ul>
+<li>GPT-4: $0.03/1K tokens</li>
+<li>GPT-3.5-Turbo: $0.001/1K tokens</li>
+<li>Claude: $0.008/1K tokens</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Analysis_TokenCountAnalyzer__ctor_" data-uid="AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer.#ctor*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Analysis_TokenCountAnalyzer__ctor_System_String_System_Func_System_String_System_Int32__" data-uid="AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer.#ctor(System.String,System.Func{System.String,System.Int32})">
+  TokenCountAnalyzer(string, Func&lt;string, int&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Analysis/TokenCountAnalyzer.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the TokenCountAnalyzer class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TokenCountAnalyzer(string modelName = &quot;gpt-4&quot;, Func&lt;string, int&gt;? tokenCounter = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The target model for token counting.</p>
+</dd>
+    <dt><code>tokenCounter</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>Optional custom token counter function.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Analysis_TokenCountAnalyzer_ForClaude_" data-uid="AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer.ForClaude*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Analysis_TokenCountAnalyzer_ForClaude" data-uid="AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer.ForClaude">
+  ForClaude()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Analysis/TokenCountAnalyzer.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an analyzer pre-configured for Claude.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TokenCountAnalyzer ForClaude()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer.html">TokenCountAnalyzer</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Analysis_TokenCountAnalyzer_ForGemini_" data-uid="AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer.ForGemini*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Analysis_TokenCountAnalyzer_ForGemini" data-uid="AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer.ForGemini">
+  ForGemini()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Analysis/TokenCountAnalyzer.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an analyzer pre-configured for Gemini.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TokenCountAnalyzer ForGemini()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer.html">TokenCountAnalyzer</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Analysis_TokenCountAnalyzer_ForGpt35Turbo_" data-uid="AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer.ForGpt35Turbo*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Analysis_TokenCountAnalyzer_ForGpt35Turbo" data-uid="AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer.ForGpt35Turbo">
+  ForGpt35Turbo()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Analysis/TokenCountAnalyzer.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an analyzer pre-configured for GPT-3.5-Turbo.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TokenCountAnalyzer ForGpt35Turbo()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer.html">TokenCountAnalyzer</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Analysis_TokenCountAnalyzer_ForGpt4_" data-uid="AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer.ForGpt4*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Analysis_TokenCountAnalyzer_ForGpt4" data-uid="AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer.ForGpt4">
+  ForGpt4()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Analysis/TokenCountAnalyzer.cs/#L96"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an analyzer pre-configured for GPT-4.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TokenCountAnalyzer ForGpt4()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer.html">TokenCountAnalyzer</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Analysis_TokenCountAnalyzer_GetModelPrice_" data-uid="AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer.GetModelPrice*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Analysis_TokenCountAnalyzer_GetModelPrice_System_String_" data-uid="AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer.GetModelPrice(System.String)">
+  GetModelPrice(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Analysis/TokenCountAnalyzer.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the price per 1000 tokens for a given model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal GetModelPrice(string modelName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The model name.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>The price per 1000 tokens in USD.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Analysis_TokenCountAnalyzer_GetSupportedModels_" data-uid="AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer.GetSupportedModels*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Analysis_TokenCountAnalyzer_GetSupportedModels" data-uid="AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer.GetSupportedModels">
+  GetSupportedModels()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Analysis/TokenCountAnalyzer.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the list of supported models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IReadOnlyList&lt;string&gt; GetSupportedModels()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A list of model names with known pricing.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Analysis/TokenCountAnalyzer.cs/#L28" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

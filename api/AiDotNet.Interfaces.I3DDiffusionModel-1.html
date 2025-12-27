@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface I3DDiffusionModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface I3DDiffusionModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Interface for 3D diffusion models that generate 3D content like point clouds, meshes, and scenes.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_I3DDiffusionModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.I3DDiffusionModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_I3DDiffusionModel_1" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1" class="text-break">
+Interface I3DDiffusionModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/I3DDiffusionModel.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Interface for 3D diffusion models that generate 3D content like point clouds, meshes, and scenes.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface I3DDiffusionModel&lt;T&gt; : IDiffusionModel&lt;T&gt;, IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html#AiDotNet_Interfaces_IDiffusionModel_1_Scheduler">IDiffusionModel&lt;T&gt;.Scheduler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html#AiDotNet_Interfaces_IDiffusionModel_1_Generate_System_Int32___System_Int32_System_Nullable_System_Int32__">IDiffusionModel&lt;T&gt;.Generate(int[], int, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html#AiDotNet_Interfaces_IDiffusionModel_1_PredictNoise_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">IDiffusionModel&lt;T&gt;.PredictNoise(Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html#AiDotNet_Interfaces_IDiffusionModel_1_ComputeLoss_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32___">IDiffusionModel&lt;T&gt;.ComputeLoss(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html#AiDotNet_Interfaces_IFullModel_3_DefaultLossFunction">IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_Train__0__1_">IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;.Train(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_Predict__0_">IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;.Predict(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_GetModelMetadata">IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;.GetModelMetadata()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Serialize">IModelSerializer.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Deserialize_System_Byte___">IModelSerializer.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_SaveModel_System_String_">IModelSerializer.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_LoadModel_System_String_">IModelSerializer.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html#AiDotNet_Interfaces_ICheckpointableModel_SaveState_System_IO_Stream_">ICheckpointableModel.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html#AiDotNet_Interfaces_ICheckpointableModel_LoadState_System_IO_Stream_">ICheckpointableModel.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_GetParameters">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_ParameterCount">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_GetActiveFeatureIndices">IFeatureAware.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">IFeatureAware.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_IsFeatureUsed_System_Int32_">IFeatureAware.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html#AiDotNet_Interfaces_IFeatureImportance_1_GetFeatureImportance">IFeatureImportance&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html#AiDotNet_Interfaces_ICloneable_1_DeepCopy">ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html#AiDotNet_Interfaces_ICloneable_1_Clone">ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ComputeGradients__1__2_AiDotNet_Interfaces_ILossFunction__0__">IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ComputeGradients(Tensor&lt;T&gt;, Tensor&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html#AiDotNet_Interfaces_IJitCompilable_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">IJitCompilable&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html#AiDotNet_Interfaces_IJitCompilable_1_SupportsJitCompilation">IJitCompilable&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Interfaces_I3DDiffusionModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+3D diffusion models extend diffusion to generate three-dimensional content,
+including point clouds, meshes, textured models, and full 3D scenes. They
+are used in computer graphics, game development, and virtual reality.
+</p>
+<p>
+<b>For Beginners:</b> 3D diffusion models create 3D objects instead of flat images.
+<p>Types of 3D generation:</p>
+<ul>
+<li>Point Clouds: Sets of 3D points that form a shape</li>
+<li>Meshes: Surfaces made of triangles (like in games)</li>
+<li>Textured Models: Meshes with colors and materials</li>
+<li>Novel Views: New angles of an object from one image</li>
+</ul>
+<p>How it works:</p>
+<ol>
+<li>Text-to-3D: Describe what you want → 3D model</li>
+<li>Image-to-3D: Single image → full 3D model</li>
+<li>Score Distillation: Use 2D diffusion to guide 3D optimization</li>
+</ol>
+<p>Applications:</p>
+<ul>
+<li>Game asset creation</li>
+<li>Product design visualization</li>
+<li>VR/AR content generation</li>
+<li>Architectural modeling</li>
+</ul>
+
+<p>
+This interface extends <a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html">IDiffusionModel&lt;T&gt;</a> with 3D-specific operations.
+</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_I3DDiffusionModel_1_DefaultPointCount_" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.DefaultPointCount*"></a>
+
+  <h3 id="AiDotNet_Interfaces_I3DDiffusionModel_1_DefaultPointCount" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.DefaultPointCount">
+  DefaultPointCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/I3DDiffusionModel.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the default number of points in generated point clouds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int DefaultPointCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_I3DDiffusionModel_1_SupportsMesh_" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.SupportsMesh*"></a>
+
+  <h3 id="AiDotNet_Interfaces_I3DDiffusionModel_1_SupportsMesh" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.SupportsMesh">
+  SupportsMesh
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/I3DDiffusionModel.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model supports mesh generation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsMesh { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_I3DDiffusionModel_1_SupportsNovelView_" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.SupportsNovelView*"></a>
+
+  <h3 id="AiDotNet_Interfaces_I3DDiffusionModel_1_SupportsNovelView" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.SupportsNovelView">
+  SupportsNovelView
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/I3DDiffusionModel.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model supports novel view synthesis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsNovelView { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_I3DDiffusionModel_1_SupportsPointCloud_" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.SupportsPointCloud*"></a>
+
+  <h3 id="AiDotNet_Interfaces_I3DDiffusionModel_1_SupportsPointCloud" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.SupportsPointCloud">
+  SupportsPointCloud
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/I3DDiffusionModel.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model supports point cloud generation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsPointCloud { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_I3DDiffusionModel_1_SupportsScoreDistillation_" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.SupportsScoreDistillation*"></a>
+
+  <h3 id="AiDotNet_Interfaces_I3DDiffusionModel_1_SupportsScoreDistillation" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.SupportsScoreDistillation">
+  SupportsScoreDistillation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/I3DDiffusionModel.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model supports score distillation sampling (SDS).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsScoreDistillation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_I3DDiffusionModel_1_SupportsScoreDistillation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+SDS uses gradients from a 2D diffusion model to optimize a 3D representation.
+This is the technique behind DreamFusion and similar text-to-3D methods.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_I3DDiffusionModel_1_SupportsTexture_" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.SupportsTexture*"></a>
+
+  <h3 id="AiDotNet_Interfaces_I3DDiffusionModel_1_SupportsTexture" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.SupportsTexture">
+  SupportsTexture
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/I3DDiffusionModel.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model supports texture generation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsTexture { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_I3DDiffusionModel_1_ColorizePointCloud_" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.ColorizePointCloud*"></a>
+
+  <h3 id="AiDotNet_Interfaces_I3DDiffusionModel_1_ColorizePointCloud_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_Int32_System_Nullable_System_Int32__" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.ColorizePointCloud(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.Int32,System.Nullable{System.Int32})">
+  ColorizePointCloud(Tensor&lt;T&gt;, string, int, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/I3DDiffusionModel.cs/#L217"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds colors/normals to a point cloud.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; ColorizePointCloud(Tensor&lt;T&gt; pointCloud, string prompt, int numInferenceSteps = 50, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>pointCloud</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Point cloud positions [batch, numPoints, 3].</p>
+</dd>
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text prompt for coloring.</p>
+</dd>
+    <dt><code>numInferenceSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of denoising steps.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Point cloud with colors [batch, numPoints, 6] (XYZ + RGB).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_I3DDiffusionModel_1_ComputeScoreDistillationGradients_" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.ComputeScoreDistillationGradients*"></a>
+
+  <h3 id="AiDotNet_Interfaces_I3DDiffusionModel_1_ComputeScoreDistillationGradients_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_Int32_System_Double_" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.ComputeScoreDistillationGradients(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.Int32,System.Double)">
+  ComputeScoreDistillationGradients(Tensor&lt;T&gt;, string, int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/I3DDiffusionModel.cs/#L195"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes score distillation gradients for 3D optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; ComputeScoreDistillationGradients(Tensor&lt;T&gt; renderedViews, string prompt, int timestep, double guidanceScale = 100)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>renderedViews</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>2D renders from the current 3D representation.</p>
+</dd>
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text prompt guiding the optimization.</p>
+</dd>
+    <dt><code>timestep</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Diffusion timestep for noise level.</p>
+</dd>
+    <dt><code>guidanceScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Classifier-free guidance scale.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Gradients to apply to the 3D representation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_I3DDiffusionModel_1_ComputeScoreDistillationGradients_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_Int32_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This helps create 3D from text using 2D knowledge:
+1. Render your 3D object from multiple angles
+2. Ask a 2D diffusion model "does this look like [prompt]?"
+3. Get gradients that tell you how to improve the 3D
+4. Repeat until the 3D looks right from all angles
+<p>This is how DreamFusion works - it uses 2D diffusion to guide 3D creation.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_I3DDiffusionModel_1_GenerateMesh_" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.GenerateMesh*"></a>
+
+  <h3 id="AiDotNet_Interfaces_I3DDiffusionModel_1_GenerateMesh_System_String_System_String_System_Int32_System_Int32_System_Double_System_Nullable_System_Int32__" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.GenerateMesh(System.String,System.String,System.Int32,System.Int32,System.Double,System.Nullable{System.Int32})">
+  GenerateMesh(string, string?, int, int, double, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/I3DDiffusionModel.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a mesh from a text description.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Mesh3D&lt;T&gt; GenerateMesh(string prompt, string? negativePrompt = null, int resolution = 128, int numInferenceSteps = 64, double guidanceScale = 3, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text description of the desired 3D object.</p>
+</dd>
+    <dt><code>negativePrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>What to avoid.</p>
+</dd>
+    <dt><code>resolution</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Mesh resolution (higher = more detail).</p>
+</dd>
+    <dt><code>numInferenceSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of denoising steps.</p>
+</dd>
+    <dt><code>guidanceScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Classifier-free guidance scale.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.Mesh3D-1.html">Mesh3D</a>&lt;T&gt;</dt>
+    <dd><p>Mesh data containing vertices and faces.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_I3DDiffusionModel_1_GenerateMesh_System_String_System_String_System_Int32_System_Int32_System_Double_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This creates a 3D surface you can render:
+- Vertices: 3D points that define corners
+- Faces: Triangles connecting vertices to form surfaces
+- Can be exported to common 3D formats (OBJ, STL, etc.)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_I3DDiffusionModel_1_GeneratePointCloud_" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.GeneratePointCloud*"></a>
+
+  <h3 id="AiDotNet_Interfaces_I3DDiffusionModel_1_GeneratePointCloud_System_String_System_String_System_Nullable_System_Int32__System_Int32_System_Double_System_Nullable_System_Int32__" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.GeneratePointCloud(System.String,System.String,System.Nullable{System.Int32},System.Int32,System.Double,System.Nullable{System.Int32})">
+  GeneratePointCloud(string, string?, int?, int, double, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/I3DDiffusionModel.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a point cloud from a text description.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; GeneratePointCloud(string prompt, string? negativePrompt = null, int? numPoints = null, int numInferenceSteps = 64, double guidanceScale = 3, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text description of the desired 3D object.</p>
+</dd>
+    <dt><code>negativePrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>What to avoid.</p>
+</dd>
+    <dt><code>numPoints</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Number of points in the cloud.</p>
+</dd>
+    <dt><code>numInferenceSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of denoising steps.</p>
+</dd>
+    <dt><code>guidanceScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Classifier-free guidance scale.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Point cloud tensor [batch, numPoints, 3] for XYZ coordinates.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_I3DDiffusionModel_1_GeneratePointCloud_System_String_System_String_System_Nullable_System_Int32__System_Int32_System_Double_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This creates a cloud of 3D points that form a shape:
+- prompt: "A chair" → 4096 points arranged in a chair shape
+- The points define the surface of the object
+- Can be converted to a mesh for rendering
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_I3DDiffusionModel_1_ImageTo3D_" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.ImageTo3D*"></a>
+
+  <h3 id="AiDotNet_Interfaces_I3DDiffusionModel_1_ImageTo3D_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Int32_System_Double_System_Nullable_System_Int32__" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.ImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,System.Int32,System.Double,System.Nullable{System.Int32})">
+  ImageTo3D(Tensor&lt;T&gt;, int, int, double, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/I3DDiffusionModel.cs/#L144"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a 3D model from a single input image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Mesh3D&lt;T&gt; ImageTo3D(Tensor&lt;T&gt; inputImage, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputImage</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input image showing the object.</p>
+</dd>
+    <dt><code>numViews</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of views to generate for reconstruction.</p>
+</dd>
+    <dt><code>numInferenceSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of denoising steps.</p>
+</dd>
+    <dt><code>guidanceScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Classifier-free guidance scale.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.Mesh3D-1.html">Mesh3D</a>&lt;T&gt;</dt>
+    <dd><p>Reconstructed mesh with optional texture.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_I3DDiffusionModel_1_ImageTo3D_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Int32_System_Double_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This turns a flat picture into a 3D model:
+- Input: Photo of a shoe from the front
+- Output: Full 3D model you can view from any angle
+- The model infers what the hidden parts look like
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_I3DDiffusionModel_1_PointCloudToMesh_" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.PointCloudToMesh*"></a>
+
+  <h3 id="AiDotNet_Interfaces_I3DDiffusionModel_1_PointCloudToMesh_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Interfaces_SurfaceReconstructionMethod_" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.PointCloudToMesh(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Interfaces.SurfaceReconstructionMethod)">
+  PointCloudToMesh(Tensor&lt;T&gt;, SurfaceReconstructionMethod)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/I3DDiffusionModel.cs/#L207"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a point cloud to a mesh.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Mesh3D&lt;T&gt; PointCloudToMesh(Tensor&lt;T&gt; pointCloud, SurfaceReconstructionMethod method = SurfaceReconstructionMethod.Poisson)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>pointCloud</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Point cloud [batch, numPoints, 3].</p>
+</dd>
+    <dt><code>method</code> <a class="xref" href="AiDotNet.Interfaces.SurfaceReconstructionMethod.html">SurfaceReconstructionMethod</a></dt>
+    <dd><p>Surface reconstruction method.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.Mesh3D-1.html">Mesh3D</a>&lt;T&gt;</dt>
+    <dd><p>Reconstructed mesh.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_I3DDiffusionModel_1_SynthesizeNovelViews_" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.SynthesizeNovelViews*"></a>
+
+  <h3 id="AiDotNet_Interfaces_I3DDiffusionModel_1_SynthesizeNovelViews_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_ValueTuple_System_Double_System_Double____System_Int32_System_Double_System_Nullable_System_Int32__" data-uid="AiDotNet.Interfaces.I3DDiffusionModel`1.SynthesizeNovelViews(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.ValueTuple{System.Double,System.Double}[],System.Int32,System.Double,System.Nullable{System.Int32})">
+  SynthesizeNovelViews(Tensor&lt;T&gt;, (double azimuth, double elevation)[], int, double, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/I3DDiffusionModel.cs/#L169"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Synthesizes novel views of an object from a reference image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt;[] SynthesizeNovelViews(Tensor&lt;T&gt; inputImage, (double azimuth, double elevation)[] targetAngles, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputImage</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The reference image.</p>
+</dd>
+    <dt><code>targetAngles</code> (<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.double,system.double-.azimuth">azimuth</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.double,system.double-.elevation">elevation</a>)[]</dt>
+    <dd><p>Target viewing angles (azimuth, elevation) in radians.</p>
+</dd>
+    <dt><code>numInferenceSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of denoising steps.</p>
+</dd>
+    <dt><code>guidanceScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Classifier-free guidance scale.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of images from the requested viewpoints.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_I3DDiffusionModel_1_SynthesizeNovelViews_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_ValueTuple_System_Double_System_Double____System_Int32_System_Double_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This shows an object from different angles:
+- Input: Front view of a car
+- Target: 45°, 90°, 135° rotations
+- Output: Images showing the car from those angles
+- Useful for product visualization
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/I3DDiffusionModel.cs/#L37" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

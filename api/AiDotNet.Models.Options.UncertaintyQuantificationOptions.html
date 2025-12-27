@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class UncertaintyQuantificationOptions | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class UncertaintyQuantificationOptions | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for enabling uncertainty quantification during inference.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_UncertaintyQuantificationOptions.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.UncertaintyQuantificationOptions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions">
+
+
+
+  <h1 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions" class="text-break">
+Class UncertaintyQuantificationOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L17"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for enabling uncertainty quantification during inference.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class UncertaintyQuantificationOptions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">UncertaintyQuantificationOptions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Uncertainty quantification (UQ) augments standard point predictions with an uncertainty estimate.
+For supported model types, the library can sample multiple stochastic predictions and aggregate them
+into a mean prediction and an uncertainty estimate (variance).
+</p>
+<p><b>For Beginners:</b> This lets you ask the model not only "what is the prediction?"
+but also "how sure are you?"</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_AdaptiveConformalBins_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.AdaptiveConformalBins*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_AdaptiveConformalBins" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.AdaptiveConformalBins">
+  AdaptiveConformalBins
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of confidence bins used when <a class="xref" href="AiDotNet.Models.Options.UncertaintyQuantificationOptions.html#AiDotNet_Models_Options_UncertaintyQuantificationOptions_ConformalMode">ConformalMode</a> is <a class="xref" href="AiDotNet.Enums.ConformalPredictionMode.html#AiDotNet_Enums_ConformalPredictionMode_Adaptive">Adaptive</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int AdaptiveConformalBins { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_CalibrationMethod_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.CalibrationMethod*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_CalibrationMethod" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.CalibrationMethod">
+  CalibrationMethod
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the probability calibration method used when calibration labels are provided.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ProbabilityCalibrationMethod CalibrationMethod { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.ProbabilityCalibrationMethod.html">ProbabilityCalibrationMethod</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_ConformalConfidenceLevel_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.ConformalConfidenceLevel*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_ConformalConfidenceLevel" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.ConformalConfidenceLevel">
+  ConformalConfidenceLevel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the desired conformal coverage level when using conformal prediction.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ConformalConfidenceLevel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_ConformalConfidenceLevel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This is typically expressed as a probability (e.g., 0.9 for 90% coverage).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_ConformalMode_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.ConformalMode*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_ConformalMode" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.ConformalMode">
+  ConformalMode
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the conformal calibration mode used when producing conformal intervals/sets.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ConformalPredictionMode ConformalMode { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.ConformalPredictionMode.html">ConformalPredictionMode</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_ConformalMode_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Split conformal is the standard baseline. Cross-conformal can improve stability on small calibration sets.
+Adaptive conformal adjusts thresholds based on predicted confidence buckets.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_CrossConformalFolds_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.CrossConformalFolds*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_CrossConformalFolds" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.CrossConformalFolds">
+  CrossConformalFolds
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of folds used when <a class="xref" href="AiDotNet.Models.Options.UncertaintyQuantificationOptions.html#AiDotNet_Models_Options_UncertaintyQuantificationOptions_ConformalMode">ConformalMode</a> is <a class="xref" href="AiDotNet.Enums.ConformalPredictionMode.html#AiDotNet_Enums_ConformalPredictionMode_CrossConformal">CrossConformal</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CrossConformalFolds { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_DeepEnsembleInitialNoiseStdDev_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.DeepEnsembleInitialNoiseStdDev*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_DeepEnsembleInitialNoiseStdDev" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.DeepEnsembleInitialNoiseStdDev">
+  DeepEnsembleInitialNoiseStdDev
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the standard deviation of the initial parameter perturbation applied when constructing ensemble members.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double DeepEnsembleInitialNoiseStdDev { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_DeepEnsembleInitialNoiseStdDev_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This helps ensure ensemble members do not collapse to identical solutions when created from a shared base model.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_DeepEnsembleSize_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.DeepEnsembleSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_DeepEnsembleSize" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.DeepEnsembleSize">
+  DeepEnsembleSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of independently trained models used for deep ensemble uncertainty estimation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int DeepEnsembleSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_DeepEnsembleSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This value is only used when <a class="xref" href="AiDotNet.Models.Options.UncertaintyQuantificationOptions.html#AiDotNet_Models_Options_UncertaintyQuantificationOptions_Method">Method</a> is <a class="xref" href="AiDotNet.Enums.UncertaintyQuantificationMethod.html#AiDotNet_Enums_UncertaintyQuantificationMethod_DeepEnsemble">DeepEnsemble</a>.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_DenormalizeUncertainty_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.DenormalizeUncertainty*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_DenormalizeUncertainty" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.DenormalizeUncertainty">
+  DenormalizeUncertainty
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether the returned uncertainty should be denormalized to match the output scale.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool DenormalizeUncertainty { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_DenormalizeUncertainty_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>When enabled, the library attempts to scale variances according to the output normalization transform.
+For non-linear normalization transforms, the uncertainty is returned in normalized space.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_EnableIsotonicRegressionCalibration_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.EnableIsotonicRegressionCalibration*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_EnableIsotonicRegressionCalibration" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.EnableIsotonicRegressionCalibration">
+  EnableIsotonicRegressionCalibration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to fit and apply isotonic regression calibration (binary calibration) when calibration labels are provided.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableIsotonicRegressionCalibration { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_EnablePlattScaling_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.EnablePlattScaling*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_EnablePlattScaling" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.EnablePlattScaling">
+  EnablePlattScaling
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to fit and apply Platt scaling (binary calibration) when calibration labels are provided.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnablePlattScaling { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_EnableTemperatureScaling_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.EnableTemperatureScaling*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_EnableTemperatureScaling" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.EnableTemperatureScaling">
+  EnableTemperatureScaling
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to fit and apply temperature scaling for classification-like outputs when calibration labels are provided.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableTemperatureScaling { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_EnableTemperatureScaling_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>When enabled and calibration labels are provided via the builder, the system will calibrate predicted probabilities and return
+calibrated probabilities as the prediction output from uncertainty APIs.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_Enabled_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.Enabled*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_Enabled" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.Enabled">
+  Enabled
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether uncertainty quantification is enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Enabled { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_Enabled_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>When disabled, calls to uncertainty APIs fall back to deterministic behavior.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_LaplacePriorPrecision_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.LaplacePriorPrecision*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_LaplacePriorPrecision" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.LaplacePriorPrecision">
+  LaplacePriorPrecision
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the prior precision (inverse variance) used by diagonal Laplace approximation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LaplacePriorPrecision { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_Method_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.Method*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_Method" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.Method">
+  Method
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the uncertainty quantification strategy to use.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UncertaintyQuantificationMethod Method { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.UncertaintyQuantificationMethod.html">UncertaintyQuantificationMethod</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_MonteCarloDropoutRate_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.MonteCarloDropoutRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_MonteCarloDropoutRate" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.MonteCarloDropoutRate">
+  MonteCarloDropoutRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the dropout rate used when injecting Monte Carlo Dropout layers automatically.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MonteCarloDropoutRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_MonteCarloDropoutRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This value is only used when the model architecture does not already contain explicit MC dropout layers.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_NumSamples_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.NumSamples*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_NumSamples" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.NumSamples">
+  NumSamples
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of stochastic samples to draw when using sampling-based methods.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumSamples { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_NumSamples_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Higher values generally improve estimate stability at the cost of increased inference latency.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_PosteriorFitMaxSamples_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.PosteriorFitMaxSamples*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_PosteriorFitMaxSamples" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.PosteriorFitMaxSamples">
+  PosteriorFitMaxSamples
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of samples used to fit Laplace/SWAG posteriors from calibration data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int PosteriorFitMaxSamples { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_PosteriorFitMaxSamples_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This is a safety/performance bound to prevent extremely large calibration datasets from causing very slow builds.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_RandomSeed_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.RandomSeed*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_RandomSeed" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.RandomSeed">
+  RandomSeed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets an optional random seed for reproducible Monte Carlo sampling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? RandomSeed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_SwagBurnInSteps_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.SwagBurnInSteps*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_SwagBurnInSteps" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.SwagBurnInSteps">
+  SwagBurnInSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L155"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of initial SWAG steps to skip before collecting snapshots.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SwagBurnInSteps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_SwagLearningRate_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.SwagLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_SwagLearningRate" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.SwagLearningRate">
+  SwagLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate used for SWAG posterior fitting on calibration data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double SwagLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_SwagNumSnapshots_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.SwagNumSnapshots*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_SwagNumSnapshots" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.SwagNumSnapshots">
+  SwagNumSnapshots
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L145"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of SWAG snapshots to collect when fitting a SWAG posterior.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SwagNumSnapshots { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_SwagNumSteps_" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.SwagNumSteps*"></a>
+
+  <h3 id="AiDotNet_Models_Options_UncertaintyQuantificationOptions_SwagNumSteps" data-uid="AiDotNet.Models.Options.UncertaintyQuantificationOptions.SwagNumSteps">
+  SwagNumSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L150"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of SWAG update steps used to collect snapshots.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SwagNumSteps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/UncertaintyQuantificationOptions.cs/#L17" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

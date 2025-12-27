@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CpuHyperbolicManifoldEngine | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CpuHyperbolicManifoldEngine | AiDotNet Documentation ">
+      
+      <meta name="description" content="CPU implementation of hyperbolic manifold operations for hyperbolic neural networks.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine">
+
+
+
+  <h1 id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine" class="text-break">
+Class CpuHyperbolicManifoldEngine  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuHyperbolicManifoldEngine.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Engines.html">Engines</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>CPU implementation of hyperbolic manifold operations for hyperbolic neural networks.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class CpuHyperbolicManifoldEngine : IHyperbolicManifoldEngine</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">CpuHyperbolicManifoldEngine</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Tensors.Engines.IHyperbolicManifoldEngine.html">IHyperbolicManifoldEngine</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+CpuHyperbolicManifoldEngine provides numerically stable implementations of operations
+on hyperbolic spaces. These are used in hyperbolic neural networks for hierarchical
+data representation.
+</p>
+<p><b>For Beginners:</b> This implements the math for hyperbolic neural networks.
+Hyperbolic space is good for representing tree-like data (hierarchies, taxonomies, graphs).
+The operations here are the building blocks for hyperbolic layers and models.
+</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_Instance_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.Instance*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_Instance" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.Instance">
+  Instance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuHyperbolicManifoldEngine.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Singleton instance for convenience.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static CpuHyperbolicManifoldEngine Instance { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.html">CpuHyperbolicManifoldEngine</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_HyperboloidDistance_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.HyperboloidDistance*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_HyperboloidDistance__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0____0_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.HyperboloidDistance``1(AiDotNet.Tensors.LinearAlgebra.Vector{``0},AiDotNet.Tensors.LinearAlgebra.Vector{``0},``0)">
+  HyperboloidDistance&lt;T&gt;(Vector&lt;T&gt;, Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuHyperbolicManifoldEngine.cs/#L391"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the geodesic distance on the hyperboloid using the Minkowski inner product.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T HyperboloidDistance&lt;T&gt;(Vector&lt;T&gt; x, Vector&lt;T&gt; y, T curvature)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>First point on the hyperboloid.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Second point on the hyperboloid.</p>
+</dd>
+    <dt><code>curvature</code> <span class="xref">T</span></dt>
+    <dd><p>The curvature parameter (typically -1).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The geodesic distance.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_HyperboloidDistance__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0____0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Formula: d(x,y) = (1/√c) * arcosh(-c * ⟨x,y⟩_L)
+where ⟨·,·⟩_L is the Minkowski inner product.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_HyperboloidExpMap_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.HyperboloidExpMap*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_HyperboloidExpMap__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0____0_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.HyperboloidExpMap``1(AiDotNet.Tensors.LinearAlgebra.Vector{``0},AiDotNet.Tensors.LinearAlgebra.Vector{``0},``0)">
+  HyperboloidExpMap&lt;T&gt;(Vector&lt;T&gt;, Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuHyperbolicManifoldEngine.cs/#L302"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exponential map on the hyperboloid model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; HyperboloidExpMap&lt;T&gt;(Vector&lt;T&gt; basePoint, Vector&lt;T&gt; tangentVector, T curvature)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>basePoint</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The base point on the hyperboloid.</p>
+</dd>
+    <dt><code>tangentVector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The tangent vector at the base point.</p>
+</dd>
+    <dt><code>curvature</code> <span class="xref">T</span></dt>
+    <dd><p>The curvature parameter (typically -1).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The point on the hyperboloid reached by following the tangent vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_HyperboloidExpMap__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0____0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Formula: exp_x(v) = cosh(||v||_L) * x + sinh(||v||_L) * (v / ||v||_L)
+where ||·||_L is the Lorentzian norm.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_HyperboloidLogMap_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.HyperboloidLogMap*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_HyperboloidLogMap__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0____0_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.HyperboloidLogMap``1(AiDotNet.Tensors.LinearAlgebra.Vector{``0},AiDotNet.Tensors.LinearAlgebra.Vector{``0},``0)">
+  HyperboloidLogMap&lt;T&gt;(Vector&lt;T&gt;, Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuHyperbolicManifoldEngine.cs/#L343"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logarithmic map on the hyperboloid model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; HyperboloidLogMap&lt;T&gt;(Vector&lt;T&gt; basePoint, Vector&lt;T&gt; targetPoint, T curvature)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>basePoint</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The base point on the hyperboloid.</p>
+</dd>
+    <dt><code>targetPoint</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target point on the hyperboloid.</p>
+</dd>
+    <dt><code>curvature</code> <span class="xref">T</span></dt>
+    <dd><p>The curvature parameter (typically -1).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The tangent vector at basePoint pointing toward targetPoint.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_HyperboloidProject_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.HyperboloidProject*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_HyperboloidProject__1_AiDotNet_Tensors_LinearAlgebra_Vector___0____0_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.HyperboloidProject``1(AiDotNet.Tensors.LinearAlgebra.Vector{``0},``0)">
+  HyperboloidProject&lt;T&gt;(Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuHyperbolicManifoldEngine.cs/#L416"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Projects a point onto the hyperboloid (ensures it satisfies the constraint).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; HyperboloidProject&lt;T&gt;(Vector&lt;T&gt; point, T curvature)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>point</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The point to project.</p>
+</dd>
+    <dt><code>curvature</code> <span class="xref">T</span></dt>
+    <dd><p>The curvature parameter.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The projected point on the hyperboloid.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_HyperboloidProject__1_AiDotNet_Tensors_LinearAlgebra_Vector___0____0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The hyperboloid constraint is: -x₀² + x₁² + ... + xₙ² = -1/c (for curvature c &lt; 0).
+This adjusts x₀ to satisfy the constraint while keeping other coordinates fixed.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_HyperboloidToPoincare_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.HyperboloidToPoincare*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_HyperboloidToPoincare__1_AiDotNet_Tensors_LinearAlgebra_Vector___0____0_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.HyperboloidToPoincare``1(AiDotNet.Tensors.LinearAlgebra.Vector{``0},``0)">
+  HyperboloidToPoincare&lt;T&gt;(Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuHyperbolicManifoldEngine.cs/#L467"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a point from hyperboloid model to Poincare ball model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; HyperboloidToPoincare&lt;T&gt;(Vector&lt;T&gt; hyperboloidPoint, T curvature)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>hyperboloidPoint</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Point on the hyperboloid.</p>
+</dd>
+    <dt><code>curvature</code> <span class="xref">T</span></dt>
+    <dd><p>The curvature parameter.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The equivalent point in the Poincare ball.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_MobiusAdd_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.MobiusAdd*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_MobiusAdd__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0____0_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.MobiusAdd``1(AiDotNet.Tensors.LinearAlgebra.Vector{``0},AiDotNet.Tensors.LinearAlgebra.Vector{``0},``0)">
+  MobiusAdd&lt;T&gt;(Vector&lt;T&gt;, Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuHyperbolicManifoldEngine.cs/#L157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Möbius addition: The hyperbolic analog of vector addition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; MobiusAdd&lt;T&gt;(Vector&lt;T&gt; x, Vector&lt;T&gt; y, T curvature)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>First point in the Poincare ball.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Second point in the Poincare ball.</p>
+</dd>
+    <dt><code>curvature</code> <span class="xref">T</span></dt>
+    <dd><p>The curvature parameter (typically -1).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The Möbius sum x ⊕ y.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_MobiusAdd__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0____0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Regular addition doesn't work in hyperbolic space
+because it might take you outside the ball. Möbius addition is a special
+operation that always stays inside the ball.
+</p>
+<p>
+Formula: x ⊕ y = ((1 + 2c⟨x,y⟩ + c||y||²)x + (1 - c||x||²)y) / (1 + 2c⟨x,y⟩ + c²||x||²||y||²)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_PoincareDistanceBatch_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.PoincareDistanceBatch*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_PoincareDistanceBatch__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Tensors_LinearAlgebra_Matrix___0____0_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.PoincareDistanceBatch``1(AiDotNet.Tensors.LinearAlgebra.Matrix{``0},AiDotNet.Tensors.LinearAlgebra.Matrix{``0},``0)">
+  PoincareDistanceBatch&lt;T&gt;(Matrix&lt;T&gt;, Matrix&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuHyperbolicManifoldEngine.cs/#L531"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batched geodesic distance computation on the Poincare ball.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; PoincareDistanceBatch&lt;T&gt;(Matrix&lt;T&gt; x, Matrix&lt;T&gt; y, T curvature)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Matrix where each row is a point.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Matrix where each row is a point.</p>
+</dd>
+    <dt><code>curvature</code> <span class="xref">T</span></dt>
+    <dd><p>The curvature parameter.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Vector of pairwise distances.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_PoincareDistance_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.PoincareDistance*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_PoincareDistance__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0____0_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.PoincareDistance``1(AiDotNet.Tensors.LinearAlgebra.Vector{``0},AiDotNet.Tensors.LinearAlgebra.Vector{``0},``0)">
+  PoincareDistance&lt;T&gt;(Vector&lt;T&gt;, Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuHyperbolicManifoldEngine.cs/#L180"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the geodesic (shortest path) distance between two points.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T PoincareDistance&lt;T&gt;(Vector&lt;T&gt; x, Vector&lt;T&gt; y, T curvature)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>First point in the Poincare ball.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Second point in the Poincare ball.</p>
+</dd>
+    <dt><code>curvature</code> <span class="xref">T</span></dt>
+    <dd><p>The curvature parameter (typically -1).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The geodesic distance.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_PoincareDistance__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0____0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The geodesic distance is the length of the shortest
+path along the curved surface. Points near the edge of the ball can be very
+far apart in geodesic distance even if they look close in Euclidean terms.
+</p>
+<p>
+Formula: d(x,y) = (2/√c) * arctanh(√c * ||(-x) ⊕ y||)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_PoincareExpMapBatch_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.PoincareExpMapBatch*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_PoincareExpMapBatch__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Tensors_LinearAlgebra_Matrix___0____0_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.PoincareExpMapBatch``1(AiDotNet.Tensors.LinearAlgebra.Matrix{``0},AiDotNet.Tensors.LinearAlgebra.Matrix{``0},``0)">
+  PoincareExpMapBatch&lt;T&gt;(Matrix&lt;T&gt;, Matrix&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuHyperbolicManifoldEngine.cs/#L503"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batched exponential map on the Poincare ball.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; PoincareExpMapBatch&lt;T&gt;(Matrix&lt;T&gt; basePoints, Matrix&lt;T&gt; tangentVectors, T curvature)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>basePoints</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Matrix where each row is a base point.</p>
+</dd>
+    <dt><code>tangentVectors</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Matrix where each row is a tangent vector.</p>
+</dd>
+    <dt><code>curvature</code> <span class="xref">T</span></dt>
+    <dd><p>The curvature parameter.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Matrix where each row is the result of exp map.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_PoincareExpMap_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.PoincareExpMap*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_PoincareExpMap__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0____0_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.PoincareExpMap``1(AiDotNet.Tensors.LinearAlgebra.Vector{``0},AiDotNet.Tensors.LinearAlgebra.Vector{``0},``0)">
+  PoincareExpMap&lt;T&gt;(Vector&lt;T&gt;, Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuHyperbolicManifoldEngine.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exponential map: Projects a tangent vector at a point onto the Poincare ball.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; PoincareExpMap&lt;T&gt;(Vector&lt;T&gt; basePoint, Vector&lt;T&gt; tangentVector, T curvature)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>basePoint</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The base point on the manifold.</p>
+</dd>
+    <dt><code>tangentVector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The tangent vector at the base point.</p>
+</dd>
+    <dt><code>curvature</code> <span class="xref">T</span></dt>
+    <dd><p>The curvature parameter (typically -1).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The point on the manifold reached by following the tangent vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_PoincareExpMap__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0____0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The exponential map "shoots" from a point in a direction.
+If you're standing at a point and want to walk in a direction, the exp map tells you
+where you end up after following the curved surface.
+</p>
+<p>
+Formula: exp_x(v) = x ⊕ tanh(√c ||v|| / (1 - c||x||²)) * (v / ||v||)
+where ⊕ is Möbius addition and c = -curvature.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_PoincareLogMap_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.PoincareLogMap*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_PoincareLogMap__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0____0_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.PoincareLogMap``1(AiDotNet.Tensors.LinearAlgebra.Vector{``0},AiDotNet.Tensors.LinearAlgebra.Vector{``0},``0)">
+  PoincareLogMap&lt;T&gt;(Vector&lt;T&gt;, Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuHyperbolicManifoldEngine.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logarithmic map: Computes the tangent vector from one point to another.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; PoincareLogMap&lt;T&gt;(Vector&lt;T&gt; basePoint, Vector&lt;T&gt; targetPoint, T curvature)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>basePoint</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The base point on the manifold.</p>
+</dd>
+    <dt><code>targetPoint</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target point on the manifold.</p>
+</dd>
+    <dt><code>curvature</code> <span class="xref">T</span></dt>
+    <dd><p>The curvature parameter (typically -1).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The tangent vector at basePoint pointing toward targetPoint.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_PoincareLogMap__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0____0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The logarithmic map is the inverse of exp.
+Given two points, it tells you the direction and distance (in tangent space)
+from one to the other.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_PoincareParallelTransport_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.PoincareParallelTransport*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_PoincareParallelTransport__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0____0_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.PoincareParallelTransport``1(AiDotNet.Tensors.LinearAlgebra.Vector{``0},AiDotNet.Tensors.LinearAlgebra.Vector{``0},AiDotNet.Tensors.LinearAlgebra.Vector{``0},``0)">
+  PoincareParallelTransport&lt;T&gt;(Vector&lt;T&gt;, Vector&lt;T&gt;, Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuHyperbolicManifoldEngine.cs/#L215"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Parallel transport: Moves a tangent vector from one point to another along the geodesic.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; PoincareParallelTransport&lt;T&gt;(Vector&lt;T&gt; x, Vector&lt;T&gt; y, Vector&lt;T&gt; v, T curvature)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Source point.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Destination point.</p>
+</dd>
+    <dt><code>v</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Tangent vector at x.</p>
+</dd>
+    <dt><code>curvature</code> <span class="xref">T</span></dt>
+    <dd><p>The curvature parameter.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The transported tangent vector at y.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_PoincareParallelTransport__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0____0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> When you move along a curved surface, directions change.
+Parallel transport tells you how to "carry" a direction vector from one point to another
+while keeping it as parallel as possible to itself.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_PoincareProject_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.PoincareProject*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_PoincareProject__1_AiDotNet_Tensors_LinearAlgebra_Vector___0____0___0_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.PoincareProject``1(AiDotNet.Tensors.LinearAlgebra.Vector{``0},``0,``0)">
+  PoincareProject&lt;T&gt;(Vector&lt;T&gt;, T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuHyperbolicManifoldEngine.cs/#L280"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Projects a point onto the Poincare ball (clamps to valid region).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; PoincareProject&lt;T&gt;(Vector&lt;T&gt; point, T curvature, T epsilon)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>point</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The point to project.</p>
+</dd>
+    <dt><code>curvature</code> <span class="xref">T</span></dt>
+    <dd><p>The curvature parameter.</p>
+</dd>
+    <dt><code>epsilon</code> <span class="xref">T</span></dt>
+    <dd><p>Small value to stay away from the boundary (recommended: 1e-5).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The projected point inside the ball.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_PoincareProject__1_AiDotNet_Tensors_LinearAlgebra_Vector___0____0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Numerical operations can push points outside the valid region (||x|| &lt; 1/√c).
+This projects them back inside for numerical stability.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_PoincareToHyperboloid_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.PoincareToHyperboloid*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuHyperbolicManifoldEngine_PoincareToHyperboloid__1_AiDotNet_Tensors_LinearAlgebra_Vector___0____0_" data-uid="AiDotNet.Tensors.Engines.CpuHyperbolicManifoldEngine.PoincareToHyperboloid``1(AiDotNet.Tensors.LinearAlgebra.Vector{``0},``0)">
+  PoincareToHyperboloid&lt;T&gt;(Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuHyperbolicManifoldEngine.cs/#L435"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a point from Poincare ball model to hyperboloid model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; PoincareToHyperboloid&lt;T&gt;(Vector&lt;T&gt; poincarePoint, T curvature)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>poincarePoint</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Point in the Poincare ball.</p>
+</dd>
+    <dt><code>curvature</code> <span class="xref">T</span></dt>
+    <dd><p>The curvature parameter.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The equivalent point on the hyperboloid.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuHyperbolicManifoldEngine.cs/#L22" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

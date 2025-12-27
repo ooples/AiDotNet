@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DataSamplerBase | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DataSamplerBase | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for all data samplers providing common functionality.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Data_Sampling_DataSamplerBase.md&amp;value=---%0Auid%3A%20AiDotNet.Data.Sampling.DataSamplerBase%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Data.Sampling.DataSamplerBase">
+
+
+
+  <h1 id="AiDotNet_Data_Sampling_DataSamplerBase" data-uid="AiDotNet.Data.Sampling.DataSamplerBase" class="text-break">
+Class DataSamplerBase  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Sampling/DataSamplerBase.cs/#L20"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Data.html">Data</a>.<a class="xref" href="AiDotNet.Data.Sampling.html">Sampling</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for all data samplers providing common functionality.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class DataSamplerBase : IDataSampler</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">DataSamplerBase</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDataSampler.html">IDataSampler</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Data.Sampling.ActiveLearningSampler-1.html">ActiveLearningSampler&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Data.Sampling.EpochAdaptiveSamplerBase-1.html">EpochAdaptiveSamplerBase&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Data.Sampling.ImportanceSampler-1.html">ImportanceSampler&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Data.Sampling.RandomSampler.html">RandomSampler</a></div>
+      <div><a class="xref" href="AiDotNet.Data.Sampling.SequentialSampler.html">SequentialSampler</a></div>
+      <div><a class="xref" href="AiDotNet.Data.Sampling.StratifiedBatchSampler.html">StratifiedBatchSampler</a></div>
+      <div><a class="xref" href="AiDotNet.Data.Sampling.StratifiedSampler.html">StratifiedSampler</a></div>
+      <div><a class="xref" href="AiDotNet.Data.Sampling.SubsetSampler.html">SubsetSampler</a></div>
+      <div><a class="xref" href="AiDotNet.Data.Sampling.WeightedSamplerBase-1.html">WeightedSamplerBase&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Data_Sampling_DataSamplerBase_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+DataSamplerBase provides default implementations for common sampler operations
+like random seed management and epoch callbacks. All concrete samplers should
+inherit from this base class rather than implementing IDataSampler directly.
+</p>
+<p><b>For Beginners:</b> This base class handles the common plumbing that all
+samplers need, like managing random number generators for reproducibility.
+When creating a custom sampler, inherit from this class and override GetIndicesCore().
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Data_Sampling_DataSamplerBase__ctor_" data-uid="AiDotNet.Data.Sampling.DataSamplerBase.#ctor*"></a>
+
+  <h3 id="AiDotNet_Data_Sampling_DataSamplerBase__ctor_System_Nullable_System_Int32__" data-uid="AiDotNet.Data.Sampling.DataSamplerBase.#ctor(System.Nullable{System.Int32})">
+  DataSamplerBase(int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Sampling/DataSamplerBase.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the DataSamplerBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected DataSamplerBase(int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed for reproducibility.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_Data_Sampling_DataSamplerBase_CurrentEpoch" data-uid="AiDotNet.Data.Sampling.DataSamplerBase.CurrentEpoch">
+  CurrentEpoch
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Sampling/DataSamplerBase.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The current epoch number (0-based).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int CurrentEpoch</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Data_Sampling_DataSamplerBase_Random" data-uid="AiDotNet.Data.Sampling.DataSamplerBase.Random">
+  Random
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Sampling/DataSamplerBase.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The random number generator used for sampling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Random Random</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.random">Random</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Data_Sampling_DataSamplerBase_Length_" data-uid="AiDotNet.Data.Sampling.DataSamplerBase.Length*"></a>
+
+  <h3 id="AiDotNet_Data_Sampling_DataSamplerBase_Length" data-uid="AiDotNet.Data.Sampling.DataSamplerBase.Length">
+  Length
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Sampling/DataSamplerBase.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of samples this sampler will produce per epoch.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract int Length { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Sampling_DataSamplerBase_Length_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This may differ from the dataset size for oversampling or undersampling strategies.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Data_Sampling_DataSamplerBase_CreateSequentialIndices_" data-uid="AiDotNet.Data.Sampling.DataSamplerBase.CreateSequentialIndices*"></a>
+
+  <h3 id="AiDotNet_Data_Sampling_DataSamplerBase_CreateSequentialIndices_System_Int32_" data-uid="AiDotNet.Data.Sampling.DataSamplerBase.CreateSequentialIndices(System.Int32)">
+  CreateSequentialIndices(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Sampling/DataSamplerBase.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a sequential array of indices from 0 to count-1.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static int[] CreateSequentialIndices(int count)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of indices to create.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>An array containing indices [0, 1, 2, ..., count-1].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Sampling_DataSamplerBase_GetIndices_" data-uid="AiDotNet.Data.Sampling.DataSamplerBase.GetIndices*"></a>
+
+  <h3 id="AiDotNet_Data_Sampling_DataSamplerBase_GetIndices" data-uid="AiDotNet.Data.Sampling.DataSamplerBase.GetIndices">
+  GetIndices()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Sampling/DataSamplerBase.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns an enumerable of indices for one epoch of sampling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;int&gt; GetIndices()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>An enumerable of sample indices in the order they should be processed.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Sampling_DataSamplerBase_GetIndices_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Each call to this method starts a new epoch. The returned indices determine
+which samples are included and in what order.
+</p>
+<p><b>For Beginners:</b> This method provides the "shopping list" of data points
+to include in this round of training. The order matters for learning!
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Sampling_DataSamplerBase_GetIndicesCore_" data-uid="AiDotNet.Data.Sampling.DataSamplerBase.GetIndicesCore*"></a>
+
+  <h3 id="AiDotNet_Data_Sampling_DataSamplerBase_GetIndicesCore" data-uid="AiDotNet.Data.Sampling.DataSamplerBase.GetIndicesCore">
+  GetIndicesCore()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Sampling/DataSamplerBase.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core implementation for generating indices. Override this in derived classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract IEnumerable&lt;int&gt; GetIndicesCore()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>An enumerable of sample indices.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Sampling_DataSamplerBase_OnEpochStart_" data-uid="AiDotNet.Data.Sampling.DataSamplerBase.OnEpochStart*"></a>
+
+  <h3 id="AiDotNet_Data_Sampling_DataSamplerBase_OnEpochStart_System_Int32_" data-uid="AiDotNet.Data.Sampling.DataSamplerBase.OnEpochStart(System.Int32)">
+  OnEpochStart(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Sampling/DataSamplerBase.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Called at the start of each epoch to allow the sampler to adjust its behavior.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void OnEpochStart(int epoch)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>epoch</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The current epoch number (0-based).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Sampling_DataSamplerBase_OnEpochStart_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method allows samplers to implement epoch-dependent behavior such as:
+- Curriculum learning: adjusting difficulty thresholds as training progresses
+- Self-paced learning: updating sample inclusion thresholds
+- Active learning: refreshing uncertainty estimates
+</p>
+<p><b>For Beginners:</b> Some sampling strategies change over time. For example,
+curriculum learning starts with easy examples and gradually adds harder ones.
+This method tells the sampler "we're starting epoch N" so it can adjust accordingly.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Sampling_DataSamplerBase_SetSeed_" data-uid="AiDotNet.Data.Sampling.DataSamplerBase.SetSeed*"></a>
+
+  <h3 id="AiDotNet_Data_Sampling_DataSamplerBase_SetSeed_System_Int32_" data-uid="AiDotNet.Data.Sampling.DataSamplerBase.SetSeed(System.Int32)">
+  SetSeed(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Sampling/DataSamplerBase.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the random seed for reproducible sampling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetSeed(int seed)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The random seed value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Sampling_DataSamplerBase_SetSeed_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Setting a seed ensures the same sampling order is produced each time,
+which is important for reproducibility and debugging.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Sampling_DataSamplerBase_ShuffleIndices_" data-uid="AiDotNet.Data.Sampling.DataSamplerBase.ShuffleIndices*"></a>
+
+  <h3 id="AiDotNet_Data_Sampling_DataSamplerBase_ShuffleIndices_System_Int32___" data-uid="AiDotNet.Data.Sampling.DataSamplerBase.ShuffleIndices(System.Int32[])">
+  ShuffleIndices(int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Sampling/DataSamplerBase.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs Fisher-Yates shuffle on an array of indices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void ShuffleIndices(int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The array to shuffle in-place.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Sampling/DataSamplerBase.cs/#L20" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

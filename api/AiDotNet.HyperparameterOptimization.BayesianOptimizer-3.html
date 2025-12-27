@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class BayesianOptimizer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class BayesianOptimizer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements Bayesian optimization for hyperparameter tuning using Gaussian Process regression.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_HyperparameterOptimization_BayesianOptimizer_3.md&amp;value=---%0Auid%3A%20AiDotNet.HyperparameterOptimization.BayesianOptimizer%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.HyperparameterOptimization.BayesianOptimizer`3">
+
+
+
+  <h1 id="AiDotNet_HyperparameterOptimization_BayesianOptimizer_3" data-uid="AiDotNet.HyperparameterOptimization.BayesianOptimizer`3" class="text-break">
+Class BayesianOptimizer&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/HyperparameterOptimization/BayesianOptimizer.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.HyperparameterOptimization.html">HyperparameterOptimization</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements Bayesian optimization for hyperparameter tuning using Gaussian Process regression.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class BayesianOptimizer&lt;T, TInput, TOutput&gt; : HyperparameterOptimizerBase&lt;T, TInput, TOutput&gt;, IHyperparameterOptimizer&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type for models.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type for models.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.HyperparameterOptimization.HyperparameterOptimizerBase-3.html">HyperparameterOptimizerBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">BayesianOptimizer&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IHyperparameterOptimizer-3.html">IHyperparameterOptimizer</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.HyperparameterOptimization.HyperparameterOptimizerBase-3.html#AiDotNet_HyperparameterOptimization_HyperparameterOptimizerBase_3_Trials">HyperparameterOptimizerBase&lt;T, TInput, TOutput&gt;.Trials</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.HyperparameterOptimization.HyperparameterOptimizerBase-3.html#AiDotNet_HyperparameterOptimization_HyperparameterOptimizerBase_3_Maximize">HyperparameterOptimizerBase&lt;T, TInput, TOutput&gt;.Maximize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.HyperparameterOptimization.HyperparameterOptimizerBase-3.html#AiDotNet_HyperparameterOptimization_HyperparameterOptimizerBase_3_SearchSpace">HyperparameterOptimizerBase&lt;T, TInput, TOutput&gt;.SearchSpace</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.HyperparameterOptimization.HyperparameterOptimizerBase-3.html#AiDotNet_HyperparameterOptimization_HyperparameterOptimizerBase_3_SyncLock">HyperparameterOptimizerBase&lt;T, TInput, TOutput&gt;.SyncLock</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.HyperparameterOptimization.HyperparameterOptimizerBase-3.html#AiDotNet_HyperparameterOptimization_HyperparameterOptimizerBase_3_Optimize_System_Func_System_Collections_Generic_Dictionary_System_String_System_Object___0__AiDotNet_Models_HyperparameterSearchSpace_System_Int32_">HyperparameterOptimizerBase&lt;T, TInput, TOutput&gt;.Optimize(Func&lt;Dictionary&lt;string, object&gt;, T&gt;, HyperparameterSearchSpace, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.HyperparameterOptimization.HyperparameterOptimizerBase-3.html#AiDotNet_HyperparameterOptimization_HyperparameterOptimizerBase_3_OptimizeModel__1_AiDotNet_Interfaces_IModel__1__2___0__System_ValueTuple__1__2__System_ValueTuple__1__2__AiDotNet_Models_HyperparameterSearchSpace_System_Int32_">HyperparameterOptimizerBase&lt;T, TInput, TOutput&gt;.OptimizeModel&lt;TMetadata&gt;(IModel&lt;TInput, TOutput, TMetadata&gt;, (TInput X, TOutput Y), (TInput X, TOutput Y), HyperparameterSearchSpace, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.HyperparameterOptimization.HyperparameterOptimizerBase-3.html#AiDotNet_HyperparameterOptimization_HyperparameterOptimizerBase_3_GetBestTrial">HyperparameterOptimizerBase&lt;T, TInput, TOutput&gt;.GetBestTrial()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.HyperparameterOptimization.HyperparameterOptimizerBase-3.html#AiDotNet_HyperparameterOptimization_HyperparameterOptimizerBase_3_GetAllTrials">HyperparameterOptimizerBase&lt;T, TInput, TOutput&gt;.GetAllTrials()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.HyperparameterOptimization.HyperparameterOptimizerBase-3.html#AiDotNet_HyperparameterOptimization_HyperparameterOptimizerBase_3_GetTrials_System_Func_AiDotNet_Models_HyperparameterTrial__0__System_Boolean__">HyperparameterOptimizerBase&lt;T, TInput, TOutput&gt;.GetTrials(Func&lt;HyperparameterTrial&lt;T&gt;, bool&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.HyperparameterOptimization.HyperparameterOptimizerBase-3.html#AiDotNet_HyperparameterOptimization_HyperparameterOptimizerBase_3_SuggestNext_AiDotNet_Models_HyperparameterTrial__0__">HyperparameterOptimizerBase&lt;T, TInput, TOutput&gt;.SuggestNext(HyperparameterTrial&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.HyperparameterOptimization.HyperparameterOptimizerBase-3.html#AiDotNet_HyperparameterOptimization_HyperparameterOptimizerBase_3_ReportTrial_AiDotNet_Models_HyperparameterTrial__0___0_">HyperparameterOptimizerBase&lt;T, TInput, TOutput&gt;.ReportTrial(HyperparameterTrial&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.HyperparameterOptimization.HyperparameterOptimizerBase-3.html#AiDotNet_HyperparameterOptimization_HyperparameterOptimizerBase_3_ShouldPrune_AiDotNet_Models_HyperparameterTrial__0__System_Int32__0_">HyperparameterOptimizerBase&lt;T, TInput, TOutput&gt;.ShouldPrune(HyperparameterTrial&lt;T&gt;, int, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.HyperparameterOptimization.HyperparameterOptimizerBase-3.html#AiDotNet_HyperparameterOptimization_HyperparameterOptimizerBase_3_FindBestTrial_System_Collections_Generic_List_AiDotNet_Models_HyperparameterTrial__0___">HyperparameterOptimizerBase&lt;T, TInput, TOutput&gt;.FindBestTrial(List&lt;HyperparameterTrial&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.HyperparameterOptimization.HyperparameterOptimizerBase-3.html#AiDotNet_HyperparameterOptimization_HyperparameterOptimizerBase_3_CreateOptimizationResult_AiDotNet_Models_HyperparameterSearchSpace_System_DateTime_System_DateTime_System_Int32_">HyperparameterOptimizerBase&lt;T, TInput, TOutput&gt;.CreateOptimizationResult(HyperparameterSearchSpace, DateTime, DateTime, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.HyperparameterOptimization.HyperparameterOptimizerBase-3.html#AiDotNet_HyperparameterOptimization_HyperparameterOptimizerBase_3_EvaluateTrialSafely_AiDotNet_Models_HyperparameterTrial__0__System_Func_System_Collections_Generic_Dictionary_System_String_System_Object___0__System_Collections_Generic_Dictionary_System_String_System_Object__">HyperparameterOptimizerBase&lt;T, TInput, TOutput&gt;.EvaluateTrialSafely(HyperparameterTrial&lt;T&gt;, Func&lt;Dictionary&lt;string, object&gt;, T&gt;, Dictionary&lt;string, object&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.HyperparameterOptimization.HyperparameterOptimizerBase-3.html#AiDotNet_HyperparameterOptimization_HyperparameterOptimizerBase_3_ValidateOptimizationInputs_System_Func_System_Collections_Generic_Dictionary_System_String_System_Object___0__AiDotNet_Models_HyperparameterSearchSpace_System_Int32_">HyperparameterOptimizerBase&lt;T, TInput, TOutput&gt;.ValidateOptimizationInputs(Func&lt;Dictionary&lt;string, object&gt;, T&gt;, HyperparameterSearchSpace, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_HyperparameterOptimization_BayesianOptimizer_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Bayesian optimization is a smart search strategy that learns from
+previous trials to decide what to try next. Unlike grid or random search, it:</p>
+<ul>
+<li>Builds a model of how hyperparameters affect performance</li>
+<li>Uses this model to focus on promising regions</li>
+<li>Balances exploration (trying new areas) with exploitation (refining good areas)</li>
+</ul>
+<p>This makes it much more efficient than random search, often finding good hyperparameters
+in 10-20 trials instead of 100s.</p>
+<p>Key components:</p>
+<ul>
+<li>Surrogate Model: A Gaussian Process that predicts performance for any hyperparameter combination</li>
+<li>Acquisition Function: Decides where to sample next based on predicted mean and uncertainty</li>
+<li>Sequential Optimization: Each trial informs the next, unlike parallel random search</li>
+</ul>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_HyperparameterOptimization_BayesianOptimizer_3__ctor_" data-uid="AiDotNet.HyperparameterOptimization.BayesianOptimizer`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_HyperparameterOptimization_BayesianOptimizer_3__ctor_System_Boolean_AiDotNet_HyperparameterOptimization_AcquisitionFunctionType_System_Int32_System_Double_System_Nullable_System_Int32__" data-uid="AiDotNet.HyperparameterOptimization.BayesianOptimizer`3.#ctor(System.Boolean,AiDotNet.HyperparameterOptimization.AcquisitionFunctionType,System.Int32,System.Double,System.Nullable{System.Int32})">
+  BayesianOptimizer(bool, AcquisitionFunctionType, int, double, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/HyperparameterOptimization/BayesianOptimizer.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the BayesianOptimizer class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BayesianOptimizer(bool maximize = true, AcquisitionFunctionType acquisitionFunction = AcquisitionFunctionType.ExpectedImprovement, int nInitialPoints = 5, double explorationWeight = 2, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>maximize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to maximize the objective (true) or minimize it (false).</p>
+</dd>
+    <dt><code>acquisitionFunction</code> <a class="xref" href="AiDotNet.HyperparameterOptimization.AcquisitionFunctionType.html">AcquisitionFunctionType</a></dt>
+    <dd><p>The acquisition function to use for selecting next points.</p>
+</dd>
+    <dt><code>nInitialPoints</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of random points to sample before using Bayesian optimization.</p>
+</dd>
+    <dt><code>explorationWeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Weight for exploration vs exploitation (higher = more exploration).</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Random seed for reproducibility. If null, uses a random seed.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_HyperparameterOptimization_BayesianOptimizer_3_Optimize_" data-uid="AiDotNet.HyperparameterOptimization.BayesianOptimizer`3.Optimize*"></a>
+
+  <h3 id="AiDotNet_HyperparameterOptimization_BayesianOptimizer_3_Optimize_System_Func_System_Collections_Generic_Dictionary_System_String_System_Object___0__AiDotNet_Models_HyperparameterSearchSpace_System_Int32_" data-uid="AiDotNet.HyperparameterOptimization.BayesianOptimizer`3.Optimize(System.Func{System.Collections.Generic.Dictionary{System.String,System.Object},`0},AiDotNet.Models.HyperparameterSearchSpace,System.Int32)">
+  Optimize(Func&lt;Dictionary&lt;string, object&gt;, T&gt;, HyperparameterSearchSpace, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/HyperparameterOptimization/BayesianOptimizer.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Searches for the best hyperparameter configuration using Bayesian optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override HyperparameterOptimizationResult&lt;T&gt; Optimize(Func&lt;Dictionary&lt;string, object&gt;, T&gt; objectiveFunction, HyperparameterSearchSpace searchSpace, int nTrials)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>objectiveFunction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;, T&gt;</dt>
+    <dd></dd>
+    <dt><code>searchSpace</code> <a class="xref" href="AiDotNet.Models.HyperparameterSearchSpace.html">HyperparameterSearchSpace</a></dt>
+    <dd></dd>
+    <dt><code>nTrials</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.HyperparameterOptimizationResult-1.html">HyperparameterOptimizationResult</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_HyperparameterOptimization_BayesianOptimizer_3_SuggestNext_" data-uid="AiDotNet.HyperparameterOptimization.BayesianOptimizer`3.SuggestNext*"></a>
+
+  <h3 id="AiDotNet_HyperparameterOptimization_BayesianOptimizer_3_SuggestNext_AiDotNet_Models_HyperparameterTrial__0__" data-uid="AiDotNet.HyperparameterOptimization.BayesianOptimizer`3.SuggestNext(AiDotNet.Models.HyperparameterTrial{`0})">
+  SuggestNext(HyperparameterTrial&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/HyperparameterOptimization/BayesianOptimizer.cs/#L146"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Suggests the next hyperparameter configuration using the acquisition function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Dictionary&lt;string, object&gt; SuggestNext(HyperparameterTrial&lt;T&gt; trial)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>trial</code> <a class="xref" href="AiDotNet.Models.HyperparameterTrial-1.html">HyperparameterTrial</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/HyperparameterOptimization/BayesianOptimizer.cs/#L29" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

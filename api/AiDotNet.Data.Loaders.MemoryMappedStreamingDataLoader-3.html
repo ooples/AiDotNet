@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MemoryMappedStreamingDataLoader&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MemoryMappedStreamingDataLoader&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="A streaming data loader that uses memory-mapped files for efficient random access to large binary datasets.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3.md&amp;value=---%0Auid%3A%20AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3">
+
+
+
+  <h1 id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3" data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3" class="text-break">
+Class MemoryMappedStreamingDataLoader&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/StreamingDataLoader.cs/#L426"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Data.html">Data</a>.<a class="xref" href="AiDotNet.Data.Loaders.html">Loaders</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A streaming data loader that uses memory-mapped files for efficient random access
+to large binary datasets.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MemoryMappedStreamingDataLoader&lt;T, TInput, TOutput&gt; : StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;, IStreamingDataLoader&lt;T, TInput, TOutput&gt;, IDataLoader&lt;T&gt;, IResettable, ICountable, IDisposable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The type of input data.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The type of output/label data.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html">DataLoaderBase</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html">StreamingDataLoaderBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">MemoryMappedStreamingDataLoader&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IStreamingDataLoader-3.html">IStreamingDataLoader</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDataLoader-1.html">IDataLoader</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IResettable.html">IResettable</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICountable.html">ICountable</a></div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_SampleCount">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.SampleCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_TotalCount">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.TotalCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_PrefetchCount">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.PrefetchCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_NumWorkers">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.NumWorkers</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_ReadSampleAsync_System_Int32_System_Threading_CancellationToken_">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.ReadSampleAsync(int, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_AggregateSamples_System_Collections_Generic_IList_System_ValueTuple__1__2___">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.AggregateSamples(IList&lt;(TInput Input, TOutput Output)&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_GetBatches_System_Boolean_System_Boolean_System_Nullable_System_Int32__">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.GetBatches(bool, bool, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_GetBatchesAsync_System_Boolean_System_Boolean_System_Nullable_System_Int32__System_Threading_CancellationToken_">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.GetBatchesAsync(bool, bool, int?, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_GetShuffledIndices_System_Boolean_System_Nullable_System_Int32__">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.GetShuffledIndices(bool, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_LoadDataCoreAsync_System_Threading_CancellationToken_">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.LoadDataCoreAsync(CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoaderBase-3.html#AiDotNet_Data_Loaders_StreamingDataLoaderBase_3_UnloadDataCore">StreamingDataLoaderBase&lt;T, TInput, TOutput&gt;.UnloadDataCore()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Description">DataLoaderBase&lt;T&gt;.Description</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_IsLoaded">DataLoaderBase&lt;T&gt;.IsLoaded</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_TotalCount">DataLoaderBase&lt;T&gt;.TotalCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_CurrentIndex">DataLoaderBase&lt;T&gt;.CurrentIndex</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_BatchSize">DataLoaderBase&lt;T&gt;.BatchSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_BatchCount">DataLoaderBase&lt;T&gt;.BatchCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_CurrentBatchIndex">DataLoaderBase&lt;T&gt;.CurrentBatchIndex</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Progress">DataLoaderBase&lt;T&gt;.Progress</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Reset">DataLoaderBase&lt;T&gt;.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_LoadAsync_System_Threading_CancellationToken_">DataLoaderBase&lt;T&gt;.LoadAsync(CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Unload">DataLoaderBase&lt;T&gt;.Unload()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_LoadDataCoreAsync_System_Threading_CancellationToken_">DataLoaderBase&lt;T&gt;.LoadDataCoreAsync(CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_OnReset">DataLoaderBase&lt;T&gt;.OnReset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_EnsureLoaded">DataLoaderBase&lt;T&gt;.EnsureLoaded()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_AdvanceIndex_System_Int32_">DataLoaderBase&lt;T&gt;.AdvanceIndex(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_AdvanceBatchIndex">DataLoaderBase&lt;T&gt;.AdvanceBatchIndex()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Data.Pipeline.DataPipelineExtensions.html#AiDotNet_Data_Pipeline_DataPipelineExtensions_ToAsyncPipeline__3_AiDotNet_Interfaces_IStreamingDataLoader___0___1___2__System_Boolean_System_Nullable_System_Int32__">DataPipelineExtensions.ToAsyncPipeline&lt;T, TInput, TOutput&gt;(IStreamingDataLoader&lt;T, TInput, TOutput&gt;, bool, int?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Data.Pipeline.DataPipelineExtensions.html#AiDotNet_Data_Pipeline_DataPipelineExtensions_ToPipeline__3_AiDotNet_Interfaces_IStreamingDataLoader___0___1___2__System_Boolean_System_Nullable_System_Int32__">DataPipelineExtensions.ToPipeline&lt;T, TInput, TOutput&gt;(IStreamingDataLoader&lt;T, TInput, TOutput&gt;, bool, int?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Data.Pipeline.DataPipelineExtensions.html#AiDotNet_Data_Pipeline_DataPipelineExtensions_ToSamplePipeline__3_AiDotNet_Interfaces_IStreamingDataLoader___0___1___2__System_Boolean_System_Nullable_System_Int32__">DataPipelineExtensions.ToSamplePipeline&lt;T, TInput, TOutput&gt;(IStreamingDataLoader&lt;T, TInput, TOutput&gt;, bool, int?)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+MemoryMappedStreamingDataLoader uses <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.memorymappedfiles.memorymappedfile">MemoryMappedFile</a>
+for efficient random access to large datasets stored in binary format. The operating system
+handles paging data in and out of physical memory as needed, enabling efficient access to
+datasets larger than available RAM.
+</p>
+<p>
+<b>File Format Requirements:</b>
+<ul><li>Binary file with fixed-size samples</li><li>Each sample is <code>inputSizeBytes + outputSizeBytes</code> bytes</li><li>Samples are stored contiguously with optional header</li></ul>
+
+<p><b>For Beginners:</b> Memory-mapped files let the operating system manage
+which parts of a large file are in memory. When you access a sample, the OS automatically
+loads that portion of the file into RAM. This is very efficient for random access
+patterns like shuffled batch iteration on datasets too large to fit in memory.
+<p>Example:</p>
+<pre><code class="lang-csharp">// Create a memory-mapped loader for binary image data
+var loader = new MemoryMappedStreamingDataLoader&lt;float, float[], int&gt;(
+    filePath: "images.bin",
+    sampleCount: 60000,
+    inputSizeBytes: 784 * sizeof(float),   // 28x28 image
+    outputSizeBytes: sizeof(int),           // Label
+    inputDeserializer: (bytes) =&gt; {
+        var floats = new float[784];
+        for (int i = 0; i &lt; 784; i++)
+            floats[i] = BitConverter.ToSingle(bytes, i * 4);
+        return floats;
+    },
+    outputDeserializer: (bytes) =&gt; BitConverter.ToInt32(bytes, 0),
+    batchSize: 32
+);
+
+await foreach (var batch in loader.GetBatchesAsync())
+{
+    await model.TrainOnBatchAsync(batch.Inputs, batch.Outputs);
+}</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3__ctor_" data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3__ctor_System_String_System_Int32_System_Int32_System_Int32_System_Func_System_Byte____1__System_Func_System_Byte____2__System_Int32_System_Int64_System_Int32_System_Int32_" data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3.#ctor(System.String,System.Int32,System.Int32,System.Int32,System.Func{System.Byte[],`1},System.Func{System.Byte[],`2},System.Int32,System.Int64,System.Int32,System.Int32)">
+  MemoryMappedStreamingDataLoader(string, int, int, int, Func&lt;byte[], TInput&gt;, Func&lt;byte[], TOutput&gt;, int, long, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/StreamingDataLoader.cs/#L459"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the MemoryMappedStreamingDataLoader class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MemoryMappedStreamingDataLoader(string filePath, int sampleCount, int inputSizeBytes, int outputSizeBytes, Func&lt;byte[], TInput&gt; inputDeserializer, Func&lt;byte[], TOutput&gt; outputDeserializer, int batchSize, long headerSizeBytes = 0, int prefetchCount = 2, int numWorkers = 4)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to the binary data file.</p>
+</dd>
+    <dt><code>sampleCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Total number of samples in the dataset.</p>
+</dd>
+    <dt><code>inputSizeBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Size of input data per sample in bytes.</p>
+</dd>
+    <dt><code>outputSizeBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Size of output/label data per sample in bytes.</p>
+</dd>
+    <dt><code>inputDeserializer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[], TInput&gt;</dt>
+    <dd><p>Function to deserialize input bytes to TInput.</p>
+</dd>
+    <dt><code>outputDeserializer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[], TOutput&gt;</dt>
+    <dd><p>Function to deserialize output bytes to TOutput.</p>
+</dd>
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of samples per batch.</p>
+</dd>
+    <dt><code>headerSizeBytes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>Size of file header to skip in bytes. Default is 0.</p>
+</dd>
+    <dt><code>prefetchCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of batches to prefetch. Default is 2.</p>
+</dd>
+    <dt><code>numWorkers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of parallel workers. Default is 4.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when filePath or deserializers are null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when sizes are invalid.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.filenotfoundexception">FileNotFoundException</a></dt>
+    <dd><p>Thrown when the file does not exist.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_HeaderSizeBytes_" data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3.HeaderSizeBytes*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_HeaderSizeBytes" data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3.HeaderSizeBytes">
+  HeaderSizeBytes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/StreamingDataLoader.cs/#L516"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the size of the file header in bytes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long HeaderSizeBytes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_Name_" data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3.Name*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_Name" data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/StreamingDataLoader.cs/#L503"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the human-readable name of this data loader.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_Name_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Examples: &quot;MNIST&quot;, &quot;Cora Citation Network&quot;, &quot;IMDB Reviews&quot;</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_SampleCount_" data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3.SampleCount*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_SampleCount" data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3.SampleCount">
+  SampleCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/StreamingDataLoader.cs/#L506"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of samples in the dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int SampleCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_SampleCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This may be known upfront (e.g., from file metadata) or estimated.
+For truly streaming sources where the count is unknown, this may return -1.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_SampleSizeBytes_" data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3.SampleSizeBytes*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_SampleSizeBytes" data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3.SampleSizeBytes">
+  SampleSizeBytes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/StreamingDataLoader.cs/#L511"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the size of each sample in bytes (input + output).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SampleSizeBytes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_Dispose_" data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3.Dispose*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_Dispose" data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/StreamingDataLoader.cs/#L625"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Releases all resources used by the memory-mapped data loader.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_Dispose_" data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3.Dispose*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_Dispose_System_Boolean_" data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3.Dispose(System.Boolean)">
+  Dispose(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/StreamingDataLoader.cs/#L635"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Releases the unmanaged resources and optionally releases the managed resources.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void Dispose(bool disposing)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>disposing</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to release both managed and unmanaged resources.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_Finalize_" data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3.Finalize*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_Finalize" data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3.Finalize">
+  ~MemoryMappedStreamingDataLoader()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/StreamingDataLoader.cs/#L666"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finalizer to ensure resources are released.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ~MemoryMappedStreamingDataLoader()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_ReadSampleAsync_" data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3.ReadSampleAsync*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_ReadSampleAsync_System_Int32_System_Threading_CancellationToken_" data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3.ReadSampleAsync(System.Int32,System.Threading.CancellationToken)">
+  ReadSampleAsync(int, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/StreamingDataLoader.cs/#L574"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reads a single sample by index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Task&lt;(TInput Input, TOutput Output)&gt; ReadSampleAsync(int index, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the sample to read.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;(TInput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.input">Input</a>, TOutput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.output">Output</a>)&gt;</dt>
+    <dd><p>A tuple containing the input and output for the sample.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_ReadSampleAsync_System_Int32_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Derived classes must implement this to read a single sample from the data source.
+This method is called by the batching infrastructure to build batches.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_UnloadDataCore_" data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3.UnloadDataCore*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_UnloadDataCore" data-uid="AiDotNet.Data.Loaders.MemoryMappedStreamingDataLoader`3.UnloadDataCore">
+  UnloadDataCore()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/StreamingDataLoader.cs/#L616"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core data unloading implementation to be provided by derived classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void UnloadDataCore()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_MemoryMappedStreamingDataLoader_3_UnloadDataCore_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Derived classes should implement this to release resources:
+- Clear internal data structures
+- Release file handles or connections
+- Allow garbage collection of loaded data
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/StreamingDataLoader.cs/#L426" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

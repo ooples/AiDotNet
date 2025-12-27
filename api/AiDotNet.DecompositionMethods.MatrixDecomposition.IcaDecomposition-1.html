@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class IcaDecomposition&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class IcaDecomposition&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements Independent Component Analysis (ICA) for blind source separation.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1.md&amp;value=---%0Auid%3A%20AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition`1">
+
+
+
+  <h1 id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition`1" class="text-break">
+Class IcaDecomposition&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/IcaDecomposition.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.DecompositionMethods.html">DecompositionMethods</a>.<a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.html">MatrixDecomposition</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements Independent Component Analysis (ICA) for blind source separation.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class IcaDecomposition&lt;T&gt; : MatrixDecompositionBase&lt;T&gt;, IMatrixDecomposition&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used in the matrix.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html">MatrixDecompositionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">IcaDecomposition&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IMatrixDecomposition-1.html">IMatrixDecomposition</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_NumOps">MatrixDecompositionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_Engine">MatrixDecompositionBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_A">MatrixDecompositionBase&lt;T&gt;.A</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_Invert">MatrixDecompositionBase&lt;T&gt;.Invert()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_ValidateMatrix_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Boolean_System_Boolean_System_Boolean_">MatrixDecompositionBase&lt;T&gt;.ValidateMatrix(Matrix&lt;T&gt;, bool, bool, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_FrobeniusNorm_AiDotNet_Tensors_LinearAlgebra_Matrix__0__">MatrixDecompositionBase&lt;T&gt;.FrobeniusNorm(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_ApproximatelyEqual__0__0__0_">MatrixDecompositionBase&lt;T&gt;.ApproximatelyEqual(T, T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixDecompositionExtensions.html#AiDotNet_Extensions_MatrixDecompositionExtensions_ToComplexDecomposition__1_AiDotNet_Interfaces_IMatrixDecomposition___0__">MatrixDecompositionExtensions.ToComplexDecomposition&lt;T&gt;(IMatrixDecomposition&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> ICA is a technique used to separate mixed signals into their independent sources.
+Imagine you're at a party with multiple people talking, and you have multiple microphones recording
+the mixed conversations. ICA helps you separate out each individual voice.
+</p>
+<p>
+The key idea is that ICA finds statistically independent components that were combined together.
+This is different from other decomposition methods because it focuses on statistical independence
+rather than uncorrelated patterns.
+</p>
+<p>
+Common applications include:
+- Audio source separation (cocktail party problem)
+- Brain signal analysis (EEG, fMRI)
+- Image separation and feature extraction
+- Financial data analysis
+- Telecommunications signal processing
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1__ctor_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1__ctor_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Nullable_System_Int32__System_Int32_System_Double_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition`1.#ctor(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},System.Nullable{System.Int32},System.Int32,System.Double)">
+  IcaDecomposition(Matrix&lt;T&gt;, int?, int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/IcaDecomposition.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the ICA decomposition for the specified matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IcaDecomposition(Matrix&lt;T&gt; matrix, int? components = null, int maxIterations = 200, double tolerance = 0.0001)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to decompose (observations * features).</p>
+</dd>
+    <dt><code>components</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>The number of independent components to extract. If null, uses all components.</p>
+</dd>
+    <dt><code>maxIterations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of iterations for the FastICA algorithm.</p>
+</dd>
+    <dt><code>tolerance</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Convergence tolerance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1__ctor_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Nullable_System_Int32__System_Int32_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This constructor sets up the ICA decomposition using the FastICA algorithm.
+The matrix should be organized with observations (samples) as rows and features (sensors/channels) as columns.
+</p>
+<p>
+Key parameters:
+- <code class="paramref">components</code>: How many independent sources to extract
+- <code class="paramref">maxIterations</code>: How long to search for the optimal separation
+- <code class="paramref">tolerance</code>: How close to convergence is "good enough"
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_IndependentComponents_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition`1.IndependentComponents*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_IndependentComponents" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition`1.IndependentComponents">
+  IndependentComponents
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/IcaDecomposition.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the independent components (separated sources).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; IndependentComponents { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_IndependentComponents_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The independent components are the separated source signals that ICA
+has extracted from the mixed observations. Each row represents one independent source.
+</p>
+<p>
+For example, in the cocktail party problem:
+- Each row might represent one person's voice
+- Each column represents a time sample
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_Mean_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition`1.Mean*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_Mean" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition`1.Mean">
+  Mean
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/IcaDecomposition.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the mean vector used for centering the data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Mean { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_MixingMatrix_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition`1.MixingMatrix*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_MixingMatrix" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition`1.MixingMatrix">
+  MixingMatrix
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/IcaDecomposition.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the mixing matrix (inverse of unmixing matrix).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; MixingMatrix { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_MixingMatrix_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The mixing matrix A represents how the original independent sources
+were combined to create the observed mixed signals. If S represents independent sources,
+then X = A * S gives you the mixed observations.
+</p>
+<p>
+This is essentially the "recipe" of how the sources were mixed together.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_UnmixingMatrix_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition`1.UnmixingMatrix*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_UnmixingMatrix" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition`1.UnmixingMatrix">
+  UnmixingMatrix
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/IcaDecomposition.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the unmixing matrix (separation matrix).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; UnmixingMatrix { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_UnmixingMatrix_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The unmixing matrix W transforms the mixed signals back into
+independent source signals. If X represents your mixed signals, then S = W * X gives
+you the separated independent components.
+</p>
+<p>
+Think of it as a filter that untangles the mixed signals, similar to how noise-canceling
+headphones filter out background noise.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_WhiteningMatrix_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition`1.WhiteningMatrix*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_WhiteningMatrix" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition`1.WhiteningMatrix">
+  WhiteningMatrix
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/IcaDecomposition.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the whitening matrix used in the preprocessing step.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; WhiteningMatrix { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_Decompose_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition`1.Decompose*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_Decompose" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition`1.Decompose">
+  Decompose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/IcaDecomposition.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the ICA decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void Decompose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_Solve_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition`1.Solve*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_Solve_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition`1.Solve(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Solve(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/IcaDecomposition.cs/#L529"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Solves a linear system Ax = b using the ICA decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Solve(Vector&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The right-hand side vector of the equation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The solution vector x.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_Solve_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method finds an approximate solution to Ax = b using the ICA factorization.
+Since ICA provides a separation A ~= mixing_matrix * unmixing_matrix, we can use this to solve
+the linear system, though it's not the primary purpose of ICA.
+</p>
+<p>
+For solving linear systems, consider using decomposition methods specifically designed for that
+purpose, such as LU or QR decomposition.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_Transform_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition`1.Transform*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_Transform_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.IcaDecomposition`1.Transform(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Transform(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/IcaDecomposition.cs/#L573"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transforms new data using the learned ICA model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; Transform(Matrix&lt;T&gt; X)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>X</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>New observations to transform.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Independent components for the new data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_IcaDecomposition_1_Transform_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method applies the learned ICA separation to new data.
+It's like using the same "un-mixing recipe" that was learned from the training data
+to separate new mixed signals.
+</p>
+<p>
+This is useful when you want to apply the same source separation to new recordings
+or measurements.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/IcaDecomposition.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

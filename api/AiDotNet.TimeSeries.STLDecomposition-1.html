@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class STLDecomposition&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class STLDecomposition&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements Seasonal-Trend decomposition using LOESS (STL) for time series analysis.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_TimeSeries_STLDecomposition_1.md&amp;value=---%0Auid%3A%20AiDotNet.TimeSeries.STLDecomposition%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.TimeSeries.STLDecomposition`1">
+
+
+
+  <h1 id="AiDotNet_TimeSeries_STLDecomposition_1" data-uid="AiDotNet.TimeSeries.STLDecomposition`1" class="text-break">
+Class STLDecomposition&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/STLDecomposition.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.TimeSeries.html">TimeSeries</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements Seasonal-Trend decomposition using LOESS (STL) for time series analysis.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class STLDecomposition&lt;T&gt; : TimeSeriesModelBase&lt;T&gt;, ITimeSeriesModel&lt;T&gt;, IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html">TimeSeriesModelBase</a>&lt;T&gt;</div>
+      <div><span class="xref">STLDecomposition&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ITimeSeriesModel-1.html">ITimeSeriesModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Options">TimeSeriesModelBase&lt;T&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_NumOps">TimeSeriesModelBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Engine">TimeSeriesModelBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ModelParameters">TimeSeriesModelBase&lt;T&gt;.ModelParameters</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_IsTrained">TimeSeriesModelBase&lt;T&gt;.IsTrained</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_LastEvaluationMetrics">TimeSeriesModelBase&lt;T&gt;.LastEvaluationMetrics</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidateOptions_AiDotNet_Models_Options_TimeSeriesRegressionOptions__0__">TimeSeriesModelBase&lt;T&gt;.ValidateOptions(TimeSeriesRegressionOptions&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidateTrainingInputs_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.ValidateTrainingInputs(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidatePredictionInput_AiDotNet_Tensors_LinearAlgebra_Matrix__0__">TimeSeriesModelBase&lt;T&gt;.ValidatePredictionInput(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_CalculateErrorMetrics_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.CalculateErrorMetrics(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Serialize">TimeSeriesModelBase&lt;T&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Deserialize_System_Byte___">TimeSeriesModelBase&lt;T&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetParameters">TimeSeriesModelBase&lt;T&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ApplyParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.ApplyParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetActiveFeatureIndices">TimeSeriesModelBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_IsFeatureUsed_System_Int32_">TimeSeriesModelBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetFeatureImportance_System_Int32_">TimeSeriesModelBase&lt;T&gt;.GetFeatureImportance(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">TimeSeriesModelBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetFeatureImportance">TimeSeriesModelBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_DeepCopy">TimeSeriesModelBase&lt;T&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Clone">TimeSeriesModelBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Clip__0__0__0_">TimeSeriesModelBase&lt;T&gt;.Clip(T, T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Forecast_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_">TimeSeriesModelBase&lt;T&gt;.Forecast(Vector&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_PrepareForecastFeatures_System_Collections_Generic_List__0__System_Int32_">TimeSeriesModelBase&lt;T&gt;.PrepareForecastFeatures(List&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ParameterCount">TimeSeriesModelBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SaveModel_System_String_">TimeSeriesModelBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_LoadModel_System_String_">TimeSeriesModelBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_DefaultLossFunction">TimeSeriesModelBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0__">TimeSeriesModelBase&lt;T&gt;.ComputeGradients(Matrix&lt;T&gt;, Vector&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">TimeSeriesModelBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SaveState_System_IO_Stream_">TimeSeriesModelBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_LoadState_System_IO_Stream_">TimeSeriesModelBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_TimeSeries_STLDecomposition_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+STL decomposition breaks down a time series into three components: trend, seasonal, and residual.
+It uses locally weighted regression (LOESS) to extract these components, making it robust to
+outliers and applicable to a wide range of time series data.
+</p>
+<p>
+<b>For Beginners:</b>
+STL decomposition is like breaking down a song into its basic elements - the melody (trend),
+the repeating chorus (seasonal pattern), and the unique variations (residuals).
+<p>For example, if you analyze monthly sales data:</p>
+<ul>
+<li>The trend component shows the long-term increase or decrease in sales</li>
+<li>The seasonal component shows regular patterns that repeat (like higher sales during holidays)</li>
+<li>The residual component shows what's left after removing trend and seasonality (like unexpected events)</li>
+</ul>
+<p>This decomposition helps you understand what's driving your time series and can improve forecasting.
+The model offers different algorithms (standard, robust, and fast) to handle various types of data.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_TimeSeries_STLDecomposition_1__ctor_" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_STLDecomposition_1__ctor_AiDotNet_Models_Options_STLDecompositionOptions__0__" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.#ctor(AiDotNet.Models.Options.STLDecompositionOptions{`0})">
+  STLDecomposition(STLDecompositionOptions&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/STLDecomposition.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the STLDecomposition class with optional configuration options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public STLDecomposition(STLDecompositionOptions&lt;T&gt;? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.STLDecompositionOptions-1.html">STLDecompositionOptions</a>&lt;T&gt;</dt>
+    <dd><p>The configuration options for STL decomposition. If null, default options are used.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_TimeSeries_STLDecomposition_1_SupportsJitCompilation_" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_STLDecomposition_1_SupportsJitCompilation" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/STLDecomposition.cs/#L1739"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Returns <code>true</code> when the model has been trained with decomposed components.
+STL prediction for forecasting can be JIT compiled as it uses precomputed
+trend and seasonal components.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_STLDecomposition_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> While the STL decomposition itself uses iterative LOESS smoothing,
+the prediction/forecasting step is simple: trend + seasonal. This can be JIT compiled
+for efficient inference.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_TimeSeries_STLDecomposition_1_CreateInstance_" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.CreateInstance*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_STLDecomposition_1_CreateInstance" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.CreateInstance">
+  CreateInstance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/STLDecomposition.cs/#L974"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the STL decomposition model with the same options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; CreateInstance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new STL decomposition model instance with the same configuration.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_STLDecomposition_1_CreateInstance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a new instance of the STL decomposition model with the same configuration options
+as the current instance. The new instance is not trained and will need to be trained on data.
+</p>
+<p>
+<b>For Beginners:</b>
+This method creates a fresh copy of your model with the same settings but no results.
+<p>It's useful when you want to:</p>
+<ul>
+<li>Apply the same decomposition approach to multiple datasets</li>
+<li>Create multiple variations of the model with slight modifications</li>
+<li>Share your model configuration with others</li>
+<li>Preserve your original settings while experimenting with new options</li>
+</ul>
+<p>Think of it like copying a recipe before making modifications - you keep the original
+intact while creating a new version that you can change.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_STLDecomposition_1_DeserializeCore_" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.DeserializeCore*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_STLDecomposition_1_DeserializeCore_System_IO_BinaryReader_" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.DeserializeCore(System.IO.BinaryReader)">
+  DeserializeCore(BinaryReader)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/STLDecomposition.cs/#L892"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes the model's core parameters from a binary reader.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void DeserializeCore(BinaryReader reader)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binaryreader">BinaryReader</a></dt>
+    <dd><p>The binary reader to read from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_STLDecomposition_1_DeserializeCore_System_IO_BinaryReader__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+Deserialization is the process of loading a previously saved model from disk.
+This method reads the model's parameters from a file and reconstructs the model
+exactly as it was when it was saved.
+<p>This allows you to:</p>
+<ul>
+<li>Load a previously trained model without retraining</li>
+<li>Make predictions with consistent results</li>
+<li>Continue analysis from where you left off</li>
+</ul>
+<p>It's like saving your work in a document and opening it later to continue editing.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_STLDecomposition_1_EvaluateModel_" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.EvaluateModel*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_STLDecomposition_1_EvaluateModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.EvaluateModel(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  EvaluateModel(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/STLDecomposition.cs/#L820"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates the performance of the trained model on test data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Dictionary&lt;string, T&gt; EvaluateModel(Matrix&lt;T&gt; xTest, Vector&lt;T&gt; yTest)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>xTest</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix for testing.</p>
+</dd>
+    <dt><code>yTest</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The actual target values for testing.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>A dictionary containing evaluation metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_STLDecomposition_1_EvaluateModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+This method tests how well our model performs by comparing its predictions to actual values.
+It calculates two error metrics:
+<ul>
+<li>MAE (Mean Absolute Error): The average of the absolute differences between predictions and actual values</li>
+<li>RMSE (Root Mean Squared Error): The square root of the average squared differences, which gives more weight to larger errors</li>
+</ul>
+<p>Lower values for these metrics indicate better model performance. They help you understand
+how accurate your forecasts are likely to be and compare different models or parameter settings.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the model has not been trained.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_STLDecomposition_1_ExportComputationGraph_" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.ExportComputationGraph*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_STLDecomposition_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.ExportComputationGraph(System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{`0}})">
+  ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/STLDecomposition.cs/#L1757"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exports the STL model as a computation graph for JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputNodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A list to which input nodes will be added.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output computation node representing the forecast.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_STLDecomposition_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The computation graph represents the STL prediction formula:
+forecast = last_trend + seasonal[t % period]
+</p>
+<p><b>For Beginners:</b> This converts the STL forecasting logic into an optimized computation graph.
+Since prediction uses precomputed trend and seasonal components, it can be efficiently JIT compiled.
+<p>Expected speedup: 2-3x for inference after JIT compilation.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_STLDecomposition_1_GetModelMetadata_" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_STLDecomposition_1_GetModelMetadata" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/STLDecomposition.cs/#L1009"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets metadata about the model, including its type, configuration, and information about the decomposed components.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>A ModelMetaData object containing information about the model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_STLDecomposition_1_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns detailed metadata about the model, including its type, configuration options,
+and information about the decomposed components. This metadata can be used for model selection,
+comparison, and documentation.
+</p>
+<p>
+<b>For Beginners:</b>
+This method provides a summary of your model's configuration and what it has learned.
+<p>It includes information like:</p>
+<ul>
+<li>The type of model (STL Decomposition)</li>
+<li>The algorithm used (Standard, Robust, or Fast)</li>
+<li>The seasonal period and window sizes</li>
+<li>Details about the decomposed components (sizes, statistics)</li>
+</ul>
+<p>This metadata is useful for:</p>
+<ul>
+<li>Comparing different decomposition approaches</li>
+<li>Documenting your analysis process</li>
+<li>Understanding what the model has extracted from your data</li>
+<li>Sharing model information with others</li>
+</ul>
+<p>Think of it like getting a detailed report card for your decomposition analysis.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_STLDecomposition_1_GetResidual_" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.GetResidual*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_STLDecomposition_1_GetResidual" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.GetResidual">
+  GetResidual()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/STLDecomposition.cs/#L752"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the residual component of the time series.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetResidual()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The residual component.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_STLDecomposition_1_GetResidual_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+The residual component is what remains after removing both trend and seasonal patterns.
+It includes random variations, noise, and any patterns not captured by the other components.
+<p>Analyzing residuals can help identify:</p>
+<ul>
+<li>Unusual events or outliers</li>
+<li>Additional patterns that might need modeling</li>
+<li>Whether the decomposition has successfully captured the main patterns in the data</li>
+</ul>
+<p>Ideally, residuals should look like random noise with no obvious patterns.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the model has not been trained.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_STLDecomposition_1_GetSeasonal_" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.GetSeasonal*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_STLDecomposition_1_GetSeasonal" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.GetSeasonal">
+  GetSeasonal()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/STLDecomposition.cs/#L731"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the seasonal component of the time series.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetSeasonal()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The seasonal component.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_STLDecomposition_1_GetSeasonal_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+The seasonal component represents regular patterns that repeat at fixed intervals.
+These patterns might be related to time of day, day of week, month of year, or any other
+cyclical factor relevant to your data.
+<p>For example, retail sales might show a seasonal pattern with peaks in December (holiday shopping),
+back-to-school season, and other predictable times. The seasonal component captures these
+recurring patterns.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the model has not been trained.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_STLDecomposition_1_GetTrend_" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.GetTrend*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_STLDecomposition_1_GetTrend" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.GetTrend">
+  GetTrend()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/STLDecomposition.cs/#L712"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the trend component of the time series.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetTrend()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The trend component.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_STLDecomposition_1_GetTrend_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+The trend component represents the long-term direction of your time series.
+It shows whether your data is generally increasing, decreasing, or staying flat over time,
+after removing seasonal patterns and random fluctuations.
+<p>For example, in retail sales data, the trend might show steady growth over several years,
+even though there are seasonal peaks during holidays and random variations from month to month.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the model has not been trained.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_STLDecomposition_1_Predict_" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.Predict*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_STLDecomposition_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.Predict(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Predict(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/STLDecomposition.cs/#L773"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates forecasts for future time periods based on the decomposed components.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Predict(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix specifying the forecast horizon.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of forecasted values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_STLDecomposition_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+This method predicts future values by:
+<ol>
+<li>Using the last trend value (assuming the trend continues at the same level)</li>
+<li>Adding the appropriate seasonal pattern from the last observed season</li>
+</ol>
+<p>This simple approach works well for short-term forecasts when the trend is relatively stable.
+For example, if we've decomposed monthly sales data and want to forecast the next few months,
+we'd use the most recent trend level and add the seasonal pattern from the same months in the previous year.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the model has not been trained.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_STLDecomposition_1_PredictSingle_" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.PredictSingle*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_STLDecomposition_1_PredictSingle_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.PredictSingle(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  PredictSingle(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/STLDecomposition.cs/#L1385"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts a single value based on the decomposed components.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T PredictSingle(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input vector containing time information.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The predicted value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_STLDecomposition_1_PredictSingle_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method generates a prediction for a single future time point by combining
+the trend and seasonal components from the decomposition.
+</p>
+<p>
+<b>For Beginners:</b>
+This method predicts a value for a single future time point by:
+<ol>
+<li>Using the last known trend value (assuming the trend continues)</li>
+<li>Adding the appropriate seasonal pattern for that time point</li>
+</ol>
+<p>For example, if you're forecasting sales for next January based on historical
+monthly data, it would:</p>
+<ul>
+<li>Use the most recent trend level (overall sales level)</li>
+<li>Add the January seasonal effect (how much January typically differs from average)</li>
+</ul>
+<p>The input vector should contain the forecast horizon (how many steps ahead)
+and any other relevant information.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the model has not been trained.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_STLDecomposition_1_Reset_" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.Reset*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_STLDecomposition_1_Reset" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/STLDecomposition.cs/#L944"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the model to its initial state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_STLDecomposition_1_Reset_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method clears all decomposed components and returns the model to its initial state,
+as if it had just been created with the same options but not yet trained.
+</p>
+<p>
+<b>For Beginners:</b>
+Resetting a model is like erasing the results of your analysis while keeping the settings.
+<p>This is useful when you want to:</p>
+<ul>
+<li>Reapply the decomposition to different data</li>
+<li>Try different algorithm types on the same data</li>
+<li>Compare results with different settings</li>
+<li>Start fresh after experimenting</li>
+</ul>
+<p>For example, you might reset the model after analyzing monthly data to then analyze
+daily data with the same settings, or to compare the results of standard versus robust
+decomposition approaches on the same dataset.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_STLDecomposition_1_SerializeCore_" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.SerializeCore*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_STLDecomposition_1_SerializeCore_System_IO_BinaryWriter_" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.SerializeCore(System.IO.BinaryWriter)">
+  SerializeCore(BinaryWriter)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/STLDecomposition.cs/#L856"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the model's core parameters to a binary writer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void SerializeCore(BinaryWriter writer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>writer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binarywriter">BinaryWriter</a></dt>
+    <dd><p>The binary writer to write to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_STLDecomposition_1_SerializeCore_System_IO_BinaryWriter__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+Serialization is the process of converting the model's state into a format that can be saved to disk.
+This allows you to save a trained model and load it later without having to retrain it.
+<p>This method saves:</p>
+<ul>
+<li>The STL configuration options (like seasonal period and window sizes)</li>
+<li>The decomposed components (trend, seasonal, and residual)</li>
+</ul>
+<p>After serializing, you can store the model and later deserialize it to make predictions
+or continue analysis without repeating the decomposition process.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_STLDecomposition_1_TrainCore_" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.TrainCore*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_STLDecomposition_1_TrainCore_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.STLDecomposition`1.TrainCore(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  TrainCore(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/STLDecomposition.cs/#L1156"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Implements the model-specific training logic for STL decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void TrainCore(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix (not used in STL decomposition).</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The time series data to decompose.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_STLDecomposition_1_TrainCore_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method handles the STL-specific training logic. It validates inputs and delegates to the
+appropriate algorithm implementation based on the configured algorithm type.
+</p>
+<p>
+<b>For Beginners:</b>
+This is the core method that actually performs the decomposition of your time series into
+trend, seasonal, and residual components. It works behind the scenes to:
+<ol>
+<li>Check that your data meets the required conditions (like having enough points)</li>
+<li>Choose the right algorithm based on your settings</li>
+<li>Break down your data into its components using that algorithm</li>
+</ol>
+<p>The method is called automatically when you train the model, so you don't need to
+call it directly. Instead, you interact with the higher-level <code>Train</code> method
+that handles validation and preparation before calling this method.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the time series is too short for the specified seasonal period.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/STLDecomposition.cs/#L29" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

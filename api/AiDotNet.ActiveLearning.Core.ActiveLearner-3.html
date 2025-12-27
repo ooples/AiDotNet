@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ActiveLearner&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ActiveLearner&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Core implementation of the active learner that orchestrates the active learning loop.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ActiveLearning_Core_ActiveLearner_3.md&amp;value=---%0Auid%3A%20AiDotNet.ActiveLearning.Core.ActiveLearner%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3">
+
+
+
+  <h1 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3" class="text-break">
+Class ActiveLearner&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ActiveLearning.html">ActiveLearning</a>.<a class="xref" href="AiDotNet.ActiveLearning.Core.html">Core</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Core implementation of the active learner that orchestrates the active learning loop.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ActiveLearner&lt;T, TInput, TOutput&gt; : IActiveLearner&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The type of input features.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The type of output labels.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ActiveLearner&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.ActiveLearning.Interfaces.IActiveLearner-3.html">IActiveLearner</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> The ActiveLearner is the main orchestrator that runs the active
+learning process. It manages the labeled and unlabeled pools, coordinates with the query
+strategy to select informative samples, and trains the model iteratively.</p>
+<p><b>Active Learning Workflow:</b></p>
+<ol><li>Initialize with labeled and unlabeled data pools</li><li>Train the model on labeled data</li><li>Use query strategy to select informative unlabeled samples</li><li>Get labels from oracle (human expert or simulator)</li><li>Move newly labeled samples from unlabeled to labeled pool</li><li>Repeat until stopping criterion is met</li></ol>
+<p><b>Example Usage:</b></p>
+<pre><code class="lang-csharp">var config = new ActiveLearnerConfig&lt;double&gt;
+{
+    QueryBatchSize = 10,
+    MaxBudget = 500,
+    QueryStrategy = QueryStrategyType.UncertaintySampling
+};
+
+var learner = new ActiveLearner&lt;double, double[], int&gt;(model, strategy, config);
+learner.Initialize(initialLabeled, unlabeledPool);
+
+var result = learner.Run(oracle, stoppingCriterion);
+Console.WriteLine($"Final accuracy: {result.FinalTrainingAccuracy}");</code></pre>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ActiveLearning_Core_ActiveLearner_3__ctor_" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3__ctor_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_ActiveLearning_Interfaces_IQueryStrategy__0__1__2__AiDotNet_ActiveLearning_Config_ActiveLearnerConfig__0__" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.#ctor(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.ActiveLearning.Interfaces.IQueryStrategy{`0,`1,`2},AiDotNet.ActiveLearning.Config.ActiveLearnerConfig{`0})">
+  ActiveLearner(IFullModel&lt;T, TInput, TOutput&gt;, IQueryStrategy&lt;T, TInput, TOutput&gt;, ActiveLearnerConfig&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new ActiveLearner with the specified model, strategy, and configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ActiveLearner(IFullModel&lt;T, TInput, TOutput&gt; model, IQueryStrategy&lt;T, TInput, TOutput&gt; queryStrategy, ActiveLearnerConfig&lt;T&gt;? config = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The machine learning model to train.</p>
+</dd>
+    <dt><code>queryStrategy</code> <a class="xref" href="AiDotNet.ActiveLearning.Interfaces.IQueryStrategy-3.html">IQueryStrategy</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The strategy for selecting samples to query.</p>
+</dd>
+    <dt><code>config</code> <a class="xref" href="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig-1.html">ActiveLearnerConfig</a>&lt;T&gt;</dt>
+    <dd><p>Configuration options for active learning.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_Configuration_" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.Configuration*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_Configuration" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.Configuration">
+  Configuration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the configuration for this active learner.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ActiveLearnerConfig&lt;T&gt; Configuration { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig-1.html">ActiveLearnerConfig</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_IterationsCompleted_" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.IterationsCompleted*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_IterationsCompleted" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.IterationsCompleted">
+  IterationsCompleted
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of active learning iterations completed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int IterationsCompleted { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_LabeledPool_" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.LabeledPool*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_LabeledPool" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.LabeledPool">
+  LabeledPool
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current labeled dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IDataset&lt;T, TInput, TOutput&gt; LabeledPool { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IDataset-3.html">IDataset</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_Model_" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.Model*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_Model" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.Model">
+  Model
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the underlying model being trained.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt; Model { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_QueryStrategy_" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.QueryStrategy*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_QueryStrategy" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.QueryStrategy">
+  QueryStrategy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the query strategy used for sample selection.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IQueryStrategy&lt;T, TInput, TOutput&gt; QueryStrategy { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ActiveLearning.Interfaces.IQueryStrategy-3.html">IQueryStrategy</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_TotalQueries_" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.TotalQueries*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_TotalQueries" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.TotalQueries">
+  TotalQueries
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of queries (labeling requests) made so far.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TotalQueries { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_UnlabeledPool_" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.UnlabeledPool*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_UnlabeledPool" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.UnlabeledPool">
+  UnlabeledPool
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current unlabeled pool.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IDataset&lt;T, TInput, TOutput&gt; UnlabeledPool { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IDataset-3.html">IDataset</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_AddLabeledSamples_" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.AddLabeledSamples*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_AddLabeledSamples_System_Int32____2___" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.AddLabeledSamples(System.Int32[],`2[])">
+  AddLabeledSamples(int[], TOutput[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L346"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds newly labeled samples to the training set.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddLabeledSamples(int[] indices, TOutput[] labels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Indices of labeled samples in the unlabeled pool.</p>
+</dd>
+    <dt><code>labels</code> TOutput[]</dt>
+    <dd><p>Labels for the samples.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_Evaluate_" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.Evaluate*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_Evaluate_AiDotNet_Interfaces_IDataset__0__1__2__" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.Evaluate(AiDotNet.Interfaces.IDataset{`0,`1,`2})">
+  Evaluate(IDataset&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L384"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates the model on a test dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public EvaluationMetrics&lt;T&gt; Evaluate(IDataset&lt;T, TInput, TOutput&gt; testData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>testData</code> <a class="xref" href="AiDotNet.Interfaces.IDataset-3.html">IDataset</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The test dataset.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ActiveLearning.Interfaces.EvaluationMetrics-1.html">EvaluationMetrics</a>&lt;T&gt;</dt>
+    <dd><p>Evaluation metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_GetLearningCurve_" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.GetLearningCurve*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_GetLearningCurve" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.GetLearningCurve">
+  GetLearningCurve()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L433"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the learning curve (performance vs. number of labeled samples).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public LearningCurve&lt;T&gt; GetLearningCurve()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ActiveLearning.Interfaces.LearningCurve-1.html">LearningCurve</a>&lt;T&gt;</dt>
+    <dd><p>The learning curve data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_Initialize_" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.Initialize*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_Initialize_AiDotNet_Interfaces_IDataset__0__1__2__AiDotNet_Interfaces_IDataset__0__1__2__" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.Initialize(AiDotNet.Interfaces.IDataset{`0,`1,`2},AiDotNet.Interfaces.IDataset{`0,`1,`2})">
+  Initialize(IDataset&lt;T, TInput, TOutput&gt;, IDataset&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes the active learner with labeled and unlabeled data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Initialize(IDataset&lt;T, TInput, TOutput&gt; initialLabeled, IDataset&lt;T, TInput, TOutput&gt; unlabeledPool)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>initialLabeled</code> <a class="xref" href="AiDotNet.Interfaces.IDataset-3.html">IDataset</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Initial labeled dataset.</p>
+</dd>
+    <dt><code>unlabeledPool</code> <a class="xref" href="AiDotNet.Interfaces.IDataset-3.html">IDataset</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Pool of unlabeled samples.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_OnIterationCompleted_" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.OnIterationCompleted*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_OnIterationCompleted_AiDotNet_ActiveLearning_Results_ActiveLearningIterationResult__0__" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.OnIterationCompleted(AiDotNet.ActiveLearning.Results.ActiveLearningIterationResult{`0})">
+  OnIterationCompleted(ActiveLearningIterationResult&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L665"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void OnIterationCompleted(ActiveLearningIterationResult&lt;T&gt; result)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>result</code> <a class="xref" href="AiDotNet.ActiveLearning.Results.ActiveLearningIterationResult-1.html">ActiveLearningIterationResult</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_OnLearningCompleted_" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.OnLearningCompleted*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_OnLearningCompleted_AiDotNet_ActiveLearning_Results_ActiveLearningResult__0__" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.OnLearningCompleted(AiDotNet.ActiveLearning.Results.ActiveLearningResult{`0})">
+  OnLearningCompleted(ActiveLearningResult&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L675"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void OnLearningCompleted(ActiveLearningResult&lt;T&gt; result)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>result</code> <a class="xref" href="AiDotNet.ActiveLearning.Results.ActiveLearningResult-1.html">ActiveLearningResult</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_OnSamplesSelected_" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.OnSamplesSelected*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_OnSamplesSelected_AiDotNet_ActiveLearning_Interfaces_SamplesSelectedEventArgs__1__" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.OnSamplesSelected(AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs{`1})">
+  OnSamplesSelected(SamplesSelectedEventArgs&lt;TInput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L670"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void OnSamplesSelected(SamplesSelectedEventArgs&lt;TInput&gt; args)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>args</code> <a class="xref" href="AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs-1.html">SamplesSelectedEventArgs</a>&lt;TInput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_Run_" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.Run*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_Run_AiDotNet_ActiveLearning_Interfaces_IOracle__1__2__AiDotNet_ActiveLearning_Interfaces_IStoppingCriterion__0__" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.Run(AiDotNet.ActiveLearning.Interfaces.IOracle{`1,`2},AiDotNet.ActiveLearning.Interfaces.IStoppingCriterion{`0})">
+  Run(IOracle&lt;TInput, TOutput&gt;, IStoppingCriterion&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L258"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runs active learning until a stopping criterion is met.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ActiveLearningResult&lt;T&gt; Run(IOracle&lt;TInput, TOutput&gt; oracle, IStoppingCriterion&lt;T&gt;? stoppingCriterion = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>oracle</code> <a class="xref" href="AiDotNet.ActiveLearning.Interfaces.IOracle-2.html">IOracle</a>&lt;TInput, TOutput&gt;</dt>
+    <dd><p>The oracle that provides labels.</p>
+</dd>
+    <dt><code>stoppingCriterion</code> <a class="xref" href="AiDotNet.ActiveLearning.Interfaces.IStoppingCriterion-1.html">IStoppingCriterion</a>&lt;T&gt;</dt>
+    <dd><p>Optional custom stopping criterion.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ActiveLearning.Results.ActiveLearningResult-1.html">ActiveLearningResult</a>&lt;T&gt;</dt>
+    <dd><p>Final result of the active learning process.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_RunIteration_" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.RunIteration*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_RunIteration_AiDotNet_ActiveLearning_Interfaces_IOracle__1__2__" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.RunIteration(AiDotNet.ActiveLearning.Interfaces.IOracle{`1,`2})">
+  RunIteration(IOracle&lt;TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runs a single iteration of active learning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ActiveLearningIterationResult&lt;T&gt; RunIteration(IOracle&lt;TInput, TOutput&gt; oracle)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>oracle</code> <a class="xref" href="AiDotNet.ActiveLearning.Interfaces.IOracle-2.html">IOracle</a>&lt;TInput, TOutput&gt;</dt>
+    <dd><p>The oracle that provides labels for selected samples.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ActiveLearning.Results.ActiveLearningIterationResult-1.html">ActiveLearningIterationResult</a>&lt;T&gt;</dt>
+    <dd><p>Result of this iteration.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_RunIteration_AiDotNet_ActiveLearning_Interfaces_IOracle__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> One iteration involves:
+1. Training on current labeled data
+2. Selecting samples to query
+3. Getting labels from the oracle
+4. Adding newly labeled samples to training set</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_SelectNextBatch_" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.SelectNextBatch*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_SelectNextBatch" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.SelectNextBatch">
+  SelectNextBatch()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L324"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Selects the next batch of samples to query.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[] SelectNextBatch()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Indices of samples to query from the unlabeled pool.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_TrainModel_" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.TrainModel*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_TrainModel" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.TrainModel">
+  TrainModel()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L377"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the model on the current labeled dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingMetrics&lt;T&gt; TrainModel()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ActiveLearning.Interfaces.TrainingMetrics-1.html">TrainingMetrics</a>&lt;T&gt;</dt>
+    <dd><p>Training metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="events">Events
+</h2>
+
+
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_IterationCompleted" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.IterationCompleted">
+  IterationCompleted
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Event raised when an iteration is completed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public event EventHandler&lt;ActiveLearningIterationResult&lt;T&gt;&gt;? IterationCompleted</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="AiDotNet.ActiveLearning.Results.ActiveLearningIterationResult-1.html">ActiveLearningIterationResult</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_LearningCompleted" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.LearningCompleted">
+  LearningCompleted
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L95"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Event raised when the learning process is complete.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public event EventHandler&lt;ActiveLearningResult&lt;T&gt;&gt;? LearningCompleted</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="AiDotNet.ActiveLearning.Results.ActiveLearningResult-1.html">ActiveLearningResult</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_ActiveLearning_Core_ActiveLearner_3_SamplesSelected" data-uid="AiDotNet.ActiveLearning.Core.ActiveLearner`3.SamplesSelected">
+  SamplesSelected
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Event raised when samples are selected for labeling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public event EventHandler&lt;SamplesSelectedEventArgs&lt;TInput&gt;&gt;? SamplesSelected</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs-1.html">SamplesSelectedEventArgs</a>&lt;TInput&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Core/ActiveLearner.cs/#L47" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

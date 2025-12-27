@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ProgramInput&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ProgramInput&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents the input specification for program synthesis.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ProgramSynthesis_Models_ProgramInput_1.md&amp;value=---%0Auid%3A%20AiDotNet.ProgramSynthesis.Models.ProgramInput%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1">
+
+
+
+  <h1 id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1" class="text-break">
+Class ProgramInput&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/ProgramInput.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ProgramSynthesis.html">ProgramSynthesis</a>.<a class="xref" href="AiDotNet.ProgramSynthesis.Models.html">Models</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents the input specification for program synthesis.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ProgramInput&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ProgramInput&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+ProgramInput encapsulates all the information needed to synthesize a program,
+including natural language descriptions, input-output examples, formal specifications,
+and constraints.
+</p>
+<p><b>For Beginners:</b> This class describes what you want the program to do.
+<p>When you want AI to create a program for you, you need to tell it what you want.
+This class lets you provide that information in different ways:</p>
+<ul>
+<li>Describe it in plain English</li>
+<li>Give examples of inputs and expected outputs</li>
+<li>Specify constraints (like &quot;must run in under 1 second&quot;)</li>
+</ul>
+<p>Think of it like ordering at a restaurant - you tell the chef what you want,
+and they create the dish. This is how you tell the AI what program you want.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1__ctor_" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1__ctor" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.#ctor">
+  ProgramInput()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/ProgramInput.cs/#L270"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.ProgramSynthesis.Models.ProgramInput-1.html">ProgramInput&lt;T&gt;</a> class with default values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ProgramInput()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Creates an empty ProgramInput that can be populated later.
+</p>
+<p><b>For Beginners:</b> Creates an empty specification to fill in later.
+<p>Sometimes you want to create the object first and add details later.
+This creates an empty form you can fill in step by step.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1__ctor_" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1__ctor_System_String_AiDotNet_ProgramSynthesis_Enums_ProgramLanguage_System_Collections_Generic_List_AiDotNet_ProgramSynthesis_Models_ProgramInputOutputExample__System_Collections_Generic_List_System_String__" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.#ctor(System.String,AiDotNet.ProgramSynthesis.Enums.ProgramLanguage,System.Collections.Generic.List{AiDotNet.ProgramSynthesis.Models.ProgramInputOutputExample},System.Collections.Generic.List{System.String})">
+  ProgramInput(string?, ProgramLanguage, List&lt;ProgramInputOutputExample&gt;?, List&lt;string&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/ProgramInput.cs/#L245"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.ProgramSynthesis.Models.ProgramInput-1.html">ProgramInput&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ProgramInput(string? description = null, ProgramLanguage targetLanguage = ProgramLanguage.Generic, List&lt;ProgramInputOutputExample&gt;? examples = null, List&lt;string&gt;? constraints = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>description</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The natural language description.</p>
+</dd>
+    <dt><code>targetLanguage</code> <a class="xref" href="AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.html">ProgramLanguage</a></dt>
+    <dd><p>The target programming language.</p>
+</dd>
+    <dt><code>examples</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ProgramSynthesis.Models.ProgramInputOutputExample.html">ProgramInputOutputExample</a>&gt;</dt>
+    <dd><p>Optional input-output examples.</p>
+</dd>
+    <dt><code>constraints</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Optional constraints.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1__ctor_System_String_AiDotNet_ProgramSynthesis_Enums_ProgramLanguage_System_Collections_Generic_List_AiDotNet_ProgramSynthesis_Models_ProgramInputOutputExample__System_Collections_Generic_List_System_String___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Creates a new ProgramInput with the essential information needed for synthesis.
+Additional properties can be set after construction.
+</p>
+<p><b>For Beginners:</b> This creates a new specification for what program you want.
+<p>Provide at minimum:</p>
+<ul>
+<li>A description of what you want</li>
+<li>Which language to use</li>
+<li>Optionally: examples and constraints</li>
+</ul>
+<p>Like filling out an order form for a custom program.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_Constraints_" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.Constraints*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_Constraints" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.Constraints">
+  Constraints
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/ProgramInput.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets constraints that the synthesized program must satisfy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;string&gt;? Constraints { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_Constraints_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+A list of constraints or requirements for the program, such as:
+- Performance requirements ("must run in O(n) time")
+- Resource limits ("must use less than 1MB memory")
+- Style requirements ("must use functional programming style")
+</p>
+<p><b>For Beginners:</b> These are rules the program must follow.
+<p>Beyond just working correctly, you might have specific requirements:</p>
+<ul>
+<li>&quot;Must be fast&quot;</li>
+<li>&quot;Should be easy to read&quot;</li>
+<li>&quot;Can't use certain functions&quot;</li>
+</ul>
+<p>Like telling a chef: &quot;Make it vegetarian and gluten-free.&quot;
+These constraints ensure the program meets your specific needs.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_Description_" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.Description*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_Description" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.Description">
+  Description
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/ProgramInput.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the natural language description of the desired program.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? Description { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_Description_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+A plain-English description of what the program should do. This can be
+used by neural synthesis methods to understand the user's intent.
+</p>
+<p><b>For Beginners:</b> This is where you describe what you want in plain English.
+<p>Just like telling someone:
+&quot;I need a function that takes a list of numbers and returns the average&quot;</p>
+<p>No programming knowledge needed - just explain what you want the program
+to accomplish.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_Encoding_" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.Encoding*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_Encoding" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.Encoding">
+  Encoding
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/ProgramInput.cs/#L202"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets an encoded representation of the input for neural processing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt;? Encoding { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_Encoding_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+An optional numerical encoding of the input specification that can be
+directly processed by neural networks.
+</p>
+<p><b>For Beginners:</b> This is a numerical version for AI processing.
+<p>Neural networks work with numbers, not text. This is an optional field
+where the input can be pre-converted to numbers. Usually generated
+automatically - you don't need to provide this yourself.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_Examples_" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.Examples*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_Examples" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.Examples">
+  Examples
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/ProgramInput.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the input-output examples for inductive synthesis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;ProgramInputOutputExample&gt;? Examples { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ProgramSynthesis.Models.ProgramInputOutputExample.html">ProgramInputOutputExample</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_Examples_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+A list of example inputs and their expected outputs. The synthesizer learns
+from these examples to generate a program that generalizes to new inputs.
+Each example includes an input and the expected output.
+</p>
+<p><b>For Beginners:</b> These are examples showing what the program should do.
+<p>Instead of explaining, you can show examples:</p>
+<ul>
+<li>Input: [1, 2, 3] → Output: 6 (sum)</li>
+<li>Input: [4, 5] → Output: 9 (sum)</li>
+<li>Input: [10] → Output: 10 (sum)</li>
+</ul>
+<p>The AI figures out the pattern from your examples. Like teaching by example
+rather than explaining - show what you want, and the AI learns the rule.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_FormalSpecification_" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.FormalSpecification*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_FormalSpecification" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.FormalSpecification">
+  FormalSpecification
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/ProgramInput.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the formal specification in logic or a domain-specific language.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? FormalSpecification { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_FormalSpecification_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+A formal, mathematical specification of the program's behavior. This is used
+by deductive synthesis methods to construct provably correct programs.
+</p>
+<p><b>For Beginners:</b> This is a precise mathematical description (advanced).
+<p>This is more advanced - it's a very precise, formal way to describe what
+the program should do using mathematical logic. Like a detailed blueprint
+with exact specifications. Most users will use Description or Examples instead.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_MaxComplexity_" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.MaxComplexity*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_MaxComplexity" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.MaxComplexity">
+  MaxComplexity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/ProgramInput.cs/#L144"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum allowed complexity for the synthesized program.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? MaxComplexity { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_MaxComplexity_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Limits how complex the generated program can be. This helps ensure the
+synthesizer produces simple, understandable code when possible.
+</p>
+<p><b>For Beginners:</b> This limits how complicated the program can be.
+<p>Sometimes simple is better. This sets a maximum complexity level:</p>
+<ul>
+<li>Low value: Forces simple solutions</li>
+<li>High value: Allows complex solutions if needed</li>
+</ul>
+<p>Like asking for a simple recipe instead of a gourmet one - both might
+work, but simple is often better for learning and maintaining.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_Tags_" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.Tags*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_Tags" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.Tags">
+  Tags
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/ProgramInput.cs/#L221"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets metadata tags for categorizing or filtering synthesis tasks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;string&gt;? Tags { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_Tags_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Optional tags that can be used to categorize the synthesis task, track
+experiments, or provide additional context to the synthesizer.
+</p>
+<p><b>For Beginners:</b> These are labels for organizing synthesis tasks.
+<p>Like hashtags or folders, these help organize and categorize:</p>
+<ul>
+<li>&quot;sorting&quot;, &quot;algorithm&quot;, &quot;beginner&quot;</li>
+<li>&quot;web-scraping&quot;, &quot;python&quot;, &quot;advanced&quot;</li>
+</ul>
+<p>Useful for tracking different types of synthesis tasks and experiments.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_TargetLanguage_" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.TargetLanguage*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_TargetLanguage" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.TargetLanguage">
+  TargetLanguage
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/ProgramInput.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the target programming language for synthesis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ProgramLanguage TargetLanguage { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.html">ProgramLanguage</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_TargetLanguage_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Specifies which programming language the synthesized program should be written in.
+</p>
+<p><b>For Beginners:</b> This is which programming language you want the code in.
+<p>Like choosing whether you want instructions in English or Spanish, this
+tells the AI whether to generate code in Python, Java, C#, etc.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_TestCases_" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.TestCases*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_TestCases" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.TestCases">
+  TestCases
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/ProgramInput.cs/#L185"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the test cases for program validation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;ProgramInputOutputExample&gt;? TestCases { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ProgramSynthesis.Models.ProgramInputOutputExample.html">ProgramInputOutputExample</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_TestCases_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Additional test cases (beyond the examples) used to validate the correctness
+of synthesized programs. Each test case includes an input and the expected output.
+</p>
+<p><b>For Beginners:</b> These are additional tests to verify the program works.
+<p>While Examples teach the AI, TestCases verify the result:</p>
+<ul>
+<li>Examples: &quot;Learn from these&quot;</li>
+<li>TestCases: &quot;Prove you got it right with these&quot;</li>
+</ul>
+<p>Like the difference between practice problems and an exam - test cases
+help ensure the program truly works correctly.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_TimeoutMs_" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.TimeoutMs*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_TimeoutMs" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.TimeoutMs">
+  TimeoutMs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/ProgramInput.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the timeout for program synthesis in milliseconds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? TimeoutMs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_TimeoutMs_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Specifies how long the synthesizer should attempt to find a solution
+before giving up. Prevents indefinite computation on difficult problems.
+</p>
+<p><b>For Beginners:</b> This is how long the AI has to find a solution.
+<p>Measured in milliseconds (1000ms = 1 second). Sometimes finding the perfect
+program takes too long. This sets a time limit:</p>
+<ul>
+<li>5000ms (5 seconds): Quick attempt, might not find best solution</li>
+<li>60000ms (1 minute): More thorough search</li>
+</ul>
+<p>Like giving up on a crossword puzzle after 10 minutes - sometimes you
+need to move on even if you haven't finished.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_AddConstraint_" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.AddConstraint*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_AddConstraint_System_String_" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.AddConstraint(System.String)">
+  AddConstraint(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/ProgramInput.cs/#L336"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a constraint to the Constraints list.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddConstraint(string constraint)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>constraint</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The constraint to add.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_AddConstraint_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Convenience method to add constraints one at a time.
+</p>
+<p><b>For Beginners:</b> This adds one constraint at a time.
+<p>Add requirements one by one:
+programInput.AddConstraint(&quot;Must run in O(n) time&quot;);
+programInput.AddConstraint(&quot;Should not use recursion&quot;);</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_AddExample_" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.AddExample*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_AddExample_System_String_System_String_" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.AddExample(System.String,System.String)">
+  AddExample(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/ProgramInput.cs/#L294"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds an input-output example to the Examples list.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddExample(string input, string expectedOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The example input.</p>
+</dd>
+    <dt><code>expectedOutput</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The expected output for this input.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_AddExample_System_String_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Convenience method to add examples one at a time instead of creating
+the entire list upfront.
+</p>
+<p><b>For Beginners:</b> This adds one example at a time.
+<p>Instead of providing all examples at once, you can add them one by one:
+programInput.AddExample(&quot;[1,2,3]&quot;, &quot;6&quot;);
+programInput.AddExample(&quot;[4,5]&quot;, &quot;9&quot;);</p>
+<p>Easier than creating the list yourself.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_AddTestCase_" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.AddTestCase*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_AddTestCase_System_String_System_String_" data-uid="AiDotNet.ProgramSynthesis.Models.ProgramInput`1.AddTestCase(System.String,System.String)">
+  AddTestCase(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/ProgramInput.cs/#L315"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a test case to the TestCases list.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddTestCase(string input, string expectedOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The test input.</p>
+</dd>
+    <dt><code>expectedOutput</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The expected output for this input.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_ProgramInput_1_AddTestCase_System_String_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Convenience method to add test cases one at a time.
+</p>
+<p><b>For Beginners:</b> This adds one test case at a time.
+<p>Similar to AddExample, but for test cases that verify correctness:
+programInput.AddTestCase(&quot;[10,20]&quot;, &quot;30&quot;);</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/ProgramInput.cs/#L28" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

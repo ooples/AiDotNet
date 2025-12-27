@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ResourceMonitor | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ResourceMonitor | AiDotNet Documentation ">
+      
+      <meta name="description" content="Monitors system resources (CPU, memory, GPU) during training.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_TrainingMonitoring_Resources_ResourceMonitor.md&amp;value=---%0Auid%3A%20AiDotNet.TrainingMonitoring.Resources.ResourceMonitor%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor">
+
+
+
+  <h1 id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor" class="text-break">
+Class ResourceMonitor  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Resources/ResourceMonitor.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.TrainingMonitoring.html">TrainingMonitoring</a>.<a class="xref" href="AiDotNet.TrainingMonitoring.Resources.html">Resources</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Monitors system resources (CPU, memory, GPU) during training.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ResourceMonitor : IDisposable</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ResourceMonitor</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> The ResourceMonitor tracks hardware utilization
+to help you understand if your training is bottlenecked by resources.</p>
+<p>Key metrics:</p>
+<ul>
+<li>CPU Usage: How much processing power is being used</li>
+<li>Memory Usage: RAM consumption and available memory</li>
+<li>GPU Usage: Graphics card utilization (if available)</li>
+<li>GPU Memory: VRAM consumption (if available)</li>
+</ul>
+<p>Example usage:</p>
+<pre><code class="lang-csharp">using var monitor = new ResourceMonitor();
+
+// Start monitoring with 1-second intervals
+monitor.Start(TimeSpan.FromSeconds(1));
+
+// Subscribe to updates
+monitor.ResourceUpdated += (s, e) =&gt; {
+    Console.WriteLine($"CPU: {e.CpuPercent:F1}%");
+    Console.WriteLine($"Memory: {e.MemoryUsedMB:F0} MB");
+};
+
+// Or get current snapshot
+var snapshot = monitor.GetSnapshot();
+
+// Stop when done
+monitor.Stop();</code></pre>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor__ctor_" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.#ctor*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor__ctor_System_Int32_" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.#ctor(System.Int32)">
+  ResourceMonitor(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Resources/ResourceMonitor.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the ResourceMonitor class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ResourceMonitor(int maxHistorySize = 3600)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>maxHistorySize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of snapshots to keep in history.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_IsRunning_" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.IsRunning*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_IsRunning" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.IsRunning">
+  IsRunning
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Resources/ResourceMonitor.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether the monitor is currently running.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsRunning { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_MonitorGpu_" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.MonitorGpu*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_MonitorGpu" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.MonitorGpu">
+  MonitorGpu
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Resources/ResourceMonitor.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to attempt GPU monitoring.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool MonitorGpu { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_NvidiaSmiPath_" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.NvidiaSmiPath*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_NvidiaSmiPath" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.NvidiaSmiPath">
+  NvidiaSmiPath
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Resources/ResourceMonitor.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the path to nvidia-smi executable.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string NvidiaSmiPath { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_NvidiaSmiPath_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Security Note:</b> For enhanced security, specify the full path to nvidia-smi
+rather than relying on PATH resolution. Common locations:</p>
+<ul>
+<li>Windows: <code>C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe</code></li>
+<li>Linux: <code>/usr/bin/nvidia-smi</code></li>
+</ul>
+<p>If left as default (&quot;nvidia-smi&quot;), the executable is resolved via the system PATH.
+Ensure your PATH only contains trusted directories if using the default.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_Thresholds_" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.Thresholds*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_Thresholds" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.Thresholds">
+  Thresholds
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Resources/ResourceMonitor.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the resource warning thresholds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ResourceThresholds Thresholds { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.TrainingMonitoring.Resources.ResourceThresholds.html">ResourceThresholds</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_ClearHistory_" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.ClearHistory*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_ClearHistory" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.ClearHistory">
+  ClearHistory()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Resources/ResourceMonitor.cs/#L237"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clears the history.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ClearHistory()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_Dispose_" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.Dispose*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_Dispose" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Resources/ResourceMonitor.cs/#L470"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Disposes the resource monitor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_GetAverage_" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.GetAverage*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_GetAverage" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.GetAverage">
+  GetAverage()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Resources/ResourceMonitor.cs/#L184"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets average resource usage over the history period.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ResourceSnapshot GetAverage()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.TrainingMonitoring.Resources.ResourceSnapshot.html">ResourceSnapshot</a></dt>
+    <dd><p>Average metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_GetHistory_" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.GetHistory*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_GetHistory_System_Nullable_System_Int32__" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.GetHistory(System.Nullable{System.Int32})">
+  GetHistory(int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Resources/ResourceMonitor.cs/#L169"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the resource history.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;ResourceSnapshot&gt; GetHistory(int? limit = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>limit</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Maximum number of entries to return.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.TrainingMonitoring.Resources.ResourceSnapshot.html">ResourceSnapshot</a>&gt;</dt>
+    <dd><p>List of historical snapshots.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_GetPeak_" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.GetPeak*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_GetPeak" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.GetPeak">
+  GetPeak()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Resources/ResourceMonitor.cs/#L211"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets peak resource usage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ResourceSnapshot GetPeak()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.TrainingMonitoring.Resources.ResourceSnapshot.html">ResourceSnapshot</a></dt>
+    <dd><p>Peak metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_GetSnapshot_" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.GetSnapshot*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_GetSnapshot" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.GetSnapshot">
+  GetSnapshot()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Resources/ResourceMonitor.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current resource snapshot.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ResourceSnapshot GetSnapshot()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.TrainingMonitoring.Resources.ResourceSnapshot.html">ResourceSnapshot</a></dt>
+    <dd><p>Current resource metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_Start_" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.Start*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_Start_System_Nullable_System_TimeSpan__" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.Start(System.Nullable{System.TimeSpan})">
+  Start(TimeSpan?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Resources/ResourceMonitor.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Starts the resource monitor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Start(TimeSpan? interval = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>interval</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a>?</dt>
+    <dd><p>How often to sample resources.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_Stop_" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.Stop*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_Stop" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.Stop">
+  Stop()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Resources/ResourceMonitor.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Stops the resource monitor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Stop()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="events">Events
+</h2>
+
+
+
+  <h3 id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_ResourceUpdated" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.ResourceUpdated">
+  ResourceUpdated
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Resources/ResourceMonitor.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Event raised when resource metrics are updated.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public event EventHandler&lt;ResourceSnapshot&gt;? ResourceUpdated</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="AiDotNet.TrainingMonitoring.Resources.ResourceSnapshot.html">ResourceSnapshot</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_TrainingMonitoring_Resources_ResourceMonitor_ThresholdExceeded" data-uid="AiDotNet.TrainingMonitoring.Resources.ResourceMonitor.ThresholdExceeded">
+  ThresholdExceeded
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Resources/ResourceMonitor.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Event raised when a resource threshold is exceeded.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public event EventHandler&lt;ResourceWarningEventArgs&gt;? ThresholdExceeded</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="AiDotNet.TrainingMonitoring.Resources.ResourceWarningEventArgs.html">ResourceWarningEventArgs</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Resources/ResourceMonitor.cs/#L39" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

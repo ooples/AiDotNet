@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class HardToEasyCurriculumStrategy&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class HardToEasyCurriculumStrategy&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Curriculum distillation strategy that progresses from hard to easy samples.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_KnowledgeDistillation_Strategies_HardToEasyCurriculumStrategy_1.md&amp;value=---%0Auid%3A%20AiDotNet.KnowledgeDistillation.Strategies.HardToEasyCurriculumStrategy%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.KnowledgeDistillation.Strategies.HardToEasyCurriculumStrategy`1">
+
+
+
+  <h1 id="AiDotNet_KnowledgeDistillation_Strategies_HardToEasyCurriculumStrategy_1" data-uid="AiDotNet.KnowledgeDistillation.Strategies.HardToEasyCurriculumStrategy`1" class="text-break">
+Class HardToEasyCurriculumStrategy&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Strategies/HardToEasyCurriculumStrategy.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.KnowledgeDistillation.html">KnowledgeDistillation</a>.<a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.html">Strategies</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Curriculum distillation strategy that progresses from hard to easy samples.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class HardToEasyCurriculumStrategy&lt;T&gt; : CurriculumDistillationStrategyBase&lt;T&gt;, IDistillationStrategy&lt;T&gt;, ICurriculumDistillationStrategy&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for calculations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.KnowledgeDistillation.DistillationStrategyBase-1.html">DistillationStrategyBase</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.CurriculumDistillationStrategyBase-1.html">CurriculumDistillationStrategyBase</a>&lt;T&gt;</div>
+      <div><span class="xref">HardToEasyCurriculumStrategy&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDistillationStrategy-1.html">IDistillationStrategy</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.ICurriculumDistillationStrategy-1.html">ICurriculumDistillationStrategy</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.CurriculumDistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_Strategies_CurriculumDistillationStrategyBase_1_TotalSteps">CurriculumDistillationStrategyBase&lt;T&gt;.TotalSteps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.CurriculumDistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_Strategies_CurriculumDistillationStrategyBase_1_CurriculumProgress">CurriculumDistillationStrategyBase&lt;T&gt;.CurriculumProgress</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.CurriculumDistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_Strategies_CurriculumDistillationStrategyBase_1_MinTemperature">CurriculumDistillationStrategyBase&lt;T&gt;.MinTemperature</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.CurriculumDistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_Strategies_CurriculumDistillationStrategyBase_1_MaxTemperature">CurriculumDistillationStrategyBase&lt;T&gt;.MaxTemperature</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.CurriculumDistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_Strategies_CurriculumDistillationStrategyBase_1_UpdateProgress_System_Int32_">CurriculumDistillationStrategyBase&lt;T&gt;.UpdateProgress(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.CurriculumDistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_Strategies_CurriculumDistillationStrategyBase_1_SetSampleDifficulty_System_Int32_System_Double_">CurriculumDistillationStrategyBase&lt;T&gt;.SetSampleDifficulty(int, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.CurriculumDistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_Strategies_CurriculumDistillationStrategyBase_1_GetSampleDifficulty_System_Int32_">CurriculumDistillationStrategyBase&lt;T&gt;.GetSampleDifficulty(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.CurriculumDistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_Strategies_CurriculumDistillationStrategyBase_1_ComputeLoss_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__">CurriculumDistillationStrategyBase&lt;T&gt;.ComputeLoss(Matrix&lt;T&gt;, Matrix&lt;T&gt;, Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.CurriculumDistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_Strategies_CurriculumDistillationStrategyBase_1_ComputeGradient_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__">CurriculumDistillationStrategyBase&lt;T&gt;.ComputeGradient(Matrix&lt;T&gt;, Matrix&lt;T&gt;, Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.CurriculumDistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_Strategies_CurriculumDistillationStrategyBase_1_ClampTemperature_System_Double_">CurriculumDistillationStrategyBase&lt;T&gt;.ClampTemperature(double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.DistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_NumOps">DistillationStrategyBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.DistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_Temperature">DistillationStrategyBase&lt;T&gt;.Temperature</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.DistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_Alpha">DistillationStrategyBase&lt;T&gt;.Alpha</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.DistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_ValidateOutputDimensions_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__">DistillationStrategyBase&lt;T&gt;.ValidateOutputDimensions(Matrix&lt;T&gt;, Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.DistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_ValidateLabelDimensions_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__">DistillationStrategyBase&lt;T&gt;.ValidateLabelDimensions(Matrix&lt;T&gt;, Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.DistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_Epsilon">DistillationStrategyBase&lt;T&gt;.Epsilon</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_KnowledgeDistillation_Strategies_HardToEasyCurriculumStrategy_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Hard-to-easy curriculum is the opposite of traditional
+curriculum learning. It starts with challenging samples and gradually includes easier ones.
+This approach is useful for fine-tuning already-trained models or when the student
+has prior knowledge.</p>
+<p><b>How It Works:</b>
+1. **Early Training** (progress 0.0-0.3):
+   - Include only hard samples (difficulty ≥ 0.7)
+   - Use low temperature (sharp targets, challenging)
+2. **Mid Training** (progress 0.3-0.7):
+   - Include hard and medium samples (difficulty ≥ 0.3)
+   - Gradually increase temperature
+3. **Late Training** (progress 0.7-1.0):
+   - Include all samples (even easy ones)
+   - Use high temperature (soft targets, exploratory)</p>
+<p><b>Temperature Progression:</b>
+Starts at MinTemperature (e.g., 2.0) and linearly increases to MaxTemperature (e.g., 5.0)
+as training progresses. This makes distillation progressively easier.</p>
+<p><b>Sample Filtering:</b>
+At progress P, only include samples with difficulty ≥ (1 - P).
+Example: At 50% progress, only samples with difficulty ≥ 0.5 are included.</p>
+<p><b>Real-World Analogy:</b>
+Training an advanced student: Start with challenging problems to identify gaps in knowledge,
+then fill in easier concepts they might have missed. Like a PhD student reviewing
+undergraduate material to strengthen foundations.</p>
+<p><b>When to Use Hard-to-Easy:</b>
+- **Fine-tuning**: Student already has base knowledge
+- **Transfer Learning**: Adapting pre-trained model to new domain
+- **Anti-forgetting**: Prevent model from forgetting hard concepts
+- **Expert Refinement**: Polish already-good student model
+- **Debugging**: Identify which hard samples student struggles with</p>
+<p><b>Advantages:</b>
+- Forces student to tackle challenges early
+- Identifies weaknesses quickly
+- Can improve performance on difficult edge cases
+- Prevents overfitting to easy samples</p>
+<p><b>Disadvantages:</b>
+- Can be unstable if student has no prior knowledge
+- May not converge well from random initialization
+- Harder to tune than easy-to-hard</p>
+<p><b>References:</b>
+- Krueger &amp; Dayan (2009). Flexible shaping: How learning in small steps helps.
+- Kumar et al. (2010). Self-paced curriculum learning (discusses anti-curriculum).</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Strategies_HardToEasyCurriculumStrategy_1__ctor_" data-uid="AiDotNet.KnowledgeDistillation.Strategies.HardToEasyCurriculumStrategy`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Strategies_HardToEasyCurriculumStrategy_1__ctor_System_Double_System_Double_System_Double_System_Double_System_Int32_System_Collections_Generic_Dictionary_System_Int32_System_Double__" data-uid="AiDotNet.KnowledgeDistillation.Strategies.HardToEasyCurriculumStrategy`1.#ctor(System.Double,System.Double,System.Double,System.Double,System.Int32,System.Collections.Generic.Dictionary{System.Int32,System.Double})">
+  HardToEasyCurriculumStrategy(double, double, double, double, int, Dictionary&lt;int, double&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Strategies/HardToEasyCurriculumStrategy.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the HardToEasyCurriculumStrategy class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public HardToEasyCurriculumStrategy(double baseTemperature = 3, double alpha = 0.3, double minTemperature = 2, double maxTemperature = 5, int totalSteps = 100, Dictionary&lt;int, double&gt;? sampleDifficulties = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>baseTemperature</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Base temperature for distillation (default: 3.0).</p>
+</dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Balance between hard and soft loss (default: 0.3).</p>
+</dd>
+    <dt><code>minTemperature</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Starting temperature for hard samples (default: 2.0).</p>
+</dd>
+    <dt><code>maxTemperature</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Ending temperature for easy samples (default: 5.0).</p>
+</dd>
+    <dt><code>totalSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Total training steps/epochs (default: 100).</p>
+</dd>
+    <dt><code>sampleDifficulties</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Optional pre-defined difficulty scores (0.0=easy, 1.0=hard).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_Strategies_HardToEasyCurriculumStrategy_1__ctor_System_Double_System_Double_System_Double_System_Double_System_Int32_System_Collections_Generic_Dictionary_System_Int32_System_Double___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Use this strategy when fine-tuning an already-trained
+student model. Not recommended for training from scratch.</p>
+<p>Example:
+<pre><code class="lang-csharp">// Fine-tuning a pre-trained student model
+var difficulties = ComputeSampleDifficulties(validationSet);
+<p>var strategy = new HardToEasyCurriculumStrategy&lt;double&gt;(
+minTemperature: 1.5,   // Initial temperature (hard phase) - challenging!
+maxTemperature: 4.0,   // Final temperature (easy phase) - gentle
+totalSteps: 50,        // Shorter curriculum for fine-tuning
+sampleDifficulties: difficulties
+);</p>
+<p>// Fine-tuning loop
+for (int epoch = 0; epoch &lt; 50; epoch++)
+{
+strategy.UpdateProgress(epoch);</p>
+<pre><code>foreach (var (sample, index) in trainingSamples.WithIndex())
+{
+    // Filter: Only hard samples early, all samples later
+    if (!strategy.ShouldIncludeSample(index))
+        continue; // Too easy for current stage
+
+    // Fine-tune on this sample...
+}
+</code></pre>
+<p>}</p></code></pre>
+
+<p><b>Difficulty Scoring for Fine-Tuning:</b>
+- Student's current loss on sample (higher = harder)
+- Disagreement with teacher (higher = harder)
+- Sample rarity in training set (rarer = harder)
+- Domain distance from pre-training data</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Strategies_HardToEasyCurriculumStrategy_1_ComputeCurriculumTemperature_" data-uid="AiDotNet.KnowledgeDistillation.Strategies.HardToEasyCurriculumStrategy`1.ComputeCurriculumTemperature*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Strategies_HardToEasyCurriculumStrategy_1_ComputeCurriculumTemperature" data-uid="AiDotNet.KnowledgeDistillation.Strategies.HardToEasyCurriculumStrategy`1.ComputeCurriculumTemperature">
+  ComputeCurriculumTemperature()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Strategies/HardToEasyCurriculumStrategy.cs/#L182"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes curriculum temperature that increases over time (hard to easy).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override double ComputeCurriculumTemperature()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Current temperature based on curriculum progress.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_Strategies_HardToEasyCurriculumStrategy_1_ComputeCurriculumTemperature_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Algorithm:</b>
+Temperature increases linearly from MinTemperature to MaxTemperature.
+temp = MinTemp + progress * (MaxTemp - MinTemp)</p>
+<p><b>Example with defaults (min=2.0, max=5.0):</b>
+- Progress 0.0 (start): Temp = 2.0 (sharp, hard, challenging)
+- Progress 0.25: Temp = 2.75 (harder)
+- Progress 0.50: Temp = 3.5 (medium)
+- Progress 0.75: Temp = 4.25 (softer)
+- Progress 1.0 (end): Temp = 5.0 (very soft, easy, exploratory)</p>
+<p><b>Intuition:</b>
+- **Low temp early**: Sharp targets force student to learn hard patterns precisely
+- **High temp late**: Soft targets help student generalize to easier patterns</p>
+<p><b>Use Case:</b>
+When fine-tuning, start with sharp targets to fix errors on hard samples,
+then soften to improve overall generalization.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Strategies_HardToEasyCurriculumStrategy_1_ShouldIncludeSample_" data-uid="AiDotNet.KnowledgeDistillation.Strategies.HardToEasyCurriculumStrategy`1.ShouldIncludeSample*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Strategies_HardToEasyCurriculumStrategy_1_ShouldIncludeSample_System_Int32_" data-uid="AiDotNet.KnowledgeDistillation.Strategies.HardToEasyCurriculumStrategy`1.ShouldIncludeSample(System.Int32)">
+  ShouldIncludeSample(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Strategies/HardToEasyCurriculumStrategy.cs/#L143"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines if a sample should be included based on curriculum progress (inverted).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool ShouldIncludeSample(int sampleIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sampleIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Index of the sample.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if sample difficulty is within current curriculum stage.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_Strategies_HardToEasyCurriculumStrategy_1_ShouldIncludeSample_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Algorithm:</b>
+- Get sample difficulty (or assume 0.5 if not set)
+- Include if difficulty ≥ (1 - current progress)
+- Example: At 60% progress, include samples with difficulty ≥ 0.4</p>
+<p><b>Progression Example (100 epochs):</b>
+- Epoch 0 (0% progress): Only difficulty ≥ 1.0 (hardest samples only)
+- Epoch 25 (25%): difficulty ≥ 0.75 (hard samples)
+- Epoch 50 (50%): difficulty ≥ 0.50 (hard + medium)
+- Epoch 75 (75%): difficulty ≥ 0.25 (hard + medium + some easy)
+- Epoch 99 (99%): difficulty ≥ 0.01 (all samples)</p>
+<p><b>Note:</b> Samples without difficulty scores are always included
+(treated as appropriate for all stages).</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Strategies/HardToEasyCurriculumStrategy.cs/#L61" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

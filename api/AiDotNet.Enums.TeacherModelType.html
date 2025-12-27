@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum TeacherModelType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum TeacherModelType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Specifies the type of teacher model to use for knowledge distillation.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_TeacherModelType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.TeacherModelType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.TeacherModelType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_TeacherModelType" data-uid="AiDotNet.Enums.TeacherModelType" class="text-break">
+Enum TeacherModelType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/TeacherModelType.cs/#L17"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Specifies the type of teacher model to use for knowledge distillation.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum TeacherModelType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_TeacherModelType_Adaptive"><code>Adaptive = 5</code></dt>
+  <dd><p>Adaptive teacher that adjusts teaching based on student performance.
+Modulates difficulty or focus areas based on how well the student is learning.</p>
+<p><b>Best for:</b> Curriculum learning, progressive training.</p>
+<p><b>Requirements:</b> Teacher model + adaptation logic.</p>
+<p><b>Pros:</b> Optimizes teaching strategy, faster convergence.</p>
+<p><b>Cons:</b> More complex, requires performance monitoring.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TeacherModelType_Curriculum"><code>Curriculum = 7</code></dt>
+  <dd><p>Curriculum teacher that provides progressive difficulty.
+Starts with easy samples and gradually increases difficulty.</p>
+<p><b>Best for:</b> Complex tasks, improving convergence.</p>
+<p><b>Requirements:</b> Teacher model + curriculum strategy.</p>
+<p><b>Pros:</b> Better convergence, handles complex tasks.</p>
+<p><b>Cons:</b> Requires curriculum design, longer training.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TeacherModelType_Distributed"><code>Distributed = 10</code></dt>
+  <dd><p>Distributed teacher split across multiple devices/nodes.
+Large teacher model is distributed for efficient inference.</p>
+<p><b>Best for:</b> Very large teachers, distributed training.</p>
+<p><b>Requirements:</b> Multi-device setup, large teacher.</p>
+<p><b>Pros:</b> Handles very large models, parallel processing.</p>
+<p><b>Cons:</b> Complex setup, communication overhead.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TeacherModelType_Ensemble"><code>Ensemble = 1</code></dt>
+  <dd><p>Ensemble of multiple teacher models.
+Combines predictions from multiple teachers (averaging, voting, or weighted combination).</p>
+<p><b>Best for:</b> High-accuracy requirements, combining diverse models.</p>
+<p><b>Requirements:</b> Multiple pre-trained teacher models.</p>
+<p><b>Pros:</b> More robust, captures diverse knowledge.</p>
+<p><b>Cons:</b> Slower (multiple forward passes), requires more memory.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TeacherModelType_MultiModal"><code>MultiModal = 4</code></dt>
+  <dd><p>Multi-modal teacher (e.g., CLIP, vision-language models).
+Handles multiple input modalities (text, images, audio, etc.).</p>
+<p><b>Best for:</b> Cross-modal learning, vision-language tasks.</p>
+<p><b>Requirements:</b> Multi-modal pre-trained model.</p>
+<p><b>Pros:</b> Handles multiple modalities, rich representations.</p>
+<p><b>Cons:</b> Complex, requires multi-modal data.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TeacherModelType_NeuralNetwork"><code>NeuralNetwork = 0</code></dt>
+  <dd><p>Standard neural network teacher.
+Uses a single, pre-trained neural network as the teacher model.</p>
+<p><b>Best for:</b> Standard distillation scenarios, single teacher.</p>
+<p><b>Requirements:</b> Pre-trained teacher model.</p>
+<p><b>Pros:</b> Simple, straightforward, fast.</p>
+<p><b>Cons:</b> Limited to single model's knowledge.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TeacherModelType_Online"><code>Online = 6</code></dt>
+  <dd><p>Online teacher that updates during student training.
+Teacher weights are updated simultaneously with student (co-training).</p>
+<p><b>Best for:</b> Continuous learning, evolving data distributions.</p>
+<p><b>Requirements:</b> Updateable teacher model.</p>
+<p><b>Pros:</b> Adapts to new data, maintains relevance.</p>
+<p><b>Cons:</b> Risk of teacher degradation, complex optimization.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TeacherModelType_Pretrained"><code>Pretrained = 2</code></dt>
+  <dd><p>Pretrained model loaded from checkpoint or ONNX.
+Loads a teacher from a saved checkpoint, ONNX model, or other serialized format.</p>
+<p><b>Best for:</b> Using external models, cross-framework distillation.</p>
+<p><b>Requirements:</b> Model checkpoint or ONNX file.</p>
+<p><b>Pros:</b> Reuse existing models, framework-agnostic.</p>
+<p><b>Cons:</b> May require format conversions.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TeacherModelType_Quantized"><code>Quantized = 9</code></dt>
+  <dd><p>Quantized teacher with reduced precision (INT8, INT4).
+Uses quantized version of teacher for faster inference during distillation.</p>
+<p><b>Best for:</b> Fast distillation, resource-constrained environments.</p>
+<p><b>Requirements:</b> Quantized teacher model.</p>
+<p><b>Pros:</b> Faster, less memory, still effective.</p>
+<p><b>Cons:</b> Slight accuracy loss, quantization overhead.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TeacherModelType_Self"><code>Self = 8</code></dt>
+  <dd><p>Self-teacher where model teaches itself (Born-Again Networks).
+The model acts as its own teacher to improve calibration and generalization.</p>
+<p><b>Best for:</b> Improving calibration, no separate teacher available.</p>
+<p><b>Requirements:</b> Initial trained model.</p>
+<p><b>Pros:</b> No separate teacher needed, improves calibration.</p>
+<p><b>Cons:</b> Requires multiple training generations.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TeacherModelType_Transformer"><code>Transformer = 3</code></dt>
+  <dd><p>Transformer-based teacher (BERT, GPT, ViT, etc.).
+Specialized for transformer architectures with attention mechanisms.</p>
+<p><b>Best for:</b> Language models, vision transformers, attention-based models.</p>
+<p><b>Requirements:</b> Transformer teacher model.</p>
+<p><b>Pros:</b> Supports attention distillation, handles sequences.</p>
+<p><b>Cons:</b> Specific to transformer architecture.</p>
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_TeacherModelType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> The teacher model is the "expert" that guides the student model's learning.
+Different teacher types are suited for different scenarios and distillation goals.</p>
+<p><b>Choosing a Teacher:</b>
+- Use **NeuralNetwork** for standard NN-to-NN distillation
+- Use **Ensemble** to combine knowledge from multiple models
+- Use **Pretrained** to load from checkpoints or ONNX
+- Use **Adaptive** for curriculum learning (progressive difficulty)
+- Use **Online** when teacher should update during training</p>
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/TeacherModelType.cs/#L17" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

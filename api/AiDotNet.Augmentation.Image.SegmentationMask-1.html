@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SegmentationMask&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SegmentationMask&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a segmentation mask for pixel-level annotations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Augmentation_Image_SegmentationMask_1.md&amp;value=---%0Auid%3A%20AiDotNet.Augmentation.Image.SegmentationMask%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1">
+
+
+
+  <h1 id="AiDotNet_Augmentation_Image_SegmentationMask_1" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1" class="text-break">
+Class SegmentationMask&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Augmentation.html">Augmentation</a>.<a class="xref" href="AiDotNet.Augmentation.Image.html">Image</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a segmentation mask for pixel-level annotations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SegmentationMask&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for mask values.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">SegmentationMask&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Augmentation_Image_SegmentationMask_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Segmentation masks provide pixel-level object delineation, used for:
+- Semantic segmentation (what class is each pixel)
+- Instance segmentation (which object instance is each pixel)
+- Panoptic segmentation (both semantic and instance)
+</p>
+<p><b>For Beginners:</b> While a bounding box draws a rectangle around an object,
+a segmentation mask precisely outlines the object's shape. When you rotate or
+flip an image, the mask must be transformed identically.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1__ctor_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1__ctor" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.#ctor">
+  SegmentationMask()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L144"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an empty segmentation mask.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SegmentationMask()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1__ctor_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1__ctor_System_Collections_Generic_IList_System_Collections_Generic_IList_System_ValueTuple_System_Double_System_Double____System_Int32_System_Int32_AiDotNet_Augmentation_Image_MaskType_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.#ctor(System.Collections.Generic.IList{System.Collections.Generic.IList{System.ValueTuple{System.Double,System.Double}}},System.Int32,System.Int32,AiDotNet.Augmentation.Image.MaskType)">
+  SegmentationMask(IList&lt;IList&lt;(double x, double y)&gt;&gt;, int, int, MaskType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L187"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a segmentation mask from polygon vertices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SegmentationMask(IList&lt;IList&lt;(double x, double y)&gt;&gt; polygons, int width, int height, MaskType type = MaskType.Binary)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>polygons</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ilist-1">IList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ilist-1">IList</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.double,system.double-.x">x</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.double,system.double-.y">y</a>)&gt;&gt;</dt>
+    <dd><p>The polygon vertices.</p>
+</dd>
+    <dt><code>width</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The image width.</p>
+</dd>
+    <dt><code>height</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The image height.</p>
+</dd>
+    <dt><code>type</code> <a class="xref" href="AiDotNet.Augmentation.Image.MaskType.html">MaskType</a></dt>
+    <dd><p>The mask type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1__ctor_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1__ctor_System_Int32___System_Int32_System_Int32_AiDotNet_Augmentation_Image_MaskType_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.#ctor(System.Int32[],System.Int32,System.Int32,AiDotNet.Augmentation.Image.MaskType)">
+  SegmentationMask(int[], int, int, MaskType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L171"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a segmentation mask from RLE encoding.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SegmentationMask(int[] rleCounts, int width, int height, MaskType type = MaskType.Binary)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rleCounts</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The RLE counts.</p>
+</dd>
+    <dt><code>width</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The mask width.</p>
+</dd>
+    <dt><code>height</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The mask height.</p>
+</dd>
+    <dt><code>type</code> <a class="xref" href="AiDotNet.Augmentation.Image.MaskType.html">MaskType</a></dt>
+    <dd><p>The mask type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1__ctor_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1__ctor__0_0__0___AiDotNet_Augmentation_Image_MaskType_System_Int32_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.#ctor(`0[0:,0:],AiDotNet.Augmentation.Image.MaskType,System.Int32)">
+  SegmentationMask(T[,], MaskType, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a segmentation mask from dense data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SegmentationMask(T[,] maskData, MaskType type = MaskType.Binary, int classIndex = 0)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>maskData</code> T[,]</dt>
+    <dd><p>The 2D mask array [height, width].</p>
+</dd>
+    <dt><code>type</code> <a class="xref" href="AiDotNet.Augmentation.Image.MaskType.html">MaskType</a></dt>
+    <dd><p>The mask type.</p>
+</dd>
+    <dt><code>classIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The class index.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1_ClassIndex_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.ClassIndex*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1_ClassIndex" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.ClassIndex">
+  ClassIndex
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the class index (for semantic/instance masks).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ClassIndex { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1_ClassName_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.ClassName*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1_ClassName" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.ClassName">
+  ClassName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the class name.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? ClassName { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1_Confidence_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.Confidence*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1_Confidence" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.Confidence">
+  Confidence
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the confidence score (if from a segmenter).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T? Confidence { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1_Encoding_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.Encoding*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1_Encoding" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.Encoding">
+  Encoding
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the current encoding format.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MaskEncoding Encoding { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Augmentation.Image.MaskEncoding.html">MaskEncoding</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1_Height_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.Height*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1_Height" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.Height">
+  Height
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the mask height.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Height { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1_InstanceId_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.InstanceId*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1_InstanceId" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.InstanceId">
+  InstanceId
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the instance ID (for instance/panoptic masks).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int InstanceId { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1_MaskData_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.MaskData*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1_MaskData" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.MaskData">
+  MaskData
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the mask data as a 2D array [height, width].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T[,]? MaskData { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt>T[,]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Augmentation_Image_SegmentationMask_1_MaskData_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For binary masks: 0 = background, 1 = foreground.
+For semantic masks: each value is a class index.
+For instance masks: each value is an instance ID.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1_Metadata_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.Metadata*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1_Metadata" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.Metadata">
+  Metadata
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L139"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets additional metadata.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IDictionary&lt;string, object&gt;? Metadata { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.idictionary-2">IDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1_Polygons_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.Polygons*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1_Polygons" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.Polygons">
+  Polygons
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the polygon vertices (if using polygon encoding).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IList&lt;IList&lt;(double x, double y)&gt;&gt;? Polygons { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ilist-1">IList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ilist-1">IList</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.double,system.double-.x">x</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.double,system.double-.y">y</a>)&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Augmentation_Image_SegmentationMask_1_Polygons_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>List of polygons, each polygon is a list of (x, y) coordinates.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1_RLECounts_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.RLECounts*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1_RLECounts" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.RLECounts">
+  RLECounts
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the RLE-encoded mask (if using RLE encoding).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[]? RLECounts { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1_Type_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.Type*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1_Type" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.Type">
+  Type
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L99"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the mask type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MaskType Type { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Augmentation.Image.MaskType.html">MaskType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1_Width_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.Width*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1_Width" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.Width">
+  Width
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the mask width.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Width { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1_Area_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.Area*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1_Area" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.Area">
+  Area()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L282"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the area (number of foreground pixels).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Area()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The mask area in pixels.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1_Clone_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.Clone*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1_Clone" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L200"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of this mask.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SegmentationMask&lt;T&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Augmentation.Image.SegmentationMask-1.html">SegmentationMask</a>&lt;T&gt;</dt>
+    <dd><p>A new mask with copied data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1_Dice_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.Dice*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1_Dice_AiDotNet_Augmentation_Image_SegmentationMask__0__" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.Dice(AiDotNet.Augmentation.Image.SegmentationMask{`0})">
+  Dice(SegmentationMask&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L379"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the Dice coefficient with another mask.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Dice(SegmentationMask&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Augmentation.Image.SegmentationMask-1.html">SegmentationMask</a>&lt;T&gt;</dt>
+    <dd><p>The other mask.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The Dice coefficient between 0 and 1.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1_GetBoundingBox_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.GetBoundingBox*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1_GetBoundingBox" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.GetBoundingBox">
+  GetBoundingBox()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L314"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the bounding box of the mask.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (int xMin, int yMin, int xMax, int yMax) GetBoundingBox()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,system.int32,system.int32,system.int32-.xmin">xMin</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,system.int32,system.int32,system.int32-.ymin">yMin</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,system.int32,system.int32,system.int32-.xmax">xMax</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,system.int32,system.int32,system.int32-.ymax">yMax</a>)</dt>
+    <dd><p>The bounding box (xMin, yMin, xMax, yMax).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1_IoU_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.IoU*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1_IoU_AiDotNet_Augmentation_Image_SegmentationMask__0__" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.IoU(AiDotNet.Augmentation.Image.SegmentationMask{`0})">
+  IoU(SegmentationMask&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L346"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the IoU (Intersection over Union) with another mask.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double IoU(SegmentationMask&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Augmentation.Image.SegmentationMask-1.html">SegmentationMask</a>&lt;T&gt;</dt>
+    <dd><p>The other mask.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The IoU value between 0 and 1.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1_ToDense_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.ToDense*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1_ToDense" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.ToDense">
+  ToDense()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L243"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts this mask to dense format.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T[,] ToDense()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>T[,]</dt>
+    <dd><p>The dense mask data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_SegmentationMask_1_ToRLE_" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.ToRLE*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_SegmentationMask_1_ToRLE" data-uid="AiDotNet.Augmentation.Image.SegmentationMask`1.ToRLE">
+  ToRLE()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L267"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts this mask to RLE format.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[] ToRLE()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The RLE counts.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/SegmentationMask.cs/#L69" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

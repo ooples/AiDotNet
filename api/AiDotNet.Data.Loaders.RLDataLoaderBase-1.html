@@ -1,0 +1,1354 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class RLDataLoaderBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class RLDataLoaderBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Abstract base class for RL data loaders providing common reinforcement learning functionality.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Data_Loaders_RLDataLoaderBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.Data.Loaders.RLDataLoaderBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1">
+
+
+
+  <h1 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1" class="text-break">
+Class RLDataLoaderBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Data.html">Data</a>.<a class="xref" href="AiDotNet.Data.Loaders.html">Loaders</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Abstract base class for RL data loaders providing common reinforcement learning functionality.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class RLDataLoaderBase&lt;T&gt; : DataLoaderBase&lt;T&gt;, IRLDataLoader&lt;T&gt;, IDataLoader&lt;T&gt;, IResettable, ICountable, IBatchIterable&lt;Experience&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html">DataLoaderBase</a>&lt;T&gt;</div>
+      <div><span class="xref">RLDataLoaderBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IRLDataLoader-1.html">IRLDataLoader</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDataLoader-1.html">IDataLoader</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IResettable.html">IResettable</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICountable.html">ICountable</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IBatchIterable-1.html">IBatchIterable</a>&lt;<a class="xref" href="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience-3.html">Experience</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Data.Loaders.RL.EnvironmentDataLoader-1.html">EnvironmentDataLoader&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Name">DataLoaderBase&lt;T&gt;.Name</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Description">DataLoaderBase&lt;T&gt;.Description</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_IsLoaded">DataLoaderBase&lt;T&gt;.IsLoaded</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_CurrentIndex">DataLoaderBase&lt;T&gt;.CurrentIndex</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_BatchCount">DataLoaderBase&lt;T&gt;.BatchCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_CurrentBatchIndex">DataLoaderBase&lt;T&gt;.CurrentBatchIndex</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Progress">DataLoaderBase&lt;T&gt;.Progress</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Reset">DataLoaderBase&lt;T&gt;.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_LoadAsync_System_Threading_CancellationToken_">DataLoaderBase&lt;T&gt;.LoadAsync(CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Unload">DataLoaderBase&lt;T&gt;.Unload()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_EnsureLoaded">DataLoaderBase&lt;T&gt;.EnsureLoaded()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_AdvanceIndex_System_Int32_">DataLoaderBase&lt;T&gt;.AdvanceIndex(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_AdvanceBatchIndex">DataLoaderBase&lt;T&gt;.AdvanceBatchIndex()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.ParallelBatchLoaderExtensions.html#AiDotNet_Data_Loaders_ParallelBatchLoaderExtensions_WithParallelLoading__1_AiDotNet_Interfaces_IBatchIterable___0__System_Func_System_Int32_____0__System_Int32_System_Nullable_System_Int32__System_Nullable_System_Int32__">ParallelBatchLoaderExtensions.WithParallelLoading&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;, Func&lt;int[], TBatch&gt;, int, int?, int?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Data.Pipeline.DataPipelineExtensions.html#AiDotNet_Data_Pipeline_DataPipelineExtensions_ToPipeline__1_AiDotNet_Interfaces_IBatchIterable___0__">DataPipelineExtensions.ToPipeline&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.DataLoaderExtensions.html#AiDotNet_Extensions_DataLoaderExtensions_CreateBatchesAsync__1_AiDotNet_Interfaces_IBatchIterable___0__System_Nullable_System_Int32__System_Int32_">DataLoaderExtensions.CreateBatchesAsync&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;, int?, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.DataLoaderExtensions.html#AiDotNet_Extensions_DataLoaderExtensions_CreateBatches__1_AiDotNet_Interfaces_IBatchIterable___0__System_Nullable_System_Int32__">DataLoaderExtensions.CreateBatches&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;, int?)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+RLDataLoaderBase provides shared implementation for all RL data loaders including:
+- Environment interaction management
+- Replay buffer management
+- Episode running and experience collection
+- Batch sampling for training
+</p>
+<p><b>For Beginners:</b> This base class handles common RL operations:
+- Stepping through the environment collecting experiences
+- Storing experiences in a replay buffer
+- Sampling batches for training
+<p>Concrete implementations extend this to work with specific environments or
+provide specialized experience collection strategies.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1__ctor_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1__ctor_AiDotNet_Interfaces_IEnvironment__0__AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer__0_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___System_Int32_System_Int32_System_Int32_System_Boolean_System_Nullable_System_Int32__" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.#ctor(AiDotNet.Interfaces.IEnvironment{`0},AiDotNet.ReinforcementLearning.ReplayBuffers.IReplayBuffer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}},System.Int32,System.Int32,System.Int32,System.Boolean,System.Nullable{System.Int32})">
+  RLDataLoaderBase(IEnvironment&lt;T&gt;, IReplayBuffer&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt;, int, int, int, bool, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the RLDataLoaderBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected RLDataLoaderBase(IEnvironment&lt;T&gt; environment, IReplayBuffer&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt; replayBuffer, int episodes = 1000, int maxStepsPerEpisode = 500, int minExperiencesBeforeTraining = 1000, bool verbose = true, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>environment</code> <a class="xref" href="AiDotNet.Interfaces.IEnvironment-1.html">IEnvironment</a>&lt;T&gt;</dt>
+    <dd><p>The RL environment to interact with.</p>
+</dd>
+    <dt><code>replayBuffer</code> <a class="xref" href="AiDotNet.ReinforcementLearning.ReplayBuffers.IReplayBuffer-3.html">IReplayBuffer</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The replay buffer for storing experiences.</p>
+</dd>
+    <dt><code>episodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Total number of episodes for training.</p>
+</dd>
+    <dt><code>maxStepsPerEpisode</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum steps per episode (prevents infinite loops).</p>
+</dd>
+    <dt><code>minExperiencesBeforeTraining</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Minimum experiences needed before training can start.</p>
+</dd>
+    <dt><code>verbose</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to print progress to console.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed for reproducibility.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_NumOps" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Numeric operations helper for type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_BatchSize_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.BatchSize*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_BatchSize" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the batch size for iteration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int BatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_CurrentEpisode_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.CurrentEpisode*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_CurrentEpisode" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.CurrentEpisode">
+  CurrentEpisode
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current episode number (0-indexed).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CurrentEpisode { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_Environment_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.Environment*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_Environment" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.Environment">
+  Environment
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the environment that the agent interacts with.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnvironment&lt;T&gt; Environment { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IEnvironment-1.html">IEnvironment</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_Episodes_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.Episodes*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_Episodes" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.Episodes">
+  Episodes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of episodes to run during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Episodes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_HasNext_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.HasNext*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_HasNext" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.HasNext">
+  HasNext
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L128"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether there are more batches available in the current iteration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool HasNext { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_MaxStepsPerEpisode_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.MaxStepsPerEpisode*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_MaxStepsPerEpisode" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.MaxStepsPerEpisode">
+  MaxStepsPerEpisode
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum number of steps per episode (prevents infinite episodes).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxStepsPerEpisode { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_MinExperiencesBeforeTraining_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.MinExperiencesBeforeTraining*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_MinExperiencesBeforeTraining" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.MinExperiencesBeforeTraining">
+  MinExperiencesBeforeTraining
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the minimum number of experiences required before training can begin.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MinExperiencesBeforeTraining { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_MinExperiencesBeforeTraining_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> We need some experiences before we can learn from random samples.
+This ensures the replay buffer has enough diverse experiences for effective learning.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_ReplayBuffer_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.ReplayBuffer*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_ReplayBuffer" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.ReplayBuffer">
+  ReplayBuffer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the replay buffer used for storing and sampling experiences.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReplayBuffer&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt; ReplayBuffer { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ReinforcementLearning.ReplayBuffers.IReplayBuffer-3.html">IReplayBuffer</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_TotalCount_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.TotalCount*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_TotalCount" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.TotalCount">
+  TotalCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L118"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of samples in the dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int TotalCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_TotalSteps_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.TotalSteps*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_TotalSteps" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.TotalSteps">
+  TotalSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of steps taken across all episodes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TotalSteps { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_Verbose_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.Verbose*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_Verbose" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.Verbose">
+  Verbose
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether to print training progress to console.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Verbose { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_AddExperience_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.AddExperience*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_AddExperience_AiDotNet_ReinforcementLearning_ReplayBuffers_Experience__0_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.AddExperience(AiDotNet.ReinforcementLearning.ReplayBuffers.Experience{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})">
+  AddExperience(Experience&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L259"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds an experience to the replay buffer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddExperience(Experience&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt; experience)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>experience</code> <a class="xref" href="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience-3.html">Experience</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The experience to add.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_CanTrain_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.CanTrain*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_CanTrain_System_Int32_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.CanTrain(System.Int32)">
+  CanTrain(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if there are enough experiences to begin training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool CanTrain(int batchSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The desired batch size for training.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if training can proceed, false if more experiences are needed.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_GetBatches_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.GetBatches*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_GetBatches_System_Nullable_System_Int32__System_Boolean_System_Boolean_System_Nullable_System_Int32__" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.GetBatches(System.Nullable{System.Int32},System.Boolean,System.Boolean,System.Nullable{System.Int32})">
+  GetBatches(int?, bool, bool, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L355"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Iterates through all batches in the dataset using lazy evaluation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IEnumerable&lt;Experience&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt;&gt; GetBatches(int? batchSize = null, bool shuffle = true, bool dropLast = false, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional batch size override. Uses default BatchSize if null.</p>
+</dd>
+    <dt><code>shuffle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to shuffle data before batching. Default is true.</p>
+</dd>
+    <dt><code>dropLast</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to drop the last incomplete batch. Default is false.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed for reproducible shuffling.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience-3.html">Experience</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>An enumerable sequence of batches using yield return for memory efficiency.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_GetBatches_System_Nullable_System_Int32__System_Boolean_System_Boolean_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method provides a PyTorch-style iteration pattern using IEnumerable and yield return
+for memory-efficient lazy evaluation. Each call creates a fresh iteration, automatically
+handling reset and shuffle operations.
+</p>
+<p><b>For Beginners:</b> This is the recommended way to iterate through your data:
+<pre><code class="lang-csharp">foreach (var (xBatch, yBatch) in dataLoader.GetBatches(batchSize: 32, shuffle: true))
+{
+    // Train on this batch
+    model.TrainOnBatch(xBatch, yBatch);
+}</code></pre>
+<p>Unlike GetNextBatch(), you don't need to call Reset() - each GetBatches() call
+starts fresh. The yield return pattern means batches are generated on-demand,
+not all loaded into memory at once.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_GetBatchesAsync_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.GetBatchesAsync*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_GetBatchesAsync_System_Nullable_System_Int32__System_Boolean_System_Boolean_System_Nullable_System_Int32__System_Int32_System_Threading_CancellationToken_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.GetBatchesAsync(System.Nullable{System.Int32},System.Boolean,System.Boolean,System.Nullable{System.Int32},System.Int32,System.Threading.CancellationToken)">
+  GetBatchesAsync(int?, bool, bool, int?, int, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L423"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously iterates through all batches with prefetching support.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IAsyncEnumerable&lt;Experience&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt;&gt; GetBatchesAsync(int? batchSize = null, bool shuffle = true, bool dropLast = false, int? seed = null, int prefetchCount = 2, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional batch size override. Uses default BatchSize if null.</p>
+</dd>
+    <dt><code>shuffle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to shuffle data before batching. Default is true.</p>
+</dd>
+    <dt><code>dropLast</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to drop the last incomplete batch. Default is false.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed for reproducible shuffling.</p>
+</dd>
+    <dt><code>prefetchCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of batches to prefetch ahead. Default is 2.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Token to cancel the iteration.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.iasyncenumerable-1">IAsyncEnumerable</a>&lt;<a class="xref" href="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience-3.html">Experience</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>An async enumerable sequence of batches.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_GetBatchesAsync_System_Nullable_System_Int32__System_Boolean_System_Boolean_System_Nullable_System_Int32__System_Int32_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method enables async batch iteration with configurable prefetching, similar to
+PyTorch's num_workers or TensorFlow's prefetch(). Batches are prepared in the background
+while the current batch is being processed.
+</p>
+<p><b>For Beginners:</b> Use this for large datasets or when batch preparation is slow:
+<pre><code class="lang-csharp">await foreach (var (xBatch, yBatch) in dataLoader.GetBatchesAsync(prefetchCount: 2))
+{
+    // While training on this batch, the next 2 batches are being prepared
+    await model.TrainOnBatchAsync(xBatch, yBatch);
+}</code></pre>
+<p>Prefetching helps hide data loading latency, especially useful for:</p>
+<ul>
+<li>Large images that need decoding</li>
+<li>Data that requires preprocessing</li>
+<li>Slow storage (network drives, cloud storage)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_GetNextBatch_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.GetNextBatch*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_GetNextBatch" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.GetNextBatch">
+  GetNextBatch()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L131"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the next batch of data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Experience&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt; GetNextBatch()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience-3.html">Experience</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The next batch of data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when no more batches are available.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_LoadDataCoreAsync_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.LoadDataCoreAsync*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_LoadDataCoreAsync_System_Threading_CancellationToken_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.LoadDataCoreAsync(System.Threading.CancellationToken)">
+  LoadDataCoreAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L290"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core data loading implementation to be provided by derived classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Task LoadDataCoreAsync(CancellationToken cancellationToken)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token for async operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd><p>A task that completes when loading is finished.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_LoadDataCoreAsync_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Derived classes must implement this to perform actual data loading:
+- Load from files, databases, or remote sources
+- Parse and validate data format
+- Store in appropriate internal structures
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_OnReset_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.OnReset*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_OnReset" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.OnReset">
+  OnReset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L284"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Called after Reset() to allow derived classes to perform additional reset operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void OnReset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_OnReset_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Override this to reset any domain-specific state. The base indices are already reset
+when this is called.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_ResetTraining_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.ResetTraining*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_ResetTraining" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.ResetTraining">
+  ResetTraining()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L265"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the data loader state (clears buffer, resets counters).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ResetTraining()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_RunEpisode_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.RunEpisode*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_RunEpisode_AiDotNet_Interfaces_IRLAgent__0__" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.RunEpisode(AiDotNet.Interfaces.IRLAgent{`0})">
+  RunEpisode(IRLAgent&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L183"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runs a single episode and collects experiences.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual EpisodeResult&lt;T&gt; RunEpisode(IRLAgent&lt;T&gt;? agent = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>agent</code> <a class="xref" href="AiDotNet.Interfaces.IRLAgent-1.html">IRLAgent</a>&lt;T&gt;</dt>
+    <dd><p>Optional agent to use for action selection. If null, uses random actions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.EpisodeResult-1.html">EpisodeResult</a>&lt;T&gt;</dt>
+    <dd><p>Episode result containing total reward, steps, and whether it was successful.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_RunEpisodes_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.RunEpisodes*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_RunEpisodes_System_Int32_AiDotNet_Interfaces_IRLAgent__0__" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.RunEpisodes(System.Int32,AiDotNet.Interfaces.IRLAgent{`0})">
+  RunEpisodes(int, IRLAgent&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L246"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runs multiple episodes and collects experiences.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;EpisodeResult&lt;T&gt;&gt; RunEpisodes(int numEpisodes, IRLAgent&lt;T&gt;? agent = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>numEpisodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of episodes to run.</p>
+</dd>
+    <dt><code>agent</code> <a class="xref" href="AiDotNet.Interfaces.IRLAgent-1.html">IRLAgent</a>&lt;T&gt;</dt>
+    <dd><p>Optional agent to use for action selection.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Interfaces.EpisodeResult-1.html">EpisodeResult</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List of episode results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_SampleBatch_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.SampleBatch*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_SampleBatch_System_Int32_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.SampleBatch(System.Int32)">
+  SampleBatch(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L164"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Samples a batch of experiences from the replay buffer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;Experience&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt;&gt; SampleBatch(int batchSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of experiences to sample.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience-3.html">Experience</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>List of sampled experiences for training.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_SampleBatch_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Instead of learning from experiences in order (which can cause issues),
+we randomly sample from past experiences. This makes learning more stable.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_SelectRandomAction_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.SelectRandomAction*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_SelectRandomAction" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.SelectRandomAction">
+  SelectRandomAction()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L314"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Selects a random action for exploration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual Vector&lt;T&gt; SelectRandomAction()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A random action vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_SelectRandomAction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>Thread Safety:</b> This method uses locking to ensure thread-safe access
+to the random number generator.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_SetSeed_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.SetSeed*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_SetSeed_System_Int32_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.SetSeed(System.Int32)">
+  SetSeed(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L274"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the random seed for reproducible training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetSeed(int seed)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Random seed value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_TryGetNextBatch_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.TryGetNextBatch*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_TryGetNextBatch_AiDotNet_ReinforcementLearning_ReplayBuffers_Experience__0_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0____" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.TryGetNextBatch(AiDotNet.ReinforcementLearning.ReplayBuffers.Experience{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}}@)">
+  TryGetNextBatch(out Experience&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L146"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Attempts to get the next batch without throwing if unavailable.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool TryGetNextBatch(out Experience&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt; batch)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batch</code> <a class="xref" href="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience-3.html">Experience</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The batch if available, default otherwise.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if a batch was available, false if iteration is complete.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_TryGetNextBatch_AiDotNet_ReinforcementLearning_ReplayBuffers_Experience__0_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>When false is returned, batch contains the default value for TBatch.
+Callers should check the return value before using batch.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_UnloadDataCore_" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.UnloadDataCore*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_UnloadDataCore" data-uid="AiDotNet.Data.Loaders.RLDataLoaderBase`1.UnloadDataCore">
+  UnloadDataCore()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L298"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core data unloading implementation to be provided by derived classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void UnloadDataCore()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_RLDataLoaderBase_1_UnloadDataCore_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Derived classes should implement this to release resources:
+- Clear internal data structures
+- Release file handles or connections
+- Allow garbage collection of loaded data
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/RLDataLoaderBase.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum PromptTemplateType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum PromptTemplateType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents different types of prompt templates for language model interactions.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_PromptTemplateType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.PromptTemplateType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.PromptTemplateType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_PromptTemplateType" data-uid="AiDotNet.Enums.PromptTemplateType" class="text-break">
+Enum PromptTemplateType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/PromptTemplateType.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents different types of prompt templates for language model interactions.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum PromptTemplateType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_PromptTemplateType_ChainOfThought"><code>ChainOfThought = 5</code></dt>
+  <dd><p>Template for chain-of-thought reasoning with step-by-step problem solving.</p>
+<p>
+<b>For Beginners:</b> Chain-of-thought templates encourage the model to think step-by-step.
+<p>Think of it like showing your work in math class:</p>
+<ul>
+<li>Instead of jumping to the answer</li>
+<li>The model explains its reasoning process</li>
+<li>Each step builds on the previous one</li>
+<li>The final answer is more accurate and explainable</li>
+</ul>
+<p>Example without chain-of-thought:
+Q: &quot;If a store has 24 apples and sells 3/4 of them, how many are left?&quot;
+A: &quot;6 apples&quot;</p>
+<p>Example with chain-of-thought:
+Q: &quot;If a store has 24 apples and sells 3/4 of them, how many are left?&quot;
+A: &quot;Let me solve this step by step:
+1. The store has 24 apples
+2. They sell 3/4 of them
+3. 3/4 of 24 = 24 × 3/4 = 18 apples sold
+4. Apples left = 24 - 18 = 6 apples
+Therefore, 6 apples are left.&quot;</p>
+<p>Benefits:</p>
+<ul>
+<li>Better accuracy on complex problems</li>
+<li>Explainable reasoning</li>
+<li>Easier to debug errors</li>
+<li>More reliable for multi-step tasks</li>
+</ul>
+<p>Use this when:</p>
+<ul>
+<li>Tasks require multi-step reasoning</li>
+<li>Accuracy is critical</li>
+<li>You need to understand how the model reached its answer</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_PromptTemplateType_Chat"><code>Chat = 2</code></dt>
+  <dd><p>Template for structured message-based conversations with roles (system, user, assistant).</p>
+<p>
+<b>For Beginners:</b> Chat templates structure conversations with different roles.
+<p>Modern language models understand different roles:</p>
+<ul>
+<li>System: Instructions for how the assistant should behave</li>
+<li>User: The person asking questions</li>
+<li>Assistant: The AI's responses</li>
+</ul>
+<p>Example:
+System: &quot;You are a helpful math tutor for elementary school students.&quot;
+User: &quot;What is 25 + 17?&quot;
+Assistant: &quot;Great question! Let's solve this step by step...&quot;</p>
+<p>This structure helps the model:</p>
+<ul>
+<li>Understand its role and constraints (system message)</li>
+<li>Distinguish between user questions and its own responses</li>
+<li>Maintain consistent behavior across a conversation</li>
+</ul>
+<p>Use this when:</p>
+<ul>
+<li>Building chatbots or conversational AI</li>
+<li>You need to set specific behavior guidelines</li>
+<li>Working with multi-turn conversations</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_PromptTemplateType_FewShot"><code>FewShot = 1</code></dt>
+  <dd><p>Template with few-shot learning examples to guide the model's output.</p>
+<p>
+<b>For Beginners:</b> Few-shot templates include examples to show the model what you want.
+<p>Think of it like teaching by example:</p>
+<ul>
+<li>Instead of just telling the model what to do, you show it examples</li>
+<li>The model learns the pattern from your examples</li>
+<li>Then applies that pattern to new inputs</li>
+</ul>
+<p>Example:
+Template with examples:
+&quot;Classify sentiment as positive or negative.</p>
+<p>Example: 'This movie was amazing!' → Positive
+Example: 'I hated the food.' → Negative
+Example: 'Best day ever!' → Positive</p>
+<p>Now classify: '{text}'&quot;</p>
+<p>The examples help the model understand exactly what format and type of response you want.</p>
+<p>Use this when:</p>
+<ul>
+<li>The task is complex or ambiguous</li>
+<li>You want to control the output format</li>
+<li>A few examples significantly improve results</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_PromptTemplateType_Optimized"><code>Optimized = 3</code></dt>
+  <dd><p>Template optimized through automated prompt engineering techniques.</p>
+<p>
+<b>For Beginners:</b> Optimized templates are automatically refined to get better results.
+<p>Think of it like A/B testing:</p>
+<ul>
+<li>You provide a basic template</li>
+<li>The system tries multiple variations</li>
+<li>It measures which variation gets the best results</li>
+<li>The winning version becomes your optimized template</li>
+</ul>
+<p>Optimization can include:</p>
+<ul>
+<li>Testing different wordings or phrasings</li>
+<li>Trying different instruction orderings</li>
+<li>Adding or removing examples</li>
+<li>Adjusting tone and specificity</li>
+</ul>
+<p>Example process:
+Original: &quot;Summarize this text: {text}&quot;
+Variation 1: &quot;Provide a concise summary of the following text in 2-3 sentences: {text}&quot;
+Variation 2: &quot;What are the key points in this text? {text}&quot;
+→ System tests all variations and picks the one with best performance</p>
+<p>Use this when:</p>
+<ul>
+<li>You want the best possible results</li>
+<li>You have evaluation metrics to measure success</li>
+<li>You're willing to invest time in optimization</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_PromptTemplateType_ReAct"><code>ReAct = 6</code></dt>
+  <dd><p>Template for ReAct (Reasoning + Acting) pattern combining thought and action.</p>
+<p>
+<b>For Beginners:</b> ReAct templates combine reasoning with actions in an iterative loop.
+<p>ReAct stands for Reasoning + Acting:</p>
+<ul>
+<li>The model alternates between thinking and doing</li>
+<li>Each thought informs the next action</li>
+<li>Each action result informs the next thought</li>
+<li>This continues until the task is complete</li>
+</ul>
+<p>The pattern:</p>
+<ol>
+<li>Thought: &quot;I need to find X to answer this question&quot;</li>
+<li>Action: Search for X</li>
+<li>Observation: Here's what I found about X</li>
+<li>Thought: &quot;Now I need to verify Y&quot;</li>
+<li>Action: Calculate Y</li>
+<li>Observation: Y equals Z</li>
+<li>Thought: &quot;I have enough information to answer&quot;</li>
+<li>Answer: Final response</li>
+</ol>
+<p>Example:
+User: &quot;Who is the current leader of the country where the Eiffel Tower is located?&quot;</p>
+<p>Thought: &quot;I need to find out which country the Eiffel Tower is in.&quot;
+Action: search(&quot;Eiffel Tower location&quot;)
+Observation: &quot;The Eiffel Tower is in Paris, France.&quot;</p>
+<p>Thought: &quot;Now I need to find the current leader of France.&quot;
+Action: search(&quot;current president of France&quot;)
+Observation: &quot;Emmanuel Macron is the current President of France.&quot;</p>
+<p>Thought: &quot;I have all the information needed to answer.&quot;
+Answer: &quot;Emmanuel Macron is the current leader of France, where the Eiffel Tower is located.&quot;</p>
+<p>Use this when:</p>
+<ul>
+<li>Tasks require both reasoning and external actions</li>
+<li>You need to combine multiple tools/data sources</li>
+<li>The solution path isn't straightforward</li>
+<li>You want transparent, step-by-step problem solving</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_PromptTemplateType_Simple"><code>Simple = 0</code></dt>
+  <dd><p>Simple template with variable substitution using placeholders.</p>
+<p>
+<b>For Beginners:</b> The simplest type of template where you replace placeholders with values.
+<p>Example:
+Template: &quot;Translate the following {source_language} text to {target_language}: {text}&quot;
+Variables: source_language=&quot;English&quot;, target_language=&quot;Spanish&quot;, text=&quot;Hello world&quot;
+Result: &quot;Translate the following English text to Spanish: Hello world&quot;</p>
+<p>Use this when:</p>
+<ul>
+<li>You have a simple prompt structure</li>
+<li>You need to insert specific values into predetermined positions</li>
+<li>You don't need examples or complex formatting</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_PromptTemplateType_Tool"><code>Tool = 4</code></dt>
+  <dd><p>Template that includes function/tool calling capabilities.</p>
+<p>
+<b>For Beginners:</b> Tool templates allow the model to use external functions and APIs.
+<p>Think of tools like giving the model superpowers:</p>
+<ul>
+<li>Instead of just answering from its training, the model can:
+<ul>
+<li>Search the web</li>
+<li>Query databases</li>
+<li>Do calculations</li>
+<li>Access current information</li>
+<li>Execute code</li>
+</ul>
+</li>
+</ul>
+<p>How it works:</p>
+<ol>
+<li>You define available tools (e.g., &quot;get_weather&quot;, &quot;search_database&quot;)</li>
+<li>The model decides when to use these tools</li>
+<li>The model generates structured tool calls</li>
+<li>Your code executes the tools</li>
+<li>The model uses the results to answer the user</li>
+</ol>
+<p>Example:
+User: &quot;What's the weather in Paris?&quot;
+Model: Calls tool: get_weather(city=&quot;Paris&quot;)
+Tool returns: {&quot;temperature&quot;: 18, &quot;condition&quot;: &quot;Sunny&quot;}
+Model: &quot;The weather in Paris is sunny with a temperature of 18°C.&quot;</p>
+<p>Use this when:</p>
+<ul>
+<li>You need real-time or external data</li>
+<li>The task requires computation or database access</li>
+<li>You want to extend the model's capabilities</li>
+</ul>
+
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_PromptTemplateType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Prompt templates are pre-structured formats for communicating with language models.
+<p>Think of templates like email templates:</p>
+<ul>
+<li>Instead of writing each email from scratch, you use a template with placeholders</li>
+<li>You fill in the specific details (name, date, etc.) for each email</li>
+<li>The overall structure and tone remain consistent</li>
+</ul>
+<p>Prompt templates work the same way:</p>
+<ul>
+<li>You create a template with placeholders for variable content</li>
+<li>You fill in specific values when you need to use the template</li>
+<li>The language model receives a well-structured, consistent prompt</li>
+</ul>
+<p>Different template types serve different purposes, from simple variable substitution to
+complex multi-turn conversations with examples and tool usage.</p>
+
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/PromptTemplateType.cs/#L24" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

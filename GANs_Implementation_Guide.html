@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Generative Adversarial Networks (GANs) Implementation Guide | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Generative Adversarial Networks (GANs) Implementation Guide | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/GANs_Implementation_Guide.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="generative-adversarial-networks-gans-implementation-guide">Generative Adversarial Networks (GANs) Implementation Guide</h1>
+
+<p>This document provides a comprehensive overview of the GAN implementations available in AiDotNet, addressing <a href="https://github.com/ooples/AiDotNet/issues/416">Issue #416</a>.</p>
+<h2 id="table-of-contents">Table of Contents</h2>
+<ul>
+<li><a href="#overview">Overview</a></li>
+<li><a href="#core-gan-architectures">Core GAN Architectures</a></li>
+<li><a href="#conditional-gans">Conditional GANs</a></li>
+<li><a href="#training-techniques-and-layers">Training Techniques and Layers</a></li>
+<li><a href="#usage-examples">Usage Examples</a></li>
+<li><a href="#best-practices">Best Practices</a></li>
+<li><a href="#references">References</a></li>
+</ul>
+<h2 id="overview">Overview</h2>
+<p>Generative Adversarial Networks (GANs) are a class of machine learning frameworks where two neural networks contest with each other in a zero-sum game framework. This implementation provides multiple GAN architectures ranging from the foundational vanilla GAN to advanced variants.</p>
+<h3 id="whats-new-in-this-release">What's New in This Release</h3>
+<p>This implementation adds the following GAN architectures and components to AiDotNet:</p>
+<h4 id="core-gans-critical-">Core GANs (CRITICAL) ✅</h4>
+<ul>
+<li><strong>DCGAN</strong> (Deep Convolutional GAN)</li>
+<li><strong>WGAN</strong> (Wasserstein GAN)</li>
+<li><strong>WGAN-GP</strong> (Wasserstein GAN with Gradient Penalty)</li>
+<li><strong>Vanilla GAN</strong> (already existed, enhanced)</li>
+</ul>
+<h4 id="conditional-gans-high-">Conditional GANs (HIGH) ✅</h4>
+<ul>
+<li><strong>cGAN</strong> (Conditional GAN)</li>
+<li><strong>AC-GAN</strong> (Auxiliary Classifier GAN)</li>
+<li><strong>InfoGAN</strong> (Information Maximizing GAN)</li>
+</ul>
+<h4 id="advanced-gans-high-">Advanced GANs (HIGH) ✅</h4>
+<ul>
+<li><strong>Pix2Pix</strong> (Paired Image-to-Image Translation)</li>
+<li><strong>CycleGAN</strong> (Unpaired Image-to-Image Translation)</li>
+<li><strong>StyleGAN</strong> (Style-Based Generator Architecture)</li>
+<li><strong>Progressive GAN</strong> (Progressively Growing GAN)</li>
+<li><strong>BigGAN</strong> (Large-Scale GAN Training)</li>
+<li><strong>SAGAN</strong> (Self-Attention GAN)</li>
+</ul>
+<h4 id="training-techniques-high-">Training Techniques (HIGH) ✅</h4>
+<ul>
+<li><strong>Spectral Normalization Layer</strong></li>
+<li><strong>Self-Attention Layer</strong> (for SAGAN)</li>
+</ul>
+<h4 id="evaluation-metrics-high-">Evaluation Metrics (HIGH) ✅</h4>
+<ul>
+<li><strong>FID</strong> (Fréchet Inception Distance)</li>
+<li><strong>IS</strong> (Inception Score)</li>
+</ul>
+<h2 id="core-gan-architectures">Core GAN Architectures</h2>
+<h3 id="1-vanilla-gan-generativeadversarialnetwork">1. Vanilla GAN (GenerativeAdversarialNetwork)</h3>
+<p><strong>Location</strong>: <code>src/NeuralNetworks/GenerativeAdversarialNetwork.cs</code></p>
+<p>The original GAN implementation with a generator and discriminator competing against each other.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Binary cross-entropy loss</li>
+<li>Adam optimizer with momentum</li>
+<li>Adaptive learning rate</li>
+<li>Mode collapse detection</li>
+</ul>
+<p><strong>When to Use</strong>:</p>
+<ul>
+<li>Learning GAN basics</li>
+<li>Simple image generation tasks</li>
+<li>Baseline comparisons</li>
+</ul>
+<h3 id="2-dcgan-deep-convolutional-gan">2. DCGAN (Deep Convolutional GAN)</h3>
+<p><strong>Location</strong>: <code>src/NeuralNetworks/DCGAN.cs</code></p>
+<p>An architecture that uses convolutional and transposed convolutional layers with specific design guidelines for stable training.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Strided convolutions instead of pooling</li>
+<li>Batch normalization in both generator and discriminator</li>
+<li>ReLU activation in generator (Tanh for output)</li>
+<li>LeakyReLU activation in discriminator</li>
+<li>No fully connected hidden layers</li>
+</ul>
+<p><strong>Architectural Guidelines</strong>:</p>
+<pre><code class="lang-csharp">var dcgan = new DCGAN&lt;double&gt;(
+    latentSize: 100,
+    imageChannels: 3,      // RGB images
+    imageHeight: 64,
+    imageWidth: 64,
+    generatorFeatureMaps: 64,
+    discriminatorFeatureMaps: 64,
+    initialLearningRate: 0.0002
+);
+</code></pre>
+<p><strong>When to Use</strong>:</p>
+<ul>
+<li>Image generation tasks</li>
+<li>When you need stable training</li>
+<li>As a strong baseline for comparison</li>
+<li>Generation of 64x64 or 128x128 images</li>
+</ul>
+<p><strong>Reference</strong>: Radford et al., &quot;Unsupervised Representation Learning with Deep Convolutional Generative Adversarial Networks&quot; (2015)</p>
+<h3 id="3-wgan-wasserstein-gan">3. WGAN (Wasserstein GAN)</h3>
+<p><strong>Location</strong>: <code>src/NeuralNetworks/WGAN.cs</code></p>
+<p>Uses Wasserstein distance (Earth Mover's distance) instead of Jensen-Shannon divergence for more stable training.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Critic instead of discriminator (no sigmoid output)</li>
+<li>Wasserstein loss correlates with image quality</li>
+<li>Weight clipping to enforce Lipschitz constraint</li>
+<li>Can train critic multiple times per generator update</li>
+<li>RMSprop optimizer (recommended)</li>
+</ul>
+<p><strong>Architectural Guidelines</strong>:</p>
+<pre><code class="lang-csharp">var wgan = new WGAN&lt;double&gt;(
+    generatorArchitecture,
+    criticArchitecture,
+    InputType.Image,
+    initialLearningRate: 0.00005,
+    weightClipValue: 0.01,
+    criticIterations: 5
+);
+</code></pre>
+<p><strong>Advantages</strong>:</p>
+<ul>
+<li>More stable training</li>
+<li>Loss value is meaningful (lower = better)</li>
+<li>Reduced mode collapse</li>
+<li>Can train critic more without instability</li>
+</ul>
+<p><strong>When to Use</strong>:</p>
+<ul>
+<li>When vanilla GAN training is unstable</li>
+<li>When you need meaningful loss metrics</li>
+<li>For research and experimentation</li>
+</ul>
+<p><strong>Reference</strong>: Arjovsky et al., &quot;Wasserstein GAN&quot; (2017)</p>
+<h3 id="4-wgan-gp-wasserstein-gan-with-gradient-penalty">4. WGAN-GP (Wasserstein GAN with Gradient Penalty)</h3>
+<p><strong>Location</strong>: <code>src/NeuralNetworks/WGANGP.cs</code></p>
+<p>An improved version of WGAN that uses gradient penalty instead of weight clipping.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Gradient penalty on interpolated samples</li>
+<li>Smoother and more stable than weight clipping</li>
+<li>Better performance and convergence</li>
+<li>Adam optimizer with beta1=0 (paper recommendation)</li>
+<li>No weight clipping artifacts</li>
+</ul>
+<p><strong>Architectural Guidelines</strong>:</p>
+<pre><code class="lang-csharp">var wgangp = new WGANGP&lt;double&gt;(
+    generatorArchitecture,
+    criticArchitecture,
+    InputType.Image,
+    initialLearningRate: 0.0001,
+    gradientPenaltyCoefficient: 10.0,
+    criticIterations: 5
+);
+</code></pre>
+<p><strong>Gradient Penalty</strong>:
+The gradient penalty is computed as:</p>
+<pre><code>GP = λ * E[(||∇_x D(x)||₂ - 1)²]
+</code></pre>
+<p>where x is sampled uniformly along straight lines between real and generated samples.</p>
+<p><strong>Advantages Over WGAN</strong>:</p>
+<ul>
+<li>No weight clipping (which can cause pathological behavior)</li>
+<li>More stable gradients</li>
+<li>Better image quality</li>
+<li>Easier to tune (fewer hyperparameters)</li>
+</ul>
+<p><strong>When to Use</strong>:</p>
+<ul>
+<li>Preferred over WGAN in most cases</li>
+<li>High-quality image generation</li>
+<li>When training stability is crucial</li>
+<li>State-of-the-art GAN baseline</li>
+</ul>
+<p><strong>Reference</strong>: Gulrajani et al., &quot;Improved Training of Wasserstein GANs&quot; (2017)</p>
+<h2 id="conditional-gans">Conditional GANs</h2>
+<h3 id="conditional-gan-cgan">Conditional GAN (cGAN)</h3>
+<p><strong>Location</strong>: <code>src/NeuralNetworks/ConditionalGAN.cs</code></p>
+<p>Generates data conditioned on additional information such as class labels or attributes.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Both generator and discriminator receive conditioning information</li>
+<li>Controlled generation (e.g., &quot;generate a specific digit&quot;)</li>
+<li>One-hot encoded class labels</li>
+<li>Flexible conditioning on any additional information</li>
+</ul>
+<p><strong>Architectural Guidelines</strong>:</p>
+<pre><code class="lang-csharp">var cgan = new ConditionalGAN&lt;double&gt;(
+    generatorArchitecture,
+    discriminatorArchitecture,
+    numConditionClasses: 10,  // e.g., 10 digits for MNIST
+    InputType.Image,
+    initialLearningRate: 0.0002
+);
+
+// Generate images of a specific class
+var noise = cgan.GenerateRandomNoiseTensor(batchSize: 16, noiseSize: 100);
+var conditions = cgan.CreateOneHotCondition(batchSize: 16, classIndex: 7);
+var images = cgan.GenerateConditional(noise, conditions);
+</code></pre>
+<p><strong>Use Cases</strong>:</p>
+<ul>
+<li>Class-conditional image generation (e.g., MNIST, CIFAR-10)</li>
+<li>Attribute-conditional generation (e.g., faces with glasses, smiling, etc.)</li>
+<li>Text-to-image generation</li>
+<li>Image-to-image translation with labels</li>
+</ul>
+<p><strong>How It Works</strong>:</p>
+<ol>
+<li><strong>Generator</strong>: Takes noise + condition → generates image</li>
+<li><strong>Discriminator</strong>: Takes image + condition → determines if pair is authentic</li>
+<li><strong>Training</strong>: Both networks learn to respect the conditioning information</li>
+</ol>
+<p><strong>When to Use</strong>:</p>
+<ul>
+<li>When you need control over what is generated</li>
+<li>Multi-class datasets</li>
+<li>When labels or attributes are available</li>
+<li>Interactive generation applications</li>
+</ul>
+<p><strong>Reference</strong>: Mirza and Osindero, &quot;Conditional Generative Adversarial Nets&quot; (2014)</p>
+<h3 id="ac-gan-auxiliary-classifier-gan">AC-GAN (Auxiliary Classifier GAN)</h3>
+<p><strong>Location</strong>: <code>src/NeuralNetworks/ACGAN.cs</code></p>
+<p>An extension of conditional GANs where the discriminator also predicts the class label, providing stronger gradients and better image quality.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Discriminator performs two tasks: authenticity + classification</li>
+<li>Stronger gradient signals for class-conditional generation</li>
+<li>Better image quality than basic cGAN</li>
+<li>Improved class separability</li>
+</ul>
+<p><strong>Architectural Guidelines</strong>:</p>
+<pre><code class="lang-csharp">var acgan = new ACGAN&lt;double&gt;(
+    generatorArchitecture,     // Takes noise + class label
+    discriminatorArchitecture, // Outputs: [authenticity, class_probs...]
+    numClasses: 10,
+    InputType.Image,
+    initialLearningRate: 0.0002
+);
+
+// Train with class labels
+var (discLoss, genLoss) = acgan.TrainStep(realImages, realLabels, noise, fakeLabels);
+
+// Generate specific class
+var noise = acgan.GenerateRandomNoiseTensor(16, 100);
+var labels = acgan.CreateOneHotLabels(16, classIndex: 7);
+var images = acgan.GenerateConditional(noise, labels);
+</code></pre>
+<p><strong>Advantages Over cGAN</strong>:</p>
+<ul>
+<li>Discriminator learns better features (multi-task)</li>
+<li>Higher quality class-conditional images</li>
+<li>Better class consistency</li>
+<li>More stable training</li>
+</ul>
+<p><strong>When to Use</strong>:</p>
+<ul>
+<li>When image quality is critical</li>
+<li>Multi-class conditional generation</li>
+<li>When you have labeled data</li>
+<li>Research requiring strong baselines</li>
+</ul>
+<p><strong>Reference</strong>: Odena et al., &quot;Conditional Image Synthesis with Auxiliary Classifier GANs&quot; (2017)</p>
+<h3 id="infogan-information-maximizing-gan">InfoGAN (Information Maximizing GAN)</h3>
+<p><strong>Location</strong>: <code>src/NeuralNetworks/InfoGAN.cs</code></p>
+<p>Learns disentangled representations in an unsupervised manner by maximizing mutual information between latent codes and generated observations.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Automatic discovery of interpretable features</li>
+<li>No labeled data required</li>
+<li>Disentangled latent codes</li>
+<li>Auxiliary Q network for code prediction</li>
+<li>Mutual information maximization</li>
+</ul>
+<p><strong>Architectural Guidelines</strong>:</p>
+<pre><code class="lang-csharp">var infogan = new InfoGAN&lt;double&gt;(
+    generatorArchitecture,      // Takes noise z + latent codes c
+    discriminatorArchitecture,
+    qNetworkArchitecture,       // Predicts c from generated images
+    latentCodeSize: 10,         // Number of codes to learn
+    InputType.Image,
+    initialLearningRate: 0.0002,
+    mutualInfoCoefficient: 1.0
+);
+
+// Train
+var noise = infogan.GenerateRandomNoiseTensor(batchSize, 100);
+var codes = infogan.GenerateRandomLatentCodes(batchSize);
+var (discLoss, genLoss, miLoss) = infogan.TrainStep(realImages, noise, codes);
+
+// Generate with specific codes (e.g., control rotation, width, etc.)
+var controlledCodes = new Tensor&lt;double&gt;(new int[] { 1, 10 });
+controlledCodes[0, 0] = 0.8;  // First code = 0.8 (might control rotation)
+var image = infogan.Generate(noise, controlledCodes);
+</code></pre>
+<p><strong>What It Learns</strong> (Examples from MNIST):</p>
+<ul>
+<li>Code 1: Digit rotation</li>
+<li>Code 2: Stroke width</li>
+<li>Code 3: Digit style</li>
+<li>All discovered automatically!</li>
+</ul>
+<p><strong>When to Use</strong>:</p>
+<ul>
+<li>Discovering latent structure in data</li>
+<li>Controllable generation without labels</li>
+<li>Disentangled representation learning</li>
+<li>Feature manipulation tasks</li>
+<li>Research on interpretability</li>
+</ul>
+<p><strong>Reference</strong>: Chen et al., &quot;InfoGAN: Interpretable Representation Learning by Information Maximizing Generative Adversarial Nets&quot; (2016)</p>
+<h2 id="advanced-gans-for-image-to-image-translation">Advanced GANs for Image-to-Image Translation</h2>
+<h3 id="pix2pix">Pix2Pix</h3>
+<p><strong>Location</strong>: <code>src/NeuralNetworks/Pix2Pix.cs</code></p>
+<p>A conditional GAN for paired image-to-image translation using U-Net generator and PatchGAN discriminator.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Requires paired training data (input-output pairs)</li>
+<li>U-Net generator with skip connections</li>
+<li>PatchGAN discriminator (classifies patches)</li>
+<li>L1 + adversarial loss</li>
+<li>Preserves spatial information</li>
+</ul>
+<p><strong>Architectural Guidelines</strong>:</p>
+<pre><code class="lang-csharp">var pix2pix = new Pix2Pix&lt;double&gt;(
+    generatorArchitecture,      // U-Net architecture
+    discriminatorArchitecture,  // PatchGAN
+    InputType.Image,
+    initialLearningRate: 0.0002,
+    l1Lambda: 100.0             // Weight for L1 loss
+);
+
+// Train with paired data
+var (discLoss, genLoss, l1Loss) = pix2pix.TrainStep(inputImages, targetImages);
+
+// Translate images
+var translated = pix2pix.Translate(inputImages);
+</code></pre>
+<p><strong>Applications</strong>:</p>
+<ul>
+<li>Edges → Photos</li>
+<li>Sketches → Realistic images</li>
+<li>Day → Night scenes</li>
+<li>Semantic labels → Photos</li>
+<li>Black-and-white → Color</li>
+<li>Maps → Satellite imagery</li>
+</ul>
+<p><strong>Key Insight</strong>: PatchGAN focuses on local patches rather than the whole image, encouraging sharp high-frequency details.</p>
+<p><strong>When to Use</strong>:</p>
+<ul>
+<li>Paired training data available</li>
+<li>Image-to-image transformation tasks</li>
+<li>When spatial correspondence is important</li>
+<li>Applications requiring sharp details</li>
+</ul>
+<p><strong>Reference</strong>: Isola et al., &quot;Image-to-Image Translation with Conditional Adversarial Networks&quot; (2017)</p>
+<h3 id="cyclegan">CycleGAN</h3>
+<p><strong>Location</strong>: <code>src/NeuralNetworks/CycleGAN.cs</code></p>
+<p>Enables unpaired image-to-image translation using cycle consistency loss, eliminating the need for paired training data.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>No paired training data required</li>
+<li>Two generators (A→B and B→A)</li>
+<li>Two discriminators (for domains A and B)</li>
+<li>Cycle consistency loss: A→B→A ≈ A</li>
+<li>Identity loss for color preservation</li>
+</ul>
+<p><strong>Architectural Guidelines</strong>:</p>
+<pre><code class="lang-csharp">var cyclegan = new CycleGAN&lt;double&gt;(
+    generatorAtoB,              // Translates A → B
+    generatorBtoA,              // Translates B → A
+    discriminatorA,
+    discriminatorB,
+    InputType.Image,
+    initialLearningRate: 0.0002,
+    cycleConsistencyLambda: 10.0,  // Cycle loss weight
+    identityLambda: 5.0             // Identity loss weight
+);
+
+// Train with unpaired data
+var (discLoss, genLoss, cycleLoss) = cyclegan.TrainStep(imagesA, imagesB);
+
+// Translate between domains
+var horsesToZebras = cyclegan.TranslateAtoB(horseImages);
+var zebrasToHorses = cyclegan.TranslateBtoA(zebraImages);
+</code></pre>
+<p><strong>Applications</strong>:</p>
+<ul>
+<li>Style transfer (Photo ↔ Monet, Photo ↔ Van Gogh)</li>
+<li>Season transfer (Summer ↔ Winter)</li>
+<li>Object transfiguration (Horse ↔ Zebra)</li>
+<li>Domain adaptation</li>
+<li>Photo enhancement</li>
+</ul>
+<p><strong>Cycle Consistency</strong>: The key innovation is enforcing that translating A→B→A should return to A, preventing mode collapse and maintaining content.</p>
+<p><strong>When to Use</strong>:</p>
+<ul>
+<li>Paired data NOT available</li>
+<li>Style transfer tasks</li>
+<li>Domain adaptation</li>
+<li>When you have two separate image collections</li>
+<li>Exploratory style experiments</li>
+</ul>
+<p><strong>Reference</strong>: Zhu et al., &quot;Unpaired Image-to-Image Translation using Cycle-Consistent Adversarial Networks&quot; (2017)</p>
+<h2 id="training-techniques-and-layers">Training Techniques and Layers</h2>
+<h3 id="spectral-normalization-layer">Spectral Normalization Layer</h3>
+<p><strong>Location</strong>: <code>src/NeuralNetworks/Layers/SpectralNormalizationLayer.cs</code></p>
+<p>A weight normalization technique that constrains the Lipschitz constant of neural network layers by dividing weights by their spectral norm (largest singular value).</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Stabilizes GAN training</li>
+<li>Prevents discriminator from becoming too powerful</li>
+<li>Computationally efficient (uses power iteration)</li>
+<li>Helps prevent mode collapse</li>
+</ul>
+<p><strong>How to Use</strong>:</p>
+<pre><code class="lang-csharp">// Wrap any layer with spectral normalization
+var convLayer = new ConvolutionalLayer&lt;double&gt;(...);
+var normalizedLayer = new SpectralNormalizationLayer&lt;double&gt;(
+    convLayer,
+    powerIterations: 1  // Usually 1 is sufficient
+);
+</code></pre>
+<p><strong>How It Works</strong>:</p>
+<ol>
+<li>Computes the largest singular value (spectral norm) of weight matrix</li>
+<li>Divides all weights by this value</li>
+<li>Uses power iteration for efficient computation</li>
+<li>Updated during each forward pass</li>
+</ol>
+<p><strong>Benefits</strong>:</p>
+<ul>
+<li>More stable discriminator training</li>
+<li>Prevents extreme gradients</li>
+<li>Works well with other GAN techniques</li>
+<li>Can be applied to any layer type</li>
+</ul>
+<p><strong>When to Use</strong>:</p>
+<ul>
+<li>In discriminator/critic networks</li>
+<li>When training is unstable</li>
+<li>For high-quality image generation</li>
+<li>In combination with self-attention (SAGAN)</li>
+</ul>
+<p><strong>Reference</strong>: Miyato et al., &quot;Spectral Normalization for Generative Adversarial Networks&quot; (2018)</p>
+<h3 id="self-attention-layer">Self-Attention Layer</h3>
+<p><strong>Location</strong>: <code>src/NeuralNetworks/Layers/SelfAttentionLayer.cs</code></p>
+<p>Allows the model to attend to different spatial locations in feature maps, enabling better modeling of long-range dependencies.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Captures global dependencies in images</li>
+<li>Query-Key-Value attention mechanism</li>
+<li>Learnable gamma parameter for gradual introduction</li>
+<li>Efficient channel reduction</li>
+</ul>
+<p><strong>How It Works</strong>:</p>
+<ol>
+<li>Projects features into Query, Key, and Value representations</li>
+<li>Computes attention map: softmax(Q^T @ K)</li>
+<li>Applies attention to values</li>
+<li>Residual connection with learnable gamma</li>
+</ol>
+<p><strong>Benefits</strong>:</p>
+<ul>
+<li>Better global coherence in generated images</li>
+<li>Improved generation of complex structures</li>
+<li>Multi-class object generation</li>
+<li>Complementary to convolution (local patterns)</li>
+</ul>
+<p><strong>When to Use</strong>:</p>
+<ul>
+<li>High-resolution image generation</li>
+<li>Complex scenes with multiple objects</li>
+<li>When local convolution is insufficient</li>
+<li>In combination with spectral normalization (SAGAN)</li>
+</ul>
+<p><strong>Reference</strong>: Zhang et al., &quot;Self-Attention Generative Adversarial Networks&quot; (2019)</p>
+<h2 id="high-resolution-and-large-scale-gans">High-Resolution and Large-Scale GANs</h2>
+<h3 id="10-stylegan">10. StyleGAN</h3>
+<p><strong>Location</strong>: <code>src/NeuralNetworks/StyleGAN.cs</code></p>
+<p>StyleGAN introduces a style-based generator architecture for high-quality image synthesis with unprecedented control over generated images.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Mapping network (Z → W latent space)</li>
+<li>Style-based generator with AdaIN</li>
+<li>Style mixing for fine-grained control</li>
+<li>Progressive architecture</li>
+<li>High-quality image generation</li>
+</ul>
+<p><strong>Architecture Components</strong>:</p>
+<pre><code class="lang-csharp">var stylegan = new StyleGAN&lt;double&gt;(
+    latentSize: 512,
+    imageChannels: 3,
+    imageHeight: 1024,
+    imageWidth: 1024,
+    enableStyleMixing: true,
+    styleMixingProbability: 0.9
+);
+</code></pre>
+<p><strong>Innovations</strong>:</p>
+<ol>
+<li><strong>Mapping Network</strong>: Transforms latent code Z into intermediate latent space W</li>
+<li><strong>AdaIN (Adaptive Instance Normalization)</strong>: Injects style at each layer</li>
+<li><strong>Style Mixing</strong>: Combines coarse and fine features from different sources</li>
+<li><strong>Progressive Growth</strong>: Can start from low resolution and increase</li>
+</ol>
+<p><strong>When to Use</strong>:</p>
+<ul>
+<li>High-resolution image generation (512×512, 1024×1024+)</li>
+<li>When you need fine-grained control over generation</li>
+<li>Face generation and synthesis</li>
+<li>Creative applications requiring style control</li>
+<li>State-of-the-art image quality required</li>
+</ul>
+<p><strong>Reference</strong>: Karras et al., &quot;A Style-Based Generator Architecture for Generative Adversarial Networks&quot; (2019)</p>
+<h3 id="11-progressive-gan">11. Progressive GAN</h3>
+<p><strong>Location</strong>: <code>src/NeuralNetworks/ProgressiveGAN.cs</code></p>
+<p>Progressive GAN grows the generator and discriminator progressively during training, starting from low resolution and gradually increasing to high resolution.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Progressive growing architecture</li>
+<li>Smooth layer fade-in with alpha blending</li>
+<li>Minibatch standard deviation</li>
+<li>Pixel normalization in generator</li>
+<li>Equalized learning rate</li>
+<li>Supports very high resolutions (1024×1024)</li>
+</ul>
+<p><strong>Architecture</strong>:</p>
+<pre><code class="lang-csharp">var progan = new ProgressiveGAN&lt;double&gt;(
+    latentSize: 512,
+    imageChannels: 3,
+    maxResolutionLevel: 8,  // Up to 1024x1024
+    baseFeatureMaps: 512
+);
+
+// Start training at 4x4
+// Gradually grow to higher resolutions
+while (progan.CurrentResolutionLevel &lt; progan.MaxResolutionLevel)
+{
+    // Train at current resolution
+    TrainForEpochs(progan, epochs: 1000);
+
+    // Grow to next resolution
+    progan.GrowNetworks();
+    progan.Alpha = 0.0;  // Start fade-in
+
+    // Gradually increase alpha from 0 to 1
+    for (int i = 0; i &lt; fadeInSteps; i++)
+    {
+        progan.Alpha = (double)i / fadeInSteps;
+        TrainForEpochs(progan, epochs: 100);
+    }
+}
+</code></pre>
+<p><strong>When to Use</strong>:</p>
+<ul>
+<li>Very high-resolution image generation (512×512+)</li>
+<li>When training stability at high resolution is important</li>
+<li>Limited GPU memory (start small, grow gradually)</li>
+<li>Face and texture generation</li>
+<li>Progressive training paradigm preferred</li>
+</ul>
+<p><strong>Reference</strong>: Karras et al., &quot;Progressive Growing of GANs for Improved Quality, Stability, and Variation&quot; (2018)</p>
+<h3 id="12-biggan">12. BigGAN</h3>
+<p><strong>Location</strong>: <code>src/NeuralNetworks/BigGAN.cs</code></p>
+<p>BigGAN scales up GAN training using large batch sizes, increased model capacity, and class-conditional generation for state-of-the-art results.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Large batch training (256-2048 samples)</li>
+<li>Spectral normalization in G and D</li>
+<li>Self-attention layers</li>
+<li>Class-conditional generation with projection discriminator</li>
+<li>Truncation trick for quality-diversity tradeoff</li>
+<li>Orthogonal initialization</li>
+</ul>
+<p><strong>Architecture</strong>:</p>
+<pre><code class="lang-csharp">var biggan = new BigGAN&lt;double&gt;(
+    latentSize: 120,
+    numClasses: 1000,  // ImageNet
+    classEmbeddingDim: 128,
+    imageHeight: 128,
+    imageWidth: 128,
+    generatorChannels: 96,
+    discriminatorChannels: 96
+);
+
+// Enable truncation for higher quality (lower diversity)
+biggan.UseTruncation = true;
+biggan.TruncationThreshold = 0.5;  // Lower = higher quality
+
+// Generate images of specific class
+var noise = GenerateNoise(batchSize);
+var classIndices = new int[] { 281, 281, 281, 281 };  // Class 281: &quot;cat&quot;
+var catImages = biggan.Generate(noise, classIndices);
+</code></pre>
+<p><strong>When to Use</strong>:</p>
+<ul>
+<li>Large-scale conditional image generation</li>
+<li>High-fidelity natural image synthesis</li>
+<li>When you have large computational resources</li>
+<li>Class-conditional generation (ImageNet, etc.)</li>
+<li>State-of-the-art image quality on complex datasets</li>
+</ul>
+<p><strong>Training Tips</strong>:</p>
+<ul>
+<li>Use large batch sizes (128-512 minimum, 256-2048 optimal)</li>
+<li>Different learning rates for G and D (D typically 4× G)</li>
+<li>Spectral normalization in both G and D</li>
+<li>Monitor training with FID and IS metrics</li>
+</ul>
+<p><strong>Reference</strong>: Brock et al., &quot;Large Scale GAN Training for High Fidelity Natural Image Synthesis&quot; (2019)</p>
+<h3 id="13-sagan-self-attention-gan">13. SAGAN (Self-Attention GAN)</h3>
+<p><strong>Location</strong>: <code>src/NeuralNetworks/SAGAN.cs</code></p>
+<p>SAGAN combines self-attention mechanisms with spectral normalization for modeling long-range dependencies in generated images.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Self-attention layers at multiple resolutions</li>
+<li>Spectral normalization in both G and D</li>
+<li>Hinge loss for stable training</li>
+<li>TTUR (Two Time-Scale Update Rule)</li>
+<li>Both conditional and unconditional generation</li>
+</ul>
+<p><strong>Architecture</strong>:</p>
+<pre><code class="lang-csharp">var sagan = new SAGAN&lt;double&gt;(
+    latentSize: 128,
+    imageChannels: 3,
+    imageHeight: 64,
+    imageWidth: 64,
+    numClasses: 10,  // 0 for unconditional
+    attentionLayers: new[] { 2, 3 },  // At 16x16 and 32x32
+    useSpectralNormalization: true
+);
+
+// Unconditional generation
+var images = sagan.Generate(numImages: 16);
+
+// Conditional generation
+var classIndices = new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+var conditionalImages = sagan.Generate(10, classIndices);
+</code></pre>
+<p><strong>How Self-Attention Helps</strong>:</p>
+<ul>
+<li>Captures long-range dependencies (e.g., symmetry between object parts)</li>
+<li>Better global structure coherence</li>
+<li>Improved multi-class image generation</li>
+<li>Complementary to convolutional layers</li>
+</ul>
+<p><strong>When to Use</strong>:</p>
+<ul>
+<li>When generated images need global coherence</li>
+<li>Complex scenes with multiple objects</li>
+<li>Geometric patterns requiring long-range consistency</li>
+<li>Class-conditional generation with diverse categories</li>
+</ul>
+<p><strong>Training Configuration</strong>:</p>
+<ul>
+<li>Generator LR: 1e-4</li>
+<li>Discriminator LR: 4e-4 (TTUR)</li>
+<li>Adam with β1=0, β2=0.9</li>
+<li>Hinge loss for both G and D</li>
+<li>Spectral normalization in all layers</li>
+</ul>
+<p><strong>Reference</strong>: Zhang et al., &quot;Self-Attention Generative Adversarial Networks&quot; (2019)</p>
+<h2 id="evaluation-metrics">Evaluation Metrics</h2>
+<h3 id="fréchet-inception-distance-fid">Fréchet Inception Distance (FID)</h3>
+<p><strong>Location</strong>: <code>src/Metrics/FrechetInceptionDistance.cs</code></p>
+<p>FID measures the distance between the distributions of real and generated images using features from a pre-trained Inception network.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Objective quality metric</li>
+<li>Captures both quality and diversity</li>
+<li>Correlates well with human judgment</li>
+<li>Industry standard for GAN evaluation</li>
+</ul>
+<p><strong>Usage</strong>:</p>
+<pre><code class="lang-csharp">using AiDotNet.Metrics;
+
+// Create FID calculator (optionally provide pre-trained Inception network)
+var fid = new FrechetInceptionDistance&lt;double&gt;(
+    inceptionNetwork: pretrainedInception,
+    featureDimension: 2048
+);
+
+// Compute FID between real and generated images
+var realImages = LoadRealImages();
+var generatedImages = gan.Generate(numImages: 10000);
+var fidScore = fid.ComputeFID(realImages, generatedImages);
+
+Console.WriteLine($&quot;FID Score: {fidScore:F2}&quot;);
+// Lower is better: &lt;10 excellent, 10-20 good, 20-50 moderate, &gt;50 poor
+</code></pre>
+<p><strong>How It Works</strong>:</p>
+<ol>
+<li>Extract features from real images using Inception network</li>
+<li>Extract features from generated images</li>
+<li>Compute mean and covariance for both distributions</li>
+<li>Calculate Fréchet distance: ||μ₁ - μ₂||² + Tr(Σ₁ + Σ₂ - 2√(Σ₁Σ₂))</li>
+</ol>
+<p><strong>When to Use</strong>:</p>
+<ul>
+<li>Primary metric for GAN evaluation</li>
+<li>Comparing different GAN architectures</li>
+<li>Monitoring training progress</li>
+<li>Research and publication</li>
+</ul>
+<p><strong>Typical Scores</strong>:</p>
+<ul>
+<li><strong>&lt; 10</strong>: Excellent quality (state-of-the-art)</li>
+<li><strong>10-20</strong>: Good quality</li>
+<li><strong>20-50</strong>: Moderate quality</li>
+<li><strong>&gt; 50</strong>: Poor quality</li>
+</ul>
+<p><strong>Reference</strong>: Heusel et al., &quot;GANs Trained by a Two Time-Scale Update Rule Converge to a Local Nash Equilibrium&quot; (2017)</p>
+<h3 id="inception-score-is">Inception Score (IS)</h3>
+<p><strong>Location</strong>: <code>src/Metrics/InceptionScore.cs</code></p>
+<p>Inception Score evaluates both the quality (confident predictions) and diversity (variety of classes) of generated images.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Measures quality and diversity simultaneously</li>
+<li>Uses KL divergence between conditional and marginal distributions</li>
+<li>Provides mean and standard deviation across splits</li>
+<li>Widely used in GAN research</li>
+</ul>
+<p><strong>Usage</strong>:</p>
+<pre><code class="lang-csharp">using AiDotNet.Metrics;
+
+// Create IS calculator
+var is = new InceptionScore&lt;double&gt;(
+    inceptionNetwork: pretrainedInception,
+    numClasses: 1000,  // ImageNet
+    numSplits: 10
+);
+
+// Compute IS with uncertainty
+var generatedImages = gan.Generate(numImages: 50000);
+var (mean, std) = is.ComputeISWithUncertainty(generatedImages);
+
+Console.WriteLine($&quot;Inception Score: {mean:F2} ± {std:F2}&quot;);
+// Higher is better: &gt;10 excellent, 5-10 good, 2-5 moderate, &lt;2 poor
+
+// Compute both IS and FID together
+var (isMean, isStd, fidScore) = is.ComputeComprehensiveMetrics(
+    generatedImages,
+    realImages
+);
+</code></pre>
+<p><strong>How It Works</strong>:</p>
+<ol>
+<li>Pass generated images through Inception classifier</li>
+<li>Get probability distributions p(y|x) for each image</li>
+<li>Compute marginal distribution p(y) = mean(p(y|x))</li>
+<li>Calculate IS = exp(E[KL(p(y|x) || p(y))])</li>
+</ol>
+<p><strong>Interpretation</strong>:</p>
+<ul>
+<li><strong>High IS</strong>: Images are recognizable (quality) AND diverse (variety)</li>
+<li><strong>Low IS</strong>: Images are ambiguous OR lack diversity</li>
+</ul>
+<p><strong>When to Use</strong>:</p>
+<ul>
+<li>Secondary metric alongside FID</li>
+<li>Evaluating class-conditional GANs</li>
+<li>Quick quality check during training</li>
+<li>Research comparisons</li>
+</ul>
+<p><strong>Typical Scores (ImageNet)</strong>:</p>
+<ul>
+<li><strong>&gt; 10</strong>: Excellent (near real images)</li>
+<li><strong>5-10</strong>: Good quality</li>
+<li><strong>2-5</strong>: Moderate quality</li>
+<li><strong>&lt; 2</strong>: Poor (approaching random noise ≈ 1)</li>
+</ul>
+<p><strong>Important Notes</strong>:</p>
+<ul>
+<li>IS can be fooled by mode collapse (same high-quality image repeated)</li>
+<li>FID is generally more reliable</li>
+<li>Scores only comparable within same dataset</li>
+<li>Use both IS and FID for comprehensive evaluation</li>
+</ul>
+<p><strong>Reference</strong>: Salimans et al., &quot;Improved Techniques for Training GANs&quot; (2016)</p>
+<h2 id="usage-examples">Usage Examples</h2>
+<h3 id="example-1-training-a-dcgan">Example 1: Training a DCGAN</h3>
+<pre><code class="lang-csharp">using AiDotNet.NeuralNetworks;
+
+// Create DCGAN
+var dcgan = new DCGAN&lt;double&gt;(
+    latentSize: 100,
+    imageChannels: 3,
+    imageHeight: 64,
+    imageWidth: 64,
+    generatorFeatureMaps: 64,
+    discriminatorFeatureMaps: 64,
+    initialLearningRate: 0.0002
+);
+
+// Training loop
+for (int epoch = 0; epoch &lt; numEpochs; epoch++)
+{
+    foreach (var batch in dataLoader)
+    {
+        // Get real images
+        Tensor&lt;double&gt; realImages = batch.Images;
+
+        // Generate noise
+        var noise = dcgan.Generator.GenerateRandomNoiseTensor(
+            batchSize: realImages.Shape[0],
+            noiseSize: 100
+        );
+
+        // Train step
+        var (discriminatorLoss, generatorLoss) = dcgan.TrainStep(realImages, noise);
+
+        Console.WriteLine($&quot;Epoch {epoch}, D Loss: {discriminatorLoss}, G Loss: {generatorLoss}&quot;);
+    }
+
+    // Evaluate periodically
+    if (epoch % 10 == 0)
+    {
+        var metrics = dcgan.EvaluateModel(sampleSize: 100);
+        Console.WriteLine($&quot;Average Discriminator Score: {metrics[&quot;AverageDiscriminatorScore&quot;]}&quot;);
+    }
+}
+</code></pre>
+<h3 id="example-2-conditional-generation">Example 2: Conditional Generation</h3>
+<pre><code class="lang-csharp">// Create Conditional GAN
+var cgan = new ConditionalGAN&lt;double&gt;(
+    generatorArchitecture,
+    discriminatorArchitecture,
+    numConditionClasses: 10,
+    InputType.Image,
+    initialLearningRate: 0.0002
+);
+
+// Generate images of specific class (e.g., digit 7)
+int targetClass = 7;
+int numImages = 16;
+
+var noise = cgan.GenerateRandomNoiseTensor(numImages, 100);
+var conditions = cgan.CreateOneHotCondition(numImages, targetClass);
+var generatedImages = cgan.GenerateConditional(noise, conditions);
+
+// Generated images will all be of class 7
+</code></pre>
+<h3 id="example-3-using-wgan-gp-for-stable-training">Example 3: Using WGAN-GP for Stable Training</h3>
+<pre><code class="lang-csharp">// Create WGAN-GP
+var wgangp = new WGANGP&lt;double&gt;(
+    generatorArchitecture,
+    criticArchitecture,
+    InputType.Image,
+    initialLearningRate: 0.0001,
+    gradientPenaltyCoefficient: 10.0,
+    criticIterations: 5
+);
+
+// Training with gradient penalty
+foreach (var batch in dataLoader)
+{
+    var (criticLoss, generatorLoss) = wgangp.TrainStep(batch.Images, noise);
+
+    // WGAN-GP losses are meaningful:
+    // - Critic loss should decrease (Wasserstein distance decreasing)
+    // - Lower values = better image quality
+    Console.WriteLine($&quot;Wasserstein Distance: {-criticLoss}&quot;);
+}
+</code></pre>
+<h2 id="best-practices">Best Practices</h2>
+<h3 id="1-choosing-the-right-gan">1. Choosing the Right GAN</h3>
+<ul>
+<li><strong>For beginners</strong>: Start with <strong>DCGAN</strong> - it's stable and well-understood</li>
+<li><strong>For stability</strong>: Use <strong>WGAN-GP</strong> - best training stability and performance</li>
+<li><strong>For control</strong>: Use <strong>Conditional GAN</strong> - when you need specific outputs</li>
+<li><strong>For research</strong>: <strong>WGAN</strong> - meaningful loss metrics for experimentation</li>
+</ul>
+<h3 id="2-training-tips">2. Training Tips</h3>
+<p><strong>Learning Rates</strong>:</p>
+<ul>
+<li>DCGAN: 0.0002 (default from paper)</li>
+<li>WGAN: 0.00005 (lower than vanilla GAN)</li>
+<li>WGAN-GP: 0.0001 (slightly higher than WGAN)</li>
+<li>cGAN: 0.0002 (same as DCGAN)</li>
+</ul>
+<p><strong>Batch Sizes</strong>:</p>
+<ul>
+<li>Use batch size 64-128 for best stability</li>
+<li>Larger batches (128-256) can improve WGAN-GP</li>
+<li>Smaller batches may require adjusting learning rate</li>
+</ul>
+<p><strong>Monitoring Training</strong>:</p>
+<ul>
+<li>Check discriminator/critic vs generator loss balance</li>
+<li>Look for mode collapse (low diversity in outputs)</li>
+<li>Monitor evaluation metrics regularly</li>
+<li>Save checkpoints frequently</li>
+</ul>
+<p><strong>Common Issues</strong>:</p>
+<ul>
+<li><strong>Mode Collapse</strong>: Generator produces limited diversity
+<ul>
+<li>Solution: Try WGAN-GP, adjust learning rates, increase critic iterations</li>
+</ul>
+</li>
+<li><strong>Training Instability</strong>: Losses fluctuate wildly
+<ul>
+<li>Solution: Lower learning rate, use spectral normalization, try WGAN-GP</li>
+</ul>
+</li>
+<li><strong>Poor Image Quality</strong>: Blurry or noisy outputs
+<ul>
+<li>Solution: Train longer, adjust architecture, use WGAN-GP</li>
+</ul>
+</li>
+</ul>
+<h3 id="3-architecture-design">3. Architecture Design</h3>
+<p><strong>Generator</strong>:</p>
+<ul>
+<li>Start with small latent size (64-128)</li>
+<li>Use transposed convolutions for upsampling</li>
+<li>Apply batch normalization (except output layer)</li>
+<li>Use ReLU (hidden) and Tanh (output)</li>
+</ul>
+<p><strong>Discriminator/Critic</strong>:</p>
+<ul>
+<li>Mirror generator architecture</li>
+<li>Use strided convolutions for downsampling</li>
+<li>Apply batch normalization (except first layer)</li>
+<li>Use LeakyReLU activations</li>
+<li>Consider spectral normalization for stability</li>
+</ul>
+<h3 id="4-data-preparation">4. Data Preparation</h3>
+<ul>
+<li>Normalize images to [-1, 1] (to match Tanh output)</li>
+<li>Apply data augmentation carefully</li>
+<li>Ensure balanced class distribution</li>
+<li>Use appropriate image sizes (powers of 2: 64, 128, 256)</li>
+</ul>
+<h2 id="implemented-architectures-summary">Implemented Architectures Summary</h2>
+<p>This implementation provides <strong>13 GAN architectures</strong>:</p>
+<ol>
+<li><strong>Vanilla GAN</strong> - Original GAN (already existed)</li>
+<li><strong>DCGAN</strong> - Deep Convolutional GAN with architectural guidelines</li>
+<li><strong>WGAN</strong> - Wasserstein GAN with weight clipping</li>
+<li><strong>WGAN-GP</strong> - WGAN with Gradient Penalty</li>
+<li><strong>Conditional GAN</strong> - Class-conditional generation</li>
+<li><strong>AC-GAN</strong> - Auxiliary Classifier GAN</li>
+<li><strong>InfoGAN</strong> - Information Maximizing GAN</li>
+<li><strong>Pix2Pix</strong> - Paired image-to-image translation</li>
+<li><strong>CycleGAN</strong> - Unpaired image-to-image translation</li>
+<li><strong>StyleGAN</strong> - Style-based generator architecture for high-quality images</li>
+<li><strong>Progressive GAN</strong> - Progressively growing architecture for high-resolution generation</li>
+<li><strong>BigGAN</strong> - Large-scale GAN training with class conditioning</li>
+<li><strong>SAGAN</strong> - Self-Attention GAN for modeling long-range dependencies</li>
+</ol>
+<p>Plus supporting components:</p>
+<ul>
+<li><strong>Spectral Normalization Layer</strong> - For training stability</li>
+<li><strong>Self-Attention Layer</strong> - For SAGAN support</li>
+<li><strong>FID Metric</strong> - Fréchet Inception Distance for quality evaluation</li>
+<li><strong>IS Metric</strong> - Inception Score for quality and diversity evaluation</li>
+</ul>
+<h2 id="references">References</h2>
+<ol>
+<li>Goodfellow et al., &quot;Generative Adversarial Networks&quot; (2014)</li>
+<li>Radford et al., &quot;Unsupervised Representation Learning with Deep Convolutional GANs&quot; (2015)</li>
+<li>Arjovsky et al., &quot;Wasserstein GAN&quot; (2017)</li>
+<li>Gulrajani et al., &quot;Improved Training of Wasserstein GANs&quot; (2017)</li>
+<li>Mirza and Osindero, &quot;Conditional Generative Adversarial Nets&quot; (2014)</li>
+<li>Odena et al., &quot;Conditional Image Synthesis with Auxiliary Classifier GANs&quot; (2017)</li>
+<li>Chen et al., &quot;InfoGAN: Interpretable Representation Learning by Information Maximizing Generative Adversarial Nets&quot; (2016)</li>
+<li>Isola et al., &quot;Image-to-Image Translation with Conditional Adversarial Networks&quot; (2017)</li>
+<li>Zhu et al., &quot;Unpaired Image-to-Image Translation using Cycle-Consistent Adversarial Networks&quot; (2017)</li>
+<li>Miyato et al., &quot;Spectral Normalization for Generative Adversarial Networks&quot; (2018)</li>
+<li>Zhang et al., &quot;Self-Attention Generative Adversarial Networks&quot; (2019)</li>
+<li>Karras et al., &quot;Progressive Growing of GANs for Improved Quality, Stability, and Variation&quot; (2018)</li>
+<li>Karras et al., &quot;A Style-Based Generator Architecture for Generative Adversarial Networks&quot; (2019)</li>
+<li>Brock et al., &quot;Large Scale GAN Training for High Fidelity Natural Image Synthesis&quot; (2019)</li>
+<li>Salimans et al., &quot;Improved Techniques for Training GANs&quot; (2016)</li>
+<li>Heusel et al., &quot;GANs Trained by a Two Time-Scale Update Rule Converge to a Local Nash Equilibrium&quot; (2017)</li>
+</ol>
+<h2 id="contributing">Contributing</h2>
+<p>Contributions to improve GAN implementations or add new architectures are welcome! Please follow the project guidelines and ensure all code includes comprehensive documentation.</p>
+<h2 id="license">License</h2>
+<p>This implementation is part of the AiDotNet library. Please refer to the main project license.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/GANs_Implementation_Guide.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

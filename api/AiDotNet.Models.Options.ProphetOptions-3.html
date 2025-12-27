@@ -1,0 +1,1511 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ProphetOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ProphetOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Prophet, a procedure for forecasting time series data based on an additive model where non-linear trends are fit with yearly, weekly, and daily seasonality, plus holiday effects.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_ProphetOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.ProphetOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.ProphetOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_ProphetOptions_3" data-uid="AiDotNet.Models.Options.ProphetOptions`3" class="text-break">
+Class ProphetOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Prophet, a procedure for forecasting time series data based on an additive model
+where non-linear trends are fit with yearly, weekly, and daily seasonality, plus holiday effects.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ProphetOptions&lt;T, TInput, TOutput&gt; : TimeSeriesRegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html">TimeSeriesRegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">ProphetOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LagOrder">TimeSeriesRegressionOptions&lt;T&gt;.LagOrder</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_IncludeTrend">TimeSeriesRegressionOptions&lt;T&gt;.IncludeTrend</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_SeasonalPeriod">TimeSeriesRegressionOptions&lt;T&gt;.SeasonalPeriod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_AutocorrelationCorrection">TimeSeriesRegressionOptions&lt;T&gt;.AutocorrelationCorrection</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_ModelType">TimeSeriesRegressionOptions&lt;T&gt;.ModelType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LossFunction">TimeSeriesRegressionOptions&lt;T&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_ProphetOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Prophet is a forecasting procedure developed by Facebook (now Meta) that decomposes time series into several components:
+trend, seasonality, holiday effects, and error. It is designed to handle time series with strong seasonal patterns, 
+missing values, outliers, and shifts in the trend. Prophet works particularly well with time series that have
+strong seasonal effects and several seasons of historical data. The model automatically detects changes in trends 
+by selecting changepoints from the data, while also allowing manual specification of known changepoints. 
+Prophet is robust to missing data and shifts in the trend, and typically handles outliers well. 
+It is particularly useful for business and economic time series that are affected by holidays and seasonal patterns.
+</p>
+<p><b>For Beginners:</b> Prophet is a powerful tool for predicting future values in time-based data.
+<p>Imagine you're trying to forecast your company's sales for the next few months:</p>
+<ul>
+<li>Sales might follow patterns that repeat yearly (holiday shopping seasons)</li>
+<li>They might follow weekly patterns (higher on weekends, lower on Mondays)</li>
+<li>There might be special days that affect sales (Black Friday, Cyber Monday)</li>
+<li>The overall trend might be growing, shrinking, or changing direction occasionally</li>
+</ul>
+<p>What Prophet does:</p>
+<ul>
+<li>It breaks down your data into separate pieces (components):
+<ul>
+<li>Base trend: The overall direction (growing or declining)</li>
+<li>Seasonality: Repeating patterns (yearly, weekly, daily)</li>
+<li>Holiday effects: Impacts of special days</li>
+<li>Changepoints: Where the trend changes direction</li>
+</ul>
+</li>
+</ul>
+<p>Think of it like weather forecasting:</p>
+<ul>
+<li>It looks at historical patterns</li>
+<li>It accounts for seasons and special events</li>
+<li>It combines these patterns to predict what will happen next</li>
+</ul>
+<p>The benefit of Prophet is that it automatically handles many complex aspects of time series forecasting
+that would otherwise require significant expertise. This class lets you configure how Prophet analyzes
+and forecasts your time series data.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_AnomalyThresholdSigma_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.AnomalyThresholdSigma*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_AnomalyThresholdSigma" data-uid="AiDotNet.Models.Options.ProphetOptions`3.AnomalyThresholdSigma">
+  AnomalyThresholdSigma
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L748"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of standard deviations from the mean residual to use as the anomaly threshold.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AnomalyThresholdSigma { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The anomaly threshold in standard deviations, defaulting to 3.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProphetOptions_3_AnomalyThresholdSigma_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls how sensitive the anomaly detection is. A value of 3.0 means that
+data points with residuals (actual - predicted) more than 3 standard deviations from the mean
+are flagged as anomalies. The residuals account for trend, seasonality, and holiday effects,
+making this a contextual anomaly threshold.
+</p>
+<p><b>For Beginners:</b> This controls how unusual a value needs to be before it's flagged as an anomaly.
+Unlike simpler models, Prophet considers what's normal for the current context:
+- High sales on Black Friday? Normal, not an anomaly.
+- High sales on a random Tuesday in February? Potentially an anomaly.
+<p>Adjust this value based on your needs:</p>
+<ul>
+<li>Lower values (like 2.0) flag more points as anomalies (more sensitive)</li>
+<li>Higher values (like 4.0) only flag extreme deviations (less sensitive)</li>
+</ul>
+<p>Start with the default of 3.0 and adjust based on whether you're seeing too many false positives
+or missing actual anomalies.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_ApplyTransformation_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.ApplyTransformation*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_ApplyTransformation" data-uid="AiDotNet.Models.Options.ProphetOptions`3.ApplyTransformation">
+  ApplyTransformation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L685"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to apply transformations to the predictions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool ApplyTransformation { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProphetOptions_3_ApplyTransformation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, the model will apply a transformation function to each prediction.
+This can be useful for scaling, normalizing, or otherwise adjusting predictions
+before returning them to the user.
+</p>
+<p><b>For Beginners:</b> This setting determines whether the model should modify
+its predictions before returning them. For example, if your data was transformed
+before training (like taking the logarithm to handle skewed data), you might need
+to reverse that transformation on the predictions to get meaningful values.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_ChangePointPriorScale_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.ChangePointPriorScale*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_ChangePointPriorScale" data-uid="AiDotNet.Models.Options.ProphetOptions`3.ChangePointPriorScale">
+  ChangePointPriorScale
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L319"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the flexibility of the trend changepoints.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ChangePointPriorScale { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The changepoint prior scale, defaulting to 0.05.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProphetOptions_3_ChangePointPriorScale_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls the flexibility of the trend component, specifically how sensitive the trend is
+to changes in slope. A higher value allows the trend to change more rapidly, making it more responsive
+to fluctuations in the data but potentially more prone to overfitting. A lower value enforces a more
+rigid trend with fewer changes, which may generalize better but might miss genuine trend shifts.
+This parameter acts as a regularization term - larger values allow more flexibility (less regularization)
+while smaller values enforce more rigidity (more regularization). The appropriate value depends on
+the characteristics of the time series and the balance needed between fitting historical changes
+and producing stable forecasts.
+</p>
+<p><b>For Beginners:</b> This setting controls how easily the model's trend can change direction.
+<p>The default value of 0.05 means:</p>
+<ul>
+<li>The trend is moderately flexible</li>
+<li>It can adapt to changes but won't overreact to every fluctuation</li>
+</ul>
+<p>Think of it like steering sensitivity in a car:</p>
+<ul>
+<li>A high value (like 0.5) is like sensitive steering that responds to small movements</li>
+<li>A low value (like 0.01) is like stiff steering that requires more force to turn</li>
+<li>The default (0.05) provides balanced responsiveness</li>
+</ul>
+<p>You might want a higher value (like 0.1 or 0.5):</p>
+<ul>
+<li>When your data shows frequent, genuine changes in trend</li>
+<li>When capturing quick shifts in direction is important</li>
+<li>When you have high confidence in your data quality</li>
+</ul>
+<p>You might want a lower value (like 0.01 or 0.001):</p>
+<ul>
+<li>When you want a smoother, more stable trend line</li>
+<li>When your data contains noise that shouldn't affect the underlying trend</li>
+<li>When you prefer a more conservative forecast</li>
+</ul>
+<p>This is one of the most important tuning parameters in Prophet. Adjusting it can
+significantly change how your forecast responds to historical changes in trend.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_Changepoints_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.Changepoints*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_Changepoints" data-uid="AiDotNet.Models.Options.ProphetOptions`3.Changepoints">
+  Changepoints
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L668"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;T&gt; Changepoints { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_ComputePredictionIntervals_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.ComputePredictionIntervals*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_ComputePredictionIntervals" data-uid="AiDotNet.Models.Options.ProphetOptions`3.ComputePredictionIntervals">
+  ComputePredictionIntervals
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L768"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether to compute prediction intervals.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool ComputePredictionIntervals { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to compute prediction intervals, defaulting to false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProphetOptions_3_ComputePredictionIntervals_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, the model will compute upper and lower bounds for predictions based on
+the historical residual distribution. This is useful for both uncertainty quantification
+and anomaly detection (points outside the interval are anomalies).
+</p>
+<p><b>For Beginners:</b> Instead of just predicting a single value, Prophet can also
+tell you the range where the actual value is likely to fall. For example, instead of
+predicting "sales will be $1000", it might say "sales will be between $900 and $1100".
+This is useful because:
+- You know how confident the model is in its predictions
+- Values outside the range are likely anomalies
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_DailySeasonality_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.DailySeasonality*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_DailySeasonality" data-uid="AiDotNet.Models.Options.ProphetOptions`3.DailySeasonality">
+  DailySeasonality
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L530"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether daily seasonality should be included in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool DailySeasonality { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>A boolean indicating whether to include daily seasonality, defaulting to false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProphetOptions_3_DailySeasonality_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter determines whether the model should include a daily seasonality component.
+When enabled, Prophet will model patterns that repeat on a daily cycle (24 hours). Daily
+seasonality is appropriate for time series with sub-daily (e.g., hourly) data that exhibits
+time-of-day effects, such as hourly website traffic, energy consumption, or call center volume.
+Enabling daily seasonality requires data collected at a sub-daily frequency and generally
+several days of historical data for reliable estimation. The default is false because daily
+seasonality is only relevant for sub-daily data, which is less common than daily data.
+Enabling this for data that is not sub-daily will lead to overfitting.
+</p>
+<p><b>For Beginners:</b> This setting determines whether your forecast should include patterns that repeat every day.
+<p>The default value of false means:</p>
+<ul>
+<li>The model will NOT automatically look for daily repeating patterns</li>
+<li>This is appropriate for most data that is collected daily or less frequently</li>
+</ul>
+<p>Think of daily seasonality like the rhythm within a single day:</p>
+<ul>
+<li>Higher coffee shop sales in morning and lunch hours</li>
+<li>Peak electricity usage in evening hours</li>
+<li>Higher website traffic during business hours</li>
+<li>Lower activity during overnight hours</li>
+</ul>
+<p>You should enable this (set to true) when:</p>
+<ul>
+<li>Your data is collected multiple times per day (hourly, every 15 minutes, etc.)</li>
+<li>You can see clear patterns that repeat within each day</li>
+<li>You're forecasting something with known time-of-day effects</li>
+</ul>
+<p>You should keep this disabled (false) when:</p>
+<ul>
+<li>Your data is collected daily or less frequently (weekly, monthly)</li>
+<li>You don't have enough data points within each day to establish patterns</li>
+<li>Your data doesn't have time-of-day effects</li>
+</ul>
+<p>Important: Only enable daily seasonality if you have sub-daily data (multiple observations per day).
+Otherwise, it can cause overfitting.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_EnableAnomalyDetection_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.EnableAnomalyDetection*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_EnableAnomalyDetection" data-uid="AiDotNet.Models.Options.ProphetOptions`3.EnableAnomalyDetection">
+  EnableAnomalyDetection
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L722"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether to enable anomaly detection during and after training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableAnomalyDetection { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to enable anomaly detection, defaulting to false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProphetOptions_3_EnableAnomalyDetection_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, the model will compute prediction residuals during training and use them
+to establish an anomaly threshold based on the statistical properties of the residuals.
+Prophet's anomaly detection leverages its decomposition of the time series into trend,
+seasonality, and holiday components to identify contextual anomalies.
+</p>
+<p><b>For Beginners:</b> Setting this to true tells Prophet to identify unusual data points (anomalies).
+Prophet is particularly good at detecting contextual anomalies - values that are unusual given the
+current trend, season, or holiday context. For example, a sales value that would be normal in December
+might be flagged as an anomaly in July because Prophet understands the seasonal context.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_ForecastHorizon_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.ForecastHorizon*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_ForecastHorizon" data-uid="AiDotNet.Models.Options.ProphetOptions`3.ForecastHorizon">
+  ForecastHorizon
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L277"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of periods to forecast into the future.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ForecastHorizon { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The forecast horizon in periods, defaulting to 30.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProphetOptions_3_ForecastHorizon_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter determines how many time periods into the future the model will forecast.
+The units of this horizon match the frequency of the input time series. For daily data,
+a value of 30 would forecast 30 days ahead; for hourly data, it would forecast 30 hours ahead.
+The appropriate horizon depends on the specific forecasting needs and the characteristics of
+the time series. Longer horizons generally result in increased uncertainty and wider prediction
+intervals. The forecast quality typically decreases as the horizon extends further into the future,
+particularly for volatile time series or series with changing dynamics.
+</p>
+<p><b>For Beginners:</b> This setting controls how far into the future your forecast will extend.
+<p>The default value of 30 means:</p>
+<ul>
+<li>For daily data: forecast 30 days ahead</li>
+<li>For hourly data: forecast 30 hours ahead</li>
+<li>For weekly data: forecast 30 weeks ahead</li>
+</ul>
+<p>Think of it like a weather forecast:</p>
+<ul>
+<li>A 7-day forecast is more reliable than a 30-day forecast</li>
+<li>The further you try to predict, the more uncertainty there is</li>
+<li>Different planning horizons require different forecast lengths</li>
+</ul>
+<p>You might want a longer horizon (like 90 or 365):</p>
+<ul>
+<li>For long-term strategic planning</li>
+<li>When your data has strong, stable patterns</li>
+<li>When you need to see longer-term trends</li>
+</ul>
+<p>You might want a shorter horizon (like 7 or 14):</p>
+<ul>
+<li>For tactical, short-term planning</li>
+<li>When your data is volatile or rapidly changing</li>
+<li>When precision is more important than forecasting far ahead</li>
+</ul>
+<p>Remember that forecast accuracy typically decreases as you extend further into the future,
+especially for volatile time series.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_FourierOrder_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.FourierOrder*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_FourierOrder" data-uid="AiDotNet.Models.Options.ProphetOptions`3.FourierOrder">
+  FourierOrder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L623"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of Fourier terms used for modeling seasonality.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int FourierOrder { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The Fourier order, defaulting to 3.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProphetOptions_3_FourierOrder_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter determines the complexity of the seasonal components by specifying the number
+of Fourier terms used to model each seasonality. Higher orders allow for more complex seasonal
+patterns, while lower orders enforce simpler, smoother seasonality. The Fourier order effectively
+controls the flexibility of the seasonality - higher orders can capture multiple peaks and troughs
+within a single seasonal period, while order 1 can only model a simple sine wave with a single peak
+and trough. The appropriate value depends on the complexity of the seasonal patterns in the data.
+Overly high values can lead to overfitting, while too low values might miss important seasonal features.
+</p>
+<p><b>For Beginners:</b> This setting controls how complex the seasonal patterns can be in your forecast.
+<p>The default value of 3 means:</p>
+<ul>
+<li>Seasonal patterns can have moderate complexity</li>
+<li>The model can capture up to 3 peaks and valleys within each seasonal cycle</li>
+</ul>
+<p>Think of Fourier order like drawing tools for waves:</p>
+<ul>
+<li>Order 1: You can only draw simple waves with one peak and one valley</li>
+<li>Order 3: You can draw more complex waves with multiple bumps and dips</li>
+<li>Order 10: You can capture very intricate patterns with many fluctuations</li>
+</ul>
+<p>You might want a higher order (like 5 or 10):</p>
+<ul>
+<li>When your seasonal patterns are complex with multiple ups and downs</li>
+<li>When you have plenty of historical data to establish these patterns reliably</li>
+<li>When capturing the exact shape of seasonality is important</li>
+</ul>
+<p>You might want a lower order (like 1 or 2):</p>
+<ul>
+<li>When you want simpler, smoother seasonal patterns</li>
+<li>When you have limited historical data</li>
+<li>When you suspect some of the fluctuations in your data are noise rather than true seasonality</li>
+<li>When you want to prevent overfitting</li>
+</ul>
+<p>This setting applies to all seasonality components (yearly, weekly, daily, and custom).
+Higher orders require more data to fit reliably.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_HolidayPriorScale_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.HolidayPriorScale*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_HolidayPriorScale" data-uid="AiDotNet.Models.Options.ProphetOptions`3.HolidayPriorScale">
+  HolidayPriorScale
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L403"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the strength of the holiday effects.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double HolidayPriorScale { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The holiday prior scale, defaulting to 10.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProphetOptions_3_HolidayPriorScale_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls the flexibility of the holiday components in the model, similar to
+the seasonality prior scale but specifically for holiday effects. It determines how much
+of the variation in the time series can be attributed to holidays or special events. A higher
+value allows holidays to have stronger effects on the forecast, while a lower value constrains
+these effects. This parameter is particularly important when the time series is strongly
+affected by holidays or when the holiday effects vary significantly from year to year.
+The appropriate value depends on the specific domain and the importance of holiday effects
+in the time series being modeled.
+</p>
+<p><b>For Beginners:</b> This setting controls how strongly holiday events can affect your forecast.
+<p>The default value of 10.0 means:</p>
+<ul>
+<li>Holiday effects are given significant flexibility</li>
+<li>The model can capture strong deviations on special dates</li>
+</ul>
+<p>Think of it like special exceptions to the rules:</p>
+<ul>
+<li>A higher value (like 20.0) allows holidays to have dramatic effects</li>
+<li>A lower value (like 1.0) constrains holidays to have more modest effects</li>
+<li>The default (10.0) allows for significant but not extreme holiday impacts</li>
+</ul>
+<p>You might want a higher value (like 20.0 or 50.0):</p>
+<ul>
+<li>When holidays cause massive spikes or drops in your data</li>
+<li>When holiday effects vary greatly from year to year</li>
+<li>For retail, e-commerce, or travel data where holidays have outsize importance</li>
+</ul>
+<p>You might want a lower value (like 1.0 or 0.1):</p>
+<ul>
+<li>When holidays have only minor effects on your data</li>
+<li>When you want more conservative holiday adjustments</li>
+<li>When you've specified many holidays and want to prevent overfitting</li>
+</ul>
+<p>This parameter only matters if you've specified holidays using the Holidays parameter.
+Otherwise, it has no effect on the model.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_Holidays_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.Holidays*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_Holidays" data-uid="AiDotNet.Models.Options.ProphetOptions`3.Holidays">
+  Holidays
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L161"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;DateTime&gt; Holidays { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetime">DateTime</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_InitialChangepointValue_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.InitialChangepointValue*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_InitialChangepointValue" data-uid="AiDotNet.Models.Options.ProphetOptions`3.InitialChangepointValue">
+  InitialChangepointValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L196"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial value for changepoint effects.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialChangepointValue { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The initial changepoint value, defaulting to 0.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProphetOptions_3_InitialChangepointValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter sets the initial value for the magnitude of changepoint effects.
+Changepoints represent moments in time when the trend component changes direction
+or slope. The initial changepoint value provides a starting point for the optimization
+of these effects. Similar to the initial trend value, Prophet typically estimates
+appropriate changepoint effects from the data, so the default value of 0.0 is usually
+sufficient. Modifying this parameter is rarely necessary unless there's specific
+domain knowledge about initial changepoint behavior.
+</p>
+<p><b>For Beginners:</b> This setting defines the starting assumption about how strong trend changes will be in your data.
+<p>The default value of 0.0 means:</p>
+<ul>
+<li>Prophet starts with a neutral assumption about trend changes</li>
+<li>It will learn the appropriate strength of changepoints from your data</li>
+</ul>
+<p>Think of changepoints like turning points in a journey:</p>
+<ul>
+<li>They represent moments when your data's trend changes direction</li>
+<li>This setting controls the initial assumption about how sharp these turns might be</li>
+</ul>
+<p>In practice:</p>
+<ul>
+<li>This parameter rarely needs adjustment</li>
+<li>Prophet will learn the appropriate changepoint effects from your data</li>
+<li>The default value works well for most forecasting scenarios</li>
+</ul>
+<p>Unless you have very specific knowledge about the initial magnitude of trend changes
+in your data, it's best to leave this parameter at its default value.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_InitialTrendValue_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.InitialTrendValue*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_InitialTrendValue" data-uid="AiDotNet.Models.Options.ProphetOptions`3.InitialTrendValue">
+  InitialTrendValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial value for the trend component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialTrendValue { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The initial trend value, defaulting to 0.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProphetOptions_3_InitialTrendValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter sets the initial value for the trend component at the start of the time series.
+It represents the y-intercept (value at time t=0) of the trend line. In most cases, Prophet can 
+effectively estimate this value from the data, so the default of 0.0 is generally sufficient.
+However, setting a specific initial trend value can be helpful when you have domain knowledge
+about the starting point of the series or when working with limited historical data where
+you want to inject prior information about the base level of the series.
+</p>
+<p><b>For Beginners:</b> This setting defines the starting value of the basic trend in your data.
+<p>The default value of 0.0 means:</p>
+<ul>
+<li>Prophet will estimate the starting point of your trend from the data</li>
+<li>You don't need to specify a starting value manually</li>
+</ul>
+<p>Think of it like the starting point on a map:</p>
+<ul>
+<li>If you're tracking elevation changes on a hike, this would be your elevation at the trailhead</li>
+<li>It doesn't affect the shape of the path, just where it begins on the y-axis</li>
+</ul>
+<p>You might want to set a specific value:</p>
+<ul>
+<li>When you have expert knowledge about the true starting level of your data</li>
+<li>When you have limited historical data and want to provide this prior information</li>
+<li>When you're continuing a forecast from a previously known point</li>
+</ul>
+<p>In most cases, leaving this at the default value works well as Prophet will determine
+an appropriate starting value from your data automatically.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_OptimizeParameters_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.OptimizeParameters*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_OptimizeParameters" data-uid="AiDotNet.Models.Options.ProphetOptions`3.OptimizeParameters">
+  OptimizeParameters
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L545"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether the model should attempt to optimize its parameters during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool OptimizeParameters { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProphetOptions_3_OptimizeParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, the model may run an additional optimization pass to refine parameter values beyond
+the initial component estimates derived from the data.
+</p>
+<p><b>For Beginners:</b>
+Turning this on tells the model to spend extra time trying to find better settings for trend,
+seasonality, and other components. This can improve accuracy, but training may take longer.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_Optimizer_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.Optimizer*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_Optimizer" data-uid="AiDotNet.Models.Options.ProphetOptions`3.Optimizer">
+  Optimizer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L581"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the optimizer to use for parameter fitting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IOptimizer&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;? Optimizer { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The optimizer instance, defaulting to null (uses the default optimizer).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProphetOptions_3_Optimizer_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter allows specification of a custom optimization algorithm for fitting the Prophet model
+parameters. When set to null, Prophet uses its default optimization method, typically L-BFGS for
+maximum a posteriori estimation. Custom optimizers can be provided to use alternative optimization
+approaches, which may be useful for specific types of time series or when special convergence
+properties are desired. The optimizer is responsible for finding the optimal values of the model
+parameters given the observed data and the prior distributions. Custom optimization can be useful
+for very large datasets, complex models, or when specific convergence behavior is required.
+</p>
+<p><b>For Beginners:</b> This setting lets you specify a different algorithm for finding the best model parameters.
+<p>The default value of null means:</p>
+<ul>
+<li>Prophet will use its built-in optimizer</li>
+<li>This works well for most forecasting problems</li>
+</ul>
+<p>Think of an optimizer like different strategies for finding the lowest point in a valley:</p>
+<ul>
+<li>The default strategy works well in most terrain</li>
+<li>But sometimes specialized strategies work better for unusual landscapes</li>
+</ul>
+<p>You might want to specify a custom optimizer when:</p>
+<ul>
+<li>You have a very complex forecasting problem</li>
+<li>The default optimizer is not converging well</li>
+<li>You have domain-specific requirements for how parameters are optimized</li>
+<li>You're working with extremely large datasets and need performance optimizations</li>
+</ul>
+<p>For most users, leaving this as null is recommended. Custom optimizers are an advanced feature
+that requires understanding of optimization algorithms and their properties.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_PredictionIntervalWidth_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.PredictionIntervalWidth*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_PredictionIntervalWidth" data-uid="AiDotNet.Models.Options.ProphetOptions`3.PredictionIntervalWidth">
+  PredictionIntervalWidth
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L786"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the confidence level for prediction intervals.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double PredictionIntervalWidth { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The confidence level (0-1), defaulting to 0.95 (95% confidence).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProphetOptions_3_PredictionIntervalWidth_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter sets the width of the prediction intervals. A value of 0.95 means that
+95% of actual values should fall within the prediction interval (assuming the model is well-calibrated).
+</p>
+<p><b>For Beginners:</b> This controls how wide the prediction "range" is:
+- 0.95 (95% confidence): Wider interval, more values fall inside
+- 0.80 (80% confidence): Narrower interval, more values flagged as unusual
+<p>Think of it like a fishing net - a wider net (higher confidence) catches more fish (includes more values).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_RegressorCount_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.RegressorCount*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_RegressorCount" data-uid="AiDotNet.Models.Options.ProphetOptions`3.RegressorCount">
+  RegressorCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L235"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of additional regressor variables to include in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int RegressorCount { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of regressors, defaulting to 0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProphetOptions_3_RegressorCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter specifies the number of external regressor variables that will be included in the model.
+Regressors are additional variables that can help explain variations in the time series beyond
+the standard trend, seasonality, and holiday components. These might include factors like pricing,
+marketing spend, weather conditions, or other relevant variables. Each regressor adds an additional
+term to the additive model, allowing the algorithm to learn how the regressor affects the time series.
+When using regressors, corresponding values must be provided for both the historical period and the
+forecast horizon.
+</p>
+<p><b>For Beginners:</b> This setting specifies how many external factors (beyond time patterns) you want to include in your forecast model.
+<p>The default value of 0 means:</p>
+<ul>
+<li>No external variables will be used in the forecast</li>
+<li>Only time-based patterns and holidays will be considered</li>
+</ul>
+<p>Think of regressors like additional explanatory factors:</p>
+<ul>
+<li>If forecasting ice cream sales, temperature might be a regressor</li>
+<li>If forecasting website traffic, marketing spend might be a regressor</li>
+<li>If forecasting energy usage, weather conditions might be regressors</li>
+</ul>
+<p>You would increase this value when:</p>
+<ul>
+<li>You have data on external factors that influence your target variable</li>
+<li>These factors provide additional information beyond time patterns</li>
+<li>You can provide these values for both past and future periods</li>
+</ul>
+<p>For example, setting <code>RegressorCount = 2</code> means you plan to include two external variables
+(like price and marketing spend) that help explain variations in your time series.</p>
+<p>Important: When using regressors, you must provide the values for these variables for both
+the historical period and the forecast horizon.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_SeasonalPeriods_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.SeasonalPeriods*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_SeasonalPeriods" data-uid="AiDotNet.Models.Options.ProphetOptions`3.SeasonalPeriods">
+  SeasonalPeriods
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L118"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;int&gt; SeasonalPeriods { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_SeasonalityPriorScale_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.SeasonalityPriorScale*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_SeasonalityPriorScale" data-uid="AiDotNet.Models.Options.ProphetOptions`3.SeasonalityPriorScale">
+  SeasonalityPriorScale
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L361"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the strength of the seasonality components.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double SeasonalityPriorScale { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The seasonality prior scale, defaulting to 10.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProphetOptions_3_SeasonalityPriorScale_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls the flexibility of the seasonality components in the model.
+It acts as a regularization term for the seasonality - larger values allow the seasonality
+to fit larger fluctuations (less regularization), while smaller values dampen the seasonality
+(more regularization). A higher value allows the model to capture stronger seasonal patterns
+but increases the risk of fitting to noise. A lower value produces more conservative seasonal
+estimates that may miss some genuine seasonal variations but are less likely to overfit.
+The default value of 10.0 is generally appropriate for datasets with clear seasonal patterns,
+but tuning may be necessary depending on the specific characteristics of the time series.
+</p>
+<p><b>For Beginners:</b> This setting controls how strongly seasonal patterns can affect your forecast.
+<p>The default value of 10.0 means:</p>
+<ul>
+<li>Seasonal patterns are given significant flexibility</li>
+<li>The model can capture strong seasonal fluctuations</li>
+</ul>
+<p>Think of it like the volume control for seasonality:</p>
+<ul>
+<li>A higher value (like 20.0) turns up the &quot;volume&quot; of seasonal patterns</li>
+<li>A lower value (like 1.0) turns down this &quot;volume&quot;</li>
+<li>The default (10.0) is a balanced setting that works well for most data</li>
+</ul>
+<p>You might want a higher value (like 20.0 or 50.0):</p>
+<ul>
+<li>When your data has very strong, consistent seasonal patterns</li>
+<li>When capturing the full magnitude of seasonal swings is critical</li>
+<li>When seasonal effects clearly dominate other patterns</li>
+</ul>
+<p>You might want a lower value (like 1.0 or 0.1):</p>
+<ul>
+<li>When you want more conservative seasonal estimates</li>
+<li>When the seasonal pattern exists but is subtle</li>
+<li>When you suspect some seasonal-looking patterns might be noise</li>
+</ul>
+<p>Adjusting this parameter changes how much of the variation in your data gets attributed to
+seasonal patterns versus other components like trend or noise.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_TransformPrediction_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.TransformPrediction*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_TransformPrediction" data-uid="AiDotNet.Models.Options.ProphetOptions`3.TransformPrediction">
+  TransformPrediction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L703"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the function used to transform predictions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Func&lt;T, T&gt; TransformPrediction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;T, T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProphetOptions_3_TransformPrediction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This function is applied to each prediction when ApplyTransformation is enabled.
+It can be used to perform operations like scaling, normalizing, or applying
+domain-specific transformations to predictions.
+</p>
+<p><b>For Beginners:</b> This is the specific formula or operation the model uses
+to adjust its predictions when ApplyTransformation is turned on. For example, 
+if your original data was in dollars but you trained the model on data converted to
+thousands of dollars, this function could multiply the predictions by 1000 to
+convert them back to dollars.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_WeeklySeasonality_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.WeeklySeasonality*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_WeeklySeasonality" data-uid="AiDotNet.Models.Options.ProphetOptions`3.WeeklySeasonality">
+  WeeklySeasonality
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L487"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether weekly seasonality should be included in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool WeeklySeasonality { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>A boolean indicating whether to include weekly seasonality, defaulting to true.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProphetOptions_3_WeeklySeasonality_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter determines whether the model should include a weekly seasonality component.
+When enabled, Prophet will model patterns that repeat on a weekly cycle (7 days). Weekly 
+seasonality is appropriate for time series that exhibit day-of-week effects, such as higher
+website traffic on weekdays versus weekends, different retail sales patterns across the week,
+or regular weekly business cycles. Enabling weekly seasonality requires at least one week of
+historical data for estimation, though several weeks are recommended for reliable results.
+For data that does not have a weekly pattern or for data collected less frequently than daily,
+this component should be disabled.
+</p>
+<p><b>For Beginners:</b> This setting determines whether your forecast should include patterns that repeat every week.
+<p>The default value of true means:</p>
+<ul>
+<li>The model will look for and include weekly repeating patterns</li>
+<li>These patterns capture phenomena like weekend drops in office activity, Monday peaks in emails, etc.</li>
+</ul>
+<p>Think of weekly seasonality like the rhythm of a typical week:</p>
+<ul>
+<li>Restaurants might be busier on weekends</li>
+<li>Office buildings use less energy on weekends</li>
+<li>Monday morning might always have higher email volume</li>
+<li>Friday afternoon might show decreased productivity</li>
+</ul>
+<p>You should keep this enabled (true) when:</p>
+<ul>
+<li>Your data is daily or hourly</li>
+<li>You can see different patterns for different days of the week</li>
+<li>Your business or activity has known weekly cycles</li>
+</ul>
+<p>You might want to disable it (set to false) when:</p>
+<ul>
+<li>Your data is collected less frequently than daily</li>
+<li>Your data doesn't show weekly patterns</li>
+<li>You're forecasting something that doesn't vary by day of week</li>
+<li>You want to simplify your model</li>
+</ul>
+<p>Weekly seasonality is very common in business operations, website traffic, and many other daily activities.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ProphetOptions_3_YearlySeasonality_" data-uid="AiDotNet.Models.Options.ProphetOptions`3.YearlySeasonality*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ProphetOptions_3_YearlySeasonality" data-uid="AiDotNet.Models.Options.ProphetOptions`3.YearlySeasonality">
+  YearlySeasonality
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L444"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether yearly seasonality should be included in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool YearlySeasonality { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>A boolean indicating whether to include yearly seasonality, defaulting to true.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ProphetOptions_3_YearlySeasonality_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter determines whether the model should include a yearly (annual) seasonality component.
+When enabled, Prophet will model patterns that repeat on a yearly cycle (365.25 days). Yearly
+seasonality is appropriate for time series that exhibit annual patterns, such as retail sales
+with holiday seasons, energy consumption with seasonal weather variations, or tourism with seasonal
+travel patterns. Enabling yearly seasonality requires at least one year of historical data for
+reliable estimation. If less data is available or if the time series does not exhibit annual
+patterns, this component should be disabled to prevent overfitting.
+</p>
+<p><b>For Beginners:</b> This setting determines whether your forecast should include patterns that repeat every year.
+<p>The default value of true means:</p>
+<ul>
+<li>The model will look for and include yearly repeating patterns</li>
+<li>These patterns capture phenomena like holiday seasons, summer increases, winter decreases, etc.</li>
+</ul>
+<p>Think of yearly seasonality like annual climate patterns:</p>
+<ul>
+<li>Summer might always bring higher ice cream sales</li>
+<li>Winter might always show higher heating costs</li>
+<li>December typically shows holiday shopping effects</li>
+</ul>
+<p>You should keep this enabled (true) when:</p>
+<ul>
+<li>Your data spans at least 1-2 years</li>
+<li>You can see clear yearly patterns in your data</li>
+<li>Your business or domain has known annual cycles</li>
+</ul>
+<p>You might want to disable it (set to false) when:</p>
+<ul>
+<li>You have less than a year of historical data</li>
+<li>Your data doesn't show yearly patterns</li>
+<li>You want to simplify your model</li>
+<li>You're dealing with very high-frequency data where yearly patterns are less relevant</li>
+</ul>
+<p>Yearly seasonality is one of the most common patterns in business and economic data.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ProphetOptions.cs/#L42" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

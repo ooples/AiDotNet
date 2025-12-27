@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>GPU Stress Testing and Memory Leak Detection - Phase B | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="GPU Stress Testing and Memory Leak Detection - Phase B | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/GPU_STRESS_TESTING.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="gpu-stress-testing-and-memory-leak-detection---phase-b">GPU Stress Testing and Memory Leak Detection - Phase B</h1>
+
+<h2 id="overview">Overview</h2>
+<p>This document describes the stress testing and memory leak detection infrastructure for AiDotNet's GPU acceleration (Phase B: US-GPU-018).</p>
+<h2 id="test-suites">Test Suites</h2>
+<h3 id="location">Location</h3>
+<ul>
+<li><strong>Stress Tests</strong>: <code>/tests/AiDotNet.Tests/StressTests/GpuStressTests.cs</code></li>
+<li><strong>Memory Leak Tests</strong>: <code>/tests/AiDotNet.Tests/StressTests/MemoryLeakTests.cs</code></li>
+</ul>
+<h2 id="stress-test-categories">Stress Test Categories</h2>
+<h3 id="1-matrix-operation-stress-tests">1. Matrix Operation Stress Tests</h3>
+<p><strong>Purpose</strong>: Validate GPU stability over extended matrix operations</p>
+<h4 id="tests">Tests:</h4>
+<ul>
+<li><p><strong>10K Matrix Multiplications</strong> (<code>MatrixMultiply_LongRun_10KIterations_NoMemoryLeak</code>)</p>
+<ul>
+<li>Runs 10,000 consecutive 256×256 matrix multiplications</li>
+<li>Monitors memory growth (should be &lt; 10MB)</li>
+<li>Validates performance consistency (avg &lt; 1ms per operation)</li>
+<li><strong>Pass Criteria</strong>: No memory leaks, stable performance</li>
+</ul>
+</li>
+<li><p><strong>Concurrent Matrix Operations</strong> (<code>MatrixMultiply_Concurrent_8Threads_NoRaceConditions</code>)</p>
+<ul>
+<li>Executes 8 concurrent threads performing matrix operations</li>
+<li>Each thread runs 100 iterations</li>
+<li>Tests thread safety and race condition prevention</li>
+<li><strong>Pass Criteria</strong>: No exceptions, all threads complete successfully</li>
+</ul>
+</li>
+</ul>
+<h3 id="2-tensor-operation-stress-tests">2. Tensor Operation Stress Tests</h3>
+<p><strong>Purpose</strong>: Validate CNN operations under sustained load</p>
+<h4 id="tests-1">Tests:</h4>
+<ul>
+<li><p><strong>1K Conv2D Operations</strong> (<code>Conv2D_LongRun_1KIterations_StablePerformance</code>)</p>
+<ul>
+<li>Runs 1,000 convolution operations (4×32×28×28 → 4×64×28×28)</li>
+<li>Monitors performance drift between first and last quartile</li>
+<li>Memory growth should be &lt; 20MB</li>
+<li><strong>Pass Criteria</strong>: Performance drift &lt; 20%, no memory leaks</li>
+</ul>
+</li>
+<li><p><strong>High-Frequency Pooling</strong> (<code>Pooling_HighFrequency_1KIterations_NoLeaks</code>)</p>
+<ul>
+<li>Alternates between MaxPool2D and AvgPool2D for 1,000 iterations</li>
+<li>Large batch size (8×64×56×56) for stress testing</li>
+<li>Memory growth should be &lt; 15MB</li>
+<li><strong>Pass Criteria</strong>: No memory leaks, stable operation</li>
+</ul>
+</li>
+</ul>
+<h3 id="3-neural-network-layer-stress-tests">3. Neural Network Layer Stress Tests</h3>
+<p><strong>Purpose</strong>: Validate layer operations in realistic training scenarios</p>
+<h4 id="tests-2">Tests:</h4>
+<ul>
+<li><p><strong>ConvolutionalLayer 1K Forward Passes</strong> (<code>ConvolutionalLayer_LongRun_1KForwardPasses_Stable</code>)</p>
+<ul>
+<li>Runs 1,000 forward passes through convolutional layer</li>
+<li>Tests layer state management and memory cleanup</li>
+<li><strong>Pass Criteria</strong>: Memory growth &lt; 10MB</li>
+</ul>
+</li>
+<li><p><strong>Full CNN Pipeline</strong> (<code>FullCNNPipeline_100Iterations_NoMemoryLeaks</code>)</p>
+<ul>
+<li>Simulates realistic CNN: Conv → ReLU → Pool → Conv → ReLU → Pool</li>
+<li>Runs 100 complete pipeline iterations</li>
+<li>Memory growth should be &lt; 30MB</li>
+<li>Average pipeline time should be &lt; 100ms</li>
+<li><strong>Pass Criteria</strong>: No memory leaks, acceptable performance</li>
+</ul>
+</li>
+</ul>
+<h3 id="4-gpu-memory-pool-stress-tests">4. GPU Memory Pool Stress Tests</h3>
+<p><strong>Purpose</strong>: Validate memory pool behavior under varied allocation patterns</p>
+<h4 id="tests-3">Tests:</h4>
+<ul>
+<li><p><strong>Variable Size Allocations</strong> (<code>MemoryPool_VariableSizeAllocations_ReuseBuffers</code>)</p>
+<ul>
+<li>Allocates matrices of varying sizes (64, 128, 256, 512, 256, 128, 64)</li>
+<li>Runs 100 cycles through size variations</li>
+<li>Tests buffer reuse in memory pool</li>
+<li><strong>Pass Criteria</strong>: Memory growth &lt; 5MB (indicates effective pooling)</li>
+</ul>
+</li>
+<li><p><strong>Rapid Allocation/Deallocation</strong> (<code>MemoryPool_RapidAllocDealloc_1KCycles_Stable</code>)</p>
+<ul>
+<li>Performs 1,000 rapid allocation/deallocation cycles</li>
+<li>Tests GC integration and buffer cleanup</li>
+<li><strong>Pass Criteria</strong>: Memory growth &lt; 5MB</li>
+</ul>
+</li>
+</ul>
+<h3 id="5-gpu-recovery-stress-tests">5. GPU Recovery Stress Tests</h3>
+<p><strong>Purpose</strong>: Validate graceful error handling and recovery</p>
+<h4 id="tests-4">Tests:</h4>
+<ul>
+<li><p><strong>Invalid Operations</strong> (<code>GPU_InvalidOperations_GracefulErrorHandling</code>)</p>
+<ul>
+<li>Tests error handling for incompatible matrix sizes</li>
+<li>Validates engine continues operating after errors</li>
+<li><strong>Pass Criteria</strong>: Proper exception handling, engine remains functional</li>
+</ul>
+</li>
+<li><p><strong>Multiple Error Recovery</strong> (<code>GPU_MultipleErrors_ContinuesOperating</code>)</p>
+<ul>
+<li>Causes 10 consecutive errors</li>
+<li>Tests operation between each error</li>
+<li><strong>Pass Criteria</strong>: Engine remains stable after multiple errors</li>
+</ul>
+</li>
+</ul>
+<h2 id="memory-leak-detection">Memory Leak Detection</h2>
+<h3 id="memory-leak-criteria">Memory Leak Criteria</h3>
+<p>A memory leak is suspected if:</p>
+<ol>
+<li><strong>Linear Growth</strong>: Memory grows linearly with iterations (correlation &gt; 0.8)</li>
+<li><strong>Excessive Growth</strong>: Total growth &gt; 15MB over 5,000 iterations</li>
+<li><strong>No Plateau</strong>: Memory does not stabilize after warmup period</li>
+<li><strong>High GC Pressure</strong>: Excessive Gen 2 collections (&gt; 5 per 5K iterations)</li>
+</ol>
+<h3 id="memory-analysis-tests">Memory Analysis Tests</h3>
+<h4 id="1-growth-pattern-analysis-matrixoperations_5kiterations_lineargrowthcheck">1. Growth Pattern Analysis (<code>MatrixOperations_5KIterations_LinearGrowthCheck</code>)</h4>
+<ul>
+<li>Runs 5,000 matrix operations</li>
+<li>Samples memory every 500 iterations</li>
+<li>Uses correlation analysis to detect linear growth</li>
+<li><strong>Pass Criteria</strong>: No linear growth pattern, total growth &lt; 15MB</li>
+</ul>
+<h4 id="2-plateau-detection-tensoroperations_5kiterations_plateaucheck">2. Plateau Detection (<code>TensorOperations_5KIterations_PlateauCheck</code>)</h4>
+<ul>
+<li>Runs 5,000 Conv2D operations</li>
+<li>Validates memory stabilizes after initial allocations</li>
+<li><strong>Pass Criteria</strong>: Memory plateaus with &lt; 10% variance in final quarter</li>
+</ul>
+<h4 id="3-gc-pressure-analysis-gpuoperations_gcpressure_boundedcollections">3. GC Pressure Analysis (<code>GpuOperations_GCPressure_BoundedCollections</code>)</h4>
+<ul>
+<li>Monitors garbage collection frequency</li>
+<li>Validates memory pooling reduces GC pressure</li>
+<li><strong>Expected Results</strong>:
+<ul>
+<li>Gen 0 collections: &lt; 100 (pooling minimizes allocations)</li>
+<li>Gen 1 collections: &lt; 20</li>
+<li>Gen 2 collections: &lt; 5 (indicates no leaks)</li>
+</ul>
+</li>
+</ul>
+<h4 id="4-optimizer-memory-leak-detection-optimizervectorupdates_5kiterations_noleak">4. Optimizer Memory Leak Detection (<code>OptimizerVectorUpdates_5KIterations_NoLeak</code>)</h4>
+<ul>
+<li>Simulates 5,000 optimizer updates on 10K parameter vector</li>
+<li>Tests vectorized operations for leaks</li>
+<li><strong>Pass Criteria</strong>: Memory growth &lt; 10MB</li>
+</ul>
+<h4 id="5-mixed-precision-operations-mixedprecisionoperations_5kiterations_noleak">5. Mixed Precision Operations (<code>MixedPrecisionOperations_5KIterations_NoLeak</code>)</h4>
+<ul>
+<li>Cycles through different operation types (matrix, vector, tensor)</li>
+<li>Tests memory pool with varied allocation patterns</li>
+<li><strong>Pass Criteria</strong>: Growth rate between halves &lt; 20%</li>
+</ul>
+<h3 id="resource-cleanup-tests">Resource Cleanup Tests</h3>
+<h4 id="1-engine-disposal-gpuengine_multiplecreatedispose_noresourceleak">1. Engine Disposal (<code>GpuEngine_MultipleCreateDispose_NoResourceLeak</code>)</h4>
+<ul>
+<li>Creates and destroys 100 GpuEngine instances</li>
+<li>Tests resource cleanup and finalizer behavior</li>
+<li><strong>Pass Criteria</strong>: Memory growth &lt; 20MB</li>
+</ul>
+<h4 id="2-tensor-lifecycle-tensor_createusediscard_5kcycles_noleak">2. Tensor Lifecycle (<code>Tensor_CreateUseDiscard_5KCycles_NoLeak</code>)</h4>
+<ul>
+<li>Creates, uses, and discards tensors 5,000 times</li>
+<li>Tests tensor memory management</li>
+<li><strong>Pass Criteria</strong>: Memory growth &lt; 15MB</li>
+</ul>
+<h2 id="running-stress-tests">Running Stress Tests</h2>
+<h3 id="run-all-stress-tests">Run All Stress Tests</h3>
+<pre><code class="lang-bash">dotnet test --filter &quot;FullyQualifiedName~StressTests&quot;
+</code></pre>
+<h3 id="run-specific-test-categories">Run Specific Test Categories</h3>
+<pre><code class="lang-bash"># Stress tests only
+dotnet test --filter &quot;FullyQualifiedName~GpuStressTests&quot;
+
+# Memory leak tests only
+dotnet test --filter &quot;FullyQualifiedName~MemoryLeakTests&quot;
+</code></pre>
+<h3 id="run-individual-tests">Run Individual Tests</h3>
+<pre><code class="lang-bash"># Specific stress test
+dotnet test --filter &quot;FullyQualifiedName~MatrixMultiply_LongRun_10KIterations&quot;
+
+# Specific memory leak test
+dotnet test --filter &quot;FullyQualifiedName~MatrixOperations_5KIterations_LinearGrowthCheck&quot;
+</code></pre>
+<h3 id="test-execution-time">Test Execution Time</h3>
+<table>
+<thead>
+<tr>
+<th>Test Category</th>
+<th>Estimated Time</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Matrix Stress Tests</td>
+<td>2-5 minutes</td>
+</tr>
+<tr>
+<td>Tensor Stress Tests</td>
+<td>3-7 minutes</td>
+</tr>
+<tr>
+<td>Layer Stress Tests</td>
+<td>2-4 minutes</td>
+</tr>
+<tr>
+<td>Memory Pool Tests</td>
+<td>1-2 minutes</td>
+</tr>
+<tr>
+<td>Recovery Tests</td>
+<td>&lt; 1 minute</td>
+</tr>
+<tr>
+<td>Memory Leak Detection</td>
+<td>5-10 minutes</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>~20-30 minutes</strong></td>
+</tr>
+</tbody>
+</table>
+<h2 id="interpreting-results">Interpreting Results</h2>
+<h3 id="memory-growth-indicators">Memory Growth Indicators</h3>
+<p><strong>Healthy Memory Profile</strong>:</p>
+<pre><code>Initial Memory: 50 MB
+After 1000 iterations: 52 MB (+2 MB)
+After 3000 iterations: 53 MB (+1 MB)
+After 5000 iterations: 53 MB (+0 MB) ← Plateau reached
+</code></pre>
+<p><strong>Memory Leak Profile</strong>:</p>
+<pre><code>Initial Memory: 50 MB
+After 1000 iterations: 55 MB (+5 MB)
+After 3000 iterations: 65 MB (+10 MB)
+After 5000 iterations: 75 MB (+10 MB) ← Linear growth (LEAK)
+</code></pre>
+<h3 id="performance-stability-indicators">Performance Stability Indicators</h3>
+<p><strong>Healthy Performance</strong>:</p>
+<pre><code>First quartile avg: 0.45 ms
+Last quartile avg: 0.47 ms
+Drift: 4.4% ✓ (&lt; 20% threshold)
+</code></pre>
+<p><strong>Performance Degradation</strong>:</p>
+<pre><code>First quartile avg: 0.45 ms
+Last quartile avg: 0.70 ms
+Drift: 55.6% ✗ (&gt; 20% threshold - indicates resource exhaustion)
+</code></pre>
+<h3 id="gc-collection-indicators">GC Collection Indicators</h3>
+<p><strong>Healthy GC Profile</strong> (5,000 iterations):</p>
+<pre><code>Gen 0: 45 collections  ✓ (&lt; 100)
+Gen 1: 8 collections   ✓ (&lt; 20)
+Gen 2: 2 collections   ✓ (&lt; 5)
+</code></pre>
+<p><strong>Problematic GC Profile</strong>:</p>
+<pre><code>Gen 0: 850 collections ✗ (poor memory pooling)
+Gen 1: 120 collections ✗ (excessive allocations)
+Gen 2: 35 collections  ✗ (likely memory leak)
+</code></pre>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="test-failures">Test Failures</h3>
+<h4 id="memory-leaked-x-mb-growth">&quot;Memory leaked: X MB growth&quot;</h4>
+<p><strong>Possible Causes</strong>:</p>
+<ol>
+<li>GPU memory pool not reusing buffers</li>
+<li>Native resource leaks (GPU buffers not freed)</li>
+<li>Managed object retention (event handlers, closures)</li>
+</ol>
+<p><strong>Debug Steps</strong>:</p>
+<pre><code class="lang-bash"># Run with memory profiler
+dotnet-trace collect --process-id &lt;pid&gt; --providers Microsoft-Windows-DotNETRuntime:0xC0000001
+
+# Analyze with dotMemory, PerfView, or Visual Studio Profiler
+</code></pre>
+<h4 id="performance-degraded-by-x">&quot;Performance degraded by X%&quot;</h4>
+<p><strong>Possible Causes</strong>:</p>
+<ol>
+<li>GPU thermal throttling</li>
+<li>GPU memory fragmentation</li>
+<li>Kernel compilation not cached</li>
+<li>Background GPU applications</li>
+</ol>
+<p><strong>Debug Steps</strong>:</p>
+<ol>
+<li>Check GPU temperature: <code>nvidia-smi</code> (NVIDIA) or <code>rocm-smi</code> (AMD)</li>
+<li>Monitor GPU utilization during test</li>
+<li>Close background applications using GPU</li>
+<li>Verify kernel pre-compilation in GpuEngine initialization</li>
+</ol>
+<h4 id="excessive-gen-2-collections">&quot;Excessive Gen 2 collections&quot;</h4>
+<p><strong>Possible Causes</strong>:</p>
+<ol>
+<li>Large object heap (LOH) fragmentation</li>
+<li>Long-lived objects not being released</li>
+<li>Finalizer queue buildup</li>
+</ol>
+<p><strong>Debug Steps</strong>:</p>
+<pre><code class="lang-csharp">// Add diagnostic logging
+GC.RegisterForFullGCNotification(10, 10);
+// Monitor finalizer queue
+Console.WriteLine($&quot;Finalizers pending: {GC.GetTotalMemory(false)}&quot;);
+</code></pre>
+<h3 id="gpu-not-available">GPU Not Available</h3>
+<p>If GPU is not available, stress tests will gracefully skip:</p>
+<pre><code>GPU not available - skipping test
+</code></pre>
+<p>This is expected on systems without CUDA/OpenCL support.</p>
+<h3 id="test-timeouts">Test Timeouts</h3>
+<p>Default xUnit timeout: 5 minutes per test</p>
+<p>If tests timeout:</p>
+<ol>
+<li>Reduce iteration counts for initial testing</li>
+<li>Run tests individually instead of in bulk</li>
+<li>Check GPU is responsive (<code>nvidia-smi</code> or Task Manager)</li>
+</ol>
+<h2 id="continuous-integration">Continuous Integration</h2>
+<h3 id="cicd-integration">CI/CD Integration</h3>
+<p>Add to your CI pipeline (with caution - GPU may not be available):</p>
+<pre><code class="lang-yaml">- name: Run GPU Stress Tests
+  if: has-gpu == true
+  run: |
+    dotnet test --filter &quot;FullyQualifiedName~GpuStressTests&quot; --logger &quot;trx;LogFileName=stress-tests.trx&quot;
+  timeout-minutes: 30
+
+- name: Run Memory Leak Tests
+  if: has-gpu == true
+  run: |
+    dotnet test --filter &quot;FullyQualifiedName~MemoryLeakTests&quot; --logger &quot;trx;LogFileName=leak-tests.trx&quot;
+  timeout-minutes: 15
+</code></pre>
+<h3 id="nightly-builds">Nightly Builds</h3>
+<p>Recommended: Run stress tests in nightly builds rather than on every commit</p>
+<ul>
+<li>Tests are long-running (20-30 minutes)</li>
+<li>GPU availability may vary across build agents</li>
+<li>Memory leak detection requires extended runtime</li>
+</ul>
+<h3 id="regression-detection">Regression Detection</h3>
+<p>Track memory growth and performance metrics over time:</p>
+<pre><code class="lang-bash"># Baseline
+dotnet test --filter &quot;FullyQualifiedName~StressTests&quot; &gt; baseline-stress.log
+
+# After changes
+dotnet test --filter &quot;FullyQualifiedName~StressTests&quot; &gt; current-stress.log
+
+# Compare
+diff baseline-stress.log current-stress.log
+</code></pre>
+<h2 id="best-practices">Best Practices</h2>
+<h3 id="writing-new-stress-tests">Writing New Stress Tests</h3>
+<ol>
+<li><p><strong>Use Appropriate Iteration Counts</strong>:</p>
+<ul>
+<li>Long-running: 5,000-10,000 iterations (leak detection)</li>
+<li>Medium-running: 1,000 iterations (stability)</li>
+<li>Short-running: 100 iterations (concurrency)</li>
+</ul>
+</li>
+<li><p><strong>Monitor Multiple Metrics</strong>:</p>
+<ul>
+<li>Managed memory (GC.GetTotalMemory)</li>
+<li>GC collection counts</li>
+<li>Performance timings</li>
+<li>Resource handles (if applicable)</li>
+</ul>
+</li>
+<li><p><strong>Force GC Periodically</strong>:</p>
+<pre><code class="lang-csharp">if (i % 1000 == 0)
+{
+    GC.Collect();
+    GC.WaitForPendingFinalizers();
+}
+</code></pre>
+</li>
+<li><p><strong>Establish Baselines</strong>:</p>
+<ul>
+<li>Measure initial memory before loop</li>
+<li>Force full GC to get accurate baseline</li>
+<li>Account for JIT/warmup overhead</li>
+</ul>
+</li>
+<li><p><strong>Use Statistical Analysis</strong>:</p>
+<ul>
+<li>Don't rely on single snapshots</li>
+<li>Calculate trends, averages, variances</li>
+<li>Detect patterns (linear growth, plateau)</li>
+</ul>
+</li>
+</ol>
+<h3 id="memory-leak-prevention">Memory Leak Prevention</h3>
+<ol>
+<li><strong>Use Memory Pooling</strong> (already implemented in GpuEngine)</li>
+<li><strong>Avoid Closures in Loops</strong> (captures variables, prevents GC)</li>
+<li><strong>Dispose IDisposable Objects</strong> (GPU buffers, streams)</li>
+<li><strong>Clear Event Handlers</strong> when done</li>
+<li><strong>Use Weak References</strong> for caches</li>
+</ol>
+<h2 id="expected-results">Expected Results</h2>
+<p>All stress tests and memory leak tests should <strong>PASS</strong> on a properly functioning GPU acceleration system.</p>
+<p><strong>Key Success Metrics</strong>:</p>
+<ul>
+<li>✅ Memory growth &lt; 15MB over 5,000 iterations</li>
+<li>✅ Performance drift &lt; 20% between first and last quartiles</li>
+<li>✅ Gen 2 GC collections &lt; 5 per 5,000 iterations</li>
+<li>✅ No exceptions in concurrent operations</li>
+<li>✅ Memory plateaus after warmup period</li>
+<li>✅ Engine remains functional after errors</li>
+</ul>
+<h2 id="references">References</h2>
+<ul>
+<li>Phase B Implementation: See Epic 4 user stories in issue #496</li>
+<li>GPU Performance Benchmarks: See <code>GPU_PERFORMANCE_BENCHMARKS.md</code></li>
+<li>xUnit Documentation: <a href="https://xunit.net/">https://xunit.net/</a></li>
+<li>.NET Memory Profiling: <a href="https://learn.microsoft.com/en-us/dotnet/core/diagnostics/">https://learn.microsoft.com/en-us/dotnet/core/diagnostics/</a></li>
+</ul>
+<hr>
+<p><strong>Last Updated</strong>: 2025-01-17
+<strong>Phase</strong>: B - GPU Production Implementation
+<strong>Status</strong>: US-GPU-018 Complete</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/GPU_STRESS_TESTING.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

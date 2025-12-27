@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ThinPlateSplineRBF&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ThinPlateSplineRBF&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements a Thin Plate Spline Radial Basis Function (RBF) of the form r&#178; log(r).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RadialBasisFunctions_ThinPlateSplineRBF_1.md&amp;value=---%0Auid%3A%20AiDotNet.RadialBasisFunctions.ThinPlateSplineRBF%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RadialBasisFunctions.ThinPlateSplineRBF`1">
+
+
+
+  <h1 id="AiDotNet_RadialBasisFunctions_ThinPlateSplineRBF_1" data-uid="AiDotNet.RadialBasisFunctions.ThinPlateSplineRBF`1" class="text-break">
+Class ThinPlateSplineRBF&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/ThinPlateSplineRBF.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RadialBasisFunctions.html">RadialBasisFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements a Thin Plate Spline Radial Basis Function (RBF) of the form r² log(r).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ThinPlateSplineRBF&lt;T&gt; : IRadialBasisFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ThinPlateSplineRBF&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IRadialBasisFunction-1.html">IRadialBasisFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_RadialBasisFunctions_ThinPlateSplineRBF_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class provides an implementation of a Thin Plate Spline Radial Basis Function, which is defined as
+f(r) = r² log(r), where r is the radial distance. This is a special case of the polyharmonic spline with k = 2.
+The Thin Plate Spline RBF does not have a width parameter, making it scale-invariant.
+</p>
+<p>
+The name "Thin Plate Spline" comes from the physical analogy of bending a thin sheet of metal. This RBF
+minimizes a measure of energy that approximates the bending energy of a thin metal plate. It is particularly
+useful for interpolation problems in two dimensions and provides a smooth interpolation that avoids
+unnecessary oscillations.
+</p>
+<p>
+Unlike many other RBFs, the thin plate spline grows with distance rather than decaying. At r = 0, the
+function and its first derivative are both 0, providing a high degree of smoothness at the origin.
+</p>
+<p><b>For Beginners:</b> A Radial Basis Function (RBF) is a special type of mathematical function
+that depends only on the distance from a center point.
+<p>The Thin Plate Spline RBF is named after the physical behavior of a thin metal plate that bends
+under pressure. Imagine pressing down on a thin sheet of metal at specific points - the way the
+sheet bends to smoothly connect those points is similar to how this function behaves.</p>
+<p>This RBF has some unique properties:</p>
+<ul>
+<li>Unlike most RBFs that decrease with distance, the thin plate spline actually grows as you move away from the center</li>
+<li>It equals exactly 0 at the center point (r = 0)</li>
+<li>It doesn't have a width parameter like most other RBFs, making it &quot;scale-invariant&quot;</li>
+<li>It creates very smooth interpolations with minimal unnecessary wiggles or oscillations</li>
+</ul>
+<p>The thin plate spline is particularly useful for 2D interpolation problems, like reconstructing
+a surface from a set of scattered points, or for image warping and morphing in computer graphics.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_RadialBasisFunctions_ThinPlateSplineRBF_1__ctor_" data-uid="AiDotNet.RadialBasisFunctions.ThinPlateSplineRBF`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_ThinPlateSplineRBF_1__ctor" data-uid="AiDotNet.RadialBasisFunctions.ThinPlateSplineRBF`1.#ctor">
+  ThinPlateSplineRBF()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/ThinPlateSplineRBF.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.RadialBasisFunctions.ThinPlateSplineRBF-1.html">ThinPlateSplineRBF&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ThinPlateSplineRBF()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_ThinPlateSplineRBF_1__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The constructor initializes the Thin Plate Spline Radial Basis Function. Unlike most other RBFs,
+the Thin Plate Spline RBF does not take any parameters as it has the fixed form f(r) = r² log(r).
+</p>
+<p><b>For Beginners:</b> This creates a new Thin Plate Spline RBF.
+<p>Unlike other RBFs we've seen, the Thin Plate Spline doesn't need any configuration parameters
+because its behavior is fixed - it always follows the same mathematical formula: r² log(r).
+There's no &quot;width&quot; parameter or other settings to adjust.</p>
+<p>This means that once you create a Thin Plate Spline RBF, it's ready to use without additional setup.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RadialBasisFunctions_ThinPlateSplineRBF_1_Compute_" data-uid="AiDotNet.RadialBasisFunctions.ThinPlateSplineRBF`1.Compute*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_ThinPlateSplineRBF_1_Compute__0_" data-uid="AiDotNet.RadialBasisFunctions.ThinPlateSplineRBF`1.Compute(`0)">
+  Compute(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/ThinPlateSplineRBF.cs/#L95"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Compute(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RadialBasisFunctions_ThinPlateSplineRBF_1_ComputeDerivative_" data-uid="AiDotNet.RadialBasisFunctions.ThinPlateSplineRBF`1.ComputeDerivative*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_ThinPlateSplineRBF_1_ComputeDerivative__0_" data-uid="AiDotNet.RadialBasisFunctions.ThinPlateSplineRBF`1.ComputeDerivative(`0)">
+  ComputeDerivative(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/ThinPlateSplineRBF.cs/#L131"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the derivative of the Thin Plate Spline RBF with respect to the radius.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeDerivative(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The radius or distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The derivative value of the function with respect to r, or zero if r = 0.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_ThinPlateSplineRBF_1_ComputeDerivative__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the derivative of the Thin Plate Spline RBF with respect to the radius r.
+The formula for the derivative is r * (2 * log(r) + 1). At r = 0, the derivative is 0 for
+numerical stability.
+</p>
+<p><b>For Beginners:</b> This method computes how fast the function's value changes
+as you move away from the center point.
+<p>The derivative tells you the &quot;slope&quot; or &quot;rate of change&quot; of the function at a specific distance.
+For the Thin Plate Spline RBF:</p>
+<ul>
+<li>At the center (r = 0), the derivative is 0, meaning the function is flat at the origin</li>
+<li>For small values of r (between 0 and about 0.61), the derivative is negative, meaning the function decreases</li>
+<li>At r ˜ 0.61 (where 2*log(r)+1 = 0), the derivative is 0 again (a local minimum)</li>
+<li>For r &gt; 0.61, the derivative is positive and increasing, meaning the function grows faster and faster</li>
+</ul>
+<p>This pattern creates the distinctive shape of the thin plate spline - a smooth dip around the origin
+followed by an increasing rise as you move further out.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RadialBasisFunctions_ThinPlateSplineRBF_1_ComputeWidthDerivative_" data-uid="AiDotNet.RadialBasisFunctions.ThinPlateSplineRBF`1.ComputeWidthDerivative*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_ThinPlateSplineRBF_1_ComputeWidthDerivative__0_" data-uid="AiDotNet.RadialBasisFunctions.ThinPlateSplineRBF`1.ComputeWidthDerivative(`0)">
+  ComputeWidthDerivative(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/ThinPlateSplineRBF.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the derivative of the Thin Plate Spline RBF with respect to a width parameter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeWidthDerivative(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The radius or distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Always zero since thin plate splines don't have a width parameter.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_ThinPlateSplineRBF_1_ComputeWidthDerivative__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method always returns zero because the Thin Plate Spline RBF does not have a width parameter.
+Unlike many other RBFs, the thin plate spline is scale-invariant, so it doesn't need a parameter
+to control its width. The method is implemented only to satisfy the interface requirements.
+</p>
+<p><b>For Beginners:</b> This method would normally tell you how the function's value
+would change if you adjusted the width parameter.
+<p>However, the Thin Plate Spline RBF doesn't have a width parameter to adjust - its behavior
+is controlled by the mathematical formula r² log(r) with no additional parameters.</p>
+<p>This property makes the function &quot;scale-invariant,&quot; which means that if you scale all input
+distances by the same factor, the relative shape of the resulting interpolation doesn't change.</p>
+<p>This method only exists because all RBFs in this library are required to have it,
+but for the Thin Plate Spline RBF, it will always return zero.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/ThinPlateSplineRBF.cs/#L40" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

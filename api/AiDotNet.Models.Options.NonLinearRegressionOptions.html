@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class NonLinearRegressionOptions | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class NonLinearRegressionOptions | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for nonlinear regression models, which capture complex, nonlinear relationships between input features and output variables using kernel functions and iterative optimization.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_NonLinearRegressionOptions.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.NonLinearRegressionOptions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.NonLinearRegressionOptions">
+
+
+
+  <h1 id="AiDotNet_Models_Options_NonLinearRegressionOptions" data-uid="AiDotNet.Models.Options.NonLinearRegressionOptions" class="text-break">
+Class NonLinearRegressionOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NonLinearRegressionOptions.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for nonlinear regression models, which capture complex, nonlinear relationships
+between input features and output variables using kernel functions and iterative optimization.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class NonLinearRegressionOptions : ModelOptions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><span class="xref">NonLinearRegressionOptions</span></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Models.Options.GaussianProcessRegressionOptions.html">GaussianProcessRegressionOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.KNearestNeighborsOptions.html">KNearestNeighborsOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.KernelRidgeRegressionOptions.html">KernelRidgeRegressionOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.LocallyWeightedRegressionOptions.html">LocallyWeightedRegressionOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.MultilayerPerceptronOptions-3.html">MultilayerPerceptronOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.NeuralNetworkRegressionOptions-3.html">NeuralNetworkRegressionOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RadialBasisFunctionOptions.html">RadialBasisFunctionOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.SplineRegressionOptions.html">SplineRegressionOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.SupportVectorRegressionOptions.html">SupportVectorRegressionOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.SymbolicRegressionOptions.html">SymbolicRegressionOptions</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_NonLinearRegressionOptions_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Nonlinear regression extends beyond the capabilities of linear models by allowing for curved or complex
+relationships between variables. This class encapsulates the parameters that control how nonlinear
+regression models are fitted to data, including convergence criteria, kernel selection, and kernel
+hyperparameters. These models are particularly valuable when data exhibits patterns that cannot be
+adequately represented by straight lines or hyperplanes, such as exponential growth, sinusoidal cycles,
+or interactions between variables. The kernel approach transforms the input space to a higher-dimensional
+feature space where complex relationships become more manageable.
+</p>
+<p><b>For Beginners:</b> Nonlinear regression is a technique for finding patterns in data that don't follow straight lines.
+<p>Imagine trying to predict house prices:</p>
+<ul>
+<li>Linear regression might assume each additional square foot adds a fixed amount to the price</li>
+<li>Nonlinear regression can capture more realistic patterns, like:
+<ul>
+<li>Diminishing returns (each extra square foot adds less value as houses get very large)</li>
+<li>Threshold effects (prices jump significantly once houses reach certain sizes)</li>
+<li>Interactions (extra bathrooms add more value in larger houses than in smaller ones)</li>
+</ul>
+</li>
+</ul>
+<p>This class provides settings that control:</p>
+<ul>
+<li>How precisely the model should fit the data</li>
+<li>How many attempts it should make to find the best fit</li>
+<li>What mathematical approach (kernel) to use for modeling curved relationships</li>
+</ul>
+<p>Nonlinear regression is powerful because it can discover complex patterns that simpler
+models miss, but it requires more careful configuration to work effectively. These options
+help you control that balance between flexibility and reliability.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_NonLinearRegressionOptions_Coef0_" data-uid="AiDotNet.Models.Options.NonLinearRegressionOptions.Coef0*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NonLinearRegressionOptions_Coef0" data-uid="AiDotNet.Models.Options.NonLinearRegressionOptions.Coef0">
+  Coef0
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NonLinearRegressionOptions.cs/#L241"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the coef0 parameter used in Polynomial and Sigmoid kernels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Coef0 { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The coef0 parameter, defaulting to 0.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NonLinearRegressionOptions_Coef0_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The coef0 parameter acts as an intercept term in Polynomial and Sigmoid kernels, allowing for more
+flexible modeling of certain nonlinear relationships. In the polynomial kernel, it influences the
+balance between higher-order and lower-order terms in the polynomial expansion. For the sigmoid kernel,
+it affects the horizontal shift of the sigmoid function. This parameter has no effect when using the
+RBF or linear kernels. The appropriate value depends on the specific characteristics of your data
+and the type of nonlinearity you aim to capture.
+</p>
+<p><b>For Beginners:</b> This setting provides an additional tuning parameter
+for Polynomial and Sigmoid kernels, affecting their shape and behavior.
+<p>The default value of 0.0:</p>
+<ul>
+<li>For Polynomial kernel: Determines the mix of different polynomial degrees</li>
+<li>For Sigmoid kernel: Controls the horizontal shift of the S-curve</li>
+<li>Has no effect when using RBF or Linear kernels</li>
+</ul>
+<p>Think of coef0 like an adjustment dial that:</p>
+<ul>
+<li>Changes the balance between simpler and more complex terms in polynomial models</li>
+<li>Shifts where the steepest part of the S-curve occurs in sigmoid models</li>
+</ul>
+<p>You might want to change this value if:</p>
+<ul>
+<li>You're specifically using Polynomial or Sigmoid kernels</li>
+<li>The default value isn't capturing the patterns in your data well</li>
+<li>You have prior knowledge about the polynomial terms or sigmoid shift that would work best</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>In polynomial kernels, a higher coef0 gives more weight to higher-order terms</li>
+<li>In sigmoid kernels, it shifts where the transition from low to high values occurs</li>
+</ul>
+<p>This is an advanced parameter that often requires experimentation alongside other
+kernel parameters to find the optimal configuration for your data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NonLinearRegressionOptions_Gamma_" data-uid="AiDotNet.Models.Options.NonLinearRegressionOptions.Gamma*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NonLinearRegressionOptions_Gamma" data-uid="AiDotNet.Models.Options.NonLinearRegressionOptions.Gamma">
+  Gamma
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NonLinearRegressionOptions.cs/#L201"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the gamma parameter that controls the influence range in RBF, Polynomial, and Sigmoid kernels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Gamma { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The gamma parameter, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NonLinearRegressionOptions_Gamma_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The gamma parameter is a critical hyperparameter that controls the "reach" or influence of each training
+example in kernel-based models. For the RBF kernel, gamma determines the width of the Gaussian function,
+with smaller values creating a broader influence (smoother decision boundary) and larger values creating
+a narrower influence (more complex, potentially overfitted boundary). In polynomial and sigmoid kernels,
+gamma acts as a scaling factor for the dot product of the input vectors. The optimal value depends on
+the scale of your features and the complexity of the underlying relationship.
+</p>
+<p><b>For Beginners:</b> This setting controls how "local" or "global" the influence
+of each data point should be in your model.
+<p>The default value of 1.0 provides a moderate influence range:</p>
+<ul>
+<li>For RBF kernel: How quickly similarity decreases with distance</li>
+<li>For Polynomial kernel: How strongly to scale the dot product</li>
+<li>For Sigmoid kernel: Affects the steepness of the S-curve</li>
+</ul>
+<p>Think of gamma like the focus setting on a camera:</p>
+<ul>
+<li>Low gamma (0.1): Wide focus, sees general trends but might miss details</li>
+<li>High gamma (10): Narrow focus, captures local details but might miss the big picture</li>
+</ul>
+<p>You might want a lower gamma value if:</p>
+<ul>
+<li>Your model seems to be overfitting (works well on training data but poorly on new data)</li>
+<li>You want to capture broader, smoother trends</li>
+<li>Your data points are sparsely distributed</li>
+</ul>
+<p>You might want a higher gamma value if:</p>
+<ul>
+<li>Your model seems to be underfitting (not capturing the complexity of your data)</li>
+<li>You need to model very localized patterns</li>
+<li>You have lots of training data to support a more complex model</li>
+</ul>
+<p>Finding the right gamma often requires experimentation, possibly using techniques
+like cross-validation to identify the value that generalizes best to new data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NonLinearRegressionOptions_KernelType_" data-uid="AiDotNet.Models.Options.NonLinearRegressionOptions.KernelType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NonLinearRegressionOptions_KernelType" data-uid="AiDotNet.Models.Options.NonLinearRegressionOptions.KernelType">
+  KernelType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NonLinearRegressionOptions.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the type of kernel function to use for transforming the input space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public KernelType KernelType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.KernelType.html">KernelType</a></dt>
+    <dd><p>The kernel type, defaulting to RBF (Radial Basis Function).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NonLinearRegressionOptions_KernelType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The kernel function is central to nonlinear regression as it implicitly maps input data into a
+higher-dimensional space where complex, nonlinear relationships can be modeled more effectively.
+Different kernel types have distinct properties and are suitable for different types of data patterns.
+The Radial Basis Function (RBF) kernel is the default as it works well for many problems by measuring
+similarity based on distance in the feature space. Other options include the linear kernel (for nearly
+linear relationships), polynomial kernel (for polynomial trends), and sigmoid kernel (for certain
+classification-like regression tasks).
+</p>
+<p><b>For Beginners:</b> This setting determines the mathematical approach
+used to model curved and complex relationships in your data.
+<p>The default RBF (Radial Basis Function) kernel:</p>
+<ul>
+<li>Works well for many types of smooth, nonlinear patterns</li>
+<li>Measures how similar data points are based on their distance</li>
+<li>Is versatile but requires tuning the Gamma parameter</li>
+</ul>
+<p>Think of kernels like different lenses for viewing your data:</p>
+<ul>
+<li>RBF: General-purpose zoom lens that works for most scenes</li>
+<li>Linear: Simple lens for straight-line relationships</li>
+<li>Polynomial: Special lens for capturing wave-like or curved patterns</li>
+<li>Sigmoid: Lens that creates S-curved patterns</li>
+</ul>
+<p>You might want to try different kernels if:</p>
+<ul>
+<li>RBF isn't capturing your data patterns well</li>
+<li>You have prior knowledge about the shape of relationships in your data</li>
+<li>You want to experiment with different approaches</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>For data with polynomial trends (like cubic growth), try the Polynomial kernel</li>
+<li>For data with nearly linear relationships, try the Linear kernel</li>
+<li>For data with complex, localized patterns, stick with RBF</li>
+</ul>
+<p>The kernel choice is one of the most important decisions for nonlinear regression
+as it fundamentally determines what kinds of patterns your model can learn.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NonLinearRegressionOptions_MaxIterations_" data-uid="AiDotNet.Models.Options.NonLinearRegressionOptions.MaxIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NonLinearRegressionOptions_MaxIterations" data-uid="AiDotNet.Models.Options.NonLinearRegressionOptions.MaxIterations">
+  MaxIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NonLinearRegressionOptions.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of iterations allowed for the optimization algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of iterations, defaulting to 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NonLinearRegressionOptions_MaxIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter sets an upper limit on how many iterations the optimization algorithm will perform
+when fitting the nonlinear regression model. Each iteration adjusts the model parameters to better
+fit the training data. The algorithm may terminate earlier if convergence is achieved based on
+the tolerance value. The appropriate number of iterations depends on the complexity of the nonlinear
+relationship, the amount of data, and the initial parameter values. Very complex models or noisy
+data may require more iterations to reach convergence.
+</p>
+<p><b>For Beginners:</b> This setting controls how many attempts the algorithm
+makes to improve its solution before giving up.
+<p>The default value of 1000 means:</p>
+<ul>
+<li>The algorithm will try up to 1000 times to find the best solution</li>
+<li>It might stop earlier if it finds a good enough answer (based on the Tolerance setting)</li>
+</ul>
+<p>Think of it like trying to find the bottom of a valley while blindfolded:</p>
+<ul>
+<li>Each iteration is taking a step based on how steep the ground feels</li>
+<li>You need enough steps to reach the bottom, but not so many that you waste effort</li>
+</ul>
+<p>You might want more iterations (like 5000) if:</p>
+<ul>
+<li>Your data has complex patterns that are hard to fit</li>
+<li>You notice the model is still improving significantly at 1000 iterations</li>
+<li>You have more computing resources and want the best possible result</li>
+</ul>
+<p>You might want fewer iterations (like 500) if:</p>
+<ul>
+<li>You need faster training times</li>
+<li>Your data has relatively simple nonlinear patterns</li>
+<li>The model converges quickly anyway</li>
+</ul>
+<p>In practice, it's good to start with the default and adjust based on whether the model
+has converged properly by the end of training.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NonLinearRegressionOptions_PolynomialDegree_" data-uid="AiDotNet.Models.Options.NonLinearRegressionOptions.PolynomialDegree*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NonLinearRegressionOptions_PolynomialDegree" data-uid="AiDotNet.Models.Options.NonLinearRegressionOptions.PolynomialDegree">
+  PolynomialDegree
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NonLinearRegressionOptions.cs/#L284"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the degree of the polynomial when using the Polynomial kernel type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int PolynomialDegree { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The polynomial degree, defaulting to 3.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NonLinearRegressionOptions_PolynomialDegree_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter determines the highest power used in the polynomial kernel function, directly controlling
+the complexity and flexibility of the model. A higher degree allows the model to capture more complex,
+higher-order relationships but increases the risk of overfitting and computational complexity. This
+parameter is only relevant when KernelType is set to Polynomial. A degree of 1 makes the polynomial
+kernel equivalent to a linear kernel, while degrees of 2 or 3 are common choices for capturing
+quadratic or cubic relationships, respectively.
+</p>
+<p><b>For Beginners:</b> This setting controls the highest power used when
+creating polynomial features, but only applies when using the Polynomial kernel.
+<p>The default value of 3 means:</p>
+<ul>
+<li>The polynomial kernel will include terms up to x³ (cubic)</li>
+<li>This can model S-shaped curves and more complex patterns than linear models</li>
+</ul>
+<p>Think of the polynomial degree like choosing how flexible your curve can be:</p>
+<ul>
+<li>Degree 1: Can only fit straight lines (equivalent to linear regression)</li>
+<li>Degree 2: Can fit parabolas (U-shaped curves)</li>
+<li>Degree 3: Can fit cubic functions (S-shaped curves)</li>
+<li>Higher degrees: Can fit increasingly wiggly, complex curves</li>
+</ul>
+<p>You might want a higher degree (like 4 or 5) if:</p>
+<ul>
+<li>Your data has very complex, oscillating patterns</li>
+<li>You have enough data to support a more complex model</li>
+<li>Lower degrees aren't capturing important trends</li>
+</ul>
+<p>You might want a lower degree (like 2) if:</p>
+<ul>
+<li>You want a simpler, more interpretable model</li>
+<li>You're concerned about overfitting</li>
+<li>You have limited training data</li>
+</ul>
+<p>Remember: This setting has no effect unless you're using the Polynomial kernel type.
+Higher degrees give more flexibility but increase the risk of overfitting and
+computational complexity.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NonLinearRegressionOptions_Tolerance_" data-uid="AiDotNet.Models.Options.NonLinearRegressionOptions.Tolerance*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NonLinearRegressionOptions_Tolerance" data-uid="AiDotNet.Models.Options.NonLinearRegressionOptions.Tolerance">
+  Tolerance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NonLinearRegressionOptions.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the convergence tolerance that determines when the optimization algorithm should stop.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Tolerance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The convergence tolerance, defaulting to 0.001 (1e-3).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NonLinearRegressionOptions_Tolerance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter defines the threshold for determining when the optimization has converged. The algorithm
+will stop when the improvement in the objective function (typically the error or loss) between consecutive
+iterations falls below this tolerance value. A smaller tolerance requires more precision in the parameter
+estimates, potentially leading to better model performance but requiring more iterations. A larger tolerance
+allows for earlier termination but might result in less optimal parameter estimates. The appropriate value
+depends on the scale of your target variable and the required precision of your predictions.
+</p>
+<p><b>For Beginners:</b> This setting determines how much improvement between
+steps is considered "good enough" to stop the algorithm.
+<p>The default value of 0.001 (one-thousandth) means:</p>
+<ul>
+<li>If an iteration improves the solution by less than 0.001</li>
+<li>The algorithm will decide it's &quot;close enough&quot; and stop</li>
+</ul>
+<p>Continuing with our valley analogy:</p>
+<ul>
+<li>If each step only gets you a tiny bit lower (less than the tolerance)</li>
+<li>You decide you're basically at the bottom and stop walking</li>
+</ul>
+<p>You might want a smaller value (like 0.0001) if:</p>
+<ul>
+<li>You need very precise predictions</li>
+<li>You have plenty of computing resources</li>
+<li>Small differences in accuracy matter in your application</li>
+</ul>
+<p>You might want a larger value (like 0.01) if:</p>
+<ul>
+<li>You want faster training</li>
+<li>You're doing exploratory analysis</li>
+<li>Ultra-precise parameters aren't necessary for your needs</li>
+</ul>
+<p>Finding the right tolerance is about balancing precision with computational efficiency -
+too strict and training takes forever, too loose and you might get suboptimal results.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NonLinearRegressionOptions.cs/#L36" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

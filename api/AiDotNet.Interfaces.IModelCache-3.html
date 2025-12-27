@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IModelCache&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IModelCache&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines a caching mechanism for storing and retrieving optimization step data during model training.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IModelCache_3.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IModelCache%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IModelCache`3">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IModelCache_3" data-uid="AiDotNet.Interfaces.IModelCache`3" class="text-break">
+Interface IModelCache&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IModelCache.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines a caching mechanism for storing and retrieving optimization step data during model training.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IModelCache&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used in the optimization calculations (e.g., float, double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IModelCache_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>This interface provides methods to store, retrieve, and clear intermediate calculation results
+during the training process of machine learning models. Caching these results can significantly
+improve performance by avoiding redundant calculations.</p>
+<p><b>For Beginners:</b> Think of model caching like saving your progress in a video game.</p>
+<p>When training machine learning models, the computer performs many calculations in steps:</p>
+<ul>
+<li>These calculations can be time-consuming and resource-intensive</li>
+<li>By saving (caching) the results of each step, we avoid having to redo calculations</li>
+<li>This makes the training process much faster, especially when:
+<ul>
+<li>You're experimenting with different model settings</li>
+<li>You need to pause and resume training</li>
+<li>You want to analyze intermediate results</li>
+</ul>
+</li>
+</ul>
+<p>For example, imagine you're baking a complex cake that requires multiple stages:</p>
+<ul>
+<li>Instead of starting from scratch each time you make a mistake</li>
+<li>You could save the batter at different stages</li>
+<li>If something goes wrong, you can go back to a saved point rather than starting over</li>
+</ul>
+<p>This interface provides the methods needed to implement this &quot;save progress&quot; functionality
+for machine learning models.</p>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IModelCache_3_CacheStepData_" data-uid="AiDotNet.Interfaces.IModelCache`3.CacheStepData*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IModelCache_3_CacheStepData_System_String_AiDotNet_Models_OptimizationStepData__0__1__2__" data-uid="AiDotNet.Interfaces.IModelCache`3.CacheStepData(System.String,AiDotNet.Models.OptimizationStepData{`0,`1,`2})">
+  CacheStepData(string, OptimizationStepData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IModelCache.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Stores optimization step data in the cache with the specified key.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void CacheStepData(string key, OptimizationStepData&lt;T, TInput, TOutput&gt; stepData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>key</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A unique identifier to associate with this cached data.</p>
+</dd>
+    <dt><code>stepData</code> <a class="xref" href="AiDotNet.Models.OptimizationStepData-3.html">OptimizationStepData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The optimization step data to cache.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IModelCache_3_CacheStepData_System_String_AiDotNet_Models_OptimizationStepData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method saves the current state and calculations from an optimization step
+so they can be retrieved later, avoiding the need to recalculate them.</p>
+<p><b>For Beginners:</b> This is like saving your work to a file on your computer.</p>
+<p>During model training:</p>
+<ul>
+<li>The model performs complex calculations at each step</li>
+<li>This method lets you save those calculations with a name (the key)</li>
+<li>Later, you can retrieve these saved calculations using that name</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>You might save the model's state after processing each batch of data</li>
+<li>You could use keys like &quot;batch_1&quot;, &quot;batch_2&quot;, etc.</li>
+<li>If you save with a key that already exists, the new data typically replaces the old data</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Checkpointing: saving progress so you can resume if something crashes</li>
+<li>Efficiency: avoiding repeating expensive calculations</li>
+<li>Analysis: keeping track of how your model changes during training</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IModelCache_3_ClearCache_" data-uid="AiDotNet.Interfaces.IModelCache`3.ClearCache*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IModelCache_3_ClearCache" data-uid="AiDotNet.Interfaces.IModelCache`3.ClearCache">
+  ClearCache()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IModelCache.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Removes all cached optimization step data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void ClearCache()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IModelCache_3_ClearCache_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method deletes all previously cached optimization data, freeing up memory
+and ensuring that future retrievals will start fresh.</p>
+<p><b>For Beginners:</b> This is like emptying your recycle bin or clearing your browser cache.</p>
+<p>Sometimes you need to start fresh:</p>
+<ul>
+<li>When you've made significant changes to your model</li>
+<li>When cached data is no longer relevant</li>
+<li>When you need to free up memory</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>After completing a full training run, you might clear the cache</li>
+<li>Before starting training with a new dataset, you'd clear old cached results</li>
+<li>If you change your model's structure, old cached calculations become invalid</li>
+</ul>
+<p>Clearing the cache:</p>
+<ul>
+<li>Frees up memory that was being used to store cached data</li>
+<li>Ensures you don't accidentally use outdated calculations</li>
+<li>Gives you a clean slate for a new training session</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IModelCache_3_GenerateCacheKey_" data-uid="AiDotNet.Interfaces.IModelCache`3.GenerateCacheKey*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IModelCache_3_GenerateCacheKey_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__" data-uid="AiDotNet.Interfaces.IModelCache`3.GenerateCacheKey(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Models.Inputs.OptimizationInputData{`0,`1,`2})">
+  GenerateCacheKey(IFullModel&lt;T, TInput, TOutput&gt;, OptimizationInputData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IModelCache.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a deterministic cache key based on the solution model and input data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string GenerateCacheKey(IFullModel&lt;T, TInput, TOutput&gt; solution, OptimizationInputData&lt;T, TInput, TOutput&gt; inputData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>solution</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model solution to generate a key for.</p>
+</dd>
+    <dt><code>inputData</code> <a class="xref" href="AiDotNet.Models.Inputs.OptimizationInputData-3.html">OptimizationInputData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The input data to include in the key generation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A deterministic string key for caching (typically a hex-encoded cryptographic hash).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IModelCache_3_GenerateCacheKey_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a deterministic identifier (key) based on the current model state and input data.
+The same inputs and model state will always produce the same key, allowing consistent caching
+across process restarts and different machines.
+</p>
+<p>
+<b>Implementation Requirements:</b>
+- Must use deterministic hashing (e.g., SHA-256) instead of GetHashCode()
+- Must serialize parameters in a stable, ordered format
+- Must handle null values consistently
+- Must use culture-invariant string formatting for numbers
+- Keys must remain valid across process restarts
+</p>
+<p>
+<b>For Beginners:</b> This is like creating a unique file name based on the contents
+that stays the same forever, even if you restart your computer or run the program again.
+</p>
+<p>
+When training a model:
+- Each combination of model parameters and input data produces different results
+- This method generates a unique "fingerprint" for each combination using cryptographic hashing
+- The fingerprint is used to save and retrieve cached results persistently
+</p>
+<p>
+For example:
+- Two identical models with identical inputs will get the same key, always
+- The cached result can be retrieved using this key instead of recalculating
+- This saves time by avoiding redundant calculations
+- Persisted caches remain valid even after restarting the application
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IModelCache_3_GetCachedStepData_" data-uid="AiDotNet.Interfaces.IModelCache`3.GetCachedStepData*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IModelCache_3_GetCachedStepData_System_String_" data-uid="AiDotNet.Interfaces.IModelCache`3.GetCachedStepData(System.String)">
+  GetCachedStepData(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IModelCache.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves previously cached optimization step data associated with the specified key.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">OptimizationStepData&lt;T, TInput, TOutput&gt;? GetCachedStepData(string key)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>key</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A unique identifier for the cached data you want to retrieve.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.OptimizationStepData-3.html">OptimizationStepData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The cached optimization step data if found; otherwise, null.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IModelCache_3_GetCachedStepData_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method looks up and returns cached calculation results from a previous optimization step.
+If no data exists for the given key, it returns null.</p>
+<p><b>For Beginners:</b> This is like opening a saved file from your computer.</p>
+<p>When training a machine learning model:</p>
+<ul>
+<li>The model goes through many steps of calculations</li>
+<li>Each step's results can be saved with a unique name (the key)</li>
+<li>This method lets you retrieve those saved results using that name</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>You might save the model's state after every 100 training iterations</li>
+<li>Later, you can retrieve the state from iteration 500 by using its key</li>
+<li>If you request data that hasn't been saved, you'll get null (nothing)</li>
+</ul>
+<p>This is useful when you want to:</p>
+<ul>
+<li>Compare the model's performance at different stages</li>
+<li>Resume training from a specific point</li>
+<li>Analyze how the model evolved during training</li>
+</ul>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IModelCache.cs/#L30" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

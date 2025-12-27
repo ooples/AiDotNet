@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CMAESOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CMAESOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the CMA-ES (Covariance Matrix Adaptation Evolution Strategy) optimization algorithm.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_CMAESOptimizerOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.CMAESOptimizerOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.CMAESOptimizerOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_CMAESOptimizerOptions_3" data-uid="AiDotNet.Models.Options.CMAESOptimizerOptions`3" class="text-break">
+Class CMAESOptimizerOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/CMAESOptimizerOptions.cs/#L20"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the CMA-ES (Covariance Matrix Adaptation Evolution Strategy) optimization algorithm.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class CMAESOptimizerOptions&lt;T, TInput, TOutput&gt; : GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The type of data being optimized.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html">GeneticAlgorithmOptimizerOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">CMAESOptimizerOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MaxGenerations">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxGenerations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_PopulationSize">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.PopulationSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MinPopulationSize">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.MinPopulationSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MaxPopulationSize">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxPopulationSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_CrossoverRate">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.CrossoverRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MutationRate">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.MutationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_CrossoverRateDecay">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.CrossoverRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_CrossoverRateIncrease">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.CrossoverRateIncrease</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MinCrossoverRate">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.MinCrossoverRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MaxCrossoverRate">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxCrossoverRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MutationRateDecay">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.MutationRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MutationRateIncrease">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.MutationRateIncrease</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MinMutationRate">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.MinMutationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MaxMutationRate">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxMutationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxIterations">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseEarlyStopping">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseEarlyStopping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_EarlyStoppingPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.EarlyStoppingPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_BadFitPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.BadFitPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinimumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinimumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaximumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaximumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseExpressionTrees">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseExpressionTrees</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_LearningRateDecay">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.LearningRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumIncreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumIncreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumDecreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumDecreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_Tolerance">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_OptimizationMode">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.OptimizationMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentScale">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentScale</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_SignFlipProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.SignFlipProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FeatureSelectionProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FeatureSelectionProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_PredictionOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.PredictionOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelStatsOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelStatsOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelEvaluator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitDetector">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitDetector</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitnessCalculator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitnessCalculator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelCache">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_CreateDefaults_AiDotNet_Enums_OptimizerType_">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.CreateDefaults(OptimizerType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_CMAESOptimizerOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+CMA-ES is a powerful evolutionary algorithm for difficult non-linear, non-convex optimization problems.
+It adapts its search strategy during optimization by learning dependencies between variables and
+step sizes, making it effective for complex problems where other methods might fail.
+</p>
+<p><b>For Beginners:</b> CMA-ES is like a smart search algorithm that tries to find the best solution 
+to a complex problem. Imagine you're looking for the lowest point in a mountain range with fog everywhere - 
+you can only see what's right around you. CMA-ES works by sending out multiple "scouts" (solutions) in different 
+directions, then learning from their findings to decide where to search next. It's particularly good at handling 
+tricky landscapes where simple "always go downhill" approaches would get stuck. This class lets you configure 
+how that search process works.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_CMAESOptimizerOptions_3_InitialStepSize_" data-uid="AiDotNet.Models.Options.CMAESOptimizerOptions`3.InitialStepSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_CMAESOptimizerOptions_3_InitialStepSize" data-uid="AiDotNet.Models.Options.CMAESOptimizerOptions`3.InitialStepSize">
+  InitialStepSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/CMAESOptimizerOptions.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial step size that controls how far the algorithm explores from the starting point.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialStepSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The initial step size as a decimal, defaulting to 0.5.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_CMAESOptimizerOptions_3_InitialStepSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The step size determines the initial spread of the search distribution.
+A larger value encourages more exploration early in the search process,
+while a smaller value focuses on exploitation near the starting point.
+</p>
+<p><b>For Beginners:</b> This setting determines how big the initial "steps" are when the algorithm 
+starts searching. The default (0.5) means it will look at solutions that are moderately different from 
+your starting point. If you set this higher (like 2.0), it will explore more widely at first, which is 
+good if you think the best solution might be far from your starting point. If you set it lower (like 0.1), 
+it will focus more closely around your starting point, which works well if you're already close to the 
+optimal solution.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_CMAESOptimizerOptions_3_MaxGenerations_" data-uid="AiDotNet.Models.Options.CMAESOptimizerOptions`3.MaxGenerations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_CMAESOptimizerOptions_3_MaxGenerations" data-uid="AiDotNet.Models.Options.CMAESOptimizerOptions`3.MaxGenerations">
+  MaxGenerations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/CMAESOptimizerOptions.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of generations (iterations) the algorithm will run.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxGenerations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of generations, defaulting to 100.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_CMAESOptimizerOptions_3_MaxGenerations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter limits the total computational budget of the optimization process.
+The algorithm will stop either when it converges or when it reaches this number of generations.
+</p>
+<p><b>For Beginners:</b> This is simply how many rounds of optimization the algorithm will perform 
+before stopping. Each generation involves creating and evaluating multiple solutions, then learning from 
+the results to improve the next generation. The default (100) is enough for many problems, but complex 
+problems might need more generations to find good solutions. If the algorithm finds an excellent solution 
+earlier, it may stop before reaching this limit.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_CMAESOptimizerOptions_3_PopulationSize_" data-uid="AiDotNet.Models.Options.CMAESOptimizerOptions`3.PopulationSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_CMAESOptimizerOptions_3_PopulationSize" data-uid="AiDotNet.Models.Options.CMAESOptimizerOptions`3.PopulationSize">
+  PopulationSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/CMAESOptimizerOptions.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of candidate solutions evaluated in each generation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int PopulationSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The population size, defaulting to a formula based on problem dimensionality: 4 + (int)(3 * Math.Log(100)).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_CMAESOptimizerOptions_3_PopulationSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The population size affects both the quality of solutions and computational cost.
+Larger populations provide more exploration but require more function evaluations.
+The default formula (4 + 3*ln(D)) is a common heuristic where D is the problem dimension.
+</p>
+<p><b>For Beginners:</b> This setting controls how many different potential solutions the algorithm 
+tries in each round (or "generation"). The default value is calculated based on a formula that works well 
+for most problems. Think of it like sending out search parties - more parties can cover more ground but 
+require more resources. For simple problems, you might reduce this value to speed things up, while for 
+complex problems with many variables, you might increase it to find better solutions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_CMAESOptimizerOptions_3_StopTolerance_" data-uid="AiDotNet.Models.Options.CMAESOptimizerOptions`3.StopTolerance*"></a>
+
+  <h3 id="AiDotNet_Models_Options_CMAESOptimizerOptions_3_StopTolerance" data-uid="AiDotNet.Models.Options.CMAESOptimizerOptions`3.StopTolerance">
+  StopTolerance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/CMAESOptimizerOptions.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the convergence threshold that determines when the algorithm should stop.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double StopTolerance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The stop tolerance as a decimal, defaulting to 1e-12 (0.000000000001).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_CMAESOptimizerOptions_3_StopTolerance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The algorithm stops when the change in the best solution falls below this threshold,
+indicating that further optimization is unlikely to yield significant improvements.
+</p>
+<p><b>For Beginners:</b> This setting determines how precise the algorithm needs to be before it 
+decides it's found a good enough solution and stops. The default value (0.000000000001) is very small, 
+meaning the algorithm will keep going until it's making virtually no progress. Think of it like deciding 
+when to stop polishing a surface - at some point, more polishing doesn't make a noticeable difference. 
+You might increase this value (making it less strict) if you want faster results and don't need the 
+absolute best solution.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/CMAESOptimizerOptions.cs/#L20" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

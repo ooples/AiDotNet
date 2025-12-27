@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IMultiScalePDE&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IMultiScalePDE&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the interface for multi-scale Partial Differential Equations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_PhysicsInformed_Interfaces_IMultiScalePDE_1.md&amp;value=---%0Auid%3A%20AiDotNet.PhysicsInformed.Interfaces.IMultiScalePDE%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.PhysicsInformed.Interfaces.IMultiScalePDE`1">
+
+
+
+  <h1 id="AiDotNet_PhysicsInformed_Interfaces_IMultiScalePDE_1" data-uid="AiDotNet.PhysicsInformed.Interfaces.IMultiScalePDE`1" class="text-break">
+Interface IMultiScalePDE&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/Interfaces/IMultiScalePDE.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.PhysicsInformed.html">PhysicsInformed</a>.<a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the interface for multi-scale Partial Differential Equations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IMultiScalePDE&lt;T&gt; : IPDESpecification&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type (float, double, etc.) used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.IPDESpecification-1.html#AiDotNet_PhysicsInformed_Interfaces_IPDESpecification_1_ComputeResidual__0____0___AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0__">IPDESpecification&lt;T&gt;.ComputeResidual(T[], T[], PDEDerivatives&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.IPDESpecification-1.html#AiDotNet_PhysicsInformed_Interfaces_IPDESpecification_1_InputDimension">IPDESpecification&lt;T&gt;.InputDimension</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.IPDESpecification-1.html#AiDotNet_PhysicsInformed_Interfaces_IPDESpecification_1_OutputDimension">IPDESpecification&lt;T&gt;.OutputDimension</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.IPDESpecification-1.html#AiDotNet_PhysicsInformed_Interfaces_IPDESpecification_1_Name">IPDESpecification&lt;T&gt;.Name</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_PhysicsInformed_Interfaces_IMultiScalePDE_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>For Beginners:
+Multi-scale PDEs describe phenomena that occur across multiple length or time scales.
+Examples include:</p>
+<ul>
+<li>Turbulent flows (large eddies to small vortices)</li>
+<li>Materials science (atomic to macroscopic behavior)</li>
+<li>Climate modeling (local weather to global patterns)</li>
+<li>Biological systems (molecular to tissue level)</li>
+</ul>
+<p>Why Multi-scale is Challenging:
+Traditional single-scale methods struggle because:</p>
+<ol>
+<li>Fine scale requires tiny mesh elements (expensive)</li>
+<li>Coarse scale misses important details</li>
+<li>Different scales have different time dynamics</li>
+</ol>
+<p>Multi-scale Solution Strategy:</p>
+<ol>
+<li>Decompose solution into scale components: u = u_coarse + u_fine</li>
+<li>Learn each scale with appropriate resolution</li>
+<li>Couple scales through cross-scale interactions</li>
+<li>Use appropriate loss weights for each scale</li>
+</ol>
+<p>Key Concepts:</p>
+<ul>
+<li>Characteristic Length Scale: The typical size of features at each scale</li>
+<li>Scale Separation: When scales are well-separated (e.g., 10x ratio)</li>
+<li>Cross-scale Coupling: How different scales interact</li>
+<li>Homogenization: Averaging fine-scale behavior for coarse-scale equations</li>
+</ul>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_PhysicsInformed_Interfaces_IMultiScalePDE_1_NumberOfScales_" data-uid="AiDotNet.PhysicsInformed.Interfaces.IMultiScalePDE`1.NumberOfScales*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_Interfaces_IMultiScalePDE_1_NumberOfScales" data-uid="AiDotNet.PhysicsInformed.Interfaces.IMultiScalePDE`1.NumberOfScales">
+  NumberOfScales
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/Interfaces/IMultiScalePDE.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of scales in the problem.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int NumberOfScales { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PhysicsInformed_Interfaces_IMultiScalePDE_1_NumberOfScales_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This indicates how many distinct length/time scales are present.
+For example:</p>
+<ul>
+<li>2 scales: macro + micro (common in composite materials)</li>
+<li>3 scales: macro + meso + micro (turbulence modeling)</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_Interfaces_IMultiScalePDE_1_ScaleCharacteristicLengths_" data-uid="AiDotNet.PhysicsInformed.Interfaces.IMultiScalePDE`1.ScaleCharacteristicLengths*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_Interfaces_IMultiScalePDE_1_ScaleCharacteristicLengths" data-uid="AiDotNet.PhysicsInformed.Interfaces.IMultiScalePDE`1.ScaleCharacteristicLengths">
+  ScaleCharacteristicLengths
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/Interfaces/IMultiScalePDE.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the characteristic length scales of the problem.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T[] ScaleCharacteristicLengths { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt>T[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PhysicsInformed_Interfaces_IMultiScalePDE_1_ScaleCharacteristicLengths_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+Characteristic lengths define the &quot;size&quot; of each scale.
+Example for a composite material:</p>
+<ul>
+<li>ScaleCharacteristics[0] = 1.0 (macroscopic, meters)</li>
+<li>ScaleCharacteristics[1] = 0.001 (fiber scale, millimeters)</li>
+<li>ScaleCharacteristics[2] = 0.000001 (molecular scale, micrometers)</li>
+</ul>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_PhysicsInformed_Interfaces_IMultiScalePDE_1_ComputeScaleCoupling_" data-uid="AiDotNet.PhysicsInformed.Interfaces.IMultiScalePDE`1.ComputeScaleCoupling*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_Interfaces_IMultiScalePDE_1_ComputeScaleCoupling_System_Int32_System_Int32__0____0____0___AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0__AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0__" data-uid="AiDotNet.PhysicsInformed.Interfaces.IMultiScalePDE`1.ComputeScaleCoupling(System.Int32,System.Int32,`0[],`0[],`0[],AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives{`0},AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives{`0})">
+  ComputeScaleCoupling(int, int, T[], T[], T[], PDEDerivatives&lt;T&gt;, PDEDerivatives&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/Interfaces/IMultiScalePDE.cs/#L95"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the coupling term between two scales.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T ComputeScaleCoupling(int coarseIndex, int fineIndex, T[] inputs, T[] coarseOutputs, T[] fineOutputs, PDEDerivatives&lt;T&gt; coarseDerivatives, PDEDerivatives&lt;T&gt; fineDerivatives)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>coarseIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Index of the coarser scale.</p>
+</dd>
+    <dt><code>fineIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Index of the finer scale.</p>
+</dd>
+    <dt><code>inputs</code> T[]</dt>
+    <dd><p>The coordinates.</p>
+</dd>
+    <dt><code>coarseOutputs</code> T[]</dt>
+    <dd><p>Solution at the coarse scale.</p>
+</dd>
+    <dt><code>fineOutputs</code> T[]</dt>
+    <dd><p>Solution at the fine scale.</p>
+</dd>
+    <dt><code>coarseDerivatives</code> <a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives-1.html">PDEDerivatives</a>&lt;T&gt;</dt>
+    <dd><p>Derivatives at the coarse scale.</p>
+</dd>
+    <dt><code>fineDerivatives</code> <a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives-1.html">PDEDerivatives</a>&lt;T&gt;</dt>
+    <dd><p>Derivatives at the fine scale.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The coupling residual (should be zero when scales are properly coupled).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PhysicsInformed_Interfaces_IMultiScalePDE_1_ComputeScaleCoupling_System_Int32_System_Int32__0____0____0___AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0__AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+Coupling terms ensure consistency between scales.
+For example, in homogenization:</p>
+<ul>
+<li>Coarse scale &quot;sees&quot; averaged effect of fine scale</li>
+<li>Fine scale is modulated by coarse scale gradient</li>
+</ul>
+<p>Mathematically:</p>
+<ul>
+<li>Upscaling: Average fine-scale solution matches coarse-scale solution</li>
+<li>Downscaling: Fine-scale boundary conditions come from coarse-scale solution</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_Interfaces_IMultiScalePDE_1_ComputeScaleResidual_" data-uid="AiDotNet.PhysicsInformed.Interfaces.IMultiScalePDE`1.ComputeScaleResidual*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_Interfaces_IMultiScalePDE_1_ComputeScaleResidual_System_Int32__0____0___AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0__" data-uid="AiDotNet.PhysicsInformed.Interfaces.IMultiScalePDE`1.ComputeScaleResidual(System.Int32,`0[],`0[],AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives{`0})">
+  ComputeScaleResidual(int, T[], T[], PDEDerivatives&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/Interfaces/IMultiScalePDE.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the PDE residual at a specific scale.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T ComputeScaleResidual(int scaleIndex, T[] inputs, T[] outputs, PDEDerivatives&lt;T&gt; derivatives)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scaleIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the scale (0 = coarsest, increasing = finer).</p>
+</dd>
+    <dt><code>inputs</code> T[]</dt>
+    <dd><p>The spatial and temporal coordinates.</p>
+</dd>
+    <dt><code>outputs</code> T[]</dt>
+    <dd><p>The predicted solution values at this scale.</p>
+</dd>
+    <dt><code>derivatives</code> <a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives-1.html">PDEDerivatives</a>&lt;T&gt;</dt>
+    <dd><p>The derivatives of the solution at this scale.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The PDE residual at this scale.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_Interfaces_IMultiScalePDE_1_GetScaleLossWeight_" data-uid="AiDotNet.PhysicsInformed.Interfaces.IMultiScalePDE`1.GetScaleLossWeight*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_Interfaces_IMultiScalePDE_1_GetScaleLossWeight_System_Int32_" data-uid="AiDotNet.PhysicsInformed.Interfaces.IMultiScalePDE`1.GetScaleLossWeight(System.Int32)">
+  GetScaleLossWeight(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/Interfaces/IMultiScalePDE.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the recommended loss weight for each scale.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T GetScaleLossWeight(int scaleIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scaleIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The scale index.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Recommended weight for this scale's loss contribution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PhysicsInformed_Interfaces_IMultiScalePDE_1_GetScaleLossWeight_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+Different scales may need different loss weights because:</p>
+<ul>
+<li>Coarse scale dominates in magnitude</li>
+<li>Fine scale captures important details</li>
+<li>Imbalanced gradients can cause training difficulties</li>
+</ul>
+<p>Common strategies:</p>
+<ul>
+<li>Weight proportional to 1/scale_length (finer scales get higher weights)</li>
+<li>Adaptive weighting based on gradient magnitudes</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_Interfaces_IMultiScalePDE_1_GetScaleOutputDimension_" data-uid="AiDotNet.PhysicsInformed.Interfaces.IMultiScalePDE`1.GetScaleOutputDimension*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_Interfaces_IMultiScalePDE_1_GetScaleOutputDimension_System_Int32_" data-uid="AiDotNet.PhysicsInformed.Interfaces.IMultiScalePDE`1.GetScaleOutputDimension(System.Int32)">
+  GetScaleOutputDimension(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/Interfaces/IMultiScalePDE.cs/#L133"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the output dimension for a specific scale.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int GetScaleOutputDimension(int scaleIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scaleIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The scale index.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of output components at this scale.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PhysicsInformed_Interfaces_IMultiScalePDE_1_GetScaleOutputDimension_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Different scales may have different output dimensions.
+For example, in turbulence:</p>
+<ul>
+<li>Coarse scale: mean velocity (3 components)</li>
+<li>Fine scale: velocity fluctuations (3 components) + Reynolds stresses (6 components)</li>
+</ul>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/Interfaces/IMultiScalePDE.cs/#L36" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

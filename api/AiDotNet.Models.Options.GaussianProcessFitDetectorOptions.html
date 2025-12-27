@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GaussianProcessFitDetectorOptions | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GaussianProcessFitDetectorOptions | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the Gaussian Process Fit Detector, which analyzes model fit quality using Gaussian Process regression to detect overfitting, underfitting, and uncertainty issues.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_GaussianProcessFitDetectorOptions.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.GaussianProcessFitDetectorOptions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.GaussianProcessFitDetectorOptions">
+
+
+
+  <h1 id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions" data-uid="AiDotNet.Models.Options.GaussianProcessFitDetectorOptions" class="text-break">
+Class GaussianProcessFitDetectorOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GaussianProcessFitDetectorOptions.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the Gaussian Process Fit Detector, which analyzes model fit quality
+using Gaussian Process regression to detect overfitting, underfitting, and uncertainty issues.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class GaussianProcessFitDetectorOptions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">GaussianProcessFitDetectorOptions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Gaussian Process Fit Detector uses Gaussian Process regression to analyze the residuals (differences
+between predicted and actual values) of a model. By examining patterns in these residuals, it can
+detect issues like overfitting (model captures noise rather than true patterns), underfitting
+(model fails to capture important patterns), and areas of high uncertainty.
+</p>
+<p><b>For Beginners:</b> Think of this as a quality control tool that examines how well your
+model's predictions match the actual data. It uses a special technique called Gaussian Process
+regression that's particularly good at detecting patterns and measuring uncertainty. This detector
+looks at the errors your model makes and determines whether they seem random (which is good) or
+show patterns (which suggests problems). It can tell you if your model is too complex and memorizing
+the data instead of learning general patterns (overfitting), or if it's too simple and missing
+important patterns (underfitting). It can also identify areas where your model is particularly
+uncertain about its predictions.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_GoodFitThreshold_" data-uid="AiDotNet.Models.Options.GaussianProcessFitDetectorOptions.GoodFitThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_GoodFitThreshold" data-uid="AiDotNet.Models.Options.GaussianProcessFitDetectorOptions.GoodFitThreshold">
+  GoodFitThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GaussianProcessFitDetectorOptions.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for considering model fit as good based on normalized residual patterns.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double GoodFitThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The good fit threshold, defaulting to 0.1 (10%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_GoodFitThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When the normalized measure of pattern strength in residuals is below this threshold, the model
+is considered to have a good fit. Lower values indicate more random residuals, suggesting the
+model has captured the true patterns in the data without fitting to noise.
+</p>
+<p><b>For Beginners:</b> This setting determines when your model is considered to be "just right" -
+not overfitting or underfitting. With the default value of 0.1, if the detector finds that the
+patterns in your model's errors are less than 10% of what would be expected by chance, it considers
+your model to have a good fit. Think of it like checking if the mistakes your model makes appear
+random rather than systematic. Random errors suggest your model has learned the true patterns in
+the data without memorizing the noise. If you want to be more strict about what counts as a good fit,
+you could lower this threshold (e.g., to 0.05).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_HighUncertaintyThreshold_" data-uid="AiDotNet.Models.Options.GaussianProcessFitDetectorOptions.HighUncertaintyThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_HighUncertaintyThreshold" data-uid="AiDotNet.Models.Options.GaussianProcessFitDetectorOptions.HighUncertaintyThreshold">
+  HighUncertaintyThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GaussianProcessFitDetectorOptions.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for considering prediction uncertainty as high.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double HighUncertaintyThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The high uncertainty threshold, defaulting to 0.5 (50%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_HighUncertaintyThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When the normalized uncertainty measure exceeds this threshold, the model's predictions are
+considered to have high uncertainty. High uncertainty suggests the model lacks confidence in
+its predictions, which may indicate insufficient training data in certain regions or inherent
+complexity in the relationship being modeled.
+</p>
+<p><b>For Beginners:</b> This setting determines when your model's predictions are considered
+highly uncertain. With the default value of 0.5, if the uncertainty in predictions exceeds 50%
+of a reference level, the model is considered to have high uncertainty. Think of it like a weather
+forecast that says "temperatures between 65-90°F tomorrow" - it's giving a very wide range because
+it's not confident in a specific prediction. High uncertainty often occurs in regions where you have
+little training data or where the relationship is inherently complex and variable. If you want to be
+more sensitive to detecting uncertain predictions, you could lower this threshold.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_LengthScale_" data-uid="AiDotNet.Models.Options.GaussianProcessFitDetectorOptions.LengthScale*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_LengthScale" data-uid="AiDotNet.Models.Options.GaussianProcessFitDetectorOptions.LengthScale">
+  LengthScale
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GaussianProcessFitDetectorOptions.cs/#L147"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the length scale parameter for the Gaussian Process kernel.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LengthScale { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The length scale, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_LengthScale_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The length scale controls how rapidly the correlation between points decreases with distance.
+Smaller values make the Gaussian Process more sensitive to small-scale variations, while larger
+values make it focus on broader trends. This parameter affects how the detector interprets
+patterns in the residuals.
+</p>
+<p><b>For Beginners:</b> This setting controls how far the detector looks when identifying
+patterns in your model's errors. With the default value of 1.0, the detector uses a standard
+distance for determining whether nearby points should be related. Think of it like adjusting
+the focus on a camera - a smaller length scale (like 0.5) focuses on fine details and local
+patterns, while a larger length scale (like 2.0) blurs the details and focuses on broader trends.
+If your data has rapid changes or fine structure, a smaller length scale might be appropriate.
+If your data changes more gradually, a larger length scale might work better.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_LowUncertaintyThreshold_" data-uid="AiDotNet.Models.Options.GaussianProcessFitDetectorOptions.LowUncertaintyThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_LowUncertaintyThreshold" data-uid="AiDotNet.Models.Options.GaussianProcessFitDetectorOptions.LowUncertaintyThreshold">
+  LowUncertaintyThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GaussianProcessFitDetectorOptions.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for considering prediction uncertainty as low.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LowUncertaintyThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The low uncertainty threshold, defaulting to 0.1 (10%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_LowUncertaintyThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When the normalized uncertainty measure is below this threshold, the model's predictions are
+considered to have low uncertainty. Low uncertainty suggests the model is confident in its
+predictions, which is desirable if the predictions are also accurate.
+</p>
+<p><b>For Beginners:</b> This setting determines when your model's predictions are considered
+highly confident. With the default value of 0.1, if the uncertainty in predictions is less than
+10% of a reference level, the model is considered to have low uncertainty. Think of it like a
+weather forecast that confidently predicts exactly 78°F tomorrow - it's making a very specific
+prediction with little hedging. Low uncertainty is generally good if the predictions are also
+accurate, but can be problematic if the model is confidently wrong. If you want your model to be
+more cautious about claiming high confidence, you could lower this threshold.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_NoiseVariance_" data-uid="AiDotNet.Models.Options.GaussianProcessFitDetectorOptions.NoiseVariance*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_NoiseVariance" data-uid="AiDotNet.Models.Options.GaussianProcessFitDetectorOptions.NoiseVariance">
+  NoiseVariance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GaussianProcessFitDetectorOptions.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the assumed noise variance in the data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double NoiseVariance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The noise variance, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_NoiseVariance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter represents the expected level of random noise in the data. Higher values assume
+more inherent randomness, making the detector more tolerant of small residuals. Lower values
+assume less noise, making the detector more sensitive to even small patterns in the residuals.
+</p>
+<p><b>For Beginners:</b> This setting tells the detector how much random noise to expect in
+your data. With the default value of 0.1, the detector assumes a moderate level of random
+fluctuation in your measurements. Think of it like listening for a conversation in a noisy room -
+if you expect a lot of background noise (high noise variance), you won't be concerned by small
+variations in what you hear. If you expect silence (low noise variance), even tiny sounds will
+seem significant. If your data comes from precise measurements with little random error, you
+might lower this value. If your data is naturally noisy with lots of random fluctuation, you
+might increase it.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_OverfitThreshold_" data-uid="AiDotNet.Models.Options.GaussianProcessFitDetectorOptions.OverfitThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_OverfitThreshold" data-uid="AiDotNet.Models.Options.GaussianProcessFitDetectorOptions.OverfitThreshold">
+  OverfitThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GaussianProcessFitDetectorOptions.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for detecting overfitting based on residual patterns.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double OverfitThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The overfit threshold, defaulting to 0.2 (20%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_OverfitThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When the normalized measure of high-frequency pattern strength in residuals exceeds this threshold,
+the model is considered to be overfitting. Overfitting occurs when the model captures noise in the
+training data rather than just the underlying patterns, leading to poor generalization.
+</p>
+<p><b>For Beginners:</b> This setting helps identify when your model is too complex and has started
+memorizing the training data instead of learning general patterns. With the default value of 0.2,
+if the detector finds strong high-frequency patterns in your model's errors that exceed 20% of a
+reference level, it flags potential overfitting. Think of it like a student who memorizes specific
+test questions instead of understanding the concepts - they'll do well on questions they've seen before
+but poorly on new questions. An overfitting model shows distinctive error patterns because it's trying
+too hard to fit every little fluctuation in the training data. If you want to be more sensitive to
+overfitting, you could lower this threshold.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_UnderfitThreshold_" data-uid="AiDotNet.Models.Options.GaussianProcessFitDetectorOptions.UnderfitThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_UnderfitThreshold" data-uid="AiDotNet.Models.Options.GaussianProcessFitDetectorOptions.UnderfitThreshold">
+  UnderfitThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GaussianProcessFitDetectorOptions.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for detecting underfitting based on residual patterns.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double UnderfitThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The underfit threshold, defaulting to 0.3 (30%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GaussianProcessFitDetectorOptions_UnderfitThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When the normalized measure of low-frequency pattern strength in residuals exceeds this threshold,
+the model is considered to be underfitting. Underfitting occurs when the model is too simple to
+capture important patterns in the data, leading to systematic errors.
+</p>
+<p><b>For Beginners:</b> This setting helps identify when your model is too simple and missing
+important patterns in the data. With the default value of 0.3, if the detector finds strong
+low-frequency patterns in your model's errors that exceed 30% of a reference level, it flags
+potential underfitting. Think of it like using a straight line to approximate a curve - the line
+will systematically overestimate in some regions and underestimate in others, creating visible
+patterns in the errors. An underfitting model makes systematic mistakes because it lacks the
+complexity to capture the true relationships in the data. If you want to be more sensitive to
+underfitting, you could lower this threshold.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GaussianProcessFitDetectorOptions.cs/#L23" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

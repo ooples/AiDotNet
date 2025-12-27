@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class Ray&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class Ray&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a ray in 3D space for rendering.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_NeuralRadianceFields_Data_Ray_1.md&amp;value=---%0Auid%3A%20AiDotNet.NeuralRadianceFields.Data.Ray%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.NeuralRadianceFields.Data.Ray`1">
+
+
+
+  <h1 id="AiDotNet_NeuralRadianceFields_Data_Ray_1" data-uid="AiDotNet.NeuralRadianceFields.Data.Ray`1" class="text-break">
+Class Ray&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralRadianceFields/Data/Ray.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.NeuralRadianceFields.html">NeuralRadianceFields</a>.<a class="xref" href="AiDotNet.NeuralRadianceFields.Data.html">Data</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a ray in 3D space for rendering.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class Ray&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">Ray&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_NeuralRadianceFields_Data_Ray_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> A ray is a half-line starting from a point and extending in a direction.</p>
+<p>In computer graphics and rendering:</p>
+<ul>
+<li>Rays are cast from camera through each pixel</li>
+<li>They represent the path light travels</li>
+<li>We sample points along rays to determine what we see</li>
+</ul>
+<p>Ray equation:</p>
+<ul>
+<li>Point on ray = Origin + t * Direction</li>
+<li>t is the distance along the ray (t &gt;= 0)</li>
+<li>Origin: Starting point (usually camera position)</li>
+<li>Direction: Which way the ray points (unit vector)</li>
+</ul>
+<p>Example:</p>
+<ul>
+<li>Camera at origin (0, 0, 0)</li>
+<li>Looking down negative Z axis</li>
+<li>Ray for center pixel: Origin = (0, 0, 0), Direction = (0, 0, -1)</li>
+<li>Point at distance 5: (0, 0, 0) + 5 * (0, 0, -1) = (0, 0, -5)</li>
+</ul>
+<p>In NeRF:</p>
+<ul>
+<li>Each pixel corresponds to one ray</li>
+<li>We sample many points along each ray</li>
+<li>Query the neural network at each sample point</li>
+<li>Blend results to get final pixel color</li>
+</ul>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_NeuralRadianceFields_Data_Ray_1__ctor_" data-uid="AiDotNet.NeuralRadianceFields.Data.Ray`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_NeuralRadianceFields_Data_Ray_1__ctor_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___0__0_" data-uid="AiDotNet.NeuralRadianceFields.Data.Ray`1.#ctor(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0,`0)">
+  Ray(Vector&lt;T&gt;, Vector&lt;T&gt;, T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralRadianceFields/Data/Ray.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the Ray class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Ray(Vector&lt;T&gt; origin, Vector&lt;T&gt; direction, T nearBound, T farBound)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>origin</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The origin point of the ray.</p>
+</dd>
+    <dt><code>direction</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The direction vector of the ray (will be normalized).</p>
+</dd>
+    <dt><code>nearBound</code> <span class="xref">T</span></dt>
+    <dd><p>The near clipping distance.</p>
+</dd>
+    <dt><code>farBound</code> <span class="xref">T</span></dt>
+    <dd><p>The far clipping distance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_NeuralRadianceFields_Data_Ray_1_Direction_" data-uid="AiDotNet.NeuralRadianceFields.Data.Ray`1.Direction*"></a>
+
+  <h3 id="AiDotNet_NeuralRadianceFields_Data_Ray_1_Direction" data-uid="AiDotNet.NeuralRadianceFields.Data.Ray`1.Direction">
+  Direction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralRadianceFields/Data/Ray.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the direction vector of the ray (should be normalized).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Direction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralRadianceFields_Data_Ray_1_Direction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Which direction the ray travels (should be a unit vector).</p>
+<p>Format: Vector of length 3 representing (dX, dY, dZ) direction
+Important: Should be normalized (length = 1) for correct distance calculations</p>
+<p>Example directions:</p>
+<ul>
+<li>(0, 0, -1): Straight down negative Z axis</li>
+<li>(1, 0, 0): Straight along positive X axis</li>
+<li>(0.707, 0.707, 0): 45 degrees between X and Y axes (√2/2 ≈ 0.707)</li>
+</ul>
+<p>Normalization:</p>
+<ul>
+<li>Unnormalized: (3, 4, 0) has length 5</li>
+<li>Normalized: (0.6, 0.8, 0) has length 1</li>
+<li>Formula: direction / ||direction||</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralRadianceFields_Data_Ray_1_FarBound_" data-uid="AiDotNet.NeuralRadianceFields.Data.Ray`1.FarBound*"></a>
+
+  <h3 id="AiDotNet_NeuralRadianceFields_Data_Ray_1_FarBound" data-uid="AiDotNet.NeuralRadianceFields.Data.Ray`1.FarBound">
+  FarBound
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralRadianceFields/Data/Ray.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the far bound for sampling along the ray.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T FarBound { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralRadianceFields_Data_Ray_1_FarBound_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Farthest distance from origin where we stop sampling.</p>
+<p>Why we need this:</p>
+<ul>
+<li>Avoid sampling infinitely far away</li>
+<li>Skip empty space we know is behind the scene</li>
+<li>Limit computation to relevant region</li>
+</ul>
+<p>Example:</p>
+<ul>
+<li>Scene is contained within 10 units</li>
+<li>Set FarBound = 10.0</li>
+<li>Don't waste samples beyond where scene ends</li>
+</ul>
+<p>Typical values:</p>
+<ul>
+<li>Indoor scenes: 5.0 to 20.0</li>
+<li>Outdoor scenes: 50.0 to 1000.0</li>
+<li>Infinity can be approximated with very large value</li>
+</ul>
+<p>Together with NearBound:</p>
+<ul>
+<li>Samples distributed between NearBound and FarBound</li>
+<li>Example: Near=2, Far=10, NumSamples=8</li>
+<li>Sample at: 2, 3.14, 4.29, 5.43, 6.57, 7.71, 8.86, 10</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralRadianceFields_Data_Ray_1_NearBound_" data-uid="AiDotNet.NeuralRadianceFields.Data.Ray`1.NearBound*"></a>
+
+  <h3 id="AiDotNet_NeuralRadianceFields_Data_Ray_1_NearBound" data-uid="AiDotNet.NeuralRadianceFields.Data.Ray`1.NearBound">
+  NearBound
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralRadianceFields/Data/Ray.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the near bound for sampling along the ray.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T NearBound { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralRadianceFields_Data_Ray_1_NearBound_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Closest distance from origin where we start sampling.</p>
+<p>Why we need this:</p>
+<ul>
+<li>Avoid sampling too close to camera (numerical issues)</li>
+<li>Skip empty space we know is in front of the scene</li>
+<li>Optimize rendering by not wasting samples</li>
+</ul>
+<p>Example:</p>
+<ul>
+<li>Scene is all beyond 2 units from camera</li>
+<li>Set NearBound = 2.0</li>
+<li>Don't waste samples on empty space from 0 to 2</li>
+</ul>
+<p>Typical values:</p>
+<ul>
+<li>Indoor scenes: 0.1 to 1.0</li>
+<li>Outdoor scenes: 1.0 to 10.0</li>
+<li>Depends on scene scale</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralRadianceFields_Data_Ray_1_Origin_" data-uid="AiDotNet.NeuralRadianceFields.Data.Ray`1.Origin*"></a>
+
+  <h3 id="AiDotNet_NeuralRadianceFields_Data_Ray_1_Origin" data-uid="AiDotNet.NeuralRadianceFields.Data.Ray`1.Origin">
+  Origin
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralRadianceFields/Data/Ray.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the origin point of the ray.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Origin { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralRadianceFields_Data_Ray_1_Origin_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Where the ray starts (typically the camera position).</p>
+<p>Format: Vector of length 3 representing (X, Y, Z) coordinates</p>
+<p>Example:</p>
+<ul>
+<li>Camera ray: Origin might be (0, 0, 5) if camera is 5 units away</li>
+<li>Shadow ray: Origin might be surface point being tested for shadows</li>
+<li>Reflection ray: Origin is the point where light bounced</li>
+</ul>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_NeuralRadianceFields_Data_Ray_1_PointAt_" data-uid="AiDotNet.NeuralRadianceFields.Data.Ray`1.PointAt*"></a>
+
+  <h3 id="AiDotNet_NeuralRadianceFields_Data_Ray_1_PointAt__0_" data-uid="AiDotNet.NeuralRadianceFields.Data.Ray`1.PointAt(`0)">
+  PointAt(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralRadianceFields/Data/Ray.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes a point along the ray at a specific distance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; PointAt(T t)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>t</code> <span class="xref">T</span></dt>
+    <dd><p>The distance along the ray from the origin.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The 3D point at distance t along the ray.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralRadianceFields_Data_Ray_1_PointAt__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Calculate a specific point along the ray.</p>
+<p>Formula: Point = Origin + t * Direction</p>
+<p>Example:</p>
+<ul>
+<li>Origin = (0, 0, 0)</li>
+<li>Direction = (0, 0, -1)</li>
+<li>t = 5.0</li>
+<li>Result: (0, 0, 0) + 5.0 * (0, 0, -1) = (0, 0, -5)</li>
+</ul>
+<p>Uses:</p>
+<ul>
+<li>Generate sample points for volume rendering</li>
+<li>Find intersection points with surfaces</li>
+<li>Determine positions to query the radiance field</li>
+</ul>
+<p>Note: t should typically be between NearBound and FarBound</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralRadianceFields/Data/Ray.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

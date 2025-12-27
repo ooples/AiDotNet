@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ElasticNetRegressionOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ElasticNetRegressionOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Elastic Net Regression (combined L1 and L2 regularization).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_ElasticNetRegressionOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.ElasticNetRegressionOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.ElasticNetRegressionOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_ElasticNetRegressionOptions_1" data-uid="AiDotNet.Models.Options.ElasticNetRegressionOptions`1" class="text-break">
+Class ElasticNetRegressionOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ElasticNetRegressionOptions.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Elastic Net Regression (combined L1 and L2 regularization).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ElasticNetRegressionOptions&lt;T&gt; : RegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The data type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">ElasticNetRegressionOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_ElasticNetRegressionOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Elastic Net combines the penalties of Ridge (L2) and Lasso (L1) regression, providing
+a balance between feature selection (from L1) and handling correlated features (from L2).
+</p>
+<p>
+The objective function minimized is:
+(1/2n) * ||y - Xw||^2 + alpha * l1_ratio * ||w||_1 + alpha * (1 - l1_ratio) * ||w||^2 / 2
+</p>
+<p><b>For Beginners:</b> Elastic Net gives you the best of both Ridge and Lasso.
+<p>Lasso (L1) is great for feature selection but has a limitation: when features are
+highly correlated, it tends to arbitrarily pick one and zero out the others.</p>
+<p>Ridge (L2) handles correlated features well but doesn't do feature selection -
+all features keep non-zero coefficients.</p>
+<p>Elastic Net combines both:</p>
+<ul>
+<li>It can still set coefficients to zero (like Lasso) for feature selection</li>
+<li>It groups correlated features together (like Ridge) instead of picking one arbitrarily</li>
+</ul>
+<p>When to use Elastic Net:</p>
+<ul>
+<li>When you have correlated features and want feature selection</li>
+<li>When Lasso's behavior on correlated features is problematic</li>
+<li>When you're not sure whether Ridge or Lasso is better</li>
+</ul>
+<p>The l1_ratio parameter controls the mix:</p>
+<ul>
+<li>l1_ratio = 1.0: Pure Lasso (L1 only)</li>
+<li>l1_ratio = 0.0: Pure Ridge (L2 only)</li>
+<li>l1_ratio = 0.5: Equal mix of L1 and L2 (default)</li>
+</ul>
+<p>Note: If your features are on different scales, consider normalizing your data
+before training using INormalizer implementations like ZScoreNormalizer or MinMaxNormalizer.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_ElasticNetRegressionOptions_1_Alpha_" data-uid="AiDotNet.Models.Options.ElasticNetRegressionOptions`1.Alpha*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ElasticNetRegressionOptions_1_Alpha" data-uid="AiDotNet.Models.Options.ElasticNetRegressionOptions`1.Alpha">
+  Alpha
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ElasticNetRegressionOptions.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the overall regularization strength. Must be a non-negative value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Alpha { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The regularization parameter, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ElasticNetRegressionOptions_1_Alpha_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls the overall strength of regularization. It multiplies both
+the L1 and L2 penalties. Larger values result in stronger regularization.
+</p>
+<p><b>For Beginners:</b> Alpha controls the overall regularization strength.
+<p>Think of it as a volume knob for regularization:</p>
+<ul>
+<li>Alpha = 0.0: No regularization (ordinary least squares)</li>
+<li>Alpha = 1.0: Moderate regularization (default)</li>
+<li>Alpha = 10.0: Strong regularization</li>
+</ul>
+<p>Higher alpha means more shrinkage and potentially more features set to zero.
+Use cross-validation to find the optimal value for your data.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when value is negative.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_Options_ElasticNetRegressionOptions_1_L1Ratio_" data-uid="AiDotNet.Models.Options.ElasticNetRegressionOptions`1.L1Ratio*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ElasticNetRegressionOptions_1_L1Ratio" data-uid="AiDotNet.Models.Options.ElasticNetRegressionOptions`1.L1Ratio">
+  L1Ratio
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ElasticNetRegressionOptions.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the ratio of L1 penalty in the combined penalty. Must be between 0 and 1.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double L1Ratio { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The L1 ratio, defaulting to 0.5.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ElasticNetRegressionOptions_1_L1Ratio_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls the mix between L1 (Lasso) and L2 (Ridge) penalties:
+- 1.0 = Pure Lasso (L1 only)
+- 0.0 = Pure Ridge (L2 only)
+- 0.5 = Equal mix (default)
+</p>
+<p><b>For Beginners:</b> L1Ratio controls the balance between feature selection and stability.
+<p>The effects of different values:</p>
+<ul>
+<li>L1Ratio = 1.0: Pure Lasso - maximum sparsity, may have issues with correlated features</li>
+<li>L1Ratio = 0.5: Balanced - good default for most problems</li>
+<li>L1Ratio = 0.1: Mostly Ridge - keeps more features, better for correlated features</li>
+<li>L1Ratio = 0.0: Pure Ridge - no feature selection, all features kept</li>
+</ul>
+<p>Tips:</p>
+<ul>
+<li>Start with 0.5 and adjust based on results</li>
+<li>If you need feature selection but have correlated features, try 0.3-0.7</li>
+<li>Use cross-validation to find the optimal value</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when value is outside [0, 1] range.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_Options_ElasticNetRegressionOptions_1_MaxIterations_" data-uid="AiDotNet.Models.Options.ElasticNetRegressionOptions`1.MaxIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ElasticNetRegressionOptions_1_MaxIterations" data-uid="AiDotNet.Models.Options.ElasticNetRegressionOptions`1.MaxIterations">
+  MaxIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ElasticNetRegressionOptions.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of iterations for the coordinate descent algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of iterations, defaulting to 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ElasticNetRegressionOptions_1_MaxIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Elastic Net uses coordinate descent optimization. This parameter limits
+the number of iterations to prevent infinite loops.
+</p>
+<p><b>For Beginners:</b> This sets how many times the algorithm can try to improve.
+The default of 1000 is usually sufficient. Increase if you see convergence warnings.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when value is not positive.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_Options_ElasticNetRegressionOptions_1_Tolerance_" data-uid="AiDotNet.Models.Options.ElasticNetRegressionOptions`1.Tolerance*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ElasticNetRegressionOptions_1_Tolerance" data-uid="AiDotNet.Models.Options.ElasticNetRegressionOptions`1.Tolerance">
+  Tolerance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ElasticNetRegressionOptions.cs/#L162"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the convergence tolerance for the optimization algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Tolerance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The convergence tolerance, defaulting to 1e-4.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ElasticNetRegressionOptions_1_Tolerance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The algorithm stops when the maximum change in coefficients falls below this threshold.
+</p>
+<p><b>For Beginners:</b> This determines how precise the solution needs to be.
+The default is good for most applications.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when value is not positive.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_Options_ElasticNetRegressionOptions_1_WarmStart_" data-uid="AiDotNet.Models.Options.ElasticNetRegressionOptions`1.WarmStart*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ElasticNetRegressionOptions_1_WarmStart" data-uid="AiDotNet.Models.Options.ElasticNetRegressionOptions`1.WarmStart">
+  WarmStart
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ElasticNetRegressionOptions.cs/#L188"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use warm starting for cross-validation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool WarmStart { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to use warm starting; false otherwise. Default is true.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ElasticNetRegressionOptions_1_WarmStart_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, the previous solution is used as the starting point for retraining,
+which can significantly speed up cross-validation.
+</p>
+<p><b>For Beginners:</b> Keep this enabled (default) for faster training when
+trying different parameter values.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ElasticNetRegressionOptions.cs/#L42" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

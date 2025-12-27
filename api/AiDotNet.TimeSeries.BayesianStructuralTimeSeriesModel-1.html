@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class BayesianStructuralTimeSeriesModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class BayesianStructuralTimeSeriesModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements a Bayesian Structural Time Series model for flexible time series forecasting.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1">
+
+
+
+  <h1 id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1" class="text-break">
+Class BayesianStructuralTimeSeriesModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/BayesianStructuralTimeSeriesModel.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.TimeSeries.html">TimeSeries</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements a Bayesian Structural Time Series model for flexible time series forecasting.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class BayesianStructuralTimeSeriesModel&lt;T&gt; : TimeSeriesModelBase&lt;T&gt;, ITimeSeriesModel&lt;T&gt;, IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double, decimal).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html">TimeSeriesModelBase</a>&lt;T&gt;</div>
+      <div><span class="xref">BayesianStructuralTimeSeriesModel&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ITimeSeriesModel-1.html">ITimeSeriesModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Options">TimeSeriesModelBase&lt;T&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_NumOps">TimeSeriesModelBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Engine">TimeSeriesModelBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ModelParameters">TimeSeriesModelBase&lt;T&gt;.ModelParameters</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_IsTrained">TimeSeriesModelBase&lt;T&gt;.IsTrained</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_LastEvaluationMetrics">TimeSeriesModelBase&lt;T&gt;.LastEvaluationMetrics</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidateOptions_AiDotNet_Models_Options_TimeSeriesRegressionOptions__0__">TimeSeriesModelBase&lt;T&gt;.ValidateOptions(TimeSeriesRegressionOptions&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidateTrainingInputs_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.ValidateTrainingInputs(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidatePredictionInput_AiDotNet_Tensors_LinearAlgebra_Matrix__0__">TimeSeriesModelBase&lt;T&gt;.ValidatePredictionInput(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_CalculateErrorMetrics_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.CalculateErrorMetrics(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Serialize">TimeSeriesModelBase&lt;T&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Deserialize_System_Byte___">TimeSeriesModelBase&lt;T&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetParameters">TimeSeriesModelBase&lt;T&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ApplyParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.ApplyParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetActiveFeatureIndices">TimeSeriesModelBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_IsFeatureUsed_System_Int32_">TimeSeriesModelBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetFeatureImportance_System_Int32_">TimeSeriesModelBase&lt;T&gt;.GetFeatureImportance(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">TimeSeriesModelBase&lt;T&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">TimeSeriesModelBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetFeatureImportance">TimeSeriesModelBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_DeepCopy">TimeSeriesModelBase&lt;T&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Clip__0__0__0_">TimeSeriesModelBase&lt;T&gt;.Clip(T, T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_Forecast_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_">TimeSeriesModelBase&lt;T&gt;.Forecast(Vector&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_PrepareForecastFeatures_System_Collections_Generic_List__0__System_Int32_">TimeSeriesModelBase&lt;T&gt;.PrepareForecastFeatures(List&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ParameterCount">TimeSeriesModelBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SaveModel_System_String_">TimeSeriesModelBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_LoadModel_System_String_">TimeSeriesModelBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_DefaultLossFunction">TimeSeriesModelBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0__">TimeSeriesModelBase&lt;T&gt;.ComputeGradients(Matrix&lt;T&gt;, Vector&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">TimeSeriesModelBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_SaveState_System_IO_Stream_">TimeSeriesModelBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.TimeSeries.TimeSeriesModelBase-1.html#AiDotNet_TimeSeries_TimeSeriesModelBase_1_LoadState_System_IO_Stream_">TimeSeriesModelBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The Bayesian Structural Time Series (BSTS) model is a powerful and flexible approach for analyzing
+and forecasting time series data. It decomposes a time series into interpretable components
+including level, trend, seasonality, and regression effects, using Bayesian methods to handle
+uncertainty and combine information from different sources.
+</p>
+<p>
+For Beginners:
+A Bayesian Structural Time Series model is like having a flexible toolkit for forecasting time series data.
+Unlike simpler models like AR or ARIMA that use fixed patterns, BSTS breaks down your data into
+meaningful components:
+<ol>
+<li>Level: The current &quot;baseline&quot; value of your series</li>
+<li>Trend: Whether your data is generally increasing or decreasing over time</li>
+<li>Seasonal patterns: Regular cycles in your data (daily, weekly, yearly, etc.)</li>
+<li>Effects of external factors: How other variables influence your data</li>
+</ol>
+<p>The &quot;Bayesian&quot; part means the model handles uncertainty well. Instead of making single point predictions,
+it gives you a range of possible outcomes with probabilities attached. It uses something called a
+&quot;Kalman filter&quot; to continually update its understanding as new data arrives.</p>
+<p>BSTS models are especially powerful because they:</p>
+<ul>
+<li>Can handle missing data</li>
+<li>Allow you to incorporate external information</li>
+<li>Provide predictions with uncertainty ranges</li>
+<li>Let you see which components are driving your forecast</li>
+</ul>
+<p>This makes them ideal for analyzing complex time series where you want to understand
+what's driving changes in addition to making predictions.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1__ctor_" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1__ctor_AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions__0__" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.#ctor(AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions{`0})">
+  BayesianStructuralTimeSeriesModel(BayesianStructuralTimeSeriesOptions&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/BayesianStructuralTimeSeriesModel.cs/#L155"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new Bayesian Structural Time Series model with the specified options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BayesianStructuralTimeSeriesModel(BayesianStructuralTimeSeriesOptions&lt;T&gt;? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions-1.html">BayesianStructuralTimeSeriesOptions</a>&lt;T&gt;</dt>
+    <dd><p>Options for configuring the BSTS model. If null, default options are used.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1__ctor_AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This constructor creates a new BSTS model, initializing all its components.
+You can provide options to customize the model, such as:</p>
+<ul>
+<li>Whether to include a trend component</li>
+<li>What seasonal patterns to look for (weekly, monthly, etc.)</li>
+<li>Whether to include external factors (regression)</li>
+<li>Technical parameters that control how the model learns</li>
+</ul>
+<p>If you don't provide options, the model will use default settings, but it's
+usually better to configure it specifically for your data.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_SupportsJitCompilation_" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_SupportsJitCompilation" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/BayesianStructuralTimeSeriesModel.cs/#L1690"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Returns <code>true</code> when the model has estimated components.
+Prediction uses the point estimates from Bayesian inference.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> While BSTS training uses MCMC sampling,
+prediction uses point estimates and can be JIT compiled.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_Clone_" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.Clone*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_Clone" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/BayesianStructuralTimeSeriesModel.cs/#L1515"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of the current model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance of the BSTS model with the same state and parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_Clone_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a complete copy of the model, including its configuration and trained components.
+</p>
+<p><b>For Beginners:</b> This method creates an exact duplicate of your trained model.
+<p>Unlike CreateInstance(), which creates a blank model with the same settings,
+Clone() creates a complete copy including:</p>
+<ul>
+<li>The model configuration (level, trend, seasonal settings, etc.)</li>
+<li>All trained components and their current values</li>
+<li>The current uncertainty estimates</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Creating a backup before experimenting with a model</li>
+<li>Using the same trained model in multiple scenarios</li>
+<li>Creating ensemble models that use variations of the same base model</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_CreateInstance_" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.CreateInstance*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_CreateInstance" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.CreateInstance">
+  CreateInstance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/BayesianStructuralTimeSeriesModel.cs/#L1282"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the BSTS model with the same options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; CreateInstance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance of the BSTS model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_CreateInstance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a new, uninitialized instance of the BSTS model with the same configuration options.
+</p>
+<p><b>For Beginners:</b> This method creates a fresh copy of the model with the same settings.
+<p>Think of this like creating a new blank notebook with the same paper quality, size, and number of pages
+as another notebook, but without copying any of the written content.</p>
+<p>This is used internally by the framework to create new model instances when needed,
+such as when cloning a model or creating ensemble models.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_DeserializeCore_" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.DeserializeCore*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_DeserializeCore_System_IO_BinaryReader_" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.DeserializeCore(System.IO.BinaryReader)">
+  DeserializeCore(BinaryReader)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/BayesianStructuralTimeSeriesModel.cs/#L1231"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes the model's state from a binary stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void DeserializeCore(BinaryReader reader)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binaryreader">BinaryReader</a></dt>
+    <dd><p>The binary reader to read from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_DeserializeCore_System_IO_BinaryReader__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This protected method loads a previously saved model from a file or stream.</p>
+<p>Deserialization allows you to:</p>
+<ol>
+<li>Load a previously trained model</li>
+<li>Use it immediately without retraining</li>
+<li>Apply the exact same model to new data</li>
+</ol>
+<p>The method loads all essential components that were saved during serialization:</p>
+<ul>
+<li>The level and trend values</li>
+<li>Seasonal components</li>
+<li>State covariance matrix</li>
+<li>Observation variance</li>
+<li>Key model options</li>
+</ul>
+<p>After deserialization, the model is ready to make predictions as if it had just been trained.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_EvaluateModel_" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.EvaluateModel*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_EvaluateModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.EvaluateModel(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  EvaluateModel(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/BayesianStructuralTimeSeriesModel.cs/#L1105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates the model's performance on test data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Dictionary&lt;string, T&gt; EvaluateModel(Matrix&lt;T&gt; xTest, Vector&lt;T&gt; yTest)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>xTest</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Matrix of exogenous variables for testing.</p>
+</dd>
+    <dt><code>yTest</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Vector of actual target values for testing.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>Dictionary of evaluation metrics (MSE, RMSE, MAE, MAPE).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_EvaluateModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This method measures how well the model performs by comparing its predictions
+against actual values from a test dataset.</p>
+<p>It calculates several common error metrics:</p>
+<ul>
+<li><p>MSE (Mean Squared Error): Average of squared differences between predictions and actual values.
+Lower is better, but squaring emphasizes large errors. MSE is useful for comparing models
+but harder to interpret directly.</p>
+</li>
+<li><p>RMSE (Root Mean Squared Error): Square root of MSE, which gives errors in the same units
+as your original data. For example, if forecasting sales in dollars, RMSE is also in dollars.</p>
+</li>
+<li><p>MAE (Mean Absolute Error): Average of absolute differences between predictions and actual values.
+Easier to interpret than MSE and treats all error sizes equally.</p>
+</li>
+<li><p>MAPE (Mean Absolute Percentage Error): Average of percentage differences between predictions
+and actual values. Useful for understanding relative size of errors. For example, MAPE = 5%
+means predictions are off by 5% on average.</p>
+</li>
+</ul>
+<p>Lower values for all these metrics indicate better performance.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_ExportComputationGraph_" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.ExportComputationGraph*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.ExportComputationGraph(System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{`0}})">
+  ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/BayesianStructuralTimeSeriesModel.cs/#L1702"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exports the BSTS model as a computation graph for JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputNodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A list to which input nodes will be added.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output computation node representing the forecast.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The computation graph represents: forecast = level + trend + seasonal
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_Forecast_" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.Forecast*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_Forecast_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.Forecast(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32,AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Forecast(Vector&lt;T&gt;, int, Matrix&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/BayesianStructuralTimeSeriesModel.cs/#L1375"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Forecasts future values based on a history of time series data and optional exogenous variables.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Forecast(Vector&lt;T&gt; history, int horizon, Matrix&lt;T&gt;? exogenousVariables = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>history</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The historical time series data.</p>
+</dd>
+    <dt><code>horizon</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of future periods to predict.</p>
+</dd>
+    <dt><code>exogenousVariables</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Optional matrix of external variables for future periods.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of predicted values for future periods.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_Forecast_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method generates forecasts for future time periods based on the trained model, historical data,
+and optional external variables.
+</p>
+<p><b>For Beginners:</b> This method forecasts future values based on past data.
+<p>Given:</p>
+<ul>
+<li>A series of past observations (the &quot;history&quot;)</li>
+<li>The number of future periods to predict (the &quot;horizon&quot;)</li>
+<li>Optional external factors that might affect predictions</li>
+</ul>
+<p>This method projects each component of the model forward:</p>
+<ul>
+<li>The level continues at its current value with possible trend adjustments</li>
+<li>Seasonal patterns repeat as expected</li>
+<li>External variables influence the forecast according to learned relationships</li>
+</ul>
+<p>For example, if forecasting retail sales, this method might predict:</p>
+<ul>
+<li>Continuing the overall upward trend</li>
+<li>Adding holiday peaks in appropriate months</li>
+<li>Adjusting for planned promotions or price changes (if included as external variables)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_GetModelMetadata_" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_GetModelMetadata" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/BayesianStructuralTimeSeriesModel.cs/#L1311"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets metadata about the trained model, including its type, components, and configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>A ModelMetaData object containing information about the model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method provides comprehensive information about the model, including its type, parameters, components,
+and serialized state. This metadata can be used for model inspection, selection, or persistence.
+</p>
+<p><b>For Beginners:</b> This method returns a complete description of your trained model.
+<p>The metadata includes:</p>
+<ul>
+<li>The type of model (BSTS in this case)</li>
+<li>The current values for level, trend, and seasonal components</li>
+<li>The configuration options you specified when creating the model</li>
+<li>A serialized version of the entire model that can be saved</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Comparing different models to choose the best one</li>
+<li>Documenting what model was used for a particular analysis</li>
+<li>Saving model details for future reference</li>
+<li>Understanding which components are most important in your forecasts</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_Predict_" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.Predict*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.Predict(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Predict(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/BayesianStructuralTimeSeriesModel.cs/#L1006"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Makes predictions using the trained BSTS model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Predict(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Matrix of exogenous variables for the periods to predict.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Vector of predicted values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This method uses the trained model to forecast future values of your time series.</p>
+<p>For each future time point in your input:</p>
+<ol>
+<li>It predicts the state of all model components</li>
+<li>Combines these components to generate a prediction</li>
+</ol>
+<p>The prediction includes:</p>
+<ul>
+<li>The level (baseline value)</li>
+<li>Trend projections (if enabled)</li>
+<li>Seasonal effects appropriate for that time point</li>
+<li>Effects of external variables (if regression is enabled)</li>
+</ul>
+<p>Unlike simpler models, BSTS accounts for all these components separately,
+giving you more accurate and interpretable forecasts.</p>
+<p>If you need uncertainty intervals around these predictions, you would typically
+use additional methods that build on this prediction process.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_PredictSingle_" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.PredictSingle*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_PredictSingle_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.PredictSingle(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  PredictSingle(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/BayesianStructuralTimeSeriesModel.cs/#L1654"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts a single value based on a single input vector of external regressors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T PredictSingle(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Vector of external regressors for a single time point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The predicted value for that time point.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_PredictSingle_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method provides a convenient way to get a prediction for a single time point without
+having to create a matrix with a single row.
+</p>
+<p><b>For Beginners:</b> This is a shortcut for getting just one prediction.
+<p>Instead of providing a table of inputs for multiple time periods, you can provide
+just one set of external factors and get back a single prediction.</p>
+<p>For example, if you want to predict tomorrow's sales based on tomorrow's promotions,
+weather forecast, and other factors, this method lets you do that directly.</p>
+<p>Under the hood, it:</p>
+<ol>
+<li>Takes your single set of inputs</li>
+<li>Creates a small table with just one row</li>
+<li>Gets a prediction using the main prediction engine</li>
+<li>Returns that single prediction to you</li>
+</ol>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_Reset_" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.Reset*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_Reset" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/BayesianStructuralTimeSeriesModel.cs/#L1466"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the model to its untrained state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_Reset_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method clears the trained components, effectively resetting the model to its initial state.
+</p>
+<p><b>For Beginners:</b> This method erases all the learned patterns from your model.
+<p>After calling this method:</p>
+<ul>
+<li>The level returns to its initial value</li>
+<li>The trend (if included) returns to its initial value</li>
+<li>All seasonal components are reset to zero</li>
+<li>Regression coefficients (if included) are cleared</li>
+<li>All variance parameters return to their initial values</li>
+</ul>
+<p>The model behaves as if it was never trained, and you would need to train it again before
+making predictions.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_SerializeCore_" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.SerializeCore*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_SerializeCore_System_IO_BinaryWriter_" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.SerializeCore(System.IO.BinaryWriter)">
+  SerializeCore(BinaryWriter)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/BayesianStructuralTimeSeriesModel.cs/#L1179"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the model's state to a binary stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void SerializeCore(BinaryWriter writer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>writer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binarywriter">BinaryWriter</a></dt>
+    <dd><p>The binary writer to write to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_SerializeCore_System_IO_BinaryWriter__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This protected method saves the model's internal state to a file or stream.</p>
+<p>Serialization allows you to:</p>
+<ol>
+<li>Save a trained model to disk</li>
+<li>Load it later without having to retrain</li>
+<li>Share the model with others</li>
+</ol>
+<p>The method saves all essential components:</p>
+<ul>
+<li>The level and trend values</li>
+<li>Seasonal components</li>
+<li>State covariance matrix</li>
+<li>Observation variance</li>
+<li>Key model options</li>
+</ul>
+<p>This allows the model to be fully reconstructed later.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_TrainCore_" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.TrainCore*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_TrainCore_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel`1.TrainCore(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  TrainCore(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/BayesianStructuralTimeSeriesModel.cs/#L1585"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Implements the core training algorithm for the Bayesian Structural Time Series model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void TrainCore(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Feature matrix of external variables.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Target vector of time series values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_BayesianStructuralTimeSeriesModel_1_TrainCore_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method contains the implementation details of the training process, handling initialization,
+Kalman filtering, smoothing, and parameter estimation.
+</p>
+<p><b>For Beginners:</b> This is the engine room of the training process.
+<p>While the public Train method provides a high-level interface, this method does the actual work:</p>
+<ol>
+<li>Initializes regression coefficients for external factors (if included)</li>
+<li>Runs the Kalman filter to estimate model components based on historical data</li>
+<li>Optionally performs backward smoothing to improve estimates using all available information</li>
+<li>Estimates optimal parameters to balance fit and flexibility</li>
+</ol>
+<p>Think of it as the detailed step-by-step recipe that the chef follows when you order a meal.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/BayesianStructuralTimeSeriesModel.cs/#L42" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

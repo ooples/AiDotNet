@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class AzureOpenAIChatModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class AzureOpenAIChatModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implementation of IChatModel for Azure OpenAI Service. Supports GPT-3.5 and GPT-4 models deployed on Azure with enterprise features.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_LanguageModels_AzureOpenAIChatModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.LanguageModels.AzureOpenAIChatModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.LanguageModels.AzureOpenAIChatModel`1">
+
+
+
+  <h1 id="AiDotNet_LanguageModels_AzureOpenAIChatModel_1" data-uid="AiDotNet.LanguageModels.AzureOpenAIChatModel`1" class="text-break">
+Class AzureOpenAIChatModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/AzureOpenAIChatModel.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.LanguageModels.html">LanguageModels</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implementation of IChatModel for Azure OpenAI Service.
+Supports GPT-3.5 and GPT-4 models deployed on Azure with enterprise features.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class AzureOpenAIChatModel&lt;T&gt; : ChatModelBase&lt;T&gt;, IChatModel&lt;T&gt;, ILanguageModel&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for model parameters and operations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html">ChatModelBase</a>&lt;T&gt;</div>
+      <div><span class="xref">AzureOpenAIChatModel&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IChatModel-1.html">IChatModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ILanguageModel-1.html">ILanguageModel</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_HttpClient">ChatModelBase&lt;T&gt;.HttpClient</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_MaxRetries">ChatModelBase&lt;T&gt;.MaxRetries</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_InitialRetryDelayMs">ChatModelBase&lt;T&gt;.InitialRetryDelayMs</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_TimeoutMs">ChatModelBase&lt;T&gt;.TimeoutMs</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_EnableDetailedLogging">ChatModelBase&lt;T&gt;.EnableDetailedLogging</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_ModelName">ChatModelBase&lt;T&gt;.ModelName</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_MaxContextTokens">ChatModelBase&lt;T&gt;.MaxContextTokens</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_MaxGenerationTokens">ChatModelBase&lt;T&gt;.MaxGenerationTokens</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_GenerateAsync_System_String_System_Threading_CancellationToken_">ChatModelBase&lt;T&gt;.GenerateAsync(string, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_Generate_System_String_">ChatModelBase&lt;T&gt;.Generate(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_GenerateResponseAsync_System_String_System_Threading_CancellationToken_">ChatModelBase&lt;T&gt;.GenerateResponseAsync(string, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_EstimateTokenCount_System_String_">ChatModelBase&lt;T&gt;.EstimateTokenCount(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_IsRetryable_System_Net_Http_HttpRequestException_">ChatModelBase&lt;T&gt;.IsRetryable(HttpRequestException)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_ValidateApiKey_System_String_System_String_">ChatModelBase&lt;T&gt;.ValidateApiKey(string, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_LanguageModels_AzureOpenAIChatModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>For Beginners:
+This class lets you use OpenAI's GPT models that are hosted on Microsoft Azure.</p>
+<p>Why use Azure OpenAI instead of OpenAI directly?</p>
+<ul>
+<li><strong>Enterprise features</strong>: Better SLAs, support contracts, compliance</li>
+<li><strong>Data residency</strong>: Control where your data is processed geographically</li>
+<li><strong>Private networking</strong>: VNet integration, private endpoints</li>
+<li><strong>Azure integration</strong>: Works with Azure AD, Key Vault, Monitor</li>
+<li><strong>Compliance</strong>: HIPAA, SOC 2, ISO 27001 certified</li>
+<li><strong>No waitlist</strong>: Easier access for enterprise customers</li>
+</ul>
+<p>What you need:</p>
+<ul>
+<li>An Azure subscription</li>
+<li>Azure OpenAI resource (request access at aka.ms/oai/access)</li>
+<li>Deployed model (deploy in Azure OpenAI Studio)</li>
+<li>API key or Azure AD authentication</li>
+<li>Endpoint URL (from Azure portal)</li>
+<li>Deployment name (what you named your model deployment)</li>
+</ul>
+<p>Example usage:</p>
+<pre><code class="lang-csharp">var model = new AzureOpenAIChatModel&lt;double&gt;(
+    endpoint: "https://your-resource.openai.azure.com",
+    apiKey: "your-azure-api-key",
+    deploymentName: "gpt-4-deployment",  // Your deployment name in Azure
+    apiVersion: "2024-02-15-preview"     // API version
+);
+
+string answer = await model.GenerateAsync("Explain cloud computing");</code></pre>
+<p>Setup steps:</p>
+<ol>
+<li>Create Azure OpenAI resource in Azure portal</li>
+<li>Deploy a model (GPT-3.5 or GPT-4) in Azure OpenAI Studio</li>
+<li>Get endpoint URL and API key from &quot;Keys and Endpoint&quot; section</li>
+<li>Use your deployment name (NOT the model name)</li>
+</ol>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_LanguageModels_AzureOpenAIChatModel_1__ctor_" data-uid="AiDotNet.LanguageModels.AzureOpenAIChatModel`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_LanguageModels_AzureOpenAIChatModel_1__ctor_System_String_System_String_System_String_System_String_System_Double_System_Int32_System_Double_System_Double_System_Double_System_Int32_System_Net_Http_HttpClient_" data-uid="AiDotNet.LanguageModels.AzureOpenAIChatModel`1.#ctor(System.String,System.String,System.String,System.String,System.Double,System.Int32,System.Double,System.Double,System.Double,System.Int32,System.Net.Http.HttpClient)">
+  AzureOpenAIChatModel(string, string, string, string, double, int, double, double, double, int, HttpClient?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/AzureOpenAIChatModel.cs/#L117"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.LanguageModels.AzureOpenAIChatModel-1.html">AzureOpenAIChatModel&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AzureOpenAIChatModel(string endpoint, string apiKey, string deploymentName, string apiVersion = &quot;2024-02-15-preview&quot;, double temperature = 0.7, int maxTokens = 2048, double topP = 1, double frequencyPenalty = 0, double presencePenalty = 0, int maxContextTokens = 8192, HttpClient? httpClient = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>endpoint</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Your Azure OpenAI endpoint (e.g., &quot;https://your-resource.openai.azure.com&quot;).</p>
+</dd>
+    <dt><code>apiKey</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Your Azure OpenAI API key.</p>
+</dd>
+    <dt><code>deploymentName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The name of your deployed model in Azure.</p>
+</dd>
+    <dt><code>apiVersion</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The API version to use (default: &quot;2024-02-15-preview&quot;).</p>
+</dd>
+    <dt><code>temperature</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Controls randomness (0.0 = deterministic, 2.0 = very creative). Default: 0.7.</p>
+</dd>
+    <dt><code>maxTokens</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum tokens to generate. Default: 2048.</p>
+</dd>
+    <dt><code>topP</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Nucleus sampling parameter (0.0-1.0). Default: 1.0.</p>
+</dd>
+    <dt><code>frequencyPenalty</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Penalize frequent tokens (-2.0 to 2.0). Default: 0.0.</p>
+</dd>
+    <dt><code>presencePenalty</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Penalize tokens based on presence (-2.0 to 2.0). Default: 0.0.</p>
+</dd>
+    <dt><code>maxContextTokens</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum context window size. Default: 8192.</p>
+</dd>
+    <dt><code>httpClient</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.net.http.httpclient">HttpClient</a></dt>
+    <dd><p>Optional HTTP client.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LanguageModels_AzureOpenAIChatModel_1__ctor_System_String_System_String_System_String_System_String_System_Double_System_Int32_System_Double_System_Double_System_Double_System_Int32_System_Net_Http_HttpClient__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:</p>
+<p><strong>Required parameters:</strong></p>
+<ul>
+<li><p>endpoint: Your Azure OpenAI resource URL
+Find this in Azure Portal → Your OpenAI Resource → Keys and Endpoint
+Format: &quot;https://YOUR-RESOURCE-NAME.openai.azure.com&quot;</p>
+</li>
+<li><p>apiKey: Your API key
+Find this in Azure Portal → Your OpenAI Resource → Keys and Endpoint
+Click &quot;Show Keys&quot; to reveal</p>
+</li>
+<li><p>deploymentName: Name YOU chose when deploying the model
+Find this in Azure OpenAI Studio → Deployments
+This is NOT &quot;gpt-4&quot; - it's the name you gave it (e.g., &quot;my-gpt4-deployment&quot;)</p>
+</li>
+</ul>
+<p><strong>Optional parameters:</strong></p>
+<ul>
+<li><p>apiVersion: Azure API version (use default unless you need a specific version)
+Latest versions support newest features</p>
+</li>
+<li><p>temperature, maxTokens, topP, penalties: Same as OpenAI
+See OpenAIChatModel documentation for details</p>
+</li>
+</ul>
+<p><strong>Finding your values:</strong></p>
+<ol>
+<li>Go to portal.azure.com</li>
+<li>Navigate to your Azure OpenAI resource</li>
+<li>Click &quot;Keys and Endpoint&quot; in left menu</li>
+<li>Copy: Endpoint, Key 1 (as apiKey)</li>
+<li>Click &quot;Model deployments&quot; → &quot;Manage Deployments&quot;</li>
+<li>Find your deployment name</li>
+</ol>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_LanguageModels_AzureOpenAIChatModel_1_GenerateAsyncCore_" data-uid="AiDotNet.LanguageModels.AzureOpenAIChatModel`1.GenerateAsyncCore*"></a>
+
+  <h3 id="AiDotNet_LanguageModels_AzureOpenAIChatModel_1_GenerateAsyncCore_System_String_System_Threading_CancellationToken_" data-uid="AiDotNet.LanguageModels.AzureOpenAIChatModel`1.GenerateAsyncCore(System.String,System.Threading.CancellationToken)">
+  GenerateAsyncCore(string, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/AzureOpenAIChatModel.cs/#L179"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core generation logic to be implemented by derived classes.
+This method should make the actual API call to the language model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Task&lt;string&gt; GenerateAsyncCore(string prompt, CancellationToken cancellationToken)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The validated prompt string.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token to cancel the operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A task that represents the asynchronous operation. The task result contains the generated response.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LanguageModels_AzureOpenAIChatModel_1_GenerateAsyncCore_System_String_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This is where you implement the specific logic for your language model API.
+The base class handles retries, timeouts, and error handling, so you only need to:</p>
+<ol>
+<li>Build the API request (JSON body, headers, etc.)</li>
+<li>Send it to the API endpoint</li>
+<li>Parse the response</li>
+<li>Return the generated text</li>
+</ol>
+<p>If anything goes wrong, just throw an exception - the base class will handle retries.</p>
+<p>IMPORTANT: Pass the cancellationToken to your HTTP calls (e.g., HttpClient.PostAsync)
+to enable proper cancellation support.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/AzureOpenAIChatModel.cs/#L53" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

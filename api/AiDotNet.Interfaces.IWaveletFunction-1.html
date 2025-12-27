@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IWaveletFunction&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IWaveletFunction&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the functionality for wavelet transforms used in signal processing and data analysis.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IWaveletFunction_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IWaveletFunction%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IWaveletFunction`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IWaveletFunction_1" data-uid="AiDotNet.Interfaces.IWaveletFunction`1" class="text-break">
+Interface IWaveletFunction&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IWaveletFunction.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the functionality for wavelet transforms used in signal processing and data analysis.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IWaveletFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IWaveletFunction_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>Wavelets are mathematical functions that split data into different frequency components
+and analyze each component with a resolution matched to its scale. They are particularly
+useful for analyzing signals with discontinuities or sharp changes.</p>
+<p><b>For Beginners:</b> Think of wavelets as special tools for breaking down complex signals (like audio,
+images, or any sequence of measurements) into simpler pieces that are easier to analyze.</p>
+<p>Imagine you're trying to understand a song:</p>
+<ul>
+<li>Regular analysis might tell you which notes are played throughout the entire song</li>
+<li>Wavelet analysis tells you which notes are played at specific moments in time</li>
+</ul>
+<p>This makes wavelets excellent for:</p>
+<ul>
+<li>Removing noise from signals (like cleaning up a blurry photo)</li>
+<li>Compressing data (like making image files smaller)</li>
+<li>Detecting patterns or features at different scales (like finding anomalies in heart rate data)</li>
+<li>Analyzing signals that change over time (like stock market prices)</li>
+</ul>
+<p>Unlike simpler transforms (like Fourier), wavelets can capture both frequency and time information,
+making them more powerful for many real-world applications.</p>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IWaveletFunction_1_Calculate_" data-uid="AiDotNet.Interfaces.IWaveletFunction`1.Calculate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IWaveletFunction_1_Calculate__0_" data-uid="AiDotNet.Interfaces.IWaveletFunction`1.Calculate(`0)">
+  Calculate(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IWaveletFunction.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the wavelet function value at a specific point.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T Calculate(T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The input value at which to evaluate the wavelet function.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The value of the wavelet function at the specified point.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IWaveletFunction_1_Calculate__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method evaluates the wavelet function at a given input value.</p>
+<p><b>For Beginners:</b> This is like asking &quot;what's the value of this wavelet at this specific point?&quot;</p>
+<p>Different wavelet functions have different shapes. Some common ones include:</p>
+<ul>
+<li>Haar wavelets (simple step functions)</li>
+<li>Daubechies wavelets (more complex, smoother functions)</li>
+<li>Mexican hat wavelets (shaped like a Mexican sombrero)</li>
+</ul>
+<p>This method gives you the y-value when you provide an x-value for the wavelet function.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IWaveletFunction_1_Decompose_" data-uid="AiDotNet.Interfaces.IWaveletFunction`1.Decompose*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IWaveletFunction_1_Decompose_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interfaces.IWaveletFunction`1.Decompose(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Decompose(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IWaveletFunction.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Decomposes a signal into approximation and detail components using the wavelet transform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(Vector&lt;T&gt; approximation, Vector&lt;T&gt; detail) Decompose(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input signal (vector) to decompose.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0--.mean">mean</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0--.logvar">logVar</a>)</dt>
+    <dd><p>A tuple containing the approximation and detail components of the signal.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IWaveletFunction_1_Decompose_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method applies the wavelet transform to break down the input signal into two components:
+an approximation (low-frequency component) and detail (high-frequency component).</p>
+<p><b>For Beginners:</b> This method splits your data into two parts:</p>
+<ol>
+<li>Approximation: The &quot;big picture&quot; or smooth trends in your data</li>
+<li>Detail: The fine details, rapid changes, or &quot;texture&quot; in your data</li>
+</ol>
+<p>For example, if your input is a heart rate signal:</p>
+<ul>
+<li>The approximation would capture the overall rhythm and major beats</li>
+<li>The detail would capture the smaller variations between beats</li>
+</ul>
+<p>This separation is useful because you can:</p>
+<ul>
+<li>Focus on just the important trends by using the approximation</li>
+<li>Look for anomalies or specific features in the detail</li>
+<li>Remove noise by modifying the detail component</li>
+<li>Compress data by storing the approximation with less precision</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IWaveletFunction_1_GetScalingCoefficients_" data-uid="AiDotNet.Interfaces.IWaveletFunction`1.GetScalingCoefficients*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IWaveletFunction_1_GetScalingCoefficients" data-uid="AiDotNet.Interfaces.IWaveletFunction`1.GetScalingCoefficients">
+  GetScalingCoefficients()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IWaveletFunction.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the scaling coefficients associated with the wavelet function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; GetScalingCoefficients()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the scaling coefficients of the wavelet function.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IWaveletFunction_1_GetScalingCoefficients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Scaling coefficients define the scaling function (also called father wavelet) that is used
+to create the approximation component in wavelet decomposition.</p>
+<p><b>For Beginners:</b> These coefficients are like a recipe for creating the &quot;big picture&quot; part
+of your data during wavelet analysis.</p>
+<p>Think of them as weights that determine how neighboring data points should be combined
+to create a smoothed version of your signal. Different wavelet families have different
+sets of scaling coefficients, which affect how the smoothing is performed.</p>
+<p>For example:</p>
+<ul>
+<li>The Haar wavelet has very simple scaling coefficients [0.5, 0.5]</li>
+<li>More complex wavelets like Daubechies have longer sets of coefficients</li>
+</ul>
+<p>You typically don't need to work with these directly unless you're implementing custom
+wavelet transforms or need to understand the mathematical details of the wavelet being used.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IWaveletFunction_1_GetWaveletCoefficients_" data-uid="AiDotNet.Interfaces.IWaveletFunction`1.GetWaveletCoefficients*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IWaveletFunction_1_GetWaveletCoefficients" data-uid="AiDotNet.Interfaces.IWaveletFunction`1.GetWaveletCoefficients">
+  GetWaveletCoefficients()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IWaveletFunction.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the wavelet coefficients associated with the wavelet function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; GetWaveletCoefficients()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the wavelet coefficients of the wavelet function.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IWaveletFunction_1_GetWaveletCoefficients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Wavelet coefficients define the wavelet function (also called mother wavelet) that is used
+to create the detail component in wavelet decomposition.</p>
+<p><b>For Beginners:</b> These coefficients are like a recipe for extracting the &quot;fine details&quot;
+part of your data during wavelet analysis.</p>
+<p>While scaling coefficients help create a smoothed version of your signal, wavelet coefficients
+help identify changes, edges, or discontinuities in your data. Different wavelet families
+have different sets of wavelet coefficients, which affect how details are extracted.</p>
+<p>For example:</p>
+<ul>
+<li>The Haar wavelet has very simple wavelet coefficients [0.5, -0.5]</li>
+<li>More complex wavelets have longer sets of coefficients designed to capture different
+types of details</li>
+</ul>
+<p>As with scaling coefficients, you typically don't need to work with these directly unless
+you're implementing custom wavelet transforms or need to understand the mathematical details.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IWaveletFunction.cs/#L28" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

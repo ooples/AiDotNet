@@ -1,0 +1,2905 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TimeSeriesModelBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TimeSeriesModelBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides a base class for all time series forecasting models in the library.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_TimeSeries_TimeSeriesModelBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.TimeSeries.TimeSeriesModelBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1">
+
+
+
+  <h1 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1" class="text-break">
+Class TimeSeriesModelBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.TimeSeries.html">TimeSeries</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides a base class for all time series forecasting models in the library.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class TimeSeriesModelBase&lt;T&gt; : ITimeSeriesModel&lt;T&gt;, IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">TimeSeriesModelBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ITimeSeriesModel-1.html">ITimeSeriesModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.TimeSeries.ARIMAModel-1.html">ARIMAModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.ARIMAXModel-1.html">ARIMAXModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.ARMAModel-1.html">ARMAModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.ARModel-1.html">ARModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.AnomalyDetection.DeepANT-1.html">DeepANT&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.AnomalyDetection.LSTMVAE-1.html">LSTMVAE&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.AnomalyDetection.TimeSeriesIsolationForest-1.html">TimeSeriesIsolationForest&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.AutoformerModel-1.html">AutoformerModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel-1.html">BayesianStructuralTimeSeriesModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.ChronosFoundationModel-1.html">ChronosFoundationModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.DeepARModel-1.html">DeepARModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors-1.html">DynamicRegressionWithARIMAErrors&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.ExponentialSmoothingModel-1.html">ExponentialSmoothingModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.GARCHModel-1.html">GARCHModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.InformerModel-1.html">InformerModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.InterventionAnalysisModel-1.html">InterventionAnalysisModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.MAModel-1.html">MAModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.NBEATSModel-1.html">NBEATSModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.NHiTSModel-1.html">NHiTSModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.NeuralNetworkARIMAModel-1.html">NeuralNetworkARIMAModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.ProphetModel-3.html">ProphetModel&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.SARIMAModel-1.html">SARIMAModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.STLDecomposition-1.html">STLDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.SpectralAnalysisModel-1.html">SpectralAnalysisModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.StateSpaceModel-1.html">StateSpaceModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.TBATSModel-1.html">TBATSModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.TemporalFusionTransformer-1.html">TemporalFusionTransformer&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.TransferFunctionModel-1.html">TransferFunctionModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.UnobservedComponentsModel-3.html">UnobservedComponentsModel&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.TimeSeries.VectorAutoRegressionModel-1.html">VectorAutoRegressionModel&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This abstract class defines the common interface and functionality that all time series models share,
+including training, prediction, evaluation, and serialization/deserialization capabilities.
+</p>
+<p>
+Time series models capture temporal dependencies in data and use patterns learned from historical
+observations to predict future values. This base class provides the foundation for implementing
+various time series forecasting algorithms like ARIMA, Exponential Smoothing, TBATS, and more complex
+machine learning approaches.
+</p>
+<p>
+<b>For Beginners:</b>
+A time series model helps predict future values based on past observations.
+<p>Think of a time series like a sequence of measurements taken over time - for example,
+daily temperatures, monthly sales, or hourly website visits. These models analyze the patterns
+in historical data to make predictions about what will happen next.</p>
+<p>This base class is like a blueprint that all specific time series models follow.
+It ensures that every model can:</p>
+<ul>
+<li>Be trained on historical data to learn patterns</li>
+<li>Make predictions for future periods based on what it learned</li>
+<li>Evaluate how accurate its predictions are compared to actual values</li>
+<li>Be saved to disk and loaded later without retraining</li>
+</ul>
+<p>Time series models are used in many real-world applications, including:</p>
+<ul>
+<li>Weather forecasting</li>
+<li>Stock market prediction</li>
+<li>Demand planning for retail</li>
+<li>Energy consumption forecasting</li>
+<li>Website traffic prediction</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1__ctor_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1__ctor_AiDotNet_Models_Options_TimeSeriesRegressionOptions__0__" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.#ctor(AiDotNet.Models.Options.TimeSeriesRegressionOptions{`0})">
+  TimeSeriesModelBase(TimeSeriesRegressionOptions&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L180"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the TimeSeriesModelBase class with the specified options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected TimeSeriesModelBase(TimeSeriesRegressionOptions&lt;T&gt; options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html">TimeSeriesRegressionOptions</a>&lt;T&gt;</dt>
+    <dd><p>The configuration options for the time series model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1__ctor_AiDotNet_Models_Options_TimeSeriesRegressionOptions__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor validates the provided options, initializes the model with the specified
+configuration, and sets up the numeric operations appropriate for the data type.
+</p>
+<p>
+<b>For Beginners:</b>
+This constructor sets up the basic configuration for any time series model.
+<p>It takes an options object that specifies important settings like:</p>
+<ul>
+<li>How many past values to consider (lag order)</li>
+<li>Whether to include a trend component (like steady growth or decline)</li>
+<li>The length of seasonal patterns (e.g., 7 for weekly, 12 for monthly)</li>
+<li>Whether to correct for autocorrelation in errors (systematic errors)</li>
+</ul>
+<p>It also checks that these settings make sense - for example, you can't have a negative
+number of past values or a seasonal period less than 2.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when options is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when options contain invalid values.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_DefaultLossFunction_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.DefaultLossFunction*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_DefaultLossFunction" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.DefaultLossFunction">
+  DefaultLossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1576"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the default loss function used by this model for gradient computation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual ILossFunction&lt;T&gt; DefaultLossFunction { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_DefaultLossFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This loss function is used when calling <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ComputeGradients__1__2_AiDotNet_Interfaces_ILossFunction__0__">ComputeGradients(TInput, TOutput, ILossFunction&lt;T&gt;?)</a>
+without explicitly providing a loss function. It represents the model's primary training objective.
+</p>
+<p><b>For Beginners:</b>
+The loss function tells the model "what counts as a mistake". For example:
+- For regression (predicting numbers): Mean Squared Error measures how far predictions are from actual values
+- For classification (predicting categories): Cross Entropy measures how confident the model is in the right category
+<p>This property provides a sensible default so you don't have to specify the loss function every time,
+but you can still override it if needed for special cases.</p>
+
+<p><b>Distributed Training:</b>
+In distributed training, all workers use the same loss function to ensure consistent gradient computation.
+The default loss function is automatically used when workers compute local gradients.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if accessed before the model has been configured with a loss function.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Engine_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.Engine*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Engine" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.Engine">
+  Engine
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the global execution engine for vector operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IEngine Engine { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.IEngine.html">IEngine</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Engine_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property provides access to the execution engine (CPU or GPU) for performing
+vectorized operations. The engine is determined by the global AiDotNetEngine configuration
+and allows automatic fallback from GPU to CPU when GPU is not available.
+</p>
+<p>
+<b>For Beginners:</b>
+This gives access to either CPU or GPU processing for faster computations.
+The system automatically chooses the best available option and falls back to CPU
+if GPU acceleration is not available.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_IsTrained_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.IsTrained*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_IsTrained" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.IsTrained">
+  IsTrained
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L133"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether the model has been trained.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected bool IsTrained { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_IsTrained_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This flag is set to true after the model has been successfully trained on data.
+</p>
+<p>
+<b>For Beginners:</b>
+This is like a switch that gets turned on once the model has learned from your data.
+It helps prevent errors by making sure you don't try to use the model for predictions
+before it's ready.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_LastEvaluationMetrics_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.LastEvaluationMetrics*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_LastEvaluationMetrics" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.LastEvaluationMetrics">
+  LastEvaluationMetrics
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L153"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the last computed error metrics when the model was evaluated.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Dictionary&lt;string, T&gt; LastEvaluationMetrics { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_LastEvaluationMetrics_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Contains accuracy metrics calculated during model evaluation, such as MAE, RMSE, and MAPE.
+</p>
+<p>
+<b>For Beginners:</b>
+These numbers tell you how accurate the model's predictions are compared to actual values.
+Lower numbers mean better predictions. They're like a scorecard for the model's performance.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ModelParameters_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.ModelParameters*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ModelParameters" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.ModelParameters">
+  ModelParameters
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L117"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the trained model parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Vector&lt;T&gt; ModelParameters { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ModelParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Contains the values that the model has learned during training, such as coefficients
+for different lags, trend components, and seasonal factors.
+</p>
+<p>
+<b>For Beginners:</b>
+These are the numerical values the model learns during training that tell it exactly
+how much influence each past observation should have on the prediction. They're like
+the recipe ingredients with specific measurements that the model has figured out work best.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_NumOps_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.NumOps*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_NumOps" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Provides numeric operations for the specific type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected INumericOperations&lt;T&gt; NumOps { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_NumOps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property provides mathematical operations appropriate for the generic type T,
+allowing the algorithm to work consistently with different numeric types like
+float, double, or decimal.
+</p>
+<p>
+<b>For Beginners:</b>
+This is a helper that knows how to do math (addition, multiplication, etc.) with
+your specific number type, whether that's a regular double, a precise decimal value,
+or something else. It allows the model to work with different types of numbers
+without changing its core logic.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Options_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.Options*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Options" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.Options">
+  Options
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configuration options for the time series model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected TimeSeriesRegressionOptions&lt;T&gt; Options { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html">TimeSeriesRegressionOptions</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Options_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+These options control the core behavior of the time series model, including how much
+historical data is considered, whether trends or seasonality are modeled, and how errors
+are handled.
+</p>
+<p>
+<b>For Beginners:</b>
+Think of these options as settings that determine how the model works:
+- LagOrder: How many past values to consider (like remembering the last 5 days to predict tomorrow)
+- IncludeTrend: Whether to account for ongoing trends (like sales steadily increasing over time)
+- SeasonalPeriod: Whether there are regular patterns (like retail sales spiking every December)
+- AutocorrelationCorrection: Whether to fix systematic errors in predictions
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ParameterCount_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.ParameterCount*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ParameterCount" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.ParameterCount">
+  ParameterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1536"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of parameters in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual int ParameterCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ParameterCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This property returns the total count of trainable parameters in the model.
+It's useful for understanding model complexity and memory requirements.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_SupportsJitCompilation_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_SupportsJitCompilation" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1769"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model currently supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the model can be JIT compiled, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Some models may not support JIT compilation due to:
+- Dynamic graph structure (changes based on input)
+- Lack of computation graph representation
+- Use of operations not yet supported by the JIT compiler
+</p>
+<p><b>For Beginners:</b> This tells you whether this specific model can benefit from JIT compilation.
+<p>Models return false if they:</p>
+<ul>
+<li>Use layer-based architecture without graph export (e.g., current neural networks)</li>
+<li>Have control flow that changes based on input data</li>
+<li>Use operations the JIT compiler doesn't understand yet</li>
+</ul>
+<p>In these cases, the model will still work normally, just without JIT acceleration.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ApplyGradients_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.ApplyGradients*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.ApplyGradients(AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0)">
+  ApplyGradients(Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1609"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies pre-computed gradients to update the model parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void ApplyGradients(Vector&lt;T&gt; gradients, T learningRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The gradient vector to apply.</p>
+</dd>
+    <dt><code>learningRate</code> <span class="xref">T</span></dt>
+    <dd><p>The learning rate for the update.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Updates parameters using: θ = θ - learningRate * gradients
+</p>
+<p><b>For Beginners:</b>
+After computing gradients (seeing which direction to move),
+this method actually moves the model in that direction.
+The learning rate controls how big of a step to take.
+</p>
+<p><b>Distributed Training:</b>
+In DDP/ZeRO-2, this applies the synchronized (averaged) gradients after
+communication across workers. Each worker applies the same averaged gradients
+to keep parameters consistent.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ApplyParameters_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.ApplyParameters*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ApplyParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.ApplyParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ApplyParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L935"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the provided parameters to the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void ApplyParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector of parameters to apply.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ApplyParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method applies the provided parameter values to the model, updating its internal state
+to reflect the new parameters. The implementation is model-specific and should be overridden
+by derived classes as needed.
+</p>
+<p>
+<b>For Beginners:</b>
+This method updates the model's internal parameters with new values.
+It's the counterpart to GetParameters and should understand the parameter
+vector in exactly the same way.
+<p>For example, if the first 5 elements of the parameters vector represent
+lag coefficients, this method should apply them as lag coefficients in
+the model's internal structure.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the parameters vector is invalid.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_CalculateErrorMetrics_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.CalculateErrorMetrics*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_CalculateErrorMetrics_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.CalculateErrorMetrics(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  CalculateErrorMetrics(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L542"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates error metrics by comparing predictions to actual values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual Dictionary&lt;string, T&gt; CalculateErrorMetrics(Vector&lt;T&gt; predictions, Vector&lt;T&gt; actuals)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predictions</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The predicted values.</p>
+</dd>
+    <dt><code>actuals</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The actual values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>A dictionary containing error metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_CalculateErrorMetrics_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method computes standard error metrics for time series forecasting, including
+MAE, RMSE, MAPE, and others as appropriate for the model type.
+</p>
+<p>
+<b>For Beginners:</b>
+This method calculates how far off the model's predictions are from the actual values.
+It computes several different ways of measuring the prediction errors:
+<ul>
+<li>MAE (Mean Absolute Error): The average magnitude of errors, ignoring whether they're positive or negative</li>
+<li>RMSE (Root Mean Squared Error): Emphasizes larger errors by squaring them before averaging</li>
+<li>MAPE (Mean Absolute Percentage Error): Shows errors as percentages of the actual values</li>
+</ul>
+<p>These metrics help you understand not just how accurate the model is overall,
+but also what kinds of errors it tends to make.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Clip_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.Clip*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Clip__0__0__0_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.Clip(`0,`0,`0)">
+  Clip(T, T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1365"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clips a value to be within the specified range.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected T Clip(T value, T min, T max)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to clip.</p>
+</dd>
+    <dt><code>min</code> <span class="xref">T</span></dt>
+    <dd><p>The minimum allowed value.</p>
+</dd>
+    <dt><code>max</code> <span class="xref">T</span></dt>
+    <dd><p>The maximum allowed value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The clipped value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Clip__0__0__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This utility method constrains a value to be within the specified range.
+If the value is less than the minimum, the minimum is returned.
+If the value is greater than the maximum, the maximum is returned.
+Otherwise, the original value is returned.
+</p>
+<p>
+<b>For Beginners:</b>
+This method ensures a value stays within a specified range (between min and max).
+It's like setting boundaries that a value cannot cross.
+<p>For example, if you clip a value with min=0 and max=1:</p>
+<ul>
+<li>If the value is -0.5, it returns 0 (the minimum)</li>
+<li>If the value is 1.5, it returns 1 (the maximum)</li>
+<li>If the value is 0.7, it returns 0.7 (unchanged, as it's within range)</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Preventing parameters from taking extreme values</li>
+<li>Constraining predictions to reasonable ranges</li>
+<li>Implementing optimization algorithms that require bounded parameters</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Clone_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.Clone*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Clone" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1250"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a clone of the time series model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance that is a clone of this model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Clone_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a copy of the model that shares the same options but has independent
+parameter values. It's a lighter-weight alternative to DeepCopy for cases where a complete
+independent copy is not needed.
+</p>
+<p>
+<b>For Beginners:</b>
+This method creates a copy of the current model with the same configuration
+and parameters.
+<p>While DeepCopy creates a fully independent duplicate of everything in the model,
+Clone sometimes creates a more lightweight copy that might share some non-essential
+components with the original (depending on the specific model implementation).</p>
+<p>This is useful for:</p>
+<ul>
+<li>Creating variations of a model for ensemble methods</li>
+<li>Saving a snapshot of the model before making changes</li>
+<li>Creating multiple instances for parallel training</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ComputeGradients_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.ComputeGradients*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0__" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.ComputeGradients(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Interfaces.ILossFunction{`0})">
+  ComputeGradients(Matrix&lt;T&gt;, Vector&lt;T&gt;, ILossFunction&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1578"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes gradients of the loss function with respect to model parameters for the given data,
+WITHOUT updating the model parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Vector&lt;T&gt; ComputeGradients(Matrix&lt;T&gt; input, Vector&lt;T&gt; target, ILossFunction&lt;T&gt;? lossFunction = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input data.</p>
+</dd>
+    <dt><code>target</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target/expected output.</p>
+</dd>
+    <dt><code>lossFunction</code> <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>The loss function to use for gradient computation. If null, uses the model's default loss function.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing gradients with respect to all model parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs a forward pass, computes the loss, and back-propagates to compute gradients,
+but does NOT update the model's parameters. The parameters remain unchanged after this call.
+</p>
+<p><b>Distributed Training:</b>
+In DDP/ZeRO-2, each worker calls this to compute local gradients on its data batch.
+These gradients are then synchronized (averaged) across workers before applying updates.
+This ensures all workers compute the same parameter updates despite having different data.
+</p>
+<p><b>For Meta-Learning:</b>
+After adapting a model on a support set, you can use this method to compute gradients
+on the query set. These gradients become the meta-gradients for updating the meta-parameters.
+</p>
+<p><b>For Beginners:</b>
+Think of this as "dry run" training:
+- The model sees what direction it should move (the gradients)
+- But it doesn't actually move (parameters stay the same)
+- You get to decide what to do with this information (average with others, inspect, modify, etc.)
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>If lossFunction is null and the model has no default loss function.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_CreateInstance_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.CreateInstance*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_CreateInstance" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.CreateInstance">
+  CreateInstance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1297"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the derived model class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; CreateInstance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance of the same model type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_CreateInstance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This abstract factory method must be implemented by derived classes to create a new
+instance of their specific type. It's used by Clone and DeepCopy to ensure that
+the correct derived type is instantiated.
+</p>
+<p>
+<b>For Beginners:</b>
+This method creates a new, empty instance of the specific model type.
+It's used during cloning and deep copying to ensure that the copy
+is of the same specific type as the original.
+<p>For example, if the original model is an ARIMA model, this method
+would create a new ARIMA model. If it's a TBATS model, it would
+create a new TBATS model.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_DeepCopy_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.DeepCopy*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_DeepCopy" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.DeepCopy">
+  DeepCopy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1215"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of the time series model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; DeepCopy()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance that is a deep copy of this model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_DeepCopy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a completely independent copy of the model, with all parameters,
+options, and internal state duplicated. Modifications to the copy will not affect the
+original, and vice versa.
+</p>
+<p>
+<b>For Beginners:</b>
+This method creates a completely independent copy of the current model.
+<p>A deep copy means that all components of the model are duplicated,
+including:</p>
+<ul>
+<li>Configuration options</li>
+<li>Learned parameters</li>
+<li>Internal state variables</li>
+</ul>
+<p>This is useful when you need to:</p>
+<ul>
+<li>Create multiple variations of a model for experimentation</li>
+<li>Save a model at a specific point during training</li>
+<li>Use the same model structure for different datasets</li>
+</ul>
+<p>Changes to the copy won't affect the original model and vice versa.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Deserialize_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.Deserialize*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Deserialize_System_Byte___" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L696"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes the model from a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Deserialize(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method deserializes the common components of the model (options, trained status, parameters)
+and then calls the model-specific deserialization method to handle specialized data.
+</p>
+<p>
+<b>For Beginners:</b>
+Deserialization is the process of loading a previously saved model from a byte array.
+<p>This method:</p>
+<ol>
+<li>Creates a memory stream from the provided byte array</li>
+<li>Reads the common configuration options shared by all models</li>
+<li>Reads whether the model has been trained</li>
+<li>Reads the model parameters learned during training</li>
+<li>Calls the model-specific deserialization method to read specialized data</li>
+</ol>
+<p>After deserialization, the model is restored to the same state it was in when serialized,
+allowing you to make predictions without retraining the model.</p>
+<p>This is particularly useful for:</p>
+<ul>
+<li>Deploying models to production environments</li>
+<li>Sharing models between different applications</li>
+<li>Saving computation time by not having to retrain complex models</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when data is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the serialized data is corrupted or incompatible.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_DeserializeCore_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.DeserializeCore*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_DeserializeCore_System_IO_BinaryReader_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.DeserializeCore(System.IO.BinaryReader)">
+  DeserializeCore(BinaryReader)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L796"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes model-specific data from the binary reader.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract void DeserializeCore(BinaryReader reader)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binaryreader">BinaryReader</a></dt>
+    <dd><p>The binary reader to read from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_DeserializeCore_System_IO_BinaryReader__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This abstract method must be implemented by each specific model type to load
+its unique parameters and state.
+</p>
+<p>
+<b>For Beginners:</b>
+This method is responsible for loading the specific details that make each type of
+time series model unique. It reads exactly what was written by SerializeCore, in the
+same order, reconstructing the specialized parts of the model.
+<p>It's the counterpart to SerializeCore and should read data in exactly the same
+order and format that it was written.</p>
+<p>This separation allows the base class to handle common deserialization tasks
+while each model type handles its specialized data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_EvaluateModel_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.EvaluateModel*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_EvaluateModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.EvaluateModel(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  EvaluateModel(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L481"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates the performance of the trained model on test data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Dictionary&lt;string, T&gt; EvaluateModel(Matrix&lt;T&gt; xTest, Vector&lt;T&gt; yTest)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>xTest</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix for testing.</p>
+</dd>
+    <dt><code>yTest</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The actual target values for testing.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>A dictionary containing evaluation metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_EvaluateModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates various error metrics by comparing the model's predictions
+on the test data to the actual values, providing a quantitative assessment of
+model performance.
+</p>
+<p>
+<b>For Beginners:</b>
+This method tests how well the model performs by comparing its predictions to actual values.
+<p>It works by:</p>
+<ol>
+<li>Using the model to make predictions based on the test inputs</li>
+<li>Comparing these predictions to the actual test values</li>
+<li>Calculating various error metrics to quantify the accuracy</li>
+</ol>
+<p>Common metrics include:</p>
+<ul>
+<li>Mean Absolute Error (MAE): Average of absolute differences between predictions and actual values</li>
+<li>Root Mean Squared Error (RMSE): Square root of the average squared differences</li>
+<li>Mean Absolute Percentage Error (MAPE): Average percentage differences</li>
+</ul>
+<p>These metrics help you understand how accurate your model is and compare different models.
+Lower values indicate better performance for all these metrics.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the model has not been trained.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when xTest or yTest is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the dimensions of xTest and yTest don't match.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ExportComputationGraph_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.ExportComputationGraph*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.ExportComputationGraph(System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{`0}})">
+  ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1804"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exports the model's computation graph for JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputNodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List to populate with input computation nodes (parameters).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output computation node representing the model's prediction.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method should construct a computation graph representing the model's forward pass.
+The graph should use placeholder input nodes that will be filled with actual data during execution.
+</p>
+<p><b>For Beginners:</b> This method creates a "recipe" of your model's calculations
+that the JIT compiler can optimize.
+<p>The method should:</p>
+<ol>
+<li>Create placeholder nodes for inputs (features, parameters)</li>
+<li>Build the computation graph using TensorOperations</li>
+<li>Return the final output node</li>
+<li>Add all input nodes to the inputNodes list (in order)</li>
+</ol>
+<p>Example for a simple linear model (y = Wx + b):</p>
+<pre><code class="lang-csharp">public ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)
+{
+    // Create placeholder inputs
+    var x = TensorOperations&lt;T&gt;.Variable(new Tensor&lt;T&gt;(InputShape), "x");
+    var W = TensorOperations&lt;T&gt;.Variable(Weights, "W");
+    var b = TensorOperations&lt;T&gt;.Variable(Bias, "b");
+
+    // Add inputs in order
+    inputNodes.Add(x);
+    inputNodes.Add(W);
+    inputNodes.Add(b);
+
+    // Build graph: y = Wx + b
+    var matmul = TensorOperations&lt;T&gt;.MatMul(x, W);
+    var output = TensorOperations&lt;T&gt;.Add(matmul, b);
+
+    return output;
+}</code></pre>
+<p>The JIT compiler will then:</p>
+<ul>
+<li>Optimize the graph (fuse operations, eliminate dead code)</li>
+<li>Compile it to fast native code</li>
+<li>Cache the compiled version for reuse</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Forecast_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.Forecast*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Forecast_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.Forecast(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32)">
+  Forecast(Vector&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1410"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a forecast for multiple steps ahead.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Vector&lt;T&gt; Forecast(Vector&lt;T&gt; history, int steps)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>history</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The historical time series data.</p>
+</dd>
+    <dt><code>steps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of steps to forecast.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the forecasted values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Forecast_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method generates a multi-step forecast using the history data as the starting point.
+For each step, it makes a prediction and then updates the history with the predicted value
+to generate the next prediction.
+</p>
+<p>
+<b>For Beginners:</b>
+This method predicts multiple future values in sequence.
+<p>For example, if you have daily data and want to forecast the next 7 days:</p>
+<ol>
+<li>It first predicts day 1 using your historical data</li>
+<li>Then it adds that prediction to the history</li>
+<li>Then it predicts day 2 using the updated history (including the day 1 prediction)</li>
+<li>And so on, until it has predicted all 7 days</li>
+</ol>
+<p>This approach lets you make predictions further into the future,
+but be aware that errors tend to accumulate with each step (predictions
+become less accurate the further ahead you forecast).</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the model has not been trained.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when history is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when steps is not positive or history is insufficient.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetActiveFeatureIndices_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.GetActiveFeatureIndices*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetActiveFeatureIndices" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.GetActiveFeatureIndices">
+  GetActiveFeatureIndices()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L974"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the indices of features (lags/time periods) actively used by the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IEnumerable&lt;int&gt; GetActiveFeatureIndices()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>A collection of indices representing the active features.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetActiveFeatureIndices_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method identifies which input features (lags) have significant impact on the model's
+predictions, based on their corresponding parameter values.
+</p>
+<p>
+<b>For Beginners:</b>
+This method tells you which past time periods (lags) are most important for predictions.
+<p>For example, if the result includes indices [1, 7, 12], this means:</p>
+<ul>
+<li>The value from 1 period ago strongly influences the prediction</li>
+<li>The value from 7 periods ago strongly influences the prediction (could be weekly seasonality)</li>
+<li>The value from 12 periods ago strongly influences the prediction (could be yearly for monthly data)</li>
+</ul>
+<p>These active features are determined by the model's structure and learned parameters.
+For instance, in an ARIMA model, non-zero AR coefficients indicate active features.</p>
+<p>Understanding active features helps interpret how the model works and which
+historical points matter most for forecasting.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the model has not been trained.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetFeatureImportance_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.GetFeatureImportance*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetFeatureImportance" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.GetFeatureImportance">
+  GetFeatureImportance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1174"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the feature importance scores as a dictionary.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Dictionary&lt;string, T&gt; GetFeatureImportance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>A dictionary mapping feature names to their importance scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetFeatureImportance_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.GetFeatureImportance*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetFeatureImportance_System_Int32_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.GetFeatureImportance(System.Int32)">
+  GetFeatureImportance(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1091"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the importance of a specific feature (lag).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual T GetFeatureImportance(int featureIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the feature.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A value indicating the feature's importance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetFeatureImportance_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the importance of a specific lag in the model's predictions,
+based on its parameter value and the model's structure. The implementation is model-specific.
+</p>
+<p>
+<b>For Beginners:</b>
+This method estimates how important a specific past time period is
+for making predictions. Higher values indicate more influential features.
+<p>For example, in many time series models:</p>
+<ul>
+<li>Recent lags (like lag 1) often have higher importance</li>
+<li>Seasonal lags (like lag 7 for weekly data) often have higher importance</li>
+<li>Some lags may have near-zero importance, meaning they don't affect predictions much</li>
+</ul>
+<p>This information helps understand the model's internal logic and which past
+time periods it considers most predictive of future values.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the model has not been trained.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when featureIndex is negative.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetModelMetadata_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetModelMetadata" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L824"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets metadata about the time series model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>A ModelMetaData object containing information about the model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method provides comprehensive metadata about the model, including its type,
+configuration options, training status, evaluation metrics, and information about
+which features/lags are most important.
+</p>
+<p>
+<b>For Beginners:</b>
+This method provides important information about the model that can help you understand
+its characteristics and performance.
+<p>The metadata includes:</p>
+<ul>
+<li>The type of model (e.g., ARIMA, TBATS, Neural Network)</li>
+<li>Configuration details (e.g., lag order, seasonality period)</li>
+<li>Whether the model has been trained</li>
+<li>Performance metrics from the last evaluation</li>
+<li>Information about which features (time periods) are most influential</li>
+</ul>
+<p>This information is useful for documentation, model comparison, and debugging.
+It's like a complete summary of everything important about the model.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetParameters_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetParameters" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L853"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the trainable parameters of the model as a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing all trainable parameters of the model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_GetParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns all the parameters learned during training, combined into a single vector.
+These parameters determine how the model makes predictions based on input data.
+</p>
+<p>
+<b>For Beginners:</b>
+This method returns all the numerical values that the model has learned during training.
+<p>For time series models, these parameters typically include:</p>
+<ul>
+<li>Coefficients for each lag (how much each past value influences the prediction)</li>
+<li>Trend coefficients (if trend is included)</li>
+<li>Seasonal coefficients (if seasonality is included)</li>
+<li>Error correction terms (if autocorrelation correction is enabled)</li>
+</ul>
+<p>These parameters can be:</p>
+<ul>
+<li>Analyzed to understand what the model has learned</li>
+<li>Saved for later use</li>
+<li>Modified to adjust the model's behavior</li>
+<li>Transferred to another model with the same structure</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the model has not been trained.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_IsFeatureUsed_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.IsFeatureUsed*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_IsFeatureUsed_System_Int32_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.IsFeatureUsed(System.Int32)">
+  IsFeatureUsed(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1037"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines if a specific feature (lag) is actively used by the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool IsFeatureUsed(int featureIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the feature to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the feature is actively used; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_IsFeatureUsed_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method determines whether a specific lag has a significant impact on the model's predictions,
+based on its corresponding parameter value. The threshold for significance is model-specific.
+</p>
+<p>
+<b>For Beginners:</b>
+This method checks if a specific past time period (lag) has a significant
+influence on the model's predictions.
+<p>For example:</p>
+<ul>
+<li>IsFeatureUsed(1) checks if the value from 1 period ago matters</li>
+<li>IsFeatureUsed(7) checks if the value from 7 periods ago matters</li>
+<li>IsFeatureUsed(12) checks if the value from 12 periods ago matters</li>
+</ul>
+<p>A feature is typically considered &quot;used&quot; if its coefficient or weight
+in the model is significantly different from zero.</p>
+<p>This information helps understand which historical points the model
+considers important when making predictions.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the model has not been trained.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when featureIndex is negative or exceeds the maximum lag order.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_LoadModel_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.LoadModel*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_LoadModel_System_String_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.LoadModel(System.String)">
+  LoadModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1559"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the model from a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void LoadModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the file containing the saved model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_LoadModel_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method provides a convenient way to load a model directly from disk.
+It combines file I/O operations with deserialization.</p>
+<p><b>For Beginners:</b> This is like clicking &quot;Open&quot; in a document editor.
+Instead of manually reading from a file and then calling Deserialize(), this method does both steps for you.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.filenotfoundexception">FileNotFoundException</a></dt>
+    <dd><p>Thrown when the specified file does not exist.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.ioexception">IOException</a></dt>
+    <dd><p>Thrown when an I/O error occurs while reading from the file or when the file contains corrupted or invalid model data.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_LoadState_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.LoadState*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_LoadState_System_IO_Stream_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.LoadState(System.IO.Stream)">
+  LoadState(Stream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1707"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the time series model's state from a stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void LoadState(Stream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream to read the model state from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_LoadState_System_IO_Stream__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method deserializes a time series model that was previously saved with SaveState.
+It uses the existing Deserialize method after reading data from the stream.
+</p>
+<p><b>For Beginners:</b> This is like loading a saved snapshot of your time series model.
+<p>When you call LoadState:</p>
+<ul>
+<li>All parameters and trends are read from the stream</li>
+<li>Model configuration and state are restored</li>
+</ul>
+<p>After loading, the model can:</p>
+<ul>
+<li>Make forecasts using the restored parameters</li>
+<li>Continue training from where it left off</li>
+<li>Be deployed to production for time series prediction</li>
+</ul>
+<p>This is essential for:</p>
+<ul>
+<li>Resuming interrupted training sessions</li>
+<li>Loading the best model for forecasting</li>
+<li>Deploying trained models to production</li>
+<li>Knowledge distillation workflows</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when stream is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.ioexception">IOException</a></dt>
+    <dd><p>Thrown when there's an error reading from the stream.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the stream contains invalid or incompatible data.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Predict_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.Predict*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.Predict(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Predict(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L376"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates forecasts using the trained time series model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Vector&lt;T&gt; Predict(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of forecasted values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method validates that the model is trained and the input data is valid, then
+generates predictions for each row in the input matrix using the model-specific
+prediction algorithm.
+</p>
+<p>
+<b>For Beginners:</b>
+This method uses the patterns learned during training to predict future values.
+<p>The input matrix typically contains:</p>
+<ul>
+<li>Past values of the time series</li>
+<li>Time indicators (e.g., month, day of week)</li>
+<li>Any external factors that might influence the forecast</li>
+</ul>
+<p>The output is a vector of predicted values, one for each row in the input matrix.
+Each prediction represents what the model thinks will happen at that future time point.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the model has not been trained.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when input is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when input has incorrect dimensions.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_PredictSingle_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.PredictSingle*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_PredictSingle_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.PredictSingle(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  PredictSingle(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L446"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a prediction for a single input vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract T PredictSingle(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input feature vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The predicted value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_PredictSingle_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This abstract method must be implemented by derived classes to generate a prediction
+for a single input vector using the model-specific algorithm.
+</p>
+<p>
+<b>For Beginners:</b>
+This method takes a single row of input data (representing one time point) and
+calculates what the model predicts will happen at that point. Each type of
+time series model will have its own way of calculating this prediction based
+on the patterns it learned during training.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_PrepareForecastFeatures_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.PrepareForecastFeatures*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_PrepareForecastFeatures_System_Collections_Generic_List__0__System_Int32_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.PrepareForecastFeatures(System.Collections.Generic.List{`0},System.Int32)">
+  PrepareForecastFeatures(List&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1479"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Prepares input features for a forecast step using the extended history.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual Vector&lt;T&gt; PrepareForecastFeatures(List&lt;T&gt; extendedHistory, int step)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>extendedHistory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;T&gt;</dt>
+    <dd><p>The historical data including any previous forecasts.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The current forecast step (0-based).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of input features for the forecast.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_PrepareForecastFeatures_System_Collections_Generic_List__0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method extracts the appropriate lags and constructs any additional features
+needed for the forecast, such as trend indicators or seasonal dummies.
+</p>
+<p>
+<b>For Beginners:</b>
+This method prepares the input data needed to make a forecast for a specific step.
+It typically extracts recent values, seasonal patterns, and trend indicators from
+the history (which may include previous predictions for multi-step forecasts).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Reset_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.Reset*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Reset" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1321"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the model to its untrained state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Reset_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method clears all trained parameters and returns the model to its initial untrained state.
+</p>
+<p>
+<b>For Beginners:</b>
+This method erases all the patterns the model has learned.
+<p>After calling this method:</p>
+<ul>
+<li>All coefficients and learned parameters are cleared</li>
+<li>The model behaves as if it was never trained</li>
+<li>You would need to train it again before making predictions</li>
+</ul>
+<p>This is useful when you want to:</p>
+<ul>
+<li>Experiment with different training data on the same model</li>
+<li>Retrain a model from scratch with new parameters</li>
+<li>Reset a model that might have been trained incorrectly</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_SaveModel_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.SaveModel*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_SaveModel_System_String_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.SaveModel(System.String)">
+  SaveModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1541"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the model to a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SaveModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path where the model should be saved.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_SaveModel_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method provides a convenient way to save the model directly to disk.
+It combines serialization with file I/O operations.</p>
+<p><b>For Beginners:</b> This is like clicking &quot;Save As&quot; in a document editor.
+Instead of manually calling Serialize() and then writing to a file, this method does both steps for you.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.ioexception">IOException</a></dt>
+    <dd><p>Thrown when an I/O error occurs while writing to the file.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.unauthorizedaccessexception">UnauthorizedAccessException</a></dt>
+    <dd><p>Thrown when the caller does not have the required permission to write to the specified file path.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_SaveState_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.SaveState*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_SaveState_System_IO_Stream_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.SaveState(System.IO.Stream)">
+  SaveState(Stream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1653"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the time series model's current state to a stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SaveState(Stream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream to write the model state to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_SaveState_System_IO_Stream__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method serializes the time series model's parameters and configuration.
+It uses the existing Serialize method and writes the data to the provided stream.
+</p>
+<p><b>For Beginners:</b> This is like creating a snapshot of your trained time series model.
+<p>When you call SaveState:</p>
+<ul>
+<li>All learned parameters and trends are written to the stream</li>
+<li>Model configuration and internal state are preserved</li>
+</ul>
+<p>This is particularly useful for:</p>
+<ul>
+<li>Checkpointing during long training sessions</li>
+<li>Saving the best model for forecasting</li>
+<li>Knowledge distillation from time series models</li>
+<li>Deploying forecasting models to production</li>
+</ul>
+<p>You can later use LoadState to restore the model.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when stream is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.ioexception">IOException</a></dt>
+    <dd><p>Thrown when there's an error writing to the stream.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Serialize_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.Serialize*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Serialize" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L626"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the model to a byte array for storage or transmission.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method serializes the common components of the model (options, trained status, parameters)
+and then calls the model-specific serialization method to handle specialized data.
+</p>
+<p>
+<b>For Beginners:</b>
+Serialization converts the model's state into a format that can be saved to disk
+or transmitted over a network.
+<p>This method:</p>
+<ol>
+<li>Creates a memory stream to hold the serialized data</li>
+<li>Writes the common configuration options shared by all models</li>
+<li>Writes whether the model has been trained</li>
+<li>Writes the model parameters learned during training</li>
+<li>Calls the model-specific serialization method to write specialized data</li>
+<li>Returns everything as a byte array</li>
+</ol>
+<p>This allows you to save a trained model and load it later without having to retrain it,
+which can save significant time for complex models trained on large datasets.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_SerializeCore_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.SerializeCore*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_SerializeCore_System_IO_BinaryWriter_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.SerializeCore(System.IO.BinaryWriter)">
+  SerializeCore(BinaryWriter)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L772"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes model-specific data to the binary writer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract void SerializeCore(BinaryWriter writer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>writer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binarywriter">BinaryWriter</a></dt>
+    <dd><p>The binary writer to write to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_SerializeCore_System_IO_BinaryWriter__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This abstract method must be implemented by each specific model type to save
+its unique parameters and state.
+</p>
+<p>
+<b>For Beginners:</b>
+This method is responsible for saving the specific details that make each type of
+time series model unique. Different models have different internal structures and parameters
+that need to be saved separately from the common elements.
+<p>For example:</p>
+<ul>
+<li>An ARIMA model would save its AR, I, and MA coefficients</li>
+<li>A TBATS model would save its level, trend, and seasonal components</li>
+<li>A neural network model would save its weights and biases</li>
+</ul>
+<p>This separation allows the base class to handle common serialization tasks
+while each model type handles its specialized data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_SetActiveFeatureIndices_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.SetActiveFeatureIndices*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.SetActiveFeatureIndices(System.Collections.Generic.IEnumerable{System.Int32})">
+  SetActiveFeatureIndices(IEnumerable&lt;int&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the active feature indices for this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetActiveFeatureIndices(IEnumerable&lt;int&gt; featureIndices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>The indices of features to activate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_SetParameters_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.SetParameters*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L1140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the parameters for this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the model parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Train_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.Train*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.Train(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L260"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the time series model using the provided input data and target values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Train(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target values vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method validates the input data, prepares the model for training, performs the actual
+training algorithm, and sets the IsTrained flag once complete.
+</p>
+<p>
+<b>For Beginners:</b>
+Training is the process where the model learns patterns from historical data.
+<p>During training, the model analyzes the relationship between:</p>
+<ul>
+<li>Input features (x): These might include past values, time indicators, or external factors</li>
+<li>Target values (y): The actual observed values we want to predict</li>
+</ul>
+<p>After training, the model will have learned parameters that capture the patterns
+in your data, which it can then use to make predictions for new inputs.</p>
+<p>This is an abstract method, meaning each specific model type (ARIMA, TBATS, etc.)
+will implement its own training algorithm.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when x or y is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the dimensions of x and y don't match or when the data is insufficient.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_TrainCore_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.TrainCore*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_TrainCore_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.TrainCore(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  TrainCore(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L291"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the model-specific training algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract void TrainCore(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target values vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_TrainCore_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This abstract method must be implemented by derived classes to perform the actual model training.
+</p>
+<p>
+<b>For Beginners:</b>
+This is where the specific math and algorithms for each type of time series model are implemented.
+Different models (like ARIMA, Exponential Smoothing, etc.) will have their own unique ways of
+finding patterns in the data.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidateOptions_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.ValidateOptions*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidateOptions_AiDotNet_Models_Options_TimeSeriesRegressionOptions__0__" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.ValidateOptions(AiDotNet.Models.Options.TimeSeriesRegressionOptions{`0})">
+  ValidateOptions(TimeSeriesRegressionOptions&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L213"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates the provided time series options to ensure they are within acceptable ranges.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void ValidateOptions(TimeSeriesRegressionOptions&lt;T&gt; options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html">TimeSeriesRegressionOptions</a>&lt;T&gt;</dt>
+    <dd><p>The options to validate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidateOptions_AiDotNet_Models_Options_TimeSeriesRegressionOptions__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Checks that LagOrder is non-negative, SeasonalPeriod is either 0 (no seasonality) or at least 2,
+and that other parameters have reasonable values.
+</p>
+<p>
+<b>For Beginners:</b>
+This method makes sure the settings you've chosen for your model make logical sense.
+For example, you can't look back a negative number of time periods, and a seasonal
+pattern must repeat at least every 2 periods to be considered seasonal.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when any option is invalid.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidatePredictionInput_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.ValidatePredictionInput*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidatePredictionInput_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.ValidatePredictionInput(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  ValidatePredictionInput(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L418"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates the input data for prediction.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void ValidatePredictionInput(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidatePredictionInput_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method verifies that the input data for prediction is valid and has the correct dimensions.
+</p>
+<p>
+<b>For Beginners:</b>
+Before making predictions, this method checks that your input data is properly formatted.
+It ensures that:
+- You have provided input features
+- The input has the correct structure (number of features/columns)
+- The data meets any model-specific requirements
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when input is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when input has incorrect dimensions.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidateTrainingInputs_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.ValidateTrainingInputs*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidateTrainingInputs_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.ValidateTrainingInputs(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ValidateTrainingInputs(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L315"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates the training input data before proceeding with training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void ValidateTrainingInputs(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target values vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_ValidateTrainingInputs_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method verifies that the input data meets the requirements for model training,
+including checking dimensions, sample size, and consistency.
+</p>
+<p>
+<b>For Beginners:</b>
+Before the model starts learning, this method checks that your data is valid and properly formatted.
+It ensures that:
+- You have provided both input features and target values
+- The number of examples matches the number of target values
+- You have enough data points to train the model effectively
+- There are no obvious inconsistencies in your data structure
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when x or y is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the dimensions of x and y don't match or when the data is insufficient.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_WithParameters_" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.WithParameters*"></a>
+
+  <h3 id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.TimeSeries.TimeSeriesModelBase`1.WithParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  WithParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L894"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new model with the specified parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; WithParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector of parameters to use for the new model.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new model instance with the specified parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TimeSeries_TimeSeriesModelBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a clone of the current model but replaces its parameters with the
+provided values. This allows for creating variations of a model without retraining.
+</p>
+<p>
+<b>For Beginners:</b>
+This method creates a copy of the current model but with different parameter values.
+<p>This allows you to:</p>
+<ul>
+<li>Create a model with manually specified parameters (e.g., from expert knowledge)</li>
+<li>Make small adjustments to a trained model without full retraining</li>
+<li>Implement ensemble models that combine multiple parameter sets</li>
+<li>Perform what-if analysis by changing specific parameters</li>
+</ul>
+<p>The parameters must be in the same order and have the same meaning as those
+returned by the GetParameters method.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when parameters is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the parameters vector has incorrect length.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/TimeSeries/TimeSeriesModelBase.cs/#L43" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

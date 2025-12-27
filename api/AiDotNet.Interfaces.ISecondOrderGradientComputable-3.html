@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface ISecondOrderGradientComputable&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface ISecondOrderGradientComputable&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Extended gradient computation interface for MAML meta-learning algorithms.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_ISecondOrderGradientComputable_3.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.ISecondOrderGradientComputable%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.ISecondOrderGradientComputable`3">
+
+
+
+  <h1 id="AiDotNet_Interfaces_ISecondOrderGradientComputable_3" data-uid="AiDotNet.Interfaces.ISecondOrderGradientComputable`3" class="text-break">
+Interface ISecondOrderGradientComputable&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISecondOrderGradientComputable.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Extended gradient computation interface for MAML meta-learning algorithms.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface ISecondOrderGradientComputable&lt;T, TInput, TOutput&gt; : IGradientComputable&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type (e.g., float, double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type.</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ComputeGradients__1__2_AiDotNet_Interfaces_ILossFunction__0__">IGradientComputable&lt;T, TInput, TOutput&gt;.ComputeGradients(TInput, TOutput, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">IGradientComputable&lt;T, TInput, TOutput&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_ISecondOrderGradientComputable_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This interface extends <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable&lt;T, TInput, TOutput&gt;</a> with second-order
+gradient computation capability required for full MAML (Model-Agnostic Meta-Learning).
+</p>
+<p><b>For Beginners:</b>
+While basic gradient computation tells you how to improve on a single task, second-order
+gradients tell you how changing your starting point would affect learning on that task.
+<p>Think of it like this:</p>
+<ul>
+<li>First-order: &quot;If I start here, which direction improves this task?&quot;</li>
+<li>Second-order: &quot;If I started slightly differently, how would my entire learning trajectory change?&quot;</li>
+</ul>
+<p>This is computationally expensive but more accurate for meta-learning.</p>
+
+<p><b>MAML Use Case:</b>
+Full MAML uses second-order gradients to backpropagate through the inner loop adaptation,
+computing true meta-gradients that account for how the adaptation process itself changes.
+Reptile and first-order MAML approximate this with only first-order gradients.
+</p>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_ISecondOrderGradientComputable_3_ComputeSecondOrderGradients_" data-uid="AiDotNet.Interfaces.ISecondOrderGradientComputable`3.ComputeSecondOrderGradients*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISecondOrderGradientComputable_3_ComputeSecondOrderGradients_System_Collections_Generic_List_System_ValueTuple__1__2____1__2_AiDotNet_Interfaces_ILossFunction__0___0_" data-uid="AiDotNet.Interfaces.ISecondOrderGradientComputable`3.ComputeSecondOrderGradients(System.Collections.Generic.List{System.ValueTuple{`1,`2}},`1,`2,AiDotNet.Interfaces.ILossFunction{`0},`0)">
+  ComputeSecondOrderGradients(List&lt;(TInput input, TOutput target)&gt;, TInput, TOutput, ILossFunction&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISecondOrderGradientComputable.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes second-order gradients (Hessian-vector product) for full MAML meta-learning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; ComputeSecondOrderGradients(List&lt;(TInput input, TOutput target)&gt; adaptationSteps, TInput queryInput, TOutput queryTarget, ILossFunction&lt;T&gt; lossFunction, T innerLearningRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>adaptationSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;(TInput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.input">input</a>, TOutput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.target">target</a>)&gt;</dt>
+    <dd><p>The sequence of adaptation steps (support set training).</p>
+</dd>
+    <dt><code>queryInput</code> <span class="xref">TInput</span></dt>
+    <dd><p>The query set input for evaluation after adaptation.</p>
+</dd>
+    <dt><code>queryTarget</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The query set target for evaluation after adaptation.</p>
+</dd>
+    <dt><code>lossFunction</code> <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>The loss function to use for gradient computation.</p>
+</dd>
+    <dt><code>innerLearningRate</code> <span class="xref">T</span></dt>
+    <dd><p>The inner loop learning rate for adaptation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The meta-gradient computed through the entire adaptation process.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ISecondOrderGradientComputable_3_ComputeSecondOrderGradients_System_Collections_Generic_List_System_ValueTuple__1__2____1__2_AiDotNet_Interfaces_ILossFunction__0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This computes the true MAML gradient by backpropagating through the inner loop adaptation.
+This requires computing second-order derivatives (gradients of gradients).
+</p>
+<p><b>Algorithm:</b>
+1. Record the adaptation trajectory (parameter updates during inner loop)
+2. Compute query loss gradient at adapted parameters
+3. Backpropagate through each adaptation step using chain rule
+4. Return gradient w.r.t. original (pre-adaptation) parameters
+</p>
+<p><b>For Beginners:</b>
+Full MAML asks: "If I change my starting point slightly, how does that affect
+my performance after adaptation?"
+<p>This requires tracking not just how to improve on this task, but how changing
+the starting point would have changed the whole adaptation process.</p>
+<p>Example: If your starting point makes you learn faster, the second-order gradient
+captures that benefit. First-order approximations (like Reptile) miss this.</p>
+
+<p><b>Computational Cost:</b>
+Significantly more expensive than first-order MAML:
+- Requires storing intermediate computations from adaptation
+- Performs additional backward passes through adaptation steps
+- Memory scales with number of adaptation steps
+<p>Use only when accuracy is more important than speed.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>If any parameter is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>If adaptationSteps is empty.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISecondOrderGradientComputable.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

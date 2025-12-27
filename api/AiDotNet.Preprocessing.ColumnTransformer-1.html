@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ColumnTransformer&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ColumnTransformer&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Applies different transformers to different columns of the input.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Preprocessing_ColumnTransformer_1.md&amp;value=---%0Auid%3A%20AiDotNet.Preprocessing.ColumnTransformer%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Preprocessing.ColumnTransformer`1">
+
+
+
+  <h1 id="AiDotNet_Preprocessing_ColumnTransformer_1" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1" class="text-break">
+Class ColumnTransformer&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/ColumnTransformer.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Preprocessing.html">Preprocessing</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Applies different transformers to different columns of the input.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ColumnTransformer&lt;T&gt; : TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;, IDataTransformer&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html">TransformerBase</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;&gt;</div>
+      <div><span class="xref">ColumnTransformer&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDataTransformer-3.html">IDataTransformer</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_NumOps">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_Engine">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_IsFitted">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.IsFitted</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_ColumnIndices">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.ColumnIndices</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_SupportsInverseTransform">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.SupportsInverseTransform</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_Fit__1_">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.Fit(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_Transform__1_">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.Transform(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_FitTransform__1_">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.FitTransform(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_InverseTransform__2_">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.InverseTransform(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_GetFeatureNamesOut_System_String___">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.GetFeatureNamesOut(string[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_FitCore__1_">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.FitCore(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_TransformCore__1_">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.TransformCore(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_InverseTransformCore__2_">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.InverseTransformCore(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_ValidateInputData__1_">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.ValidateInputData(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_EnsureFitted">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.EnsureFitted()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_GetColumnsToProcess_System_Int32_">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.GetColumnsToProcess(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Preprocessing_ColumnTransformer_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+ColumnTransformer allows you to specify which transformer should be applied
+to which columns. This is useful when different columns require different
+preprocessing (e.g., scaling numeric columns, encoding categorical columns).
+</p>
+<p>
+Output columns are concatenated in the order transformers are added.
+Columns not specified in any transformer can be passed through or dropped.
+</p>
+<p><b>For Beginners:</b> Different columns often need different treatment:
+- Numeric columns: scaling, normalization
+- Categorical columns: one-hot encoding
+- Text columns: vectorization
+<p>ColumnTransformer lets you apply the right transformation to each column type.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Preprocessing_ColumnTransformer_1__ctor_" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_ColumnTransformer_1__ctor_AiDotNet_Preprocessing_ColumnTransformerRemainder_" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.#ctor(AiDotNet.Preprocessing.ColumnTransformerRemainder)">
+  ColumnTransformer(ColumnTransformerRemainder)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/ColumnTransformer.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of <a class="xref" href="AiDotNet.Preprocessing.ColumnTransformer-1.html">ColumnTransformer&lt;T&gt;</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ColumnTransformer(ColumnTransformerRemainder remainder = ColumnTransformerRemainder.Drop)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>remainder</code> <a class="xref" href="AiDotNet.Preprocessing.ColumnTransformerRemainder.html">ColumnTransformerRemainder</a></dt>
+    <dd><p>How to handle columns not specified in any transformer. Defaults to Drop.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Preprocessing_ColumnTransformer_1_Remainder_" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.Remainder*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_ColumnTransformer_1_Remainder" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.Remainder">
+  Remainder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/ColumnTransformer.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets how columns not specified in any transformer are handled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ColumnTransformerRemainder Remainder { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Preprocessing.ColumnTransformerRemainder.html">ColumnTransformerRemainder</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_ColumnTransformer_1_SupportsInverseTransform_" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.SupportsInverseTransform*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_ColumnTransformer_1_SupportsInverseTransform" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.SupportsInverseTransform">
+  SupportsInverseTransform
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/ColumnTransformer.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this transformer supports inverse transformation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsInverseTransform { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Preprocessing_ColumnTransformer_1_Add_" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.Add*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_ColumnTransformer_1_Add_AiDotNet_Interfaces_IDataTransformer__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0___System_Int32___" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.Add(AiDotNet.Interfaces.IDataTransformer{`0,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0}},System.Int32[])">
+  Add(IDataTransformer&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;, int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/ColumnTransformer.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a transformer to be applied to specific columns.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ColumnTransformer&lt;T&gt; Add(IDataTransformer&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt; transformer, int[] columns)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>transformer</code> <a class="xref" href="AiDotNet.Interfaces.IDataTransformer-3.html">IDataTransformer</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The transformer to apply.</p>
+</dd>
+    <dt><code>columns</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The column indices to apply this transformer to.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Preprocessing.ColumnTransformer-1.html">ColumnTransformer</a>&lt;T&gt;</dt>
+    <dd><p>This instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_ColumnTransformer_1_Add_" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.Add*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_ColumnTransformer_1_Add_System_String_AiDotNet_Interfaces_IDataTransformer__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0___System_Int32___" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.Add(System.String,AiDotNet.Interfaces.IDataTransformer{`0,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0}},System.Int32[])">
+  Add(string, IDataTransformer&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;, int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/ColumnTransformer.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a transformer to be applied to specific columns.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ColumnTransformer&lt;T&gt; Add(string name, IDataTransformer&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt; transformer, int[] columns)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Name identifier for the transformer.</p>
+</dd>
+    <dt><code>transformer</code> <a class="xref" href="AiDotNet.Interfaces.IDataTransformer-3.html">IDataTransformer</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The transformer to apply.</p>
+</dd>
+    <dt><code>columns</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The column indices to apply this transformer to.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Preprocessing.ColumnTransformer-1.html">ColumnTransformer</a>&lt;T&gt;</dt>
+    <dd><p>This instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_ColumnTransformer_1_FitCore_" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.FitCore*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_ColumnTransformer_1_FitCore_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.FitCore(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  FitCore(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/ColumnTransformer.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Fits all transformers to their respective columns.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void FitCore(Matrix&lt;T&gt; data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The training data matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_ColumnTransformer_1_GetFeatureNamesOut_" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.GetFeatureNamesOut*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_ColumnTransformer_1_GetFeatureNamesOut_System_String___" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.GetFeatureNamesOut(System.String[])">
+  GetFeatureNamesOut(string[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/ColumnTransformer.cs/#L242"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the output feature names after transformation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputFeatureNames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_ColumnTransformer_1_GetTransformer_" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.GetTransformer*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_ColumnTransformer_1_GetTransformer_System_String_" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.GetTransformer(System.String)">
+  GetTransformer(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/ColumnTransformer.cs/#L286"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the transformer with the specified name.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IDataTransformer&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;? GetTransformer(string name)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The transformer name.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IDataTransformer-3.html">IDataTransformer</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The transformer if found, null otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_ColumnTransformer_1_GetTransformerNames_" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.GetTransformerNames*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_ColumnTransformer_1_GetTransformerNames" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.GetTransformerNames">
+  GetTransformerNames()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/ColumnTransformer.cs/#L299"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all transformer names.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string[] GetTransformerNames()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd><p>Array of transformer names.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_ColumnTransformer_1_InverseTransformCore_" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.InverseTransformCore*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_ColumnTransformer_1_InverseTransformCore_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.InverseTransformCore(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  InverseTransformCore(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/ColumnTransformer.cs/#L234"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Inverse transformation is not supported for ColumnTransformer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Matrix&lt;T&gt; InverseTransformCore(Matrix&lt;T&gt; data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_ColumnTransformer_1_TransformCore_" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.TransformCore*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_ColumnTransformer_1_TransformCore_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Preprocessing.ColumnTransformer`1.TransformCore(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  TransformCore(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/ColumnTransformer.cs/#L178"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transforms the data by applying each transformer to its columns.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Matrix&lt;T&gt; TransformCore(Matrix&lt;T&gt; data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The data to transform.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The transformed data with all outputs concatenated.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/ColumnTransformer.cs/#L28" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MapReduceChain&lt;TItem, TMapResult, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MapReduceChain&lt;TItem, TMapResult, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Chain that applies a map operation to each item in a collection, then reduces the results.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_PromptEngineering_Chains_MapReduceChain_3.md&amp;value=---%0Auid%3A%20AiDotNet.PromptEngineering.Chains.MapReduceChain%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.PromptEngineering.Chains.MapReduceChain`3">
+
+
+
+  <h1 id="AiDotNet_PromptEngineering_Chains_MapReduceChain_3" data-uid="AiDotNet.PromptEngineering.Chains.MapReduceChain`3" class="text-break">
+Class MapReduceChain&lt;TItem, TMapResult, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Chains/MapReduceChain.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.PromptEngineering.html">PromptEngineering</a>.<a class="xref" href="AiDotNet.PromptEngineering.Chains.html">Chains</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Chain that applies a map operation to each item in a collection, then reduces the results.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MapReduceChain&lt;TItem, TMapResult, TOutput&gt; : ChainBase&lt;IEnumerable&lt;TItem&gt;, TOutput&gt;, IChain&lt;IEnumerable&lt;TItem&gt;, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TItem</code></dt>
+    <dd><p>The type of items in the input collection.</p>
+</dd>
+    <dt><code>TMapResult</code></dt>
+    <dd><p>The type of result from the map operation.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The type of final output from the reduce operation.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.PromptEngineering.Chains.ChainBase-2.html">ChainBase</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;TItem&gt;, TOutput&gt;</div>
+      <div><span class="xref">MapReduceChain&lt;TItem, TMapResult, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IChain-2.html">IChain</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;TItem&gt;, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Chains.ChainBase-2.html#AiDotNet_PromptEngineering_Chains_ChainBase_2_Name">ChainBase&lt;IEnumerable&lt;TItem&gt;, TOutput&gt;.Name</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Chains.ChainBase-2.html#AiDotNet_PromptEngineering_Chains_ChainBase_2_Description">ChainBase&lt;IEnumerable&lt;TItem&gt;, TOutput&gt;.Description</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Chains.ChainBase-2.html#AiDotNet_PromptEngineering_Chains_ChainBase_2_Run__0_">ChainBase&lt;IEnumerable&lt;TItem&gt;, TOutput&gt;.Run(IEnumerable&lt;TItem&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Chains.ChainBase-2.html#AiDotNet_PromptEngineering_Chains_ChainBase_2_RunAsync__0_System_Threading_CancellationToken_">ChainBase&lt;IEnumerable&lt;TItem&gt;, TOutput&gt;.RunAsync(IEnumerable&lt;TItem&gt;, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Chains.ChainBase-2.html#AiDotNet_PromptEngineering_Chains_ChainBase_2_ValidateInput__0_">ChainBase&lt;IEnumerable&lt;TItem&gt;, TOutput&gt;.ValidateInput(IEnumerable&lt;TItem&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Chains.ChainBase-2.html#AiDotNet_PromptEngineering_Chains_ChainBase_2_RunCore__0_">ChainBase&lt;IEnumerable&lt;TItem&gt;, TOutput&gt;.RunCore(IEnumerable&lt;TItem&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Chains.ChainBase-2.html#AiDotNet_PromptEngineering_Chains_ChainBase_2_RunCoreAsync__0_System_Threading_CancellationToken_">ChainBase&lt;IEnumerable&lt;TItem&gt;, TOutput&gt;.RunCoreAsync(IEnumerable&lt;TItem&gt;, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_PromptEngineering_Chains_MapReduceChain_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A map-reduce chain processes collections by applying the same operation to each item (map phase),
+then combining all results into a single output (reduce phase).
+</p>
+<p><b>For Beginners:</b> Process many items the same way, then combine results.
+<p>Example - Summarizing multiple documents:</p>
+<pre><code class="lang-csharp">var chain = new MapReduceChain&lt;Document, string, Summary&gt;("DocumentSummarizer", "Summarizes multiple documents");
+
+// Map: Process each document
+chain.SetMapper(doc =&gt; SummarizeDocument(doc));
+
+// Reduce: Combine all summaries
+chain.SetReducer(summaries =&gt; CombineSummaries(summaries));
+
+// Run on collection
+var documents = new[] { doc1, doc2, doc3, doc4, doc5 };
+var result = chain.Run(documents);
+// Each document is summarized individually, then all summaries are combined</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Chains_MapReduceChain_3__ctor_" data-uid="AiDotNet.PromptEngineering.Chains.MapReduceChain`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Chains_MapReduceChain_3__ctor_System_String_System_String_System_Int32_" data-uid="AiDotNet.PromptEngineering.Chains.MapReduceChain`3.#ctor(System.String,System.String,System.Int32)">
+  MapReduceChain(string, string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Chains/MapReduceChain.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the MapReduceChain class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MapReduceChain(string name, string description = &quot;&quot;, int maxDegreeOfParallelism = -1)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The name of the chain.</p>
+</dd>
+    <dt><code>description</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The description of the chain.</p>
+</dd>
+    <dt><code>maxDegreeOfParallelism</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum concurrent map operations. -1 for unlimited.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Chains_MapReduceChain_3_LastItemCount_" data-uid="AiDotNet.PromptEngineering.Chains.MapReduceChain`3.LastItemCount*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Chains_MapReduceChain_3_LastItemCount" data-uid="AiDotNet.PromptEngineering.Chains.MapReduceChain`3.LastItemCount">
+  LastItemCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Chains/MapReduceChain.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of items processed in the last run.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int LastItemCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Chains_MapReduceChain_3_MaxDegreeOfParallelism_" data-uid="AiDotNet.PromptEngineering.Chains.MapReduceChain`3.MaxDegreeOfParallelism*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Chains_MapReduceChain_3_MaxDegreeOfParallelism" data-uid="AiDotNet.PromptEngineering.Chains.MapReduceChain`3.MaxDegreeOfParallelism">
+  MaxDegreeOfParallelism
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Chains/MapReduceChain.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum degree of parallelism for the map phase.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxDegreeOfParallelism { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Chains_MapReduceChain_3_RunCore_" data-uid="AiDotNet.PromptEngineering.Chains.MapReduceChain`3.RunCore*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Chains_MapReduceChain_3_RunCore_System_Collections_Generic_IEnumerable__0__" data-uid="AiDotNet.PromptEngineering.Chains.MapReduceChain`3.RunCore(System.Collections.Generic.IEnumerable{`0})">
+  RunCore(IEnumerable&lt;TItem&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Chains/MapReduceChain.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes the map-reduce operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override TOutput RunCore(IEnumerable&lt;TItem&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;TItem&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Chains_MapReduceChain_3_RunCoreAsync_" data-uid="AiDotNet.PromptEngineering.Chains.MapReduceChain`3.RunCoreAsync*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Chains_MapReduceChain_3_RunCoreAsync_System_Collections_Generic_IEnumerable__0__System_Threading_CancellationToken_" data-uid="AiDotNet.PromptEngineering.Chains.MapReduceChain`3.RunCoreAsync(System.Collections.Generic.IEnumerable{`0},System.Threading.CancellationToken)">
+  RunCoreAsync(IEnumerable&lt;TItem&gt;, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Chains/MapReduceChain.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes the map-reduce operation asynchronously.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Task&lt;TOutput&gt; RunCoreAsync(IEnumerable&lt;TItem&gt; input, CancellationToken cancellationToken)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;TItem&gt;</dt>
+    <dd></dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Chains_MapReduceChain_3_SetMapper_" data-uid="AiDotNet.PromptEngineering.Chains.MapReduceChain`3.SetMapper*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Chains_MapReduceChain_3_SetMapper_System_Func__0__1__" data-uid="AiDotNet.PromptEngineering.Chains.MapReduceChain`3.SetMapper(System.Func{`0,`1})">
+  SetMapper(Func&lt;TItem, TMapResult&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Chains/MapReduceChain.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the mapper function applied to each item.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MapReduceChain&lt;TItem, TMapResult, TOutput&gt; SetMapper(Func&lt;TItem, TMapResult&gt; mapper)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>mapper</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;TItem, TMapResult&gt;</dt>
+    <dd><p>Function to apply to each item.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Chains.MapReduceChain-3.html">MapReduceChain</a>&lt;TItem, TMapResult, TOutput&gt;</dt>
+    <dd><p>This chain instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Chains_MapReduceChain_3_SetMapperAsync_" data-uid="AiDotNet.PromptEngineering.Chains.MapReduceChain`3.SetMapperAsync*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Chains_MapReduceChain_3_SetMapperAsync_System_Func__0_System_Threading_CancellationToken_System_Threading_Tasks_Task__1___" data-uid="AiDotNet.PromptEngineering.Chains.MapReduceChain`3.SetMapperAsync(System.Func{`0,System.Threading.CancellationToken,System.Threading.Tasks.Task{`1}})">
+  SetMapperAsync(Func&lt;TItem, CancellationToken, Task&lt;TMapResult&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Chains/MapReduceChain.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the async mapper function applied to each item.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MapReduceChain&lt;TItem, TMapResult, TOutput&gt; SetMapperAsync(Func&lt;TItem, CancellationToken, Task&lt;TMapResult&gt;&gt; mapper)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>mapper</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-3">Func</a>&lt;TItem, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;TMapResult&gt;&gt;</dt>
+    <dd><p>Async function to apply to each item.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Chains.MapReduceChain-3.html">MapReduceChain</a>&lt;TItem, TMapResult, TOutput&gt;</dt>
+    <dd><p>This chain instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Chains_MapReduceChain_3_SetReducer_" data-uid="AiDotNet.PromptEngineering.Chains.MapReduceChain`3.SetReducer*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Chains_MapReduceChain_3_SetReducer_System_Func_System_Collections_Generic_IEnumerable__1___2__" data-uid="AiDotNet.PromptEngineering.Chains.MapReduceChain`3.SetReducer(System.Func{System.Collections.Generic.IEnumerable{`1},`2})">
+  SetReducer(Func&lt;IEnumerable&lt;TMapResult&gt;, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Chains/MapReduceChain.cs/#L95"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the reducer function that combines all map results.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MapReduceChain&lt;TItem, TMapResult, TOutput&gt; SetReducer(Func&lt;IEnumerable&lt;TMapResult&gt;, TOutput&gt; reducer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reducer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;TMapResult&gt;, TOutput&gt;</dt>
+    <dd><p>Function to combine map results.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Chains.MapReduceChain-3.html">MapReduceChain</a>&lt;TItem, TMapResult, TOutput&gt;</dt>
+    <dd><p>This chain instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Chains_MapReduceChain_3_SetReducerAsync_" data-uid="AiDotNet.PromptEngineering.Chains.MapReduceChain`3.SetReducerAsync*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Chains_MapReduceChain_3_SetReducerAsync_System_Func_System_Collections_Generic_IEnumerable__1__System_Threading_CancellationToken_System_Threading_Tasks_Task__2___" data-uid="AiDotNet.PromptEngineering.Chains.MapReduceChain`3.SetReducerAsync(System.Func{System.Collections.Generic.IEnumerable{`1},System.Threading.CancellationToken,System.Threading.Tasks.Task{`2}})">
+  SetReducerAsync(Func&lt;IEnumerable&lt;TMapResult&gt;, CancellationToken, Task&lt;TOutput&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Chains/MapReduceChain.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the async reducer function that combines all map results.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MapReduceChain&lt;TItem, TMapResult, TOutput&gt; SetReducerAsync(Func&lt;IEnumerable&lt;TMapResult&gt;, CancellationToken, Task&lt;TOutput&gt;&gt; reducer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reducer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-3">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;TMapResult&gt;, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;TOutput&gt;&gt;</dt>
+    <dd><p>Async function to combine map results.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Chains.MapReduceChain-3.html">MapReduceChain</a>&lt;TItem, TMapResult, TOutput&gt;</dt>
+    <dd><p>This chain instance for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Chains/MapReduceChain.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

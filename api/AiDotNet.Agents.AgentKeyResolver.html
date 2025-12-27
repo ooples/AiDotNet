@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class AgentKeyResolver | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class AgentKeyResolver | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides intelligent API key resolution by searching multiple configuration sources in priority order.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Agents_AgentKeyResolver.md&amp;value=---%0Auid%3A%20AiDotNet.Agents.AgentKeyResolver%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Agents.AgentKeyResolver">
+
+
+
+  <h1 id="AiDotNet_Agents_AgentKeyResolver" data-uid="AiDotNet.Agents.AgentKeyResolver" class="text-break">
+Class AgentKeyResolver  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Agents/AgentKeyResolver.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Agents.html">Agents</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides intelligent API key resolution by searching multiple configuration sources in priority order.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class AgentKeyResolver</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">AgentKeyResolver</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Agents_AgentKeyResolver_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This static utility class resolves API keys for LLM providers by checking multiple configuration sources in
+a well-defined priority order. It enables flexible credential management by supporting explicit parameters,
+stored configurations, global application settings, and environment variables. The priority system ensures that
+more specific configurations (like explicit parameters) override more general ones (like environment variables),
+giving developers fine-grained control while maintaining convenient defaults. If no API key can be found in any
+source, the resolver throws a detailed exception explaining all available configuration options.
+</p>
+<p><b>For Beginners:</b> This class automatically finds your API keys by checking several places in order.
+<p>Think of it as a smart key finder that looks for your API key in multiple locations:</p>
+<ol>
+<li><strong>Explicit parameter</strong>: Key provided directly in your code (highest priority)</li>
+<li><strong>Stored configuration</strong>: Key saved during model building</li>
+<li><strong>Global configuration</strong>: Key set at application startup via AgentGlobalConfiguration</li>
+<li><strong>Environment variable</strong>: Key stored in system environment variables (most secure)</li>
+</ol>
+<p>Why this is useful:</p>
+<ul>
+<li><strong>Flexibility</strong>: You can provide keys in different ways for different situations</li>
+<li><strong>Security</strong>: Supports environment variables which keeps keys out of your code</li>
+<li><strong>Convenience</strong>: Set once globally and use everywhere</li>
+<li><strong>Override capability</strong>: Can override global settings for specific models when needed</li>
+<li><strong>Clear errors</strong>: If no key is found, you get helpful instructions on how to fix it</li>
+</ul>
+<p>For example, in development you might use:</p>
+<pre><code class="lang-csharp">// Option 1: Direct in code (quick for testing, not secure for production)
+var result = await builder
+    .ConfigureAgentAssistance(
+        options =&gt; options.EnableModelSelection(),
+        apiKey: "sk-test-key")
+    .BuildAsync();
+
+// Option 2: Global configuration (set once at startup)
+AgentGlobalConfiguration.Configure(config =&gt; config
+    .ConfigureOpenAI("your-api-key"));
+
+// Option 3: Environment variable (most secure for production)
+// Set OPENAI_API_KEY=your-key in your environment
+// Then no code changes needed, just:
+var result = await builder
+    .ConfigureAgentAssistance(options =&gt; options.EnableModelSelection())
+    .BuildAsync();</code></pre>
+<p>The resolver automatically checks all these locations and uses the first key it finds, following the
+priority order. This means you can set a global default but override it for specific models when needed.</p>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Agents_AgentKeyResolver_ResolveApiKey_" data-uid="AiDotNet.Agents.AgentKeyResolver.ResolveApiKey*"></a>
+
+  <h3 id="AiDotNet_Agents_AgentKeyResolver_ResolveApiKey__1_System_String_AiDotNet_Models_AgentConfiguration___0__AiDotNet_Enums_LLMProvider_" data-uid="AiDotNet.Agents.AgentKeyResolver.ResolveApiKey``1(System.String,AiDotNet.Models.AgentConfiguration{``0},AiDotNet.Enums.LLMProvider)">
+  ResolveApiKey&lt;T&gt;(string?, AgentConfiguration&lt;T&gt;?, LLMProvider)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Agents/AgentKeyResolver.cs/#L140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resolves an API key for the specified LLM provider by checking multiple sources in priority order.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static string ResolveApiKey&lt;T&gt;(string? explicitKey = null, AgentConfiguration&lt;T&gt;? storedConfig = null, LLMProvider provider = LLMProvider.OpenAI)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>explicitKey</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>An explicitly provided API key (highest priority), or null to check other sources.</p>
+</dd>
+    <dt><code>storedConfig</code> <a class="xref" href="AiDotNet.Models.AgentConfiguration-1.html">AgentConfiguration</a>&lt;T&gt;</dt>
+    <dd><p>A stored AgentConfiguration from the build phase, or null if not available.</p>
+</dd>
+    <dt><code>provider</code> <a class="xref" href="AiDotNet.Enums.LLMProvider.html">LLMProvider</a></dt>
+    <dd><p>The LLM provider for which to resolve the API key. Defaults to OpenAI.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The resolved API key string from the highest-priority available source.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used in the agent configuration.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Agents_AgentKeyResolver_ResolveApiKey__1_System_String_AiDotNet_Models_AgentConfiguration___0__AiDotNet_Enums_LLMProvider__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method searches for API keys in the following priority order, returning the first valid key found:
+<ol>
+<li><strong>Explicit parameter</strong>: If explicitKey is provided and non-empty, it's used immediately</li>
+<li><strong>Stored configuration</strong>: If storedConfig contains an API key, it's used</li>
+<li><strong>Global configuration</strong>: If the key exists in AgentGlobalConfiguration.ApiKeys, it's used</li>
+<li><strong>Environment variable</strong>: Checks standard environment variables (OPENAI_API_KEY, ANTHROPIC_API_KEY, AZURE_OPENAI_KEY)</li>
+<li><strong>Exception</strong>: If no key is found, throws InvalidOperationException with helpful guidance</li>
+</ol>
+<p>This priority system allows specific configurations to override more general ones, providing flexibility
+while maintaining sensible defaults. For example, you can set a global key for most models but override
+it with an explicit parameter for specific cases.</p>
+
+<p><b>For Beginners:</b> This method finds your API key by looking in several places in order.
+<p>How it works:</p>
+<pre><code class="lang-csharp">// The resolver checks in this order:
+
+// 1. Explicit key (you provided it directly)
+var key = ResolveApiKey(explicitKey: "sk-direct-key");  // Uses this immediately
+
+// 2. Stored config (saved during model building)
+var config = new AgentConfiguration&lt;double&gt; { ApiKey = "sk-stored" };
+var key = ResolveApiKey(storedConfig: config);  // Uses stored key if no explicit key
+
+// 3. Global config (set at application startup)
+AgentGlobalConfiguration.Configure(c =&gt; c.ConfigureOpenAI("sk-global"));
+var key = ResolveApiKey();  // Uses global key if nothing more specific
+
+// 4. Environment variable (set in system environment)
+// If OPENAI_API_KEY is set in environment, uses that
+var key = ResolveApiKey();  // Checks environment if no other source</code></pre>
+<p>Priority example:</p>
+<pre><code class="lang-csharp">// Even if you have global config and environment variable set,
+// an explicit key takes priority:
+AgentGlobalConfiguration.Configure(c =&gt; c.ConfigureOpenAI("global-key"));
+Environment.SetEnvironmentVariable("OPENAI_API_KEY", "env-key");
+
+var key = ResolveApiKey(explicitKey: "explicit-key");
+// Result: "explicit-key" (highest priority wins)
+
+var key2 = ResolveApiKey();
+// Result: "global-key" (next highest priority when no explicit key)</code></pre>
+<p>If no key is found anywhere, you get a clear error message telling you exactly how to fix it:</p>
+<pre><code class="lang-csharp">try {
+    var key = ResolveApiKey();  // No key configured anywhere
+}
+catch (InvalidOperationException ex) {
+    // Exception message lists all ways to provide the key:
+    // "No API key found for OpenAI. Please provide via:
+    //  1. Explicit parameter: .ConfigureAgentAssistance(apiKey: "...")
+    //  2. Global config: AgentGlobalConfiguration.Configure(...)
+    //  3. Environment variable: OPENAI_API_KEY"
+}</code></pre>
+<p>This automatic resolution means you can use the most convenient method for your situation while
+maintaining security and flexibility.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when no API key can be found in any source. The exception message provides detailed instructions
+on how to configure the API key using each available method.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Agents/AgentKeyResolver.cs/#L58" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

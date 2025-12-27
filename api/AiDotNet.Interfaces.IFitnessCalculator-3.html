@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IFitnessCalculator&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IFitnessCalculator&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines an interface for calculating how well a machine learning model performs.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IFitnessCalculator_3.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IFitnessCalculator%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IFitnessCalculator`3">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IFitnessCalculator_3" data-uid="AiDotNet.Interfaces.IFitnessCalculator`3" class="text-break">
+Interface IFitnessCalculator&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFitnessCalculator.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines an interface for calculating how well a machine learning model performs.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IFitnessCalculator&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., double, float).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IFitnessCalculator_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> This interface helps measure how &quot;fit&quot; or effective your machine learning model is.</p>
+<p>In machine learning, we need a way to measure how good our model is at making predictions.
+This is similar to how we might grade a test - we need a scoring system.</p>
+<p>Different types of problems need different scoring methods:</p>
+<ul>
+<li>For predicting house prices, we might measure how close our predictions are to actual prices</li>
+<li>For classifying emails as spam/not spam, we might count how many emails we classified correctly</li>
+</ul>
+<p>The &quot;fitness score&quot; is this measurement of how well the model performs. Some important points:</p>
+<ul>
+<li>Sometimes higher scores are better (like accuracy: 95% is better than 90%)</li>
+<li>Sometimes lower scores are better (like error: 5% error is better than 10% error)</li>
+<li>The score helps us compare different models to choose the best one</li>
+</ul>
+<p>This interface provides methods to calculate these fitness scores in a standardized way.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IFitnessCalculator_3_IsHigherScoreBetter_" data-uid="AiDotNet.Interfaces.IFitnessCalculator`3.IsHigherScoreBetter*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFitnessCalculator_3_IsHigherScoreBetter" data-uid="AiDotNet.Interfaces.IFitnessCalculator`3.IsHigherScoreBetter">
+  IsHigherScoreBetter
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFitnessCalculator.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether higher fitness scores represent better performance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool IsHigherScoreBetter { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IFitnessCalculator_3_IsHigherScoreBetter_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This property tells you whether bigger numbers mean better performance.</p>
+<p>Different metrics work in opposite ways:</p>
+<ul>
+<li>For some metrics like accuracy, higher is better (95% accuracy is better than 90%)</li>
+<li>For other metrics like error rate, lower is better (5% error is better than 10%)</li>
+</ul>
+<p>This property returns:</p>
+<ul>
+<li>true: if higher scores mean better performance (like accuracy)</li>
+<li>false: if lower scores mean better performance (like error)</li>
+</ul>
+<p>Knowing this helps you correctly interpret and compare fitness scores.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IFitnessCalculator_3_CalculateFitnessScore_" data-uid="AiDotNet.Interfaces.IFitnessCalculator`3.CalculateFitnessScore*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFitnessCalculator_3_CalculateFitnessScore_AiDotNet_Models_DataSetStats__0__1__2__" data-uid="AiDotNet.Interfaces.IFitnessCalculator`3.CalculateFitnessScore(AiDotNet.Models.DataSetStats{`0,`1,`2})">
+  CalculateFitnessScore(DataSetStats&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFitnessCalculator.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates a fitness score based on basic dataset statistics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T CalculateFitnessScore(DataSetStats&lt;T, TInput, TOutput&gt; dataSet)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dataSet</code> <a class="xref" href="AiDotNet.Models.DataSetStats-3.html">DataSetStats</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Statistical information about model performance on a dataset.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A fitness score representing how well the model performs.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IFitnessCalculator_3_CalculateFitnessScore_AiDotNet_Models_DataSetStats__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method grades your model based on simplified performance statistics.</p>
+<p>The input parameter:</p>
+<ul>
+<li>dataSet: Contains basic statistics about how your model performed
+This is a simpler version of the evaluation data used in the other method</li>
+</ul>
+<p>This method is useful when you only have access to summary statistics rather than
+detailed evaluation data. It still produces a fitness score that measures how good
+your model is, just using less detailed information.</p>
+<p>For example, if you're building a spam filter, this might calculate accuracy
+based on how many emails were correctly classified as spam or not spam.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IFitnessCalculator_3_CalculateFitnessScore_" data-uid="AiDotNet.Interfaces.IFitnessCalculator`3.CalculateFitnessScore*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFitnessCalculator_3_CalculateFitnessScore_AiDotNet_Models_ModelEvaluationData__0__1__2__" data-uid="AiDotNet.Interfaces.IFitnessCalculator`3.CalculateFitnessScore(AiDotNet.Models.ModelEvaluationData{`0,`1,`2})">
+  CalculateFitnessScore(ModelEvaluationData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFitnessCalculator.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates a fitness score based on comprehensive model evaluation data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T CalculateFitnessScore(ModelEvaluationData&lt;T, TInput, TOutput&gt; evaluationData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>evaluationData</code> <a class="xref" href="AiDotNet.Models.ModelEvaluationData-3.html">ModelEvaluationData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Data containing model performance metrics on training and validation datasets.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A fitness score representing how well the model performs.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IFitnessCalculator_3_CalculateFitnessScore_AiDotNet_Models_ModelEvaluationData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method grades your model based on detailed performance information.</p>
+<p>The input parameter:</p>
+<ul>
+<li>evaluationData: Contains various measurements about how your model performed on different data
+This typically includes information from both:
+<ul>
+<li>Training data (data your model learned from)</li>
+<li>Validation data (new data your model hasn't seen before)</li>
+</ul>
+</li>
+</ul>
+<p>The method processes these measurements and returns a single number (the fitness score)
+that represents how good your model is. This makes it easy to compare different models
+or different versions of the same model.</p>
+<p>For example, if you're predicting house prices, this might calculate the average
+percentage error in your predictions compared to actual prices.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IFitnessCalculator_3_IsBetterFitness_" data-uid="AiDotNet.Interfaces.IFitnessCalculator`3.IsBetterFitness*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFitnessCalculator_3_IsBetterFitness__0__0_" data-uid="AiDotNet.Interfaces.IFitnessCalculator`3.IsBetterFitness(`0,`0)">
+  IsBetterFitness(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFitnessCalculator.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compares two fitness scores and determines if the current score is better than the best score so far.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool IsBetterFitness(T currentFitness, T bestFitness)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>currentFitness</code> <span class="xref">T</span></dt>
+    <dd><p>The fitness score to evaluate.</p>
+</dd>
+    <dt><code>bestFitness</code> <span class="xref">T</span></dt>
+    <dd><p>The best fitness score found so far.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the current fitness score is better than the best fitness score; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IFitnessCalculator_3_IsBetterFitness__0__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method compares two scores and tells you if the new one is better.</p>
+<p>When comparing models, you need to know which one performs better. This method handles
+the comparison logic for you, taking into account whether higher or lower scores are better.</p>
+<p>The input parameters:</p>
+<ul>
+<li>currentFitness: The new score you want to evaluate</li>
+<li>bestFitness: The best score you've seen so far</li>
+</ul>
+<p>The method returns:</p>
+<ul>
+<li>true: if the current fitness is better than the best fitness</li>
+<li>false: if the current fitness is worse than or equal to the best fitness</li>
+</ul>
+<p>This is particularly useful in algorithms that try many different models and need
+to keep track of which one is best.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFitnessCalculator.cs/#L24" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

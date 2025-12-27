@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DefaultDataPreprocessor&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DefaultDataPreprocessor&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Default implementation of a data preprocessor that prepares data for machine learning algorithms.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_DataProcessor_DefaultDataPreprocessor_3.md&amp;value=---%0Auid%3A%20AiDotNet.DataProcessor.DefaultDataPreprocessor%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.DataProcessor.DefaultDataPreprocessor`3">
+
+
+
+  <h1 id="AiDotNet_DataProcessor_DefaultDataPreprocessor_3" data-uid="AiDotNet.DataProcessor.DefaultDataPreprocessor`3" class="text-break">
+Class DefaultDataPreprocessor&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataProcessor/DefaultDataPreprocessor.cs/#L20"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.DataProcessor.html">DataProcessor</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Default implementation of a data preprocessor that prepares data for machine learning algorithms.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class DefaultDataPreprocessor&lt;T, TInput, TOutput&gt; : IDataPreprocessor&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">DefaultDataPreprocessor&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDataPreprocessor-3.html">IDataPreprocessor</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_DataProcessor_DefaultDataPreprocessor_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Data preprocessing is like preparing ingredients before cooking a meal. 
+Raw data often needs to be cleaned and transformed before a machine learning algorithm can use it effectively.
+<p>This class handles three important preprocessing steps:</p>
+<ol>
+<li>Removing outliers - Getting rid of unusual data points that might confuse the algorithm</li>
+<li>Normalizing data - Adjusting values so they're on similar scales (like converting inches and feet to all inches)</li>
+<li>Selecting features - Choosing which information is most relevant (like deciding which ingredients to include in a recipe)</li>
+</ol>
+<p>These steps help machine learning algorithms work better and learn more efficiently from your data.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_DataProcessor_DefaultDataPreprocessor_3__ctor_" data-uid="AiDotNet.DataProcessor.DefaultDataPreprocessor`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_DataProcessor_DefaultDataPreprocessor_3__ctor_AiDotNet_Interfaces_INormalizer__0__1__2__AiDotNet_Interfaces_IFeatureSelector__0__1__AiDotNet_Interfaces_IOutlierRemoval__0__1__2__AiDotNet_Models_Options_DataProcessorOptions_" data-uid="AiDotNet.DataProcessor.DefaultDataPreprocessor`3.#ctor(AiDotNet.Interfaces.INormalizer{`0,`1,`2},AiDotNet.Interfaces.IFeatureSelector{`0,`1},AiDotNet.Interfaces.IOutlierRemoval{`0,`1,`2},AiDotNet.Models.Options.DataProcessorOptions)">
+  DefaultDataPreprocessor(INormalizer&lt;T, TInput, TOutput&gt;, IFeatureSelector&lt;T, TInput&gt;, IOutlierRemoval&lt;T, TInput, TOutput&gt;, DataProcessorOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataProcessor/DefaultDataPreprocessor.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the DefaultDataPreprocessor class with specified components.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DefaultDataPreprocessor(INormalizer&lt;T, TInput, TOutput&gt; normalizer, IFeatureSelector&lt;T, TInput&gt; featureSelector, IOutlierRemoval&lt;T, TInput, TOutput&gt; outlierRemoval, DataProcessorOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>normalizer</code> <a class="xref" href="AiDotNet.Interfaces.INormalizer-3.html">INormalizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Component for normalizing data values.</p>
+</dd>
+    <dt><code>featureSelector</code> <a class="xref" href="AiDotNet.Interfaces.IFeatureSelector-2.html">IFeatureSelector</a>&lt;T, TInput&gt;</dt>
+    <dd><p>Component for selecting relevant features.</p>
+</dd>
+    <dt><code>outlierRemoval</code> <a class="xref" href="AiDotNet.Interfaces.IOutlierRemoval-3.html">IOutlierRemoval</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Component for removing outliers.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.DataProcessorOptions.html">DataProcessorOptions</a></dt>
+    <dd><p>Optional configuration settings for data processing.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DataProcessor_DefaultDataPreprocessor_3__ctor_AiDotNet_Interfaces_INormalizer__0__1__2__AiDotNet_Interfaces_IFeatureSelector__0__1__AiDotNet_Interfaces_IOutlierRemoval__0__1__2__AiDotNet_Models_Options_DataProcessorOptions__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This constructor sets up the data preprocessor with the tools it needs.
+Think of it like assembling a toolkit before starting a project:
+- The normalizer adjusts the scale of your data
+- The feature selector helps choose which parts of your data are most important
+- The outlier removal tool identifies and removes unusual data points
+- The options parameter lets you customize how these tools work together
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_DataProcessor_DefaultDataPreprocessor_3_PreprocessData_" data-uid="AiDotNet.DataProcessor.DefaultDataPreprocessor`3.PreprocessData*"></a>
+
+  <h3 id="AiDotNet_DataProcessor_DefaultDataPreprocessor_3_PreprocessData__1__2_" data-uid="AiDotNet.DataProcessor.DefaultDataPreprocessor`3.PreprocessData(`1,`2)">
+  PreprocessData(TInput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataProcessor/DefaultDataPreprocessor.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Preprocesses the input data by removing outliers, normalizing values, and selecting features.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (TInput X, TOutput y, NormalizationInfo&lt;T, TInput, TOutput&gt; normInfo) PreprocessData(TInput X, TOutput y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>X</code> <span class="xref">TInput</span></dt>
+    <dd><p>The feature matrix where rows represent samples and columns represent features.</p>
+</dd>
+    <dt><code>y</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The target vector containing the values to predict.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(TInput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2,aidotnet.models.normalizationinfo--0,-1,-2--.x">X</a>, TOutput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2,aidotnet.models.normalizationinfo--0,-1,-2--.y">y</a>, <a class="xref" href="AiDotNet.Models.NormalizationInfo-3.html">NormalizationInfo</a>&lt;T, TInput, TOutput&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2,aidotnet.models.normalizationinfo--0,-1,-2--.norminfo">normInfo</a>)</dt>
+    <dd><p>A tuple containing the processed feature matrix, target vector, and normalization information.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DataProcessor_DefaultDataPreprocessor_3_PreprocessData__1__2__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method cleans and prepares your data in three steps:
+<ol>
+<li><p>First, it removes outliers (unusual data points that might confuse the learning algorithm)</p>
+</li>
+<li><p>Then, depending on your settings, it either:</p>
+<ul>
+<li>Normalizes the data first (adjusts all values to a similar scale) and then selects the most important features, or</li>
+<li>Selects the most important features first and then normalizes the data</li>
+</ul>
+</li>
+<li><p>Finally, it returns your cleaned data along with information about how the normalization was done
+(which you'll need later if you want to use your model with new data)</p>
+</li>
+</ol>
+<p>The &quot;X&quot; matrix contains your input data (like house sizes, number of bedrooms, etc.),
+while the &quot;y&quot; vector contains what you're trying to predict (like house prices).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_DataProcessor_DefaultDataPreprocessor_3_SplitData_" data-uid="AiDotNet.DataProcessor.DefaultDataPreprocessor`3.SplitData*"></a>
+
+  <h3 id="AiDotNet_DataProcessor_DefaultDataPreprocessor_3_SplitData__1__2_" data-uid="AiDotNet.DataProcessor.DefaultDataPreprocessor`3.SplitData(`1,`2)">
+  SplitData(TInput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataProcessor/DefaultDataPreprocessor.cs/#L139"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Splits the dataset into training, validation, and test sets.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (TInput XTrain, TOutput yTrain, TInput XValidation, TOutput yValidation, TInput XTest, TOutput yTest) SplitData(TInput X, TOutput y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>X</code> <span class="xref">TInput</span></dt>
+    <dd><p>The features where rows represent samples and columns represent features.</p>
+</dd>
+    <dt><code>y</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The target values to predict.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(TInput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2,-1,-2,-1,-2-.xtrain">XTrain</a>, TOutput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2,-1,-2,-1,-2-.ytrain">yTrain</a>, TInput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2,-1,-2,-1,-2-.xvalidation">XValidation</a>, TOutput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2,-1,-2,-1,-2-.yvalidation">yValidation</a>, TInput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2,-1,-2,-1,-2-.xtest">XTest</a>, TOutput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2,-1,-2,-1,-2-.ytest">yTest</a>)</dt>
+    <dd><p>A tuple containing the training, validation, and test datasets.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DataProcessor_DefaultDataPreprocessor_3_SplitData__1__2__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method divides your data into three separate groups:
+<ol>
+<li><p>Training data - The largest portion, used to teach the model patterns
+(like studying examples to learn a new skill)</p>
+</li>
+<li><p>Validation data - A smaller portion, used to fine-tune the model
+(like practicing the skill and making adjustments)</p>
+</li>
+<li><p>Test data - Another small portion, used to evaluate how well the model works
+(like taking a final test to see how well you learned)</p>
+</li>
+</ol>
+<p>The data is shuffled randomly before splitting to ensure each set contains a good mix of examples.
+The size of each portion is determined by the settings in the options.</p>
+<p>This separation is crucial because it helps ensure your model can work well with new data it hasn't seen before.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/DataProcessor/DefaultDataPreprocessor.cs/#L20" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

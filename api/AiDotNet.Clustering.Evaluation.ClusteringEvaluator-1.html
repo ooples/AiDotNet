@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ClusteringEvaluator&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ClusteringEvaluator&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Comprehensive evaluator for clustering results.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Clustering_Evaluation_ClusteringEvaluator_1.md&amp;value=---%0Auid%3A%20AiDotNet.Clustering.Evaluation.ClusteringEvaluator%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Clustering.Evaluation.ClusteringEvaluator`1">
+
+
+
+  <h1 id="AiDotNet_Clustering_Evaluation_ClusteringEvaluator_1" data-uid="AiDotNet.Clustering.Evaluation.ClusteringEvaluator`1" class="text-break">
+Class ClusteringEvaluator&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Evaluation/ClusteringEvaluator.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Clustering.html">Clustering</a>.<a class="xref" href="AiDotNet.Clustering.Evaluation.html">Evaluation</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Comprehensive evaluator for clustering results.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ClusteringEvaluator&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ClusteringEvaluator&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Clustering_Evaluation_ClusteringEvaluator_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+ClusteringEvaluator provides a unified interface to compute multiple
+cluster validity indices and metrics. It supports both internal metrics
+(using only the data) and external metrics (comparing to ground truth).
+</p>
+<p><b>For Beginners:</b> This is your "one-stop shop" for evaluating clusters.
+<p>Instead of calling each metric separately:</p>
+<ul>
+<li>Create a ClusteringEvaluator</li>
+<li>Call EvaluateAll() to get all metrics at once</li>
+<li>Compare different clusterings easily</li>
+</ul>
+<p>The evaluator handles:</p>
+<ul>
+<li>Internal validity: How well-structured are the clusters?</li>
+<li>External validity: How well do clusters match known labels?</li>
+<li>Model selection: Which K is best? Which algorithm works best?</li>
+</ul>
+<p>Use this when:</p>
+<ul>
+<li>Comparing different clustering algorithms</li>
+<li>Tuning parameters (like number of clusters)</li>
+<li>Validating clustering results</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Clustering_Evaluation_ClusteringEvaluator_1__ctor_" data-uid="AiDotNet.Clustering.Evaluation.ClusteringEvaluator`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Clustering_Evaluation_ClusteringEvaluator_1__ctor" data-uid="AiDotNet.Clustering.Evaluation.ClusteringEvaluator`1.#ctor">
+  ClusteringEvaluator()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Evaluation/ClusteringEvaluator.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new ClusteringEvaluator with default metrics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ClusteringEvaluator()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Clustering_Evaluation_ClusteringEvaluator_1_AddExternalMetric_" data-uid="AiDotNet.Clustering.Evaluation.ClusteringEvaluator`1.AddExternalMetric*"></a>
+
+  <h3 id="AiDotNet_Clustering_Evaluation_ClusteringEvaluator_1_AddExternalMetric_AiDotNet_Clustering_Evaluation_IExternalClusterMetric__0__" data-uid="AiDotNet.Clustering.Evaluation.ClusteringEvaluator`1.AddExternalMetric(AiDotNet.Clustering.Evaluation.IExternalClusterMetric{`0})">
+  AddExternalMetric(IExternalClusterMetric&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Evaluation/ClusteringEvaluator.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a custom external metric to the evaluator.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddExternalMetric(IExternalClusterMetric&lt;T&gt; metric)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>metric</code> <a class="xref" href="AiDotNet.Clustering.Evaluation.IExternalClusterMetric-1.html">IExternalClusterMetric</a>&lt;T&gt;</dt>
+    <dd><p>The metric to add.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_Evaluation_ClusteringEvaluator_1_AddInternalMetric_" data-uid="AiDotNet.Clustering.Evaluation.ClusteringEvaluator`1.AddInternalMetric*"></a>
+
+  <h3 id="AiDotNet_Clustering_Evaluation_ClusteringEvaluator_1_AddInternalMetric_AiDotNet_Clustering_Evaluation_IClusterMetric__0__" data-uid="AiDotNet.Clustering.Evaluation.ClusteringEvaluator`1.AddInternalMetric(AiDotNet.Clustering.Evaluation.IClusterMetric{`0})">
+  AddInternalMetric(IClusterMetric&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Evaluation/ClusteringEvaluator.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a custom internal metric to the evaluator.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddInternalMetric(IClusterMetric&lt;T&gt; metric)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>metric</code> <a class="xref" href="AiDotNet.Clustering.Evaluation.IClusterMetric-1.html">IClusterMetric</a>&lt;T&gt;</dt>
+    <dd><p>The metric to add.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_Evaluation_ClusteringEvaluator_1_CompareClusterings_" data-uid="AiDotNet.Clustering.Evaluation.ClusteringEvaluator`1.CompareClusterings*"></a>
+
+  <h3 id="AiDotNet_Clustering_Evaluation_ClusteringEvaluator_1_CompareClusterings_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Collections_Generic_List_AiDotNet_Tensors_LinearAlgebra_Vector__0___System_Collections_Generic_List_System_String__" data-uid="AiDotNet.Clustering.Evaluation.ClusteringEvaluator`1.CompareClusterings(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},System.Collections.Generic.List{AiDotNet.Tensors.LinearAlgebra.Vector{`0}},System.Collections.Generic.List{System.String})">
+  CompareClusterings(Matrix&lt;T&gt;, List&lt;Vector&lt;T&gt;&gt;, List&lt;string&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Evaluation/ClusteringEvaluator.cs/#L167"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compares multiple clustering results and ranks them.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;ClusteringComparisonResult&gt; CompareClusterings(Matrix&lt;T&gt; data, List&lt;Vector&lt;T&gt;&gt; labelsList, List&lt;string&gt;? algorithmNames = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The data matrix.</p>
+</dd>
+    <dt><code>labelsList</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List of different clustering label assignments.</p>
+</dd>
+    <dt><code>algorithmNames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Optional names for each algorithm.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Clustering.Evaluation.ClusteringComparisonResult.html">ClusteringComparisonResult</a>&gt;</dt>
+    <dd><p>Ranked comparison results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_Evaluation_ClusteringEvaluator_1_EvaluateAll_" data-uid="AiDotNet.Clustering.Evaluation.ClusteringEvaluator`1.EvaluateAll*"></a>
+
+  <h3 id="AiDotNet_Clustering_Evaluation_ClusteringEvaluator_1_EvaluateAll_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Clustering.Evaluation.ClusteringEvaluator`1.EvaluateAll(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  EvaluateAll(Matrix&lt;T&gt;, Vector&lt;T&gt;, Vector&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Evaluation/ClusteringEvaluator.cs/#L140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates all metrics for a clustering result.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ClusteringEvaluationResult EvaluateAll(Matrix&lt;T&gt; data, Vector&lt;T&gt; predictedLabels, Vector&lt;T&gt;? trueLabels = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The data matrix.</p>
+</dd>
+    <dt><code>predictedLabels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The predicted cluster assignments.</p>
+</dd>
+    <dt><code>trueLabels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Optional ground truth labels for external metrics.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Clustering.Evaluation.ClusteringEvaluationResult.html">ClusteringEvaluationResult</a></dt>
+    <dd><p>Complete evaluation results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_Evaluation_ClusteringEvaluator_1_EvaluateExternal_" data-uid="AiDotNet.Clustering.Evaluation.ClusteringEvaluator`1.EvaluateExternal*"></a>
+
+  <h3 id="AiDotNet_Clustering_Evaluation_ClusteringEvaluator_1_EvaluateExternal_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Clustering.Evaluation.ClusteringEvaluator`1.EvaluateExternal(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  EvaluateExternal(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Evaluation/ClusteringEvaluator.cs/#L113"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates all external metrics for a clustering result.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, double&gt; EvaluateExternal(Vector&lt;T&gt; trueLabels, Vector&lt;T&gt; predictedLabels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>trueLabels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The ground truth labels.</p>
+</dd>
+    <dt><code>predictedLabels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The predicted cluster assignments.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Dictionary of metric name to value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_Evaluation_ClusteringEvaluator_1_EvaluateInternal_" data-uid="AiDotNet.Clustering.Evaluation.ClusteringEvaluator`1.EvaluateInternal*"></a>
+
+  <h3 id="AiDotNet_Clustering_Evaluation_ClusteringEvaluator_1_EvaluateInternal_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Clustering.Evaluation.ClusteringEvaluator`1.EvaluateInternal(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  EvaluateInternal(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Evaluation/ClusteringEvaluator.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates all internal metrics for a clustering result.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, double&gt; EvaluateInternal(Matrix&lt;T&gt; data, Vector&lt;T&gt; labels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The data matrix.</p>
+</dd>
+    <dt><code>labels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The cluster assignments.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Dictionary of metric name to value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_Evaluation_ClusteringEvaluator_1_FindOptimalK_" data-uid="AiDotNet.Clustering.Evaluation.ClusteringEvaluator`1.FindOptimalK*"></a>
+
+  <h3 id="AiDotNet_Clustering_Evaluation_ClusteringEvaluator_1_FindOptimalK_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Func_System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0___System_ValueTuple_System_Int32_System_Int32__" data-uid="AiDotNet.Clustering.Evaluation.ClusteringEvaluator`1.FindOptimalK(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},System.Func{System.Int32,AiDotNet.Tensors.LinearAlgebra.Vector{`0}},System.ValueTuple{System.Int32,System.Int32})">
+  FindOptimalK(Matrix&lt;T&gt;, Func&lt;int, Vector&lt;T&gt;&gt;, (int min, int max))
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Evaluation/ClusteringEvaluator.cs/#L203"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the optimal number of clusters using multiple criteria.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OptimalKAnalysis FindOptimalK(Matrix&lt;T&gt; data, Func&lt;int, Vector&lt;T&gt;&gt; clusteringFunction, (int min, int max) kRange)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The data matrix.</p>
+</dd>
+    <dt><code>clusteringFunction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Function that takes K and returns labels.</p>
+</dd>
+    <dt><code>kRange</code> (<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,system.int32-.min">min</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,system.int32-.max">max</a>)</dt>
+    <dd><p>Range of K values to test.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Clustering.Evaluation.OptimalKAnalysis.html">OptimalKAnalysis</a></dt>
+    <dd><p>Analysis results for each K.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Evaluation/ClusteringEvaluator.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,3182 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class LayerHelper&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class LayerHelper&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides helper methods for creating various neural network layer configurations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Helpers_LayerHelper_1.md&amp;value=---%0Auid%3A%20AiDotNet.Helpers.LayerHelper%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Helpers.LayerHelper`1">
+
+
+
+  <h1 id="AiDotNet_Helpers_LayerHelper_1" data-uid="AiDotNet.Helpers.LayerHelper`1" class="text-break">
+Class LayerHelper&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L14"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Helpers.html">Helpers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides helper methods for creating various neural network layer configurations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class LayerHelper&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (typically float or double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">LayerHelper&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Helpers_LayerHelper_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>This class contains factory methods that create pre-configured sets of neural network layers
+for common architectures like standard feed-forward networks, CNNs, ResNets, and more.</p>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultAttentionLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultAttentionLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultAttentionLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultAttentionLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0})">
+  CreateDefaultAttentionLayers(NeuralNetworkArchitecture&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L507"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default set of attention-based layers for transformer-style architectures.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultAttentionLayers(NeuralNetworkArchitecture&lt;T&gt; architecture)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming an attention-based neural network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultAttentionLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Attention mechanisms allow neural networks to focus on specific parts of the input 
+that are most relevant for a given task. Similar to how humans pay attention to specific details 
+in a conversation, these layers help the network "pay attention" to important parts of the data.
+Transformers use this mechanism to process sequences (like text) very effectively.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultAutoEncoderLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultAutoEncoderLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultAutoEncoderLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultAutoEncoderLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0})">
+  CreateDefaultAutoEncoderLayers(NeuralNetworkArchitecture&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L549"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default autoencoder neural network architecture.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultAutoEncoderLayers(NeuralNetworkArchitecture&lt;T&gt; architecture)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming an autoencoder neural network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultAutoEncoderLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> An autoencoder is a type of neural network that learns to compress data into a 
+smaller representation and then reconstruct it back to the original form. Think of it like 
+learning to create a thumbnail of an image and then expanding it back to full size. The network 
+has two main parts: an encoder that compresses the data and a decoder that reconstructs it.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultBayesianNeuralNetworkLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultBayesianNeuralNetworkLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultBayesianNeuralNetworkLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultBayesianNeuralNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0})">
+  CreateDefaultBayesianNeuralNetworkLayers(NeuralNetworkArchitecture&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L2191"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default configuration of layers for a Bayesian neural network (Bayes-by-Backprop style).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultBayesianNeuralNetworkLayers(NeuralNetworkArchitecture&lt;T&gt; architecture)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultBayesianNeuralNetworkLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This mirrors the library's default dense+activation patterns, but uses Bayesian dense layers so the network can
+express epistemic uncertainty through weight distributions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultCNNLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultCNNLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultCNNLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultCNNLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32)">
+  CreateDefaultCNNLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int, int, int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a Convolutional Neural Network (CNN) with configurable layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultCNNLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int convLayerCount = 2, int filterCount = 32, int kernelSize = 3, int denseLayerCount = 1, int denseLayerSize = 64, int outputSize = 1)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration.</p>
+</dd>
+    <dt><code>convLayerCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of convolutional layers (default: 2).</p>
+</dd>
+    <dt><code>filterCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of filters in each convolutional layer (default: 32).</p>
+</dd>
+    <dt><code>kernelSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Size of the convolutional kernel (default: 3).</p>
+</dd>
+    <dt><code>denseLayerCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of dense layers after convolutional layers (default: 1).</p>
+</dd>
+    <dt><code>denseLayerSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of neurons in each dense layer (default: 64).</p>
+</dd>
+    <dt><code>outputSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of output neurons (default: 1).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a CNN.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultCNNLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A Convolutional Neural Network (CNN) is specialized for processing grid-like data,
+such as images. Instead of connecting every input to every neuron (which would be inefficient for images),
+CNNs use filters that scan across the image to detect features like edges, textures, and shapes.
+</p>
+<p>
+Key components in this CNN:
+- Convolutional layers: Detect features in the input using filters
+- Pooling layers: Reduce the size of the data while keeping important information
+- Flatten layer: Converts the multi-dimensional data to a flat vector
+- Dense layers: Process the extracted features to make predictions
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultCapsuleNetworkLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultCapsuleNetworkLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultCapsuleNetworkLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultCapsuleNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0})">
+  CreateDefaultCapsuleNetworkLayers(NeuralNetworkArchitecture&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L619"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default capsule network architecture.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultCapsuleNetworkLayers(NeuralNetworkArchitecture&lt;T&gt; architecture)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a capsule network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultCapsuleNetworkLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A capsule network is an advanced type of neural network that tries to better 
+understand spatial relationships in data. Unlike traditional networks that just detect features, 
+capsule networks also track the position, orientation, and size of features. Think of it like 
+the difference between recognizing a face by just its parts (eyes, nose, mouth) versus understanding 
+how those parts relate to each other in 3D space.
+</p>
+<p>
+The network consists of special "capsule" layers that group neurons together to represent entities 
+and their properties, allowing the network to better understand complex structures in data.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultClipLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultClipLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultClipLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultClipLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32)">
+  CreateDefaultClipLayers(NeuralNetworkArchitecture&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L3766"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for CLIP-style multimodal networks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultClipLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int projectionDim = 512)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture specification.</p>
+</dd>
+    <dt><code>projectionDim</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The projection dimension for embeddings (default: 512).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of projection layers for CLIP fine-tuning.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultClipLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+CLIP uses pre-trained ONNX encoders for most of its work,
+but these layers provide optional projection heads for fine-tuning or feature extraction.
+</p>
+<p><b>For Beginners:</b> CLIP has two main parts: an image encoder and a text encoder.
+These pre-trained encoders are loaded from ONNX files. The projection layers here are
+optional additions that can:
+- Adapt the embeddings for specific tasks
+- Allow fine-tuning on new domains
+- Match embedding dimensions between different model variants
+<p>If you're just using CLIP for inference (getting embeddings), you typically don't
+need these layers. They're useful when you want to adapt CLIP for a specific task.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultDNCLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultDNCLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultDNCLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultDNCLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32,System.Int32,System.Int32)">
+  CreateDefaultDNCLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L771"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default Differentiable Neural Computer (DNC) with pre-configured layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultDNCLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int controllerSize, int memoryWordSize, int readHeads, int interfaceSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration.</p>
+</dd>
+    <dt><code>controllerSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the controller network.</p>
+</dd>
+    <dt><code>memoryWordSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of each memory word.</p>
+</dd>
+    <dt><code>readHeads</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of read heads.</p>
+</dd>
+    <dt><code>interfaceSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the interface between controller and memory.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a Differentiable Neural Computer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultDNCLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A Differentiable Neural Computer (DNC) is like a neural network with a built-in 
+memory system. Traditional neural networks process information and then forget it, but a DNC 
+can store information in its "memory" and retrieve it later when needed. This makes DNCs good 
+at tasks that require remembering information over time, like answering questions about a story 
+or navigating through complex environments.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultDeepBeliefNetworkLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultDeepBeliefNetworkLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultDeepBeliefNetworkLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultDeepBeliefNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0})">
+  CreateDefaultDeepBeliefNetworkLayers(NeuralNetworkArchitecture&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L686"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default Deep Belief Network (DBN) with pre-configured layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultDeepBeliefNetworkLayers(NeuralNetworkArchitecture&lt;T&gt; architecture)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a Deep Belief Network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultDeepBeliefNetworkLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A Deep Belief Network is a type of neural network that learns to recognize patterns 
+in data by building multiple layers that each specialize in finding specific features. It works by 
+training each layer one at a time (called "pre-training"), which helps the network learn more 
+effectively, especially when you don't have a lot of labeled training data.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultDeepBoltzmannMachineLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultDeepBoltzmannMachineLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultDeepBoltzmannMachineLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultDeepBoltzmannMachineLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0})">
+  CreateDefaultDeepBoltzmannMachineLayers(NeuralNetworkArchitecture&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L238"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for a Deep Boltzmann Machine (DBM).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultDeepBoltzmannMachineLayers(NeuralNetworkArchitecture&lt;T&gt; architecture)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration that defines input and output shapes.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a Deep Boltzmann Machine.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultDeepBoltzmannMachineLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A Deep Boltzmann Machine is a type of neural network that learns to recognize patterns 
+in data without supervision. It's made up of multiple layers of "hidden units" that learn to represent 
+features of the input data. DBMs are particularly good at learning complex patterns and can be used for 
+tasks like feature learning, dimensionality reduction, and generating new data similar to the training set.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultDeepOperatorNetworkLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultDeepOperatorNetworkLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultDeepOperatorNetworkLayers_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultDeepOperatorNetworkLayers(System.Int32,System.Int32,System.Int32,System.Int32,System.Int32)">
+  CreateDefaultDeepOperatorNetworkLayers(int, int, int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L2948"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for a Deep Operator Network (DeepONet).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static (IEnumerable&lt;ILayer&lt;T&gt;&gt; BranchLayers, IEnumerable&lt;ILayer&lt;T&gt;&gt; TrunkLayers) CreateDefaultDeepOperatorNetworkLayers(int branchInputSize, int trunkInputSize, int outputSize = 1, int hiddenLayerCount = 3, int hiddenLayerSize = 64)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>branchInputSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Size of the branch network input (function samples).</p>
+</dd>
+    <dt><code>trunkInputSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Size of the trunk network input (query locations).</p>
+</dd>
+    <dt><code>outputSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of output components (default: 1 for scalar operators).
+For multi-output operators, each output component uses <code class="paramref">hiddenLayerSize</code> basis functions,
+so the final layer outputs <code>hiddenLayerSize * outputSize</code> values that are reshaped and summed.</p>
+</dd>
+    <dt><code>hiddenLayerCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of hidden layers in each sub-network (default: 3).</p>
+</dd>
+    <dt><code>hiddenLayerSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of neurons in each hidden layer, and the number of basis functions per output component (default: 64).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.collections.generic.ienumerable-aidotnet.interfaces.ilayer--0--,system.collections.generic.ienumerable-aidotnet.interfaces.ilayer--0---.branchlayers">BranchLayers</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.collections.generic.ienumerable-aidotnet.interfaces.ilayer--0--,system.collections.generic.ienumerable-aidotnet.interfaces.ilayer--0---.trunklayers">TrunkLayers</a>)</dt>
+    <dd><p>A tuple of (branchLayers, trunkLayers) for the DeepONet architecture.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultDeepOperatorNetworkLayers_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> DeepONet learns operators - functions that take functions as input.
+For example, an operator might take a temperature distribution as input and output
+the resulting heat flow. The branch network encodes the input function, while the
+trunk network handles where you want to evaluate the output.
+</p>
+<p>
+<b>Architecture:</b> Branch encodes input function, Trunk encodes query location.
+Output = sum(Branch * Trunk) + bias, allowing learning of complex operators.
+</p>
+<p>
+<b>Multi-output handling:</b> For operators with multiple output components (e.g., velocity
+with x,y,z components), set <code class="paramref">outputSize</code> to the number of components.
+Each component gets its own set of basis functions. The branch and trunk networks
+output <code>hiddenLayerSize * outputSize</code> values, which are grouped as
+[component1_basis1..p, component2_basis1..p, ...] where p = <code class="paramref">hiddenLayerSize</code>.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultDeepQNetworkLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultDeepQNetworkLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultDeepQNetworkLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultDeepQNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0})">
+  CreateDefaultDeepQNetworkLayers(NeuralNetworkArchitecture&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L730"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default Deep Q-Network (DQN) with pre-configured layers for reinforcement learning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultDeepQNetworkLayers(NeuralNetworkArchitecture&lt;T&gt; architecture)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a Deep Q-Network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultDeepQNetworkLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A Deep Q-Network is a type of neural network used in reinforcement learning, 
+which is how computers learn to make decisions by trying different actions and receiving rewards. 
+Think of it like teaching a dog new tricks with treats. The network learns which actions 
+(like moving left or right in a game) will lead to the highest rewards over time.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultDeepRitzLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultDeepRitzLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultDeepRitzLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultDeepRitzLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32)">
+  CreateDefaultDeepRitzLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L3161"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for the Deep Ritz Method network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultDeepRitzLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int hiddenLayerCount = 4, int hiddenLayerSize = 50)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration.</p>
+</dd>
+    <dt><code>hiddenLayerCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of hidden layers (default: 4).</p>
+</dd>
+    <dt><code>hiddenLayerSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of neurons in each hidden layer (default: 50).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a Deep Ritz network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultDeepRitzLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The Deep Ritz Method solves PDEs by minimizing an energy functional
+instead of directly enforcing the PDE. This is based on the Ritz method from
+calculus of variations. The network learns the function that minimizes the energy.
+</p>
+<p>
+Similar architecture to VPINN but used with energy-based loss functions.
+Tanh activation provides smooth second derivatives needed for energy computations.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultELMLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultELMLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultELMLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultELMLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32)">
+  CreateDefaultELMLayers(NeuralNetworkArchitecture&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L1216"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for an Extreme Learning Machine (ELM) neural network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultELMLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int hiddenLayerSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration.</p>
+</dd>
+    <dt><code>hiddenLayerSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the hidden layer.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming an Extreme Learning Machine.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultELMLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> An Extreme Learning Machine (ELM) is a simplified neural network where only the 
+output layer weights are trained. The hidden layer weights are randomly initialized and never updated. 
+This makes ELMs very fast to train compared to traditional neural networks, while still providing 
+good performance for many tasks. Think of it as a "shortcut" approach to neural network training.
+</p>
+<p>
+ELMs work by projecting the input data into a higher-dimensional space using random weights, 
+then finding the best output weights to solve the problem. They're particularly useful when you 
+need a quick solution and don't have time for extensive training.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultESNLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultESNLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultESNLayers_System_Int32_System_Int32_System_Int32_System_Double_System_Double_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultESNLayers(System.Int32,System.Int32,System.Int32,System.Double,System.Double)">
+  CreateDefaultESNLayers(int, int, int, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L814"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default Echo State Network (ESN) with pre-configured layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultESNLayers(int inputSize, int outputSize, int reservoirSize, double spectralRadius = 0.9, double sparsity = 0.1)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the input layer.</p>
+</dd>
+    <dt><code>outputSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the output layer.</p>
+</dd>
+    <dt><code>reservoirSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the reservoir (hidden layer).</p>
+</dd>
+    <dt><code>spectralRadius</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Controls the stability of the reservoir dynamics (default: 0.9).</p>
+</dd>
+    <dt><code>sparsity</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The connection sparsity in the reservoir (default: 0.1).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming an Echo State Network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultESNLayers_System_Int32_System_Int32_System_Int32_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> An Echo State Network is a special type of recurrent neural network where most 
+of the connections between neurons are fixed (not trained). Only the connections from the hidden 
+layer to the output are trained. Think of it like having a pool of water (the reservoir) that 
+you disturb with input signals, and then you learn to read the ripple patterns to predict outputs. 
+This makes ESNs very fast to train compared to other recurrent networks.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultFeedForwardLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultFeedForwardLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultFeedForwardLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultFeedForwardLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32)">
+  CreateDefaultFeedForwardLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L2527"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for a feed-forward neural network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultFeedForwardLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int hiddenLayerCount = 2, int hiddenLayerSize = 64)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration that defines input and output shapes.</p>
+</dd>
+    <dt><code>hiddenLayerCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of hidden layers (default: 2).</p>
+</dd>
+    <dt><code>hiddenLayerSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of neurons in each hidden layer (default: 64).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a feed-forward neural network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultFeedForwardLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method builds a basic feed-forward neural network. Think of it as a series of 
+connected layers where information flows from the input, through "hidden" processing layers, to the output.
+</p>
+<p>
+Key components:
+- Input layer: Receives the raw data
+- Hidden layers: Process and transform the data, learning patterns
+- Output layer: Produces the final prediction or classification
+<p>The network automatically adjusts for different types of tasks (like classification or regression)
+by choosing appropriate activation functions for the output layer.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultFourierNeuralOperatorLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultFourierNeuralOperatorLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultFourierNeuralOperatorLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32___System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultFourierNeuralOperatorLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32[],System.Int32,System.Int32,System.Int32)">
+  CreateDefaultFourierNeuralOperatorLayers(NeuralNetworkArchitecture&lt;T&gt;, int[], int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L3062"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for a Fourier Neural Operator (FNO).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultFourierNeuralOperatorLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int[] spatialDimensions, int numFourierLayers = 4, int hiddenChannels = 64, int numModes = 12)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration.</p>
+</dd>
+    <dt><code>spatialDimensions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Dimensions of the spatial domain (e.g., [64, 64] for 2D grid, [32] for 1D).
+This determines the FFT size for spectral operations.</p>
+</dd>
+    <dt><code>numFourierLayers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of Fourier layers (default: 4).</p>
+</dd>
+    <dt><code>hiddenChannels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of hidden channels/width (default: 64).</p>
+</dd>
+    <dt><code>numModes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of Fourier modes to retain (default: 12). Lower = smoother, higher = more detail.
+Should be less than or equal to smallest spatial dimension.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a Fourier Neural Operator.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultFourierNeuralOperatorLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32___System_Int32_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Fourier Neural Operators learn mappings between function spaces
+by operating in frequency domain. They're especially powerful for PDEs because
+many physical phenomena have simple representations in frequency space.
+</p>
+<p>
+<b>Architecture:</b>
+<ol><li>Lifting layer: Projects input to higher-dimensional channel space</li><li>Fourier layers: Apply spectral convolution (FFT → learnable weights → IFFT) + local linear transform</li><li>Projection layers: Map back to output dimension</li></ol>
+
+<p>
+<b>Key FNO Properties:</b>
+<ul><li>Resolution-invariant: Train at one resolution, evaluate at another</li><li>Global receptive field through spectral operations</li><li>Efficient for smooth functions (low-frequency dominated)</li></ul>
+
+<p>
+<b>Note:</b> For full FNO functionality with training, use the <a class="xref" href="AiDotNet.PhysicsInformed.NeuralOperators.FourierNeuralOperator-1.html">FourierNeuralOperator&lt;T&gt;</a>
+class directly, which provides a complete neural operator implementation.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when spatialDimensions is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when spatialDimensions is empty.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultGNNLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultGNNLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultGNNLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultGNNLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0})">
+  CreateDefaultGNNLayers(NeuralNetworkArchitecture&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L1256"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for a Graph Neural Network (GNN).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultGNNLayers(NeuralNetworkArchitecture&lt;T&gt; architecture)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a Graph Neural Network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultGNNLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Graph Neural Networks (GNNs) are specialized neural networks designed to work with 
+graph-structured data, where information is represented as nodes (points) connected by edges (lines). 
+Examples include social networks, molecular structures, or road networks.
+</p>
+<p>
+Unlike standard neural networks that process individual data points independently, GNNs can 
+understand relationships between data points. They work by passing information between connected 
+nodes, allowing each node to "learn" from its neighbors. This makes GNNs powerful for tasks where 
+relationships between entities matter, such as recommending friends on social media, predicting 
+protein interactions, or analyzing traffic patterns.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultGRULayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultGRULayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultGRULayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultGRULayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0})">
+  CreateDefaultGRULayers(NeuralNetworkArchitecture&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L1512"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default Gated Recurrent Unit (GRU) neural network layer configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultGRULayers(NeuralNetworkArchitecture&lt;T&gt; architecture)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture specification.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers configured for GRU-based processing.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultGRULayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A GRU (Gated Recurrent Unit) is a type of recurrent neural network that's 
+especially good at learning patterns in sequences of data, like text or time series. 
+It's similar to LSTM but with a simpler structure, making it faster to train while 
+still capturing long-term dependencies in data.
+</p>
+<p>
+This method automatically configures appropriate GRU layers based on your task type,
+with sensible defaults for hidden layer sizes and activation functions.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the architecture has invalid input or output dimensions.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultGraphAttentionLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultGraphAttentionLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultGraphAttentionLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Double_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultGraphAttentionLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32,System.Double)">
+  CreateDefaultGraphAttentionLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L1388"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for a Graph Attention Network (GAT).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultGraphAttentionLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int numHeads = 8, int numLayers = 2, double dropoutRate = 0.6)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture specification.</p>
+</dd>
+    <dt><code>numHeads</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of attention heads per layer (default: 8).</p>
+</dd>
+    <dt><code>numLayers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of GAT layers (default: 2).</p>
+</dd>
+    <dt><code>dropoutRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Dropout rate for attention coefficients (default: 0.6).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers configured for GAT processing.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultGraphAttentionLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> GAT uses attention mechanisms to learn which neighbors are most important
+for each node, allowing dynamic weighting of neighbor contributions.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultGraphClassificationLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultGraphClassificationLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultGraphClassificationLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Int32_System_Double_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultGraphClassificationLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32,System.Int32,System.Double)">
+  CreateDefaultGraphClassificationLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int, int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L2678"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for a Graph Classification model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultGraphClassificationLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int hiddenDim = 64, int embeddingDim = 128, int numGnnLayers = 3, double dropoutRate = 0.5)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture specification.</p>
+</dd>
+    <dt><code>hiddenDim</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Hidden dimension size (default: 64).</p>
+</dd>
+    <dt><code>embeddingDim</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Graph embedding dimension (default: 128).</p>
+</dd>
+    <dt><code>numGnnLayers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of GNN layers (default: 3).</p>
+</dd>
+    <dt><code>dropoutRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Dropout rate for regularization (default: 0.5).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers configured for graph classification.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultGraphClassificationLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Int32_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Graph classification predicts labels for entire graphs.
+This architecture uses multiple GCN layers followed by pooling and classification.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultGraphGenerationLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultGraphGenerationLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultGraphGenerationLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultGraphGenerationLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32)">
+  CreateDefaultGraphGenerationLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L2729"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for a Graph Generation model (VGAE encoder).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultGraphGenerationLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int hiddenDim = 32, int numEncoderLayers = 2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture specification.</p>
+</dd>
+    <dt><code>hiddenDim</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Hidden dimension size (default: 32).</p>
+</dd>
+    <dt><code>numEncoderLayers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of encoder GNN layers (default: 2).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers configured for graph generation encoder.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultGraphGenerationLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Graph generation models learn to create new graph structures.
+This encoder uses GCN layers to map node features to a latent space.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultGraphIsomorphismLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultGraphIsomorphismLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultGraphIsomorphismLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Boolean_System_Double_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultGraphIsomorphismLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32,System.Boolean,System.Double)">
+  CreateDefaultGraphIsomorphismLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int, bool, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L1448"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for a Graph Isomorphism Network (GIN).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultGraphIsomorphismLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int mlpHiddenDim = 64, int numLayers = 5, bool learnEpsilon = true, double initialEpsilon = 0)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture specification.</p>
+</dd>
+    <dt><code>mlpHiddenDim</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Hidden dimension for MLP within GIN layers (default: 64).</p>
+</dd>
+    <dt><code>numLayers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of GIN layers (default: 5).</p>
+</dd>
+    <dt><code>learnEpsilon</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to learn epsilon parameter (default: true).</p>
+</dd>
+    <dt><code>initialEpsilon</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Initial value for epsilon (default: 0.0).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers configured for GIN processing.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultGraphIsomorphismLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Boolean_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> GIN is provably as powerful as the Weisfeiler-Lehman graph isomorphism test,
+making it optimal for distinguishing graph structures.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultGraphSAGELayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultGraphSAGELayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultGraphSAGELayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__AiDotNet_Enums_SAGEAggregatorType_System_Int32_System_Boolean_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultGraphSAGELayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},AiDotNet.Enums.SAGEAggregatorType,System.Int32,System.Boolean)">
+  CreateDefaultGraphSAGELayers(NeuralNetworkArchitecture&lt;T&gt;, SAGEAggregatorType, int, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L1330"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for a GraphSAGE (Graph Sample and Aggregate) Network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultGraphSAGELayers(NeuralNetworkArchitecture&lt;T&gt; architecture, SAGEAggregatorType aggregatorType = SAGEAggregatorType.Mean, int numLayers = 2, bool normalize = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture specification.</p>
+</dd>
+    <dt><code>aggregatorType</code> <a class="xref" href="AiDotNet.Enums.SAGEAggregatorType.html">SAGEAggregatorType</a></dt>
+    <dd><p>The type of aggregation function (default: Mean).</p>
+</dd>
+    <dt><code>numLayers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of GraphSAGE layers (default: 2).</p>
+</dd>
+    <dt><code>normalize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to apply L2 normalization (default: true).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers configured for GraphSAGE processing.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultGraphSAGELayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__AiDotNet_Enums_SAGEAggregatorType_System_Int32_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> GraphSAGE learns to aggregate neighbor information for inductive learning.
+It can generalize to new, unseen nodes by learning aggregation functions.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultHTMLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultHTMLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultHTMLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Double_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultHTMLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32,System.Double)">
+  CreateDefaultHTMLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L1675"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default Hierarchical Temporal Memory (HTM) neural network layer configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultHTMLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int columnCount, int cellsPerColumn, double sparsityThreshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture specification.</p>
+</dd>
+    <dt><code>columnCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of columns in the HTM network.</p>
+</dd>
+    <dt><code>cellsPerColumn</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of cells per column.</p>
+</dd>
+    <dt><code>sparsityThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The sparsity threshold for the spatial pooler.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers configured for HTM processing.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultHTMLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Hierarchical Temporal Memory (HTM) is a machine learning technology that 
+mimics certain structural and algorithmic properties of the neocortex (the part of the brain 
+responsible for higher-order thinking). HTM is particularly good at learning patterns in 
+sequential data and making predictions.
+</p>
+<p>
+Key HTM concepts:
+- Columns: Vertical arrangements of cells that work together
+- Cells: The basic processing units (like neurons)
+- Sparsity: Only a small percentage of cells are active at any time, which helps with learning
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the architecture has invalid input or output dimensions.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultHamiltonianLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultHamiltonianLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultHamiltonianLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultHamiltonianLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32)">
+  CreateDefaultHamiltonianLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L2779"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for a Hamiltonian Neural Network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultHamiltonianLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int hiddenLayerCount = 3, int hiddenLayerSize = 64)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration that defines input and output shapes.</p>
+</dd>
+    <dt><code>hiddenLayerCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of hidden layers (default: 3).</p>
+</dd>
+    <dt><code>hiddenLayerSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of neurons in each hidden layer (default: 64).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a Hamiltonian neural network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultHamiltonianLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Hamiltonian Neural Networks (HNNs) learn the energy function (Hamiltonian)
+of a physical system. The network takes a state vector [q, p] (positions and momenta) as input
+and outputs a scalar energy value.
+</p>
+<p>
+Key design choices:
+- Uses Tanh activation in hidden layers for smooth, bounded outputs that help with gradient computation
+- Output layer has linear activation since the Hamiltonian can be any real number
+- Architecture is designed for computing gradients (∂H/∂q, ∂H/∂p) to derive dynamics
+<p>The network structure enables Hamilton's equations:</p>
+<ul>
+<li>dq/dt = ∂H/∂p (velocity from momentum gradient)</li>
+<li>dp/dt = -∂H/∂q (force from position gradient)</li>
+</ul>
+<p>This guarantees energy conservation by construction.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultLSMLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultLSMLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultLSMLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Double_System_Double_System_Double_System_Double_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultLSMLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Double,System.Double,System.Double,System.Double)">
+  CreateDefaultLSMLayers(NeuralNetworkArchitecture&lt;T&gt;, int, double, double, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L2284"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default configuration of layers for a Liquid State Machine (LSM) neural network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultLSMLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int reservoirSize = 100, double connectionProbability = 0.1, double spectralRadius = 0.9, double inputScaling = 1, double leakingRate = 1)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture specification.</p>
+</dd>
+    <dt><code>reservoirSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the reservoir (number of neurons in the reservoir layer). Default is 100.</p>
+</dd>
+    <dt><code>connectionProbability</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The probability of connection between neurons in the reservoir. Default is 0.1 (10%).</p>
+</dd>
+    <dt><code>spectralRadius</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Controls the stability of the reservoir dynamics. Default is 0.9.</p>
+</dd>
+    <dt><code>inputScaling</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Scaling factor for input connections. Default is 1.0.</p>
+</dd>
+    <dt><code>leakingRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Controls how quickly the reservoir responds to new inputs. Default is 1.0.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers configured for a Liquid State Machine.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultLSMLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Double_System_Double_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A Liquid State Machine is a special type of neural network inspired by how 
+the brain processes information. The key component is the "reservoir" - imagine it as a pool 
+of randomly connected neurons that create complex patterns when input is fed into them.
+<ul>
+<li>The reservoirSize is how many neurons are in this pool</li>
+<li>The connectionProbability determines how densely connected these neurons are</li>
+<li>The spectralRadius affects how stable the patterns in the reservoir are</li>
+<li>The inputScaling controls how strongly the input affects the reservoir</li>
+<li>The leakingRate determines how quickly the reservoir responds to new information</li>
+</ul>
+<p>LSMs are particularly good at processing time-dependent data like speech or video.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when architecture is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when input shape is not specified or input/output size is not positive.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultLSTMNetworkLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultLSTMNetworkLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultLSTMNetworkLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultLSTMNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0})">
+  CreateDefaultLSTMNetworkLayers(NeuralNetworkArchitecture&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L2399"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default configuration of layers for a Long Short-Term Memory (LSTM) neural network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultLSTMNetworkLayers(NeuralNetworkArchitecture&lt;T&gt; architecture)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture specification.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers configured for an LSTM neural network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultLSTMNetworkLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> LSTM (Long Short-Term Memory) networks are a special kind of neural network
+designed to remember information for long periods of time. Think of them like a person with
+a good memory who can recall things from the past to make decisions in the present.
+</p>
+<p>
+LSTMs are particularly useful for:
+- Text prediction (like autocomplete on your phone)
+- Speech recognition
+- Time series forecasting (like stock prices or weather)
+- Any task where the order of data matters
+</p>
+<p>
+Key terms explained:
+- Hidden Size: How much information the network can remember at once (bigger = more memory)
+- Layers: How many processing steps the data goes through (more layers = more complex patterns)
+- Activation Function: How neurons decide whether to fire (like Tanh or Sigmoid)
+- Recurrent Activation: Special activation function used for the memory gates
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when architecture is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when input shape is not specified or input/output size is not positive.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultLagrangianLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultLagrangianLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultLagrangianLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultLagrangianLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32)">
+  CreateDefaultLagrangianLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L2834"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for a Lagrangian Neural Network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultLagrangianLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int hiddenLayerCount = 3, int hiddenLayerSize = 64)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration that defines input and output shapes.</p>
+</dd>
+    <dt><code>hiddenLayerCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of hidden layers (default: 3).</p>
+</dd>
+    <dt><code>hiddenLayerSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of neurons in each hidden layer (default: 64).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a Lagrangian neural network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultLagrangianLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Lagrangian Neural Networks (LNNs) learn the Lagrangian function L(q, q̇)
+of a physical system. The Lagrangian is typically L = T - V (kinetic minus potential energy).
+</p>
+<p>
+Key design choices:
+- Uses Tanh activation in hidden layers for smooth derivatives needed in Euler-Lagrange equations
+- Output is scalar (the Lagrangian value)
+- Structure supports computing second derivatives for equations of motion
+<p>The Euler-Lagrange equation: d/dt(∂L/∂q̇) = ∂L/∂q
+This gives the equations of motion while automatically respecting conservation laws.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32,System.Int32)">
+  CreateDefaultLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a standard feed-forward neural network with configurable hidden layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int hiddenLayerCount = 1, int hiddenLayerSize = 64, int outputSize = 1)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration.</p>
+</dd>
+    <dt><code>hiddenLayerCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of hidden layers (default: 1).</p>
+</dd>
+    <dt><code>hiddenLayerSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of neurons in each hidden layer (default: 64).</p>
+</dd>
+    <dt><code>outputSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of output neurons (default: 1).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a feed-forward neural network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A feed-forward neural network is the simplest type of neural network where
+information flows in one direction from input to output. Think of it as an assembly line
+where each layer processes the data and passes it to the next layer.
+</p>
+<p>
+This method creates:
+- An input layer that takes your data
+- One or more hidden layers that learn patterns in your data
+- An output layer that produces the final prediction
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultLinkPredictionLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultLinkPredictionLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultLinkPredictionLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Int32_System_Double_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultLinkPredictionLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32,System.Int32,System.Double)">
+  CreateDefaultLinkPredictionLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int, int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L2625"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for a Link Prediction model encoder.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultLinkPredictionLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int hiddenDim = 64, int embeddingDim = 32, int numLayers = 2, double dropoutRate = 0.5)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture specification.</p>
+</dd>
+    <dt><code>hiddenDim</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Hidden dimension size (default: 64).</p>
+</dd>
+    <dt><code>embeddingDim</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Node embedding dimension (default: 32).</p>
+</dd>
+    <dt><code>numLayers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of GNN layers (default: 2).</p>
+</dd>
+    <dt><code>dropoutRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Dropout rate for regularization (default: 0.5).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers configured for link prediction.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultLinkPredictionLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Int32_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Link prediction predicts whether edges should exist between nodes.
+This encoder learns node embeddings that can be combined to score potential edges.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultMemoryNetworkLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultMemoryNetworkLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultMemoryNetworkLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultMemoryNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32)">
+  CreateDefaultMemoryNetworkLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L1720"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default Memory Network layer configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultMemoryNetworkLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int memorySize, int embeddingSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture specification.</p>
+</dd>
+    <dt><code>memorySize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the memory component (number of memory slots).</p>
+</dd>
+    <dt><code>embeddingSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The dimension of the embedding vectors.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers configured for a Memory Network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultMemoryNetworkLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A Memory Network is a type of neural network that has an explicit memory component.
+Think of it like a notebook that the network can write to and read from while processing information.
+This makes it particularly good at tasks that require remembering context from earlier in a sequence,
+such as answering questions about a story or maintaining a conversation.
+</p>
+<p>
+The memory size parameter controls how many "pages" are in the notebook, while the embedding size
+determines how detailed each "note" can be.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the architecture has invalid input or output dimensions.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultMeshCNNLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultMeshCNNLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultMeshCNNLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32___System_Int32___System_Int32___System_Int32_System_Boolean_System_Double_System_Boolean_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultMeshCNNLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32[],System.Int32[],System.Int32[],System.Int32,System.Boolean,System.Double,System.Boolean)">
+  CreateDefaultMeshCNNLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int[]?, int[]?, int[]?, int, bool, double, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L3537"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for a MeshCNN architecture for mesh classification/segmentation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultMeshCNNLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int inputFeatures = 5, int[]? convChannels = null, int[]? poolTargets = null, int[]? fcSizes = null, int numNeighbors = 4, bool useBatchNorm = true, double dropoutRate = 0.5, bool useGlobalAveragePooling = false)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture specification.</p>
+</dd>
+    <dt><code>inputFeatures</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of input features per edge. Default is 5.</p>
+</dd>
+    <dt><code>convChannels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Channel sizes for each edge convolution block.</p>
+</dd>
+    <dt><code>poolTargets</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Target edge counts after each pooling operation.</p>
+</dd>
+    <dt><code>fcSizes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Sizes of fully connected layers before output.</p>
+</dd>
+    <dt><code>numNeighbors</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of neighboring edges per edge. Default is 4.</p>
+</dd>
+    <dt><code>useBatchNorm</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to use batch normalization. Default is true.</p>
+</dd>
+    <dt><code>dropoutRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Dropout rate for regularization. Default is 0.5.</p>
+</dd>
+    <dt><code>useGlobalAveragePooling</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to use global average pooling. Default is false (max pooling).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers configured for mesh processing.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultMeshCNNLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32___System_Int32___System_Int32___System_Int32_System_Boolean_System_Double_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> MeshCNN processes 3D mesh data by learning from edge features.
+</p>
+<p>
+The architecture consists of:
+- Edge convolution blocks: Learn patterns from edge neighborhoods
+- Mesh pooling: Simplify the mesh by removing less important edges
+- Global pooling: Aggregate all edge features into a fixed-size vector
+- Fully connected layers: Map aggregated features to class predictions
+</p>
+<p>
+Applications include:
+- 3D shape classification from mesh data
+- Mesh segmentation (labeling different parts)
+- Learning from CAD models and 3D scans
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the architecture has invalid output size.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultNTMLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultNTMLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultNTMLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultNTMLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32,System.Int32)">
+  CreateDefaultNTMLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L2017"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default configuration of layers for a Neural Turing Machine (NTM).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultNTMLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int memorySize = 128, int memoryVectorSize = 20, int controllerSize = 100)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture specification.</p>
+</dd>
+    <dt><code>memorySize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of memory locations (default: 128).</p>
+</dd>
+    <dt><code>memoryVectorSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of each memory vector (default: 20).</p>
+</dd>
+    <dt><code>controllerSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the controller network (default: 100).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers configured for a Neural Turing Machine.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultNTMLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A Neural Turing Machine (NTM) is a type of neural network that has an external 
+memory component, similar to how computers have RAM. The network learns to read from and write to 
+this memory, which helps it solve tasks that require remembering information over long periods.
+</p>
+<p>
+- memorySize: How many "slots" are in the memory (like pages in a notebook)
+- memoryVectorSize: How much information each memory slot can hold
+- controllerSize: How complex the "brain" of the network is that decides what to read/write
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when architecture is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when memory parameters are not positive.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultNeuralNetworkLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultNeuralNetworkLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultNeuralNetworkLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultNeuralNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0})">
+  CreateDefaultNeuralNetworkLayers(NeuralNetworkArchitecture&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L2091"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default configuration of layers for a standard neural network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultNeuralNetworkLayers(NeuralNetworkArchitecture&lt;T&gt; architecture)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture specification.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers configured for a standard neural network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultNeuralNetworkLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method creates the basic building blocks (layers) of a neural network.
+Think of layers as a series of connected processing units that transform your input data
+step by step until it produces the desired output. The complexity parameter in the architecture
+determines how many layers and neurons your network will have - Simple networks have fewer layers
+while Deep networks have more layers for handling more complex problems.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when architecture is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when input size or output size is not positive.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultNodeClassificationLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultNodeClassificationLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultNodeClassificationLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Double_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultNodeClassificationLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32,System.Double)">
+  CreateDefaultNodeClassificationLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L2572"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for a Node Classification model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultNodeClassificationLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int hiddenDim = 64, int numLayers = 2, double dropoutRate = 0.5)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture specification.</p>
+</dd>
+    <dt><code>hiddenDim</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Hidden dimension size (default: 64).</p>
+</dd>
+    <dt><code>numLayers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of GNN layers (default: 2).</p>
+</dd>
+    <dt><code>dropoutRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Dropout rate for regularization (default: 0.5).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers configured for node classification.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultNodeClassificationLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Node classification predicts labels for individual nodes in a graph.
+This architecture uses GCN layers with dropout for semi-supervised learning on graphs.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultOccupancyLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultOccupancyLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultOccupancyLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultOccupancyLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0})">
+  CreateDefaultOccupancyLayers(NeuralNetworkArchitecture&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L287"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for an occupancy detection neural network without temporal data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultOccupancyLayers(NeuralNetworkArchitecture&lt;T&gt; architecture)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration that defines input and output shapes.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a non-temporal occupancy detection network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultOccupancyLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method builds a simpler neural network for detecting occupancy 
+(whether a space is occupied by people) using data from a single point in time, rather than 
+a sequence of time points. It uses standard Dense layers (also called fully connected layers) 
+to process the input features.
+</p>
+<p>
+Non-temporal data means the model makes predictions based only on current data points
+without considering how values have changed over time. For example, using the current 
+temperature, humidity, and CO2 levels to predict occupancy without looking at historical values.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultOccupancyTemporalLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultOccupancyTemporalLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultOccupancyTemporalLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultOccupancyTemporalLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32)">
+  CreateDefaultOccupancyTemporalLayers(NeuralNetworkArchitecture&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L166"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for an occupancy detection neural network with temporal data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultOccupancyTemporalLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int historyWindowSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration that defines input and output shapes.</p>
+</dd>
+    <dt><code>historyWindowSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of time steps to consider in the temporal data (how many past observations to include).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a temporal occupancy detection network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultOccupancyTemporalLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method builds a neural network specifically designed to detect occupancy 
+(whether a space is occupied by people) using data that changes over time. It uses special layer types 
+like LSTM (Long Short-Term Memory) that can "remember" patterns in sequential data, and attention 
+mechanisms that help the network focus on the most important time steps in the data sequence.
+</p>
+<p>
+Temporal data refers to data collected over time, where the sequence and patterns across time 
+points are important for making predictions. For example, sensor readings collected every minute
+over several hours would be temporal data.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultPINNLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultPINNLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultPINNLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultPINNLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32)">
+  CreateDefaultPINNLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L3207"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for a Physics-Informed Neural Network (PINN).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultPINNLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int hiddenLayerCount = 4, int hiddenLayerSize = 32)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration.</p>
+</dd>
+    <dt><code>hiddenLayerCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of hidden layers (default: 4).</p>
+</dd>
+    <dt><code>hiddenLayerSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of neurons in each hidden layer (default: 32).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a PINN.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultPINNLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Physics-Informed Neural Networks (PINNs) solve PDEs by training
+a neural network to minimize the PDE residual at collocation points. The network
+learns the solution function u(x,t) while respecting the physics (PDE, boundary
+conditions, and initial conditions).
+</p>
+<p>
+Uses Tanh activation for smooth derivatives (important for computing PDE residuals).
+Multiple hidden layers capture complex solution behavior.
+Linear output layer since PDE solutions can take any real value.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultQuantumNetworkLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultQuantumNetworkLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultQuantumNetworkLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultQuantumNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32)">
+  CreateDefaultQuantumNetworkLayers(NeuralNetworkArchitecture&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L1938"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default configuration of layers for a Quantum Neural Network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultQuantumNetworkLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int numQubits = 4)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture specification.</p>
+</dd>
+    <dt><code>numQubits</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of qubits to use in quantum layers (default: 4).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers configured for a Quantum Neural Network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultQuantumNetworkLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A Quantum Neural Network combines quantum computing concepts with neural networks.
+Think of qubits as special units that can exist in multiple states at once (unlike regular bits
+that are either 0 or 1). This gives quantum networks potential advantages for certain problems.
+The numQubits parameter controls how many of these special quantum units are used in each
+quantum layer.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when architecture is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when numQubits is not positive.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultRBFNetworkLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultRBFNetworkLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultRBFNetworkLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_AiDotNet_Interfaces_IRadialBasisFunction__0__" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultRBFNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,AiDotNet.Interfaces.IRadialBasisFunction{`0})">
+  CreateDefaultRBFNetworkLayers(NeuralNetworkArchitecture&lt;T&gt;, int, IRadialBasisFunction&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L1878"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default Radial Basis Function (RBF) neural network layer configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultRBFNetworkLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int hiddenSize = 0, IRadialBasisFunction&lt;T&gt;? rbfFunction = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture specification.</p>
+</dd>
+    <dt><code>hiddenSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the hidden layer. If set to 0 or negative, a default size will be calculated.</p>
+</dd>
+    <dt><code>rbfFunction</code> <a class="xref" href="AiDotNet.Interfaces.IRadialBasisFunction-1.html">IRadialBasisFunction</a>&lt;T&gt;</dt>
+    <dd><p>The radial basis function to use. If null, a default Gaussian RBF will be used.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers configured for RBF network processing.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultRBFNetworkLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_AiDotNet_Interfaces_IRadialBasisFunction__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A Radial Basis Function (RBF) Network is a special type of neural network that uses
+"distance" to make predictions. Instead of gradually learning patterns through weights like standard
+neural networks, RBF networks measure how similar or different an input is from known examples.
+</p>
+<p>
+Think of it like this: if you want to identify a fruit, you might compare how similar it looks to
+fruits you already know. An RBF network works in a similar way - it has "reference points" and
+measures how close new data is to these points.
+</p>
+<p>
+RBF networks are particularly good at function approximation, pattern recognition, and time series prediction.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultRNNLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultRNNLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultRNNLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultRNNLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0})">
+  CreateDefaultRNNLayers(NeuralNetworkArchitecture&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L1808"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default Recurrent Neural Network (RNN) layer configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultRNNLayers(NeuralNetworkArchitecture&lt;T&gt; architecture)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture specification.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers configured for RNN-based processing.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultRNNLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A Recurrent Neural Network (RNN) is designed to work with sequential data
+by maintaining a form of "memory" of previous inputs. Unlike standard neural networks,
+RNNs can use their internal state to process sequences of inputs, making them ideal for
+tasks like text analysis, speech recognition, or time series prediction.
+</p>
+<p>
+This method automatically configures appropriate RNN layers with sensible defaults,
+including hidden layer sizes and activation functions.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultResNetLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultResNetLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultResNetLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultResNetLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32)">
+  CreateDefaultResNetLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L361"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a Residual Neural Network (ResNet) with configurable blocks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultResNetLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int blockCount = 3, int blockSize = 2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration.</p>
+</dd>
+    <dt><code>blockCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of residual blocks (default: 3).</p>
+</dd>
+    <dt><code>blockSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of convolutional layers in each block (default: 2).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a ResNet.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultResNetLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A Residual Network (ResNet) is designed to solve the "vanishing gradient problem" 
+that occurs when training very deep networks. It does this by adding "skip connections" that 
+allow information to bypass some layers.
+</p>
+<p>
+Think of it like this: In a traditional network, each layer must learn everything from scratch.
+In a ResNet, each layer only needs to learn the "difference" (or residual) between its input and 
+the desired output, which is often easier to learn.
+</p>
+<p>
+Key components:
+- Initial convolutional layer: Processes the raw input
+- Residual blocks: Groups of layers with skip connections
+- Global pooling: Reduces the spatial dimensions to a single value per feature map
+- Final dense layer: Makes the prediction based on the extracted features
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultSpikingLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultSpikingLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultSpikingLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__AiDotNet_Enums_SpikingNeuronType_System_Double_System_Double_System_Boolean_System_Boolean_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultSpikingLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},AiDotNet.Enums.SpikingNeuronType,System.Double,System.Double,System.Boolean,System.Boolean)">
+  CreateDefaultSpikingLayers(NeuralNetworkArchitecture&lt;T&gt;, SpikingNeuronType, double, double, bool, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L1110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for a Spiking Neural Network (SNN).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultSpikingLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, SpikingNeuronType neuronType = SpikingNeuronType.LeakyIntegrateAndFire, double tau = 10, double refractoryPeriod = 2, bool useLayerNormalization = false, bool useOutputConversion = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration.</p>
+</dd>
+    <dt><code>neuronType</code> <a class="xref" href="AiDotNet.Enums.SpikingNeuronType.html">SpikingNeuronType</a></dt>
+    <dd><p>The type of spiking neuron to use.</p>
+</dd>
+    <dt><code>tau</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The membrane time constant that controls how quickly neurons respond to inputs.</p>
+</dd>
+    <dt><code>refractoryPeriod</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The period after firing during which a neuron cannot fire again.</p>
+</dd>
+    <dt><code>useLayerNormalization</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to use layer normalization to stabilize training.</p>
+</dd>
+    <dt><code>useOutputConversion</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to convert spike outputs to continuous values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a Spiking Neural Network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultSpikingLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__AiDotNet_Enums_SpikingNeuronType_System_Double_System_Double_System_Boolean_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Spiking Neural Networks (SNNs) are a type of neural network that more closely 
+mimics how real neurons in the brain work. Unlike traditional neural networks that use continuous 
+values, SNNs use "spikes" (binary on/off signals) to communicate between neurons. This makes them 
+more biologically realistic and potentially more energy-efficient for certain tasks.
+</p>
+<p>
+The tau parameter controls how quickly a neuron "forgets" previous inputs - larger values make 
+the neuron remember inputs for longer. The refractory period is like a "rest time" after a neuron 
+fires, during which it cannot fire again, similar to how real neurons behave.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultSpiralNetLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultSpiralNetLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultSpiralNetLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Int32___System_Double___System_Int32___System_Boolean_System_Double_System_Boolean_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultSpiralNetLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32,System.Int32[],System.Double[],System.Int32[],System.Boolean,System.Double,System.Boolean)">
+  CreateDefaultSpiralNetLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int, int[]?, double[]?, int[]?, bool, double, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L3654"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates the default layer sequence for a SpiralNet mesh neural network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultSpiralNetLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int inputFeatures = 3, int spiralLength = 9, int[]? convChannels = null, double[]? poolRatios = null, int[]? fcSizes = null, bool useBatchNorm = true, double dropoutRate = 0.5, bool useGlobalAveragePooling = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration.</p>
+</dd>
+    <dt><code>inputFeatures</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of input features per vertex (default: 3 for coordinates).</p>
+</dd>
+    <dt><code>spiralLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Length of spiral sequences for convolutions.</p>
+</dd>
+    <dt><code>convChannels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Channel sizes for each spiral convolution block.</p>
+</dd>
+    <dt><code>poolRatios</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>Pooling ratios for mesh simplification at each level.</p>
+</dd>
+    <dt><code>fcSizes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Sizes of fully connected layers before output.</p>
+</dd>
+    <dt><code>useBatchNorm</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to use batch normalization after convolutions.</p>
+</dd>
+    <dt><code>dropoutRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Dropout rate for fully connected layers.</p>
+</dd>
+    <dt><code>useGlobalAveragePooling</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to use global average (true) or max (false) pooling.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>An enumerable of layers forming the SpiralNet architecture.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultSpiralNetLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Int32___System_Double___System_Int32___System_Boolean_System_Double_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method builds the default layer stack for SpiralNet++.</p>
+<p>
+Architecture pattern:
+- Multiple spiral convolution blocks (SpiralConv + optional BatchNorm)
+- Global pooling to aggregate vertex features
+- Fully connected layers for classification
+<p>Applications:</p>
+<ul>
+<li>3D face recognition and reconstruction</li>
+<li>Human body shape analysis</li>
+<li>Medical mesh analysis</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the architecture has invalid output size.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultTransformerLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultTransformerLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultTransformerLayers_AiDotNet_NeuralNetworks_TransformerArchitecture__0__" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultTransformerLayers(AiDotNet.NeuralNetworks.TransformerArchitecture{`0})">
+  CreateDefaultTransformerLayers(TransformerArchitecture&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L926"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default Transformer neural network with pre-configured encoder and decoder layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultTransformerLayers(TransformerArchitecture&lt;T&gt; architecture)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.TransformerArchitecture-1.html">TransformerArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The transformer architecture configuration.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a Transformer neural network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultTransformerLayers_AiDotNet_NeuralNetworks_TransformerArchitecture__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A Transformer is a powerful type of neural network especially good at processing 
+sequences like text or time series data. Unlike older networks, Transformers can look at all parts 
+of the input at once (using "attention") rather than processing it step by step. This makes them 
+excellent for tasks like translation, text generation, and understanding language.
+</p>
+<p>
+Key concepts:
+- Attention: Allows the model to focus on relevant parts of the input regardless of position
+- Multi-head attention: Lets the model focus on different aspects of the input simultaneously
+- Encoder: Processes the input sequence
+- Decoder: Generates the output sequence
+- Positional encoding: Helps the model understand the order of elements in a sequence
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultUNet3DLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultUNet3DLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultUNet3DLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultUNet3DLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32,System.Int32)">
+  CreateDefaultUNet3DLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L3363"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for a 3D U-Net architecture for volumetric segmentation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultUNet3DLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int voxelResolution = 32, int numEncoderBlocks = 4, int baseFilters = 32)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture specification.</p>
+</dd>
+    <dt><code>voxelResolution</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The resolution of the voxel grid (e.g., 32 for 32x32x32). Default is 32.</p>
+</dd>
+    <dt><code>numEncoderBlocks</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of encoder blocks. Default is 4.</p>
+</dd>
+    <dt><code>baseFilters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of filters in the first convolutional layer. Doubles with each block. Default is 32.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers configured for 3D volumetric segmentation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultUNet3DLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A 3D U-Net is like a specialized 3D image processor that can identify
+different parts of a 3D volume (like organs in a CT scan or objects in a point cloud).
+</p>
+<p>
+The U-shape architecture:
+- Encoder: Progressively downsamples to capture context (like zooming out)
+- Bottleneck: Smallest representation capturing global features
+- Decoder: Progressively upsamples to restore resolution (like zooming in)
+- Skip connections: Link encoder to decoder to preserve fine details
+</p>
+<p>
+Applications include:
+- 3D semantic segmentation of point clouds
+- Medical image segmentation (organs, tumors in CT/MRI)
+- Part segmentation of 3D shapes
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the architecture has invalid dimensions.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultUniversalDELayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultUniversalDELayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultUniversalDELayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultUniversalDELayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32)">
+  CreateDefaultUniversalDELayers(NeuralNetworkArchitecture&lt;T&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L2887"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for a Universal Differential Equation (UDE) network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultUniversalDELayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int hiddenLayerCount = 2, int hiddenLayerSize = 32)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration.</p>
+</dd>
+    <dt><code>hiddenLayerCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of hidden layers (default: 2).</p>
+</dd>
+    <dt><code>hiddenLayerSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of neurons in each hidden layer (default: 32).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a UDE neural network component.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultUniversalDELayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Universal Differential Equations combine known physics with neural networks.
+The neural network learns the unknown parts of the dynamics while known physics equations
+are added explicitly. This is perfect for scientific applications where you know some
+of the physics but not all of it.
+</p>
+<p>
+The network takes [state, time] as input and outputs the learned correction to the dynamics.
+Uses Tanh activation for smooth derivatives needed in ODE integration.
+Output uses linear (identity) activation since corrections can be positive or negative.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultVAELayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultVAELayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultVAELayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultVAELayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32)">
+  CreateDefaultVAELayers(NeuralNetworkArchitecture&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L851"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default Variational Autoencoder (VAE) with pre-configured layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultVAELayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int latentSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration.</p>
+</dd>
+    <dt><code>latentSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the latent space dimension.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a Variational Autoencoder.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultVAELayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A Variational Autoencoder (VAE) is a type of neural network that learns to 
+compress data into a smaller representation (encoding) and then reconstruct it back (decoding). 
+What makes VAEs special is that they create a "fuzzy" compressed representation rather than 
+an exact one, which helps the network learn meaningful patterns in your data. This makes VAEs 
+excellent for generating new data similar to your training examples.
+</p>
+<p>
+The latent space is the compressed representation where your data exists in a simplified form.
+Think of it as a "creative space" where the network understands the essential features of your data.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultVariationalPINNLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultVariationalPINNLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultVariationalPINNLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultVariationalPINNLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32)">
+  CreateDefaultVariationalPINNLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L3117"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for a Variational Physics-Informed Neural Network (VPINN).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultVariationalPINNLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int hiddenLayerCount = 4, int hiddenLayerSize = 50)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture configuration.</p>
+</dd>
+    <dt><code>hiddenLayerCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of hidden layers (default: 4).</p>
+</dd>
+    <dt><code>hiddenLayerSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of neurons in each hidden layer (default: 50).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers forming a VPINN.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultVariationalPINNLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Variational PINNs solve PDEs using the weak (variational) form
+instead of the strong form. This is similar to Finite Element Methods but using
+neural networks. Often more stable for complex PDEs than standard PINNs.
+</p>
+<p>
+Uses Tanh activation throughout for smooth derivatives needed in variational formulation.
+Linear output layer since PDE solutions can take any real value.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultVoxelCNNLayers_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultVoxelCNNLayers*"></a>
+
+  <h3 id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultVoxelCNNLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Helpers.LayerHelper`1.CreateDefaultVoxelCNNLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32,System.Int32)">
+  CreateDefaultVoxelCNNLayers(NeuralNetworkArchitecture&lt;T&gt;, int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L3263"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates default layers for a Voxel-based 3D Convolutional Neural Network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultVoxelCNNLayers(NeuralNetworkArchitecture&lt;T&gt; architecture, int voxelResolution = 32, int numConvBlocks = 3, int baseFilters = 32)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture specification.</p>
+</dd>
+    <dt><code>voxelResolution</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The resolution of the voxel grid (e.g., 32 for 32x32x32). Default is 32.</p>
+</dd>
+    <dt><code>numConvBlocks</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of convolutional blocks (each block has Conv3D + MaxPool3D). Default is 3.</p>
+</dd>
+    <dt><code>baseFilters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of filters in the first convolutional layer. Doubles with each block. Default is 32.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of layers configured for voxel-based 3D classification.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Helpers_LayerHelper_1_CreateDefaultVoxelCNNLayers_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A Voxel CNN is like a 3D version of a regular image classifier.
+Instead of looking at a 2D image, it examines a 3D grid of "blocks" (voxels) to understand
+3D shapes. This is like how Minecraft represents the world - each block is either filled
+or empty, and the pattern of blocks creates recognizable objects.
+</p>
+<p>
+The architecture follows a standard pattern:
+- Multiple Conv3D + MaxPool3D blocks to extract hierarchical 3D features
+- Each block doubles the number of filters while halving the spatial resolution
+- Global average pooling to aggregate spatial information
+- Dense output layer for classification
+</p>
+<p>
+Applications include:
+- Recognizing 3D objects from voxelized point clouds (e.g., ModelNet40)
+- Medical image analysis (CT, MRI volumetric scans)
+- Spatial occupancy prediction from depth sensors
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the architecture has invalid input or output dimensions.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Helpers/LayerHelper.cs/#L14" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

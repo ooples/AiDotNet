@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>CI Auto-Fix Bot Setup (Recommended) | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="CI Auto-Fix Bot Setup (Recommended) | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/AUTOFIX_BOT_SETUP.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="ci-auto-fix-bot-setup-recommended">CI Auto-Fix Bot Setup (Recommended)</h1>
+
+<h2 id="overview">Overview</h2>
+<p>Some of our CI workflows automatically rewrite commits (for example, fixing commit messages to match our Conventional Commits rules). Repository rules such as <strong>“Commits must have verified signatures”</strong> require the automation to create <strong>GPG-signed</strong> commits, and GitHub limitations mean the automation should usually push using a <strong>PAT</strong> (not <code>GITHUB_TOKEN</code>) so downstream checks re-run.</p>
+<p>This guide describes the safest setup:</p>
+<ul>
+<li>A <strong>dedicated GitHub user</strong> (bot) for CI automation</li>
+<li>A <strong>dedicated GPG key</strong> owned by that bot user (not a human’s personal key)</li>
+<li>Repository secrets used by the workflows</li>
+</ul>
+<h2 id="1-create-a-dedicated-github-bot-user">1) Create a dedicated GitHub bot user</h2>
+<p>Create a new GitHub account (example):</p>
+<ul>
+<li>Username: <code>AiDotNetAutofixBot</code></li>
+<li>Email: a shared/team mailbox you control (example: <code>autofix-bot@yourdomain.com</code>)</li>
+</ul>
+<p>Then add it to the org/repo:</p>
+<ul>
+<li>Add as a collaborator (minimum needed permissions; typically <code>Write</code>)</li>
+<li>If you use branch protection/rules, ensure this bot is allowed to push to PR branches as required by your rules</li>
+</ul>
+<h2 id="2-add-a-pat-for-the-bot-to-trigger-ci-correctly">2) Add a PAT for the bot (to trigger CI correctly)</h2>
+<p>Why: pushes made with <code>GITHUB_TOKEN</code> often do <strong>not</strong> trigger other workflows/checks. A PAT avoids that limitation.</p>
+<p>On the bot account:</p>
+<ul>
+<li>GitHub → Settings → Developer settings → Personal access tokens</li>
+<li>Create a classic PAT (or fine-grained PAT if your org prefers) with:
+<ul>
+<li><code>repo</code> (needed to push and comment)</li>
+<li><code>workflow</code> (needed so the push can trigger other workflows)</li>
+</ul>
+</li>
+</ul>
+<p>Store it as a repo secret:</p>
+<ul>
+<li><code>Settings → Secrets and variables → Actions → New repository secret</code></li>
+<li>Name: <code>AUTOFIX_PAT</code></li>
+<li>Value: the token</li>
+</ul>
+<h2 id="3-create-a-dedicated-gpg-key-for-the-bot">3) Create a dedicated GPG key for the bot</h2>
+<h3 id="windows-gpg4win">Windows (Gpg4win)</h3>
+<ol>
+<li>Install Gpg4win (if not already installed).</li>
+<li>Open PowerShell and run:
+<ul>
+<li><code>gpg --quick-generate-key &quot;AiDotNet Autofix Bot &lt;autofix-bot@ooples.com&gt;&quot; default default 0</code></li>
+<li><code>gpg --list-secret-keys --keyid-format=long</code></li>
+</ul>
+</li>
+<li>Export the keys:
+<ul>
+<li><code>gpg --armor --export &quot;AiDotNet Autofix Bot&quot; &gt; autofix-public.key</code></li>
+<li><code>gpg --armor --export-secret-keys &quot;AiDotNet Autofix Bot&quot; &gt; autofix-private.key</code></li>
+</ul>
+</li>
+</ol>
+<h3 id="linuxmacos">Linux/macOS</h3>
+<ol>
+<li>Generate:
+<ul>
+<li><code>gpg --quick-generate-key &quot;AiDotNet Autofix Bot &lt;autofix-bot@yourdomain.com&gt;&quot; default default 0</code></li>
+</ul>
+</li>
+<li>Export:
+<ul>
+<li><code>gpg --armor --export &quot;AiDotNet Autofix Bot&quot; &gt; autofix-public.key</code></li>
+<li><code>gpg --armor --export-secret-keys &quot;AiDotNet Autofix Bot&quot; &gt; autofix-private.key</code></li>
+</ul>
+</li>
+</ol>
+<h2 id="4-upload-the-bots-public-key-to-github">4) Upload the bot’s public key to GitHub</h2>
+<p>On the <strong>bot</strong> GitHub account:</p>
+<ul>
+<li>Settings → “SSH and GPG keys” → “New GPG key”</li>
+<li>Paste the contents of <code>autofix-public.key</code></li>
+</ul>
+<p>This makes commits signed by that key show up as “Verified”.</p>
+<h2 id="5-add-required-repo-secrets-for-signed-auto-fix-commits">5) Add required repo secrets for signed auto-fix commits</h2>
+<p>In the repository:</p>
+<ul>
+<li>Settings → Secrets and variables → Actions → New repository secret</li>
+</ul>
+<p>Add:</p>
+<ul>
+<li><code>AUTOFIX_GPG_PRIVATE_KEY</code>: paste the contents of <code>autofix-private.key</code></li>
+<li><code>AUTOFIX_GPG_PASSPHRASE</code>: the passphrase for the key (leave empty if you created a key without one)</li>
+</ul>
+<h2 id="6-verify-the-setup">6) Verify the setup</h2>
+<ol>
+<li>Create a test PR with an intentionally non-compliant commit message (for example: <code>deps: Bump ...</code> with sentence-case subject).</li>
+<li>Confirm:
+<ul>
+<li><code>Commit Message Lint</code> fails on the PR.</li>
+<li><code>Fix Commit Messages</code> runs, rewrites the commit(s), and pushes back to the PR branch.</li>
+<li><code>Commit Message Lint</code> re-runs on the updated commit and passes.</li>
+<li>The rewritten commits show “Verified” in GitHub.</li>
+</ul>
+</li>
+</ol>
+<h2 id="notes--security">Notes / Security</h2>
+<ul>
+<li>Do not reuse a human’s personal signing key for CI automation.</li>
+<li>Keep <code>AUTOFIX_PAT</code> and <code>AUTOFIX_GPG_PRIVATE_KEY</code> restricted to repo secrets (never checked into git).</li>
+<li>Our auto-fix workflows should be guarded to avoid operating on forks; keep those guards in place.</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/AUTOFIX_BOT_SETUP.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

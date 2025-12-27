@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IBlipModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IBlipModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for BLIP (Bootstrapped Language-Image Pre-training) models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IBlipModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IBlipModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IBlipModel`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IBlipModel_1" data-uid="AiDotNet.Interfaces.IBlipModel`1" class="text-break">
+Interface IBlipModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IBlipModel.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for BLIP (Bootstrapped Language-Image Pre-training) models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IBlipModel&lt;T&gt; : IMultimodalEmbedding&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EncodeText_System_String_">IMultimodalEmbedding&lt;T&gt;.EncodeText(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EncodeTextBatch_System_Collections_Generic_IEnumerable_System_String__">IMultimodalEmbedding&lt;T&gt;.EncodeTextBatch(IEnumerable&lt;string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EncodeImage_System_Double___">IMultimodalEmbedding&lt;T&gt;.EncodeImage(double[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EncodeImageBatch_System_Collections_Generic_IEnumerable_System_Double____">IMultimodalEmbedding&lt;T&gt;.EncodeImageBatch(IEnumerable&lt;double[]&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_ComputeSimilarity_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">IMultimodalEmbedding&lt;T&gt;.ComputeSimilarity(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_ZeroShotClassify_System_Double___System_Collections_Generic_IEnumerable_System_String__">IMultimodalEmbedding&lt;T&gt;.ZeroShotClassify(double[], IEnumerable&lt;string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EmbeddingDimension">IMultimodalEmbedding&lt;T&gt;.EmbeddingDimension</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_MaxSequenceLength">IMultimodalEmbedding&lt;T&gt;.MaxSequenceLength</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_ImageSize">IMultimodalEmbedding&lt;T&gt;.ImageSize</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IBlipModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+BLIP extends CLIP's capabilities with additional vision-language tasks:
+image captioning, image-text matching, and visual question answering.
+This interface extends <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html">IMultimodalEmbedding&lt;T&gt;</a> with these features.
+</p>
+<p><b>For Beginners:</b> BLIP is like CLIP but with extra superpowers!
+<p>What CLIP can do:</p>
+<ul>
+<li>Compare images and text (are they related?)</li>
+<li>Zero-shot classification (classify without training)</li>
+</ul>
+<p>What BLIP adds:</p>
+<ul>
+<li>Generate captions for images (describe what you see)</li>
+<li>Answer questions about images (VQA)</li>
+<li>Better image-text matching with cross-attention</li>
+</ul>
+<p>BLIP was trained on a larger, cleaner dataset using a special &quot;bootstrapping&quot;
+technique that improves the quality of training data automatically.</p>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IBlipModel_1_AnswerQuestion_" data-uid="AiDotNet.Interfaces.IBlipModel`1.AnswerQuestion*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IBlipModel_1_AnswerQuestion_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_Int32_" data-uid="AiDotNet.Interfaces.IBlipModel`1.AnswerQuestion(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.Int32)">
+  AnswerQuestion(Tensor&lt;T&gt;, string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IBlipModel.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Answers a question about an image's content.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string AnswerQuestion(Tensor&lt;T&gt; image, string question, int maxLength = 20)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The preprocessed image tensor.</p>
+</dd>
+    <dt><code>question</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The question to answer (e.g., &quot;What color is the car?&quot;).</p>
+</dd>
+    <dt><code>maxLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum length of the answer.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The generated answer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IBlipModel_1_AnswerQuestion_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Visual Question Answering (VQA) generates natural language answers to questions
+about image content. The model uses cross-attention to focus on relevant image
+regions when generating the answer.
+</p>
+<p><b>For Beginners:</b> Ask questions about images and get answers!
+<p>Examples:</p>
+<ul>
+<li>Image: Photo of a kitchen</li>
+<li>&quot;What appliances are visible?&quot; → &quot;refrigerator, microwave, and stove&quot;</li>
+<li>&quot;What color are the cabinets?&quot; → &quot;white&quot;</li>
+<li>&quot;Is there a window?&quot; → &quot;yes, above the sink&quot;</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Accessibility (describe images for visually impaired users)</li>
+<li>Content moderation (is there alcohol in this photo?)</li>
+<li>Data extraction (what brand is this product?)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IBlipModel_1_ComputeImageTextMatch_" data-uid="AiDotNet.Interfaces.IBlipModel`1.ComputeImageTextMatch*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IBlipModel_1_ComputeImageTextMatch_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_" data-uid="AiDotNet.Interfaces.IBlipModel`1.ComputeImageTextMatch(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String)">
+  ComputeImageTextMatch(Tensor&lt;T&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IBlipModel.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether a given text accurately describes an image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T ComputeImageTextMatch(Tensor&lt;T&gt; image, string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The preprocessed image tensor.</p>
+</dd>
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text description to evaluate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A probability score between 0 and 1 indicating match quality.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IBlipModel_1_ComputeImageTextMatch_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Uses the Image-Text Matching (ITM) head with cross-attention between
+image patches and text tokens for fine-grained matching.
+This is more accurate than simple embedding similarity for detailed matching.
+</p>
+<p><b>For Beginners:</b> This checks if a caption accurately describes an image.
+<p>Unlike simple similarity (dot product), this uses &quot;cross-attention&quot; which:</p>
+<ul>
+<li>Looks at specific parts of the image</li>
+<li>Compares them to specific words in the text</li>
+<li>Gives a more accurate yes/no answer</li>
+</ul>
+<p>Example:</p>
+<ul>
+<li>Image: A red car parked on a street</li>
+<li>&quot;A red vehicle on pavement&quot; → 0.92 (accurate!)</li>
+<li>&quot;A blue car in a garage&quot; → 0.15 (wrong color and location)</li>
+</ul>
+<p>Use this when you need precise matching, not just &quot;related content.&quot;</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IBlipModel_1_GenerateCaption_" data-uid="AiDotNet.Interfaces.IBlipModel`1.GenerateCaption*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IBlipModel_1_GenerateCaption_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Int32_" data-uid="AiDotNet.Interfaces.IBlipModel`1.GenerateCaption(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,System.Int32)">
+  GenerateCaption(Tensor&lt;T&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IBlipModel.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a caption describing the content of an image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string GenerateCaption(Tensor&lt;T&gt; image, int maxLength = 30, int numBeams = 3)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The preprocessed image tensor with shape [channels, height, width].</p>
+</dd>
+    <dt><code>maxLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of tokens to generate. Default is 30.</p>
+</dd>
+    <dt><code>numBeams</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of beams for beam search. Default is 3 for quality/speed balance.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A generated caption describing the image.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IBlipModel_1_GenerateCaption_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Uses the image-grounded text decoder to generate descriptive captions.
+The generation uses beam search by default for higher quality outputs.
+</p>
+<p><b>For Beginners:</b> This automatically describes what's in an image!
+<p>Example:</p>
+<ul>
+<li>Input: Photo of a dog playing fetch in a park</li>
+<li>Output: &quot;a brown dog catching a frisbee on a grassy field&quot;</li>
+</ul>
+<p>Parameters:</p>
+<ul>
+<li>maxLength: How long the caption can be (30 = roughly 25 words)</li>
+<li>numBeams: More beams = better captions but slower (3 is a good balance)</li>
+</ul>
+<p>Uses &quot;beam search&quot; - it explores multiple possible captions and picks the best one.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IBlipModel_1_GenerateCaptions_" data-uid="AiDotNet.Interfaces.IBlipModel`1.GenerateCaptions*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IBlipModel_1_GenerateCaptions_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Int32_" data-uid="AiDotNet.Interfaces.IBlipModel`1.GenerateCaptions(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,System.Int32)">
+  GenerateCaptions(Tensor&lt;T&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IBlipModel.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates multiple candidate captions for an image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;string&gt; GenerateCaptions(Tensor&lt;T&gt; image, int numCaptions = 5, int maxLength = 30)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The preprocessed image tensor.</p>
+</dd>
+    <dt><code>numCaptions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of captions to generate.</p>
+</dd>
+    <dt><code>maxLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum length per caption.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A collection of candidate captions.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IBlipModel_1_GenerateCaptions_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Uses nucleus (top-p) sampling to generate diverse captions.
+Useful for getting multiple perspectives on an image's content.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IBlipModel_1_RankCaptions_" data-uid="AiDotNet.Interfaces.IBlipModel`1.RankCaptions*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IBlipModel_1_RankCaptions_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Collections_Generic_IEnumerable_System_String__" data-uid="AiDotNet.Interfaces.IBlipModel`1.RankCaptions(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Collections.Generic.IEnumerable{System.String})">
+  RankCaptions(Tensor&lt;T&gt;, IEnumerable&lt;string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IBlipModel.cs/#L144"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Ranks a set of candidate captions by how well they match an image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;(string Caption, T Score)&gt; RankCaptions(Tensor&lt;T&gt; image, IEnumerable&lt;string&gt; candidates)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The preprocessed image tensor.</p>
+</dd>
+    <dt><code>candidates</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>The candidate captions to rank.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0-.caption">Caption</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0-.score">Score</a>)&gt;</dt>
+    <dd><p>Captions ranked by match score, from best to worst.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IBlipModel_1_RankCaptions_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Collections_Generic_IEnumerable_System_String___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Uses the ITM head to score each candidate, then returns them in descending order.
+Useful for caption reranking in retrieval applications.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IBlipModel_1_RetrieveImages_" data-uid="AiDotNet.Interfaces.IBlipModel`1.RetrieveImages*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IBlipModel_1_RetrieveImages_System_String_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Vector__0___System_Int32_" data-uid="AiDotNet.Interfaces.IBlipModel`1.RetrieveImages(System.String,System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Vector{`0}},System.Int32)">
+  RetrieveImages(string, IEnumerable&lt;Vector&lt;T&gt;&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IBlipModel.cs/#L159"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves the most relevant images for a text query from a collection.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;(int Index, T Score)&gt; RetrieveImages(string query, IEnumerable&lt;Vector&lt;T&gt;&gt; imageEmbeddings, int topK = 10)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text query describing desired images.</p>
+</dd>
+    <dt><code>imageEmbeddings</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Pre-computed image embeddings.</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of results to return.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,-0-.index">Index</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,-0-.score">Score</a>)&gt;</dt>
+    <dd><p>Indices of the top-K matching images with their scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IBlipModel_1_RetrieveImages_System_String_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Vector__0___System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Performs efficient text-to-image retrieval using embedding similarity.
+For large collections, pre-compute and cache image embeddings.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IBlipModel_1_RetrieveTexts_" data-uid="AiDotNet.Interfaces.IBlipModel`1.RetrieveTexts*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IBlipModel_1_RetrieveTexts_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Vector__0___System_Int32_" data-uid="AiDotNet.Interfaces.IBlipModel`1.RetrieveTexts(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Vector{`0}},System.Int32)">
+  RetrieveTexts(Tensor&lt;T&gt;, IEnumerable&lt;Vector&lt;T&gt;&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IBlipModel.cs/#L177"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves the most relevant texts for an image from a collection.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;(int Index, T Score)&gt; RetrieveTexts(Tensor&lt;T&gt; image, IEnumerable&lt;Vector&lt;T&gt;&gt; textEmbeddings, int topK = 10)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The preprocessed image tensor.</p>
+</dd>
+    <dt><code>textEmbeddings</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Pre-computed text embeddings.</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of results to return.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,-0-.index">Index</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,-0-.score">Score</a>)&gt;</dt>
+    <dd><p>Indices of the top-K matching texts with their scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IBlipModel_1_RetrieveTexts_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Vector__0___System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Performs efficient image-to-text retrieval using embedding similarity.
+Useful for finding relevant captions or descriptions for images.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IBlipModel.cs/#L30" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DiversityExampleSelector&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DiversityExampleSelector&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Selects diverse examples to maximize coverage of different patterns.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_PromptEngineering_FewShot_DiversityExampleSelector_1.md&amp;value=---%0Auid%3A%20AiDotNet.PromptEngineering.FewShot.DiversityExampleSelector%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.PromptEngineering.FewShot.DiversityExampleSelector`1">
+
+
+
+  <h1 id="AiDotNet_PromptEngineering_FewShot_DiversityExampleSelector_1" data-uid="AiDotNet.PromptEngineering.FewShot.DiversityExampleSelector`1" class="text-break">
+Class DiversityExampleSelector&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/FewShot/DiversityExampleSelector.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.PromptEngineering.html">PromptEngineering</a>.<a class="xref" href="AiDotNet.PromptEngineering.FewShot.html">FewShot</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Selects diverse examples to maximize coverage of different patterns.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class DiversityExampleSelector&lt;T&gt; : FewShotExampleSelectorBase&lt;T&gt;, IFewShotExampleSelector&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The type of numeric data used for similarity scoring.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.PromptEngineering.FewShot.FewShotExampleSelectorBase-1.html">FewShotExampleSelectorBase</a>&lt;T&gt;</div>
+      <div><span class="xref">DiversityExampleSelector&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFewShotExampleSelector-1.html">IFewShotExampleSelector</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.FewShot.FewShotExampleSelectorBase-1.html#AiDotNet_PromptEngineering_FewShot_FewShotExampleSelectorBase_1_NumOps">FewShotExampleSelectorBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.FewShot.FewShotExampleSelectorBase-1.html#AiDotNet_PromptEngineering_FewShot_FewShotExampleSelectorBase_1_Examples">FewShotExampleSelectorBase&lt;T&gt;.Examples</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.FewShot.FewShotExampleSelectorBase-1.html#AiDotNet_PromptEngineering_FewShot_FewShotExampleSelectorBase_1_SelectExamples_System_String_System_Int32_">FewShotExampleSelectorBase&lt;T&gt;.SelectExamples(string, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.FewShot.FewShotExampleSelectorBase-1.html#AiDotNet_PromptEngineering_FewShot_FewShotExampleSelectorBase_1_AddExample_AiDotNet_Interfaces_FewShotExample_">FewShotExampleSelectorBase&lt;T&gt;.AddExample(FewShotExample)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.FewShot.FewShotExampleSelectorBase-1.html#AiDotNet_PromptEngineering_FewShot_FewShotExampleSelectorBase_1_RemoveExample_AiDotNet_Interfaces_FewShotExample_">FewShotExampleSelectorBase&lt;T&gt;.RemoveExample(FewShotExample)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.FewShot.FewShotExampleSelectorBase-1.html#AiDotNet_PromptEngineering_FewShot_FewShotExampleSelectorBase_1_GetAllExamples">FewShotExampleSelectorBase&lt;T&gt;.GetAllExamples()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.FewShot.FewShotExampleSelectorBase-1.html#AiDotNet_PromptEngineering_FewShot_FewShotExampleSelectorBase_1_ExampleCount">FewShotExampleSelectorBase&lt;T&gt;.ExampleCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.FewShot.FewShotExampleSelectorBase-1.html#AiDotNet_PromptEngineering_FewShot_FewShotExampleSelectorBase_1_ClampToUnitInterval__0_">FewShotExampleSelectorBase&lt;T&gt;.ClampToUnitInterval(T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.FewShot.FewShotExampleSelectorBase-1.html#AiDotNet_PromptEngineering_FewShot_FewShotExampleSelectorBase_1_CosineSimilarity_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">FewShotExampleSelectorBase&lt;T&gt;.CosineSimilarity(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.FewShot.FewShotExampleSelectorBase-1.html#AiDotNet_PromptEngineering_FewShot_FewShotExampleSelectorBase_1_EuclideanDistanceSquared_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">FewShotExampleSelectorBase&lt;T&gt;.EuclideanDistanceSquared(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.FewShot.FewShotExampleSelectorBase-1.html#AiDotNet_PromptEngineering_FewShot_FewShotExampleSelectorBase_1_CompareDescending__0__0_">FewShotExampleSelectorBase&lt;T&gt;.CompareDescending(T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_PromptEngineering_FewShot_DiversityExampleSelector_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This selector picks examples that are different from each other to provide broad coverage.
+It uses a greedy algorithm to iteratively select examples that are most different from
+already-selected examples.
+</p>
+<p><b>For Beginners:</b> Picks examples that are different from each other.
+<p>Instead of picking similar examples, this ensures variety:</p>
+<ul>
+<li>If you have 100 sentiment examples</li>
+<li>Random might give 3 positive examples</li>
+<li>Diversity gives 1 positive, 1 negative, 1 neutral</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">var selector = new DiversityExampleSelector&lt;double&gt;(embeddingFunction);
+
+// Add many sentiment examples
+selector.AddExample(new FewShotExample { Input = "Great!", Output = "Positive" });
+selector.AddExample(new FewShotExample { Input = "Terrible!", Output = "Negative" });
+selector.AddExample(new FewShotExample { Input = "It's okay", Output = "Neutral" });
+// ... more examples
+
+// Get diverse examples
+var examples = selector.SelectExamples("Review this product", 3);
+// Returns one from each sentiment category</code></pre>
+<p>Use this when:</p>
+<ul>
+<li>You want broad coverage of the example space</li>
+<li>Your examples cluster into natural groups</li>
+<li>Model needs to understand the full range of possibilities</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_FewShot_DiversityExampleSelector_1__ctor_" data-uid="AiDotNet.PromptEngineering.FewShot.DiversityExampleSelector`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_FewShot_DiversityExampleSelector_1__ctor_AiDotNet_Interfaces_IEmbeddingModel__0__" data-uid="AiDotNet.PromptEngineering.FewShot.DiversityExampleSelector`1.#ctor(AiDotNet.Interfaces.IEmbeddingModel{`0})">
+  DiversityExampleSelector(IEmbeddingModel&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/FewShot/DiversityExampleSelector.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the DiversityExampleSelector class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DiversityExampleSelector(IEmbeddingModel&lt;T&gt; embeddingModel)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>embeddingModel</code> <a class="xref" href="AiDotNet.Interfaces.IEmbeddingModel-1.html">IEmbeddingModel</a>&lt;T&gt;</dt>
+    <dd><p>Embedding model used to convert text to embedding vectors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_FewShot_DiversityExampleSelector_1__ctor_" data-uid="AiDotNet.PromptEngineering.FewShot.DiversityExampleSelector`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_FewShot_DiversityExampleSelector_1__ctor_AiDotNet_Interfaces_IEmbeddingModel__0___0_" data-uid="AiDotNet.PromptEngineering.FewShot.DiversityExampleSelector`1.#ctor(AiDotNet.Interfaces.IEmbeddingModel{`0},`0)">
+  DiversityExampleSelector(IEmbeddingModel&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/FewShot/DiversityExampleSelector.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the DiversityExampleSelector class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DiversityExampleSelector(IEmbeddingModel&lt;T&gt; embeddingModel, T diversityThreshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>embeddingModel</code> <a class="xref" href="AiDotNet.Interfaces.IEmbeddingModel-1.html">IEmbeddingModel</a>&lt;T&gt;</dt>
+    <dd><p>Embedding model used to convert text to embedding vectors.</p>
+</dd>
+    <dt><code>diversityThreshold</code> <span class="xref">T</span></dt>
+    <dd><p>Minimum dissimilarity required between selected examples (0.0 to 1.0).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_FewShot_DiversityExampleSelector_1__ctor_" data-uid="AiDotNet.PromptEngineering.FewShot.DiversityExampleSelector`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_FewShot_DiversityExampleSelector_1__ctor_System_Func_System_String_AiDotNet_Tensors_LinearAlgebra_Vector__0___" data-uid="AiDotNet.PromptEngineering.FewShot.DiversityExampleSelector`1.#ctor(System.Func{System.String,AiDotNet.Tensors.LinearAlgebra.Vector{`0}})">
+  DiversityExampleSelector(Func&lt;string, Vector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/FewShot/DiversityExampleSelector.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the DiversityExampleSelector class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DiversityExampleSelector(Func&lt;string, Vector&lt;T&gt;&gt; embeddingFunction)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>embeddingFunction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Function to convert text to embedding vectors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_FewShot_DiversityExampleSelector_1__ctor_" data-uid="AiDotNet.PromptEngineering.FewShot.DiversityExampleSelector`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_FewShot_DiversityExampleSelector_1__ctor_System_Func_System_String_AiDotNet_Tensors_LinearAlgebra_Vector__0____0_" data-uid="AiDotNet.PromptEngineering.FewShot.DiversityExampleSelector`1.#ctor(System.Func{System.String,AiDotNet.Tensors.LinearAlgebra.Vector{`0}},`0)">
+  DiversityExampleSelector(Func&lt;string, Vector&lt;T&gt;&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/FewShot/DiversityExampleSelector.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the DiversityExampleSelector class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DiversityExampleSelector(Func&lt;string, Vector&lt;T&gt;&gt; embeddingFunction, T diversityThreshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>embeddingFunction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Function to convert text to embedding vectors.</p>
+</dd>
+    <dt><code>diversityThreshold</code> <span class="xref">T</span></dt>
+    <dd><p>Minimum dissimilarity required between selected examples (0.0 to 1.0).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_FewShot_DiversityExampleSelector_1__ctor_System_Func_System_String_AiDotNet_Tensors_LinearAlgebra_Vector__0____0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The diversity threshold controls how different examples must be.
+<ul>
+<li>0.0: No diversity requirement (like random selection)</li>
+<li>0.3: Examples must be somewhat different</li>
+<li>0.7: Examples must be very different</li>
+<li>1.0: Examples must be completely different (hard to achieve)</li>
+</ul>
+<p>Higher values = more diversity but may be harder to satisfy.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_FewShot_DiversityExampleSelector_1_DiversityThreshold_" data-uid="AiDotNet.PromptEngineering.FewShot.DiversityExampleSelector`1.DiversityThreshold*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_FewShot_DiversityExampleSelector_1_DiversityThreshold" data-uid="AiDotNet.PromptEngineering.FewShot.DiversityExampleSelector`1.DiversityThreshold">
+  DiversityThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/FewShot/DiversityExampleSelector.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the diversity threshold used for selection.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T DiversityThreshold { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_FewShot_DiversityExampleSelector_1_OnExampleAdded_" data-uid="AiDotNet.PromptEngineering.FewShot.DiversityExampleSelector`1.OnExampleAdded*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_FewShot_DiversityExampleSelector_1_OnExampleAdded_AiDotNet_Interfaces_FewShotExample_" data-uid="AiDotNet.PromptEngineering.FewShot.DiversityExampleSelector`1.OnExampleAdded(AiDotNet.Interfaces.FewShotExample)">
+  OnExampleAdded(FewShotExample)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/FewShot/DiversityExampleSelector.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Called when an example is added. Pre-computes the embedding.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void OnExampleAdded(FewShotExample example)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>example</code> <a class="xref" href="AiDotNet.Interfaces.FewShotExample.html">FewShotExample</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_FewShot_DiversityExampleSelector_1_OnExampleRemoved_" data-uid="AiDotNet.PromptEngineering.FewShot.DiversityExampleSelector`1.OnExampleRemoved*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_FewShot_DiversityExampleSelector_1_OnExampleRemoved_AiDotNet_Interfaces_FewShotExample_" data-uid="AiDotNet.PromptEngineering.FewShot.DiversityExampleSelector`1.OnExampleRemoved(AiDotNet.Interfaces.FewShotExample)">
+  OnExampleRemoved(FewShotExample)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/FewShot/DiversityExampleSelector.cs/#L117"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Called when an example is removed. Removes the cached embedding.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void OnExampleRemoved(FewShotExample example)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>example</code> <a class="xref" href="AiDotNet.Interfaces.FewShotExample.html">FewShotExample</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_FewShot_DiversityExampleSelector_1_SelectExamplesCore_" data-uid="AiDotNet.PromptEngineering.FewShot.DiversityExampleSelector`1.SelectExamplesCore*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_FewShot_DiversityExampleSelector_1_SelectExamplesCore_System_String_System_Int32_" data-uid="AiDotNet.PromptEngineering.FewShot.DiversityExampleSelector`1.SelectExamplesCore(System.String,System.Int32)">
+  SelectExamplesCore(string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/FewShot/DiversityExampleSelector.cs/#L125"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Selects diverse examples using a greedy algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IReadOnlyList&lt;FewShotExample&gt; SelectExamplesCore(string query, int count)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Interfaces.FewShotExample.html">FewShotExample</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/FewShot/DiversityExampleSelector.cs/#L44" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

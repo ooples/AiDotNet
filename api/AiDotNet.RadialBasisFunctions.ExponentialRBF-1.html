@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ExponentialRBF&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ExponentialRBF&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements an Exponential Radial Basis Function (RBF) of the form exp(-e*r).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RadialBasisFunctions_ExponentialRBF_1.md&amp;value=---%0Auid%3A%20AiDotNet.RadialBasisFunctions.ExponentialRBF%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RadialBasisFunctions.ExponentialRBF`1">
+
+
+
+  <h1 id="AiDotNet_RadialBasisFunctions_ExponentialRBF_1" data-uid="AiDotNet.RadialBasisFunctions.ExponentialRBF`1" class="text-break">
+Class ExponentialRBF&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/ExponentialRBF.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RadialBasisFunctions.html">RadialBasisFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements an Exponential Radial Basis Function (RBF) of the form exp(-e*r).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ExponentialRBF&lt;T&gt; : IRadialBasisFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ExponentialRBF&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IRadialBasisFunction-1.html">IRadialBasisFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_RadialBasisFunctions_ExponentialRBF_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class provides an implementation of a Radial Basis Function (RBF) that uses an exponential decay
+of the form f(r) = exp(-e*r), where r is the radial distance and e (epsilon) is a width parameter
+controlling how quickly the function decreases with distance. The exponential RBF is sometimes called
+the Laplacian RBF and is related to the distribution of the same name. It decreases less rapidly than
+the Gaussian RBF for small distances but has a more gradual asymptotic behavior for large distances.
+</p>
+<p><b>For Beginners:</b> A Radial Basis Function (RBF) is a special type of mathematical function
+that depends only on the distance from a center point.
+<p>The Exponential RBF decreases as you move away from the center point, following an exponential decay pattern.
+Think of it like a hill or mountain that starts at its highest point in the center and then gradually
+slopes downward in all directions, never quite reaching zero.</p>
+<p>This specific RBF has a parameter called epsilon (e) that controls how quickly the &quot;hill&quot; drops off:</p>
+<ul>
+<li>A larger epsilon value creates a steeper hill that drops off quickly with distance</li>
+<li>A smaller epsilon value creates a more gradual slope that extends further</li>
+</ul>
+<p>The exponential RBF is useful in many machine learning applications, especially when you want a smoother
+decrease with distance compared to a Gaussian RBF.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_RadialBasisFunctions_ExponentialRBF_1__ctor_" data-uid="AiDotNet.RadialBasisFunctions.ExponentialRBF`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_ExponentialRBF_1__ctor_System_Double_" data-uid="AiDotNet.RadialBasisFunctions.ExponentialRBF`1.#ctor(System.Double)">
+  ExponentialRBF(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/ExponentialRBF.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.RadialBasisFunctions.ExponentialRBF-1.html">ExponentialRBF&lt;T&gt;</a> class with a specified width parameter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExponentialRBF(double epsilon = 1)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>epsilon</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The width parameter, defaults to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_ExponentialRBF_1__ctor_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The constructor initializes the Exponential Radial Basis Function with a specified width parameter epsilon.
+Epsilon controls how quickly the function decreases with distance. Larger values of epsilon result in a
+faster decrease (narrower width), while smaller values result in a slower decrease (wider width).
+</p>
+<p><b>For Beginners:</b> This creates a new Exponential RBF with a specific width setting.
+<p>The epsilon parameter controls the &quot;width&quot; of the function:</p>
+<ul>
+<li>Larger epsilon values (like 5.0) make the function very narrow, falling off quickly as you move away from the center</li>
+<li>Smaller epsilon values (like 0.1) make the function very wide, decreasing slowly with distance</li>
+</ul>
+<p>If you're not sure what value to use, the default (epsilon = 1.0) is a good starting point
+that provides a moderate decrease with distance.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RadialBasisFunctions_ExponentialRBF_1_Compute_" data-uid="AiDotNet.RadialBasisFunctions.ExponentialRBF`1.Compute*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_ExponentialRBF_1_Compute__0_" data-uid="AiDotNet.RadialBasisFunctions.ExponentialRBF`1.Compute(`0)">
+  Compute(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/ExponentialRBF.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the value of the Exponential Radial Basis Function for a given radius.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Compute(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The radius or distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The computed function value exp(-e*r).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_ExponentialRBF_1_Compute__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the value of the Exponential RBF for a given radius r. The formula used is
+exp(-e*r), which decreases exponentially with distance. The function equals 1 at r = 0 and approaches 0
+as r approaches infinity.
+</p>
+<p><b>For Beginners:</b> This method computes the "height" or "value" of the Exponential function
+at a specific distance (r) from the center.
+<p>The calculation involves:</p>
+<ol>
+<li>Multiplying the distance (r) by the epsilon parameter</li>
+<li>Negating this product to make it negative</li>
+<li>Computing the exponential function (e raised to this power)</li>
+</ol>
+<p>The result is a single number representing the function's value at the given distance.
+This value is always between 0 and 1:</p>
+<ul>
+<li>At the center (r = 0), the value is exactly 1</li>
+<li>As you move away from the center, the value gets smaller, approaching 0 but never quite reaching it</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RadialBasisFunctions_ExponentialRBF_1_ComputeDerivative_" data-uid="AiDotNet.RadialBasisFunctions.ExponentialRBF`1.ComputeDerivative*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_ExponentialRBF_1_ComputeDerivative__0_" data-uid="AiDotNet.RadialBasisFunctions.ExponentialRBF`1.ComputeDerivative(`0)">
+  ComputeDerivative(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/ExponentialRBF.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the derivative of the Exponential RBF with respect to the radius.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeDerivative(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The radius or distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The derivative value of the function with respect to r.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_ExponentialRBF_1_ComputeDerivative__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the derivative of the Exponential RBF with respect to the radius r.
+The formula for the derivative is -e * exp(-e*r), which is always negative for positive r and e,
+indicating that the function always decreases with distance.
+</p>
+<p><b>For Beginners:</b> This method computes how fast the function's value changes
+as you move away from the center point.
+<p>The derivative tells you the &quot;slope&quot; or &quot;rate of change&quot; of the function at a specific distance.
+For the Exponential RBF, the derivative is:</p>
+<ul>
+<li>Always negative (for positive r and epsilon), meaning the function always decreases as you move away from the center</li>
+<li>Has its largest magnitude near the center and gradually approaches zero as distance increases</li>
+</ul>
+<p>This derivative is useful in machine learning applications when optimizing parameters
+using gradient-based methods.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RadialBasisFunctions_ExponentialRBF_1_ComputeWidthDerivative_" data-uid="AiDotNet.RadialBasisFunctions.ExponentialRBF`1.ComputeWidthDerivative*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_ExponentialRBF_1_ComputeWidthDerivative__0_" data-uid="AiDotNet.RadialBasisFunctions.ExponentialRBF`1.ComputeWidthDerivative(`0)">
+  ComputeWidthDerivative(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/ExponentialRBF.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the derivative of the Exponential RBF with respect to the width parameter epsilon.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeWidthDerivative(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The radius or distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The derivative value of the function with respect to epsilon.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_ExponentialRBF_1_ComputeWidthDerivative__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the derivative of the Exponential RBF with respect to the width parameter epsilon.
+The formula for this derivative is -r * exp(-e*r). The sign of this derivative depends on r: it is
+negative for positive r, indicating that increasing epsilon decreases the function value at any positive radius.
+</p>
+<p><b>For Beginners:</b> This method calculates how the function's value would change
+if you were to adjust the width parameter (epsilon).
+<p>This is particularly important in machine learning applications:</p>
+<ul>
+<li>When training a model with Exponential RBFs, we often need to adjust epsilon to fit the data better</li>
+<li>This derivative tells us exactly how changing epsilon affects the output of the function</li>
+<li>With this information, learning algorithms can automatically find the optimal value of epsilon</li>
+</ul>
+<p>The derivative is always negative for positive distances, which means that increasing the epsilon
+parameter always decreases the function value at any given positive distance.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/ExponentialRBF.cs/#L30" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

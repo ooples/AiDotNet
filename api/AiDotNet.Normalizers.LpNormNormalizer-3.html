@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class LpNormNormalizer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class LpNormNormalizer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Normalizes vectors using the Lp-norm, dividing each element by the vector&#39;s p-norm.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Normalizers_LpNormNormalizer_3.md&amp;value=---%0Auid%3A%20AiDotNet.Normalizers.LpNormNormalizer%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Normalizers.LpNormNormalizer`3">
+
+
+
+  <h1 id="AiDotNet_Normalizers_LpNormNormalizer_3" data-uid="AiDotNet.Normalizers.LpNormNormalizer`3" class="text-break">
+Class LpNormNormalizer&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/LpNormNormalizer.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Normalizers.html">Normalizers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Normalizes vectors using the Lp-norm, dividing each element by the vector's p-norm.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class LpNormNormalizer&lt;T, TInput, TOutput&gt; : NormalizerBase&lt;T, TInput, TOutput&gt;, INormalizer&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The type of input data structure.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The type of output data structure.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html">NormalizerBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">LpNormNormalizer&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.INormalizer-3.html">INormalizer</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_NumOps">NormalizerBase&lt;T, TInput, TOutput&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_Engine">NormalizerBase&lt;T, TInput, TOutput&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_NormalizeOutput__2_">NormalizerBase&lt;T, TInput, TOutput&gt;.NormalizeOutput(TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_NormalizeInput__1_">NormalizerBase&lt;T, TInput, TOutput&gt;.NormalizeInput(TInput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_Denormalize__2_AiDotNet_Models_NormalizationParameters__0__">NormalizerBase&lt;T, TInput, TOutput&gt;.Denormalize(TOutput, NormalizationParameters&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_Denormalize__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0__">NormalizerBase&lt;T, TInput, TOutput&gt;.Denormalize(TOutput, List&lt;NormalizationParameters&lt;T&gt;&gt;, NormalizationParameters&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_Denormalize__1__2__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0__">NormalizerBase&lt;T, TInput, TOutput&gt;.Denormalize(TInput, TOutput, TOutput, List&lt;NormalizationParameters&lt;T&gt;&gt;, NormalizationParameters&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Normalizers_LpNormNormalizer_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The LpNormNormalizer scales vectors by dividing each element by the Lp-norm of the vector.
+The Lp-norm is a generalization of different vector norms based on the parameter p:
+- p = 1: Manhattan (L1) norm (sum of absolute values)
+- p = 2: Euclidean (L2) norm (square root of sum of squares)
+- p = 8: Maximum (L8) norm (maximum absolute value)
+</p>
+<p>
+This normalization preserves the direction of the vector while scaling its magnitude.
+After normalization, the Lp-norm of the resulting vector equals 1.
+</p>
+<p>
+This normalization method is particularly useful for:
+- Feature normalization in machine learning models
+- Ensuring consistent scaling across feature vectors
+- Distance calculations in various algorithms
+- Applications where vector direction is more important than magnitude
+</p>
+<p><b>For Beginners:</b> Lp-norm normalization is like scaling a map while preserving its proportions.
+<p>Think of a vector as an arrow pointing in a specific direction:</p>
+<ul>
+<li>The Lp-norm is a way to measure the &quot;length&quot; of this arrow</li>
+<li>This normalizer divides each component of the arrow by its length</li>
+<li>The result is an arrow pointing in the same direction, but with a standard length of 1</li>
+</ul>
+<p>Different values of p provide different ways to measure the arrow's length:</p>
+<ul>
+<li>p = 1: Measures length as the sum of absolute values (like walking along city blocks)</li>
+<li>p = 2: Measures length as the straight-line distance (like the crow flies)</li>
+<li>Higher p values: Increasingly emphasize the largest component</li>
+</ul>
+<p>For example, normalizing the vector [3, 4] with p = 2 (Euclidean norm):</p>
+<ul>
+<li>The norm is sqrt(3² + 4²) = sqrt(25) = 5</li>
+<li>The normalized vector is [3/5, 4/5] = [0.6, 0.8]</li>
+<li>This new vector points in the same direction but has a length of 1</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Normalizers_LpNormNormalizer_3__ctor_" data-uid="AiDotNet.Normalizers.LpNormNormalizer`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_Normalizers_LpNormNormalizer_3__ctor__0_" data-uid="AiDotNet.Normalizers.LpNormNormalizer`3.#ctor(`0)">
+  LpNormNormalizer(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/LpNormNormalizer.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Normalizers.LpNormNormalizer-3.html">LpNormNormalizer&lt;T, TInput, TOutput&gt;</a> class with the specified p value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public LpNormNormalizer(T p)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>p</code> <span class="xref">T</span></dt>
+    <dd><p>The p value that determines which norm to use.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_LpNormNormalizer_3__ctor__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new LpNormNormalizer with the specified p value and initializes
+the numeric operations provider for the type T. Common values for p are 1 (Manhattan norm),
+2 (Euclidean norm), and large values to approximate the maximum norm.
+</p>
+<p><b>For Beginners:</b> This sets up your vector normalization system with a specific way to measure vector length.
+<p>When you create a new LpNormNormalizer:</p>
+<ul>
+<li>You specify the p value, which determines how vector length is calculated</li>
+<li>Common choices are p = 1 (Manhattan/taxicab distance) or p = 2 (straight-line distance)</li>
+<li>The normalizer prepares the mathematical tools needed for these calculations</li>
+</ul>
+<p>It's like choosing which ruler (straight or Manhattan-style) you'll use to measure distances
+before standardizing them.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Normalizers_LpNormNormalizer_3_Denormalize_" data-uid="AiDotNet.Normalizers.LpNormNormalizer`3.Denormalize*"></a>
+
+  <h3 id="AiDotNet_Normalizers_LpNormNormalizer_3_Denormalize__1__2__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0__" data-uid="AiDotNet.Normalizers.LpNormNormalizer`3.Denormalize(`1,`2,`2,System.Collections.Generic.List{AiDotNet.Models.NormalizationParameters{`0}},AiDotNet.Models.NormalizationParameters{`0})">
+  Denormalize(TInput, TOutput, TOutput, List&lt;NormalizationParameters&lt;T&gt;&gt;, NormalizationParameters&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/LpNormNormalizer.cs/#L419"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the denormalized Y-intercept (constant term) for a linear model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients, List&lt;NormalizationParameters&lt;T&gt;&gt; xParams, NormalizationParameters&lt;T&gt; yParams)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>xMatrix</code> <span class="xref">TInput</span></dt>
+    <dd><p>The original input feature matrix.</p>
+</dd>
+    <dt><code>y</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The original target vector.</p>
+</dd>
+    <dt><code>coefficients</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The model coefficients.</p>
+</dd>
+    <dt><code>xParams</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The normalization parameters for the input features.</p>
+</dd>
+    <dt><code>yParams</code> <a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;</dt>
+    <dd><p>The normalization parameters for the output variable.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The denormalized Y-intercept for use with non-normalized data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_LpNormNormalizer_3_Denormalize__1__2__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns zero as the y-intercept for models trained on Lp-norm normalized data.
+For Lp-norm normalization, the y-intercept in the original scale is always zero because
+the normalization only involves scaling by a constant factor, which doesn't introduce any shift
+in the intercept.
+</p>
+<p><b>For Beginners:</b> This method determines the baseline value for predictions with original data.
+<p>In a prediction model, the y-intercept is the starting point:</p>
+<ul>
+<li>It's the predicted value when all features are set to zero</li>
+</ul>
+<p>For Lp-norm normalization specifically:</p>
+<ul>
+<li>The y-intercept is always zero in the original scale</li>
+<li>This is because Lp-norm normalization only involves multiplication/division, not addition/subtraction</li>
+<li>A zero input will still be zero after scaling, so the origin point doesn't change</li>
+</ul>
+<p>This is different from other normalization methods that might shift values, which would require
+a non-zero intercept adjustment.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Normalizers_LpNormNormalizer_3_Denormalize_" data-uid="AiDotNet.Normalizers.LpNormNormalizer`3.Denormalize*"></a>
+
+  <h3 id="AiDotNet_Normalizers_LpNormNormalizer_3_Denormalize__2_AiDotNet_Models_NormalizationParameters__0__" data-uid="AiDotNet.Normalizers.LpNormNormalizer`3.Denormalize(`2,AiDotNet.Models.NormalizationParameters{`0})">
+  Denormalize(TOutput, NormalizationParameters&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/LpNormNormalizer.cs/#L297"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reverses the normalization of data using the provided normalization parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override TOutput Denormalize(TOutput data, NormalizationParameters&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The normalized data to denormalize.</p>
+</dd>
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;</dt>
+    <dd><p>The normalization parameters containing the scale (norm).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>A denormalized data with values converted back to their original scale.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_LpNormNormalizer_3_Denormalize__2_AiDotNet_Models_NormalizationParameters__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method reverses the Lp-norm normalization by multiplying each element by the original norm.
+This restores the vector to its original magnitude while maintaining its direction.
+</p>
+<p><b>For Beginners:</b> This method restores the original length of a normalized vector.
+<p>The process is straightforward:</p>
+<ul>
+<li>Take each element in the normalized vector</li>
+<li>Multiply it by the original length (norm) that was saved during normalization</li>
+</ul>
+<p>For example, if your normalized vector was [0.6, 0.8] with an original norm of 5:</p>
+<ul>
+<li>The denormalized vector would be [0.6 × 5, 0.8 × 5] = [3, 4]</li>
+</ul>
+<p>This restores the vector to its original scale while maintaining its direction and the
+proportional relationships between its elements.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Normalizers_LpNormNormalizer_3_Denormalize_" data-uid="AiDotNet.Normalizers.LpNormNormalizer`3.Denormalize*"></a>
+
+  <h3 id="AiDotNet_Normalizers_LpNormNormalizer_3_Denormalize__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0__" data-uid="AiDotNet.Normalizers.LpNormNormalizer`3.Denormalize(`2,System.Collections.Generic.List{AiDotNet.Models.NormalizationParameters{`0}},AiDotNet.Models.NormalizationParameters{`0})">
+  Denormalize(TOutput, List&lt;NormalizationParameters&lt;T&gt;&gt;, NormalizationParameters&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/LpNormNormalizer.cs/#L358"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Denormalizes coefficients from a regression model that was trained on Lp-norm normalized data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override TOutput Denormalize(TOutput coefficients, List&lt;NormalizationParameters&lt;T&gt;&gt; xParams, NormalizationParameters&lt;T&gt; yParams)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>coefficients</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The regression coefficients to denormalize.</p>
+</dd>
+    <dt><code>xParams</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The normalization parameters for the input features.</p>
+</dd>
+    <dt><code>yParams</code> <a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;</dt>
+    <dd><p>The normalization parameters for the output variable.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>Denormalized coefficients that can be applied to original, unnormalized data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_LpNormNormalizer_3_Denormalize__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method adjusts regression coefficients to work with original unnormalized data.
+For Lp-norm normalization, this involves scaling each coefficient by the ratio of
+the output norm to the corresponding input norm.
+</p>
+<p><b>For Beginners:</b> This method adjusts prediction model weights for use with original values.
+<p>When you build a model using normalized data:</p>
+<ul>
+<li>The model learns weights (coefficients) based on the normalized values</li>
+<li>To use this model with original, unnormalized data, you need to adjust these weights</li>
+</ul>
+<p>This method performs that adjustment by:</p>
+<ul>
+<li>Multiplying each coefficient by the ratio of output norm to input norm</li>
+</ul>
+<p>For example, if:</p>
+<ul>
+<li>An input feature was normalized by dividing by 5</li>
+<li>The output was normalized by dividing by 10</li>
+<li>The model learned a coefficient of 2.0 for this feature on normalized data</li>
+</ul>
+<p>The denormalized coefficient would be 2.0 × (10 ÷ 5) = 4.0</p>
+<p>This ensures that predictions made using original data will be properly scaled.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Normalizers_LpNormNormalizer_3_NormalizeInput_" data-uid="AiDotNet.Normalizers.LpNormNormalizer`3.NormalizeInput*"></a>
+
+  <h3 id="AiDotNet_Normalizers_LpNormNormalizer_3_NormalizeInput__1_" data-uid="AiDotNet.Normalizers.LpNormNormalizer`3.NormalizeInput(`1)">
+  NormalizeInput(TInput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/LpNormNormalizer.cs/#L197"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Normalizes input data using the Lp-norm approach, applying normalization separately to each column.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override (TInput, List&lt;NormalizationParameters&lt;T&gt;&gt;) NormalizeInput(TInput data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TInput</span></dt>
+    <dd><p>The input data to normalize.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(TInput, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;&gt;)</dt>
+    <dd><p>A tuple containing the normalized data and a list of normalization parameters for each column.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_LpNormNormalizer_3_NormalizeInput__1__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method normalizes each column of the matrix independently using the Lp-norm approach.
+It treats each column as a separate feature vector that needs its own normalization.
+</p>
+<p><b>For Beginners:</b> This method standardizes each column of a data table to have a length of 1.
+<p>When working with a table (matrix) of data:</p>
+<ul>
+<li>Each column is treated as a separate vector</li>
+<li>Each column gets normalized independently using the method described above</li>
+<li>This ensures that each feature (column) has a consistent scale</li>
+</ul>
+<p>For example, with a table of measurements where:</p>
+<ul>
+<li>Column 1 might represent heights</li>
+<li>Column 2 might represent weights</li>
+<li>Each column is scaled to have a p-norm of 1, while preserving the relationships within that column</li>
+</ul>
+<p>The method returns:</p>
+<ul>
+<li>A new table with all columns normalized to unit length</li>
+<li>The norm values for each column, so you can convert back to original values later if needed</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Normalizers_LpNormNormalizer_3_NormalizeOutput_" data-uid="AiDotNet.Normalizers.LpNormNormalizer`3.NormalizeOutput*"></a>
+
+  <h3 id="AiDotNet_Normalizers_LpNormNormalizer_3_NormalizeOutput__2_" data-uid="AiDotNet.Normalizers.LpNormNormalizer`3.NormalizeOutput(`2)">
+  NormalizeOutput(TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/LpNormNormalizer.cs/#L133"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Normalizes output data using the Lp-norm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override (TOutput, NormalizationParameters&lt;T&gt;) NormalizeOutput(TOutput data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The input data to normalize.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(TOutput, <a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;)</dt>
+    <dd><p>A tuple containing the normalized data and the normalization parameters, which include the scale (norm) and p value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_LpNormNormalizer_3_NormalizeOutput__2__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method normalizes data by:
+1. Computing the Lp-norm of the vector: (sum of |x_i|^p)^(1/p)
+2. Dividing each element by this norm
+<p>The resulting vector has the same direction as the original but with an Lp-norm of 1.
+The norm is saved in the normalization parameters for later denormalization.</p>
+
+<p><b>For Beginners:</b> This method standardizes a vector to have a length of 1 while keeping its direction.
+<p>The process works like this:</p>
+<ol>
+<li>First, it measures the &quot;length&quot; of your vector using the p-norm
+<ul>
+<li>Takes the absolute value of each element</li>
+<li>Raises each to the power of p</li>
+<li>Adds them all together</li>
+<li>Takes the (1/p)th root of the sum</li>
+</ul>
+</li>
+<li>Then, it divides each element of the vector by this length</li>
+</ol>
+<p>For example, with vector [3, 4] and p = 2:</p>
+<ul>
+<li>The norm is sqrt(3² + 4²) = sqrt(25) = 5</li>
+<li>The normalized vector is [3/5, 4/5] = [0.6, 0.8]</li>
+</ul>
+<p>After normalization:</p>
+<ul>
+<li>The vector points in the same direction</li>
+<li>The vector has a length of exactly 1 using the p-norm</li>
+<li>The relative proportions between elements are preserved</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/LpNormNormalizer.cs/#L46" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

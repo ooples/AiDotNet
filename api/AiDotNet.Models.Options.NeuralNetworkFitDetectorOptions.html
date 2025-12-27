@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class NeuralNetworkFitDetectorOptions | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class NeuralNetworkFitDetectorOptions | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the Neural Network Fit Detector, which evaluates the quality of a neural network&#39;s fit to data by analyzing performance metrics and detecting issues like underfitting and overfitting.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_NeuralNetworkFitDetectorOptions.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.NeuralNetworkFitDetectorOptions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.NeuralNetworkFitDetectorOptions">
+
+
+
+  <h1 id="AiDotNet_Models_Options_NeuralNetworkFitDetectorOptions" data-uid="AiDotNet.Models.Options.NeuralNetworkFitDetectorOptions" class="text-break">
+Class NeuralNetworkFitDetectorOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkFitDetectorOptions.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the Neural Network Fit Detector, which evaluates the quality of a neural network's
+fit to data by analyzing performance metrics and detecting issues like underfitting and overfitting.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class NeuralNetworkFitDetectorOptions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">NeuralNetworkFitDetectorOptions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_NeuralNetworkFitDetectorOptions_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The Neural Network Fit Detector provides automated detection and classification of model fit quality
+based on configurable thresholds. It analyzes the discrepancy between training and validation performance
+to identify issues such as underfitting (poor performance on both training and validation data) and
+overfitting (good performance on training data but poor performance on validation data). This tool
+helps data scientists and machine learning engineers quickly assess model quality and make informed
+decisions about architecture adjustments, regularization techniques, or data augmentation strategies.
+</p>
+<p><b>For Beginners:</b> The Neural Network Fit Detector helps you understand if your AI model is learning properly.
+<p>When training an AI model, three common problems can occur:</p>
+<ul>
+<li>Underfitting: The model is too simple and performs poorly on all data</li>
+<li>Overfitting: The model has &quot;memorized&quot; the training data instead of learning general patterns</li>
+<li>Just Right: The model has learned general patterns that work well on new data</li>
+</ul>
+<p>Imagine you're teaching someone to play chess:</p>
+<ul>
+<li>Underfitting is like they only learned how pieces move, but no strategies</li>
+<li>Overfitting is like they memorized specific games but can't adapt to new situations</li>
+<li>Just Right is when they learned general principles they can apply to any game</li>
+</ul>
+<p>This class lets you set thresholds that determine:</p>
+<ul>
+<li>What level of error is acceptable for a &quot;good&quot; model</li>
+<li>When a model is considered &quot;moderately good&quot;</li>
+<li>When a model is performing poorly</li>
+<li>When a model shows signs of overfitting (performing much better on training data than on new data)</li>
+</ul>
+<p>These thresholds help automatically classify models during development and training,
+so you can quickly identify and fix issues in your neural network.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkFitDetectorOptions_GoodFitThreshold_" data-uid="AiDotNet.Models.Options.NeuralNetworkFitDetectorOptions.GoodFitThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkFitDetectorOptions_GoodFitThreshold" data-uid="AiDotNet.Models.Options.NeuralNetworkFitDetectorOptions.GoodFitThreshold">
+  GoodFitThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkFitDetectorOptions.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum error threshold for classifying a model's fit as &quot;good&quot;.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double GoodFitThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The good fit threshold, defaulting to 0.05 (5%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkFitDetectorOptions_GoodFitThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This threshold defines the maximum acceptable error rate for a model to be classified as having a
+"good" fit. Error rates below this threshold indicate that the model has successfully learned
+patterns in the data and is generalizing well. The specific metric used for the error rate
+depends on the task (e.g., mean squared error for regression, cross-entropy for classification),
+but in all cases, lower values indicate better performance. This threshold should be set based
+on domain-specific requirements and the quality standards for your particular application.
+</p>
+<p><b>For Beginners:</b> This setting determines how accurate a model must be
+to be considered "good."
+<p>The default value of 0.05 means:</p>
+<ul>
+<li>If the model's error rate is below 5%</li>
+<li>It's classified as having a &quot;good&quot; fit</li>
+</ul>
+<p>Think of it like a test score:</p>
+<ul>
+<li>A &quot;good&quot; model gets at least 95% of answers correct (error less than 5%)</li>
+</ul>
+<p>You might want a lower value (stricter, like 0.03) if:</p>
+<ul>
+<li>Your application requires very high accuracy</li>
+<li>You're working with a relatively simple problem</li>
+<li>You have high-quality, consistent data</li>
+</ul>
+<p>You might want a higher value (more lenient, like 0.08) if:</p>
+<ul>
+<li>Your problem is inherently noisy or difficult</li>
+<li>You're working with limited data</li>
+<li>Perfect predictions aren't required for your application</li>
+</ul>
+<p>The right threshold depends on your specific problem - what's &quot;good&quot; for predicting
+stock prices might be different from what's &quot;good&quot; for image classification.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkFitDetectorOptions_ModerateFitThreshold_" data-uid="AiDotNet.Models.Options.NeuralNetworkFitDetectorOptions.ModerateFitThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkFitDetectorOptions_ModerateFitThreshold" data-uid="AiDotNet.Models.Options.NeuralNetworkFitDetectorOptions.ModerateFitThreshold">
+  ModerateFitThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkFitDetectorOptions.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum error threshold for classifying a model's fit as &quot;moderate&quot;.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ModerateFitThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The moderate fit threshold, defaulting to 0.1 (10%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkFitDetectorOptions_ModerateFitThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This threshold defines the maximum acceptable error rate for a model to be classified as having
+a "moderate" fit. Error rates below this threshold but above the GoodFitThreshold indicate that
+the model has learned useful patterns but may benefit from further refinement. Models in this
+category typically demonstrate reasonable performance but might be improved through additional
+training, architectural adjustments, or data preprocessing techniques. This intermediate category
+helps distinguish models that require minor refinements from those that need significant rework.
+</p>
+<p><b>For Beginners:</b> This setting determines the threshold for a model to be
+considered "moderately good."
+<p>The default value of 0.1 means:</p>
+<ul>
+<li>If the model's error rate is between 5% and 10%</li>
+<li>It's classified as having a &quot;moderate&quot; fit</li>
+</ul>
+<p>Continuing with our test score analogy:</p>
+<ul>
+<li>A &quot;moderate&quot; model gets between 90% and 95% of answers correct</li>
+</ul>
+<p>You might want a lower value (like 0.07) if:</p>
+<ul>
+<li>You have high standards for your application</li>
+<li>You want to push more models into the &quot;poor&quot; category for further improvement</li>
+<li>The problem is well-understood and solvable</li>
+</ul>
+<p>You might want a higher value (like 0.15) if:</p>
+<ul>
+<li>The problem is challenging with inherent uncertainty</li>
+<li>You want more tolerance for moderately-performing models</li>
+<li>You need to balance accuracy with other considerations like model simplicity</li>
+</ul>
+<p>Models in the &quot;moderate&quot; category are usually worth keeping and refining further,
+while those below this threshold might need more substantial redesign.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkFitDetectorOptions_OverfittingThreshold_" data-uid="AiDotNet.Models.Options.NeuralNetworkFitDetectorOptions.OverfittingThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkFitDetectorOptions_OverfittingThreshold" data-uid="AiDotNet.Models.Options.NeuralNetworkFitDetectorOptions.OverfittingThreshold">
+  OverfittingThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkFitDetectorOptions.cs/#L201"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for detecting overfitting based on the difference between training
+and validation performance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double OverfittingThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The overfitting threshold, defaulting to 0.2 (20%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkFitDetectorOptions_OverfittingThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This threshold determines when a model is classified as overfitting by measuring the relative
+difference between training and validation error rates. If the validation error exceeds the
+training error by this percentage or more, the model is flagged as overfitting. Overfitting
+occurs when a model learns the training data too precisely, including noise and outliers,
+resulting in poor generalization to new data. Early detection of overfitting allows for timely
+application of regularization techniques, data augmentation, or early stopping to improve
+model generalizability.
+</p>
+<p><b>For Beginners:</b> This setting helps detect when a model has "memorized"
+the training data instead of learning general patterns.
+<p>The default value of 0.2 means:</p>
+<ul>
+<li>If the model performs 20% or more better on training data than on validation data</li>
+<li>It's flagged as &quot;overfitting&quot;</li>
+</ul>
+<p>Using our chess learning analogy:</p>
+<ul>
+<li>Overfitting is like a player who performs great when replaying games they've studied</li>
+<li>But performs much worse when playing new opponents with different strategies</li>
+</ul>
+<p>You might want a lower value (like 0.1) if:</p>
+<ul>
+<li>You want to be very conservative about overfitting</li>
+<li>Your application requires consistent performance across all data</li>
+<li>You're working with limited validation data</li>
+</ul>
+<p>You might want a higher value (like 0.3) if:</p>
+<ul>
+<li>Some overfitting is acceptable in your application</li>
+<li>Your training and validation data naturally have different characteristics</li>
+<li>You want to focus on other issues before addressing mild overfitting</li>
+</ul>
+<p>Detecting overfitting early helps you apply the right techniques (like regularization,
+dropout, or early stopping) to improve your model's ability to generalize to new data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkFitDetectorOptions_PoorFitThreshold_" data-uid="AiDotNet.Models.Options.NeuralNetworkFitDetectorOptions.PoorFitThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkFitDetectorOptions_PoorFitThreshold" data-uid="AiDotNet.Models.Options.NeuralNetworkFitDetectorOptions.PoorFitThreshold">
+  PoorFitThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkFitDetectorOptions.cs/#L159"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum error threshold for classifying a model's fit as &quot;poor&quot; rather than &quot;very poor&quot;.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double PoorFitThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The poor fit threshold, defaulting to 0.2 (20%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkFitDetectorOptions_PoorFitThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This threshold defines the boundary between "poor" and "very poor" model performance. Models with
+error rates below this threshold but above the ModerateFitThreshold are classified as having a
+"poor" fit, while those exceeding this threshold are classified as "very poor". Models in the
+"poor" category typically show some learning but fail to capture important patterns in the data,
+while "very poor" models may be no better than random guessing or simple heuristics. This
+distinction helps prioritize which underperforming models require complete redesign versus
+those that might be salvageable with substantial modifications.
+</p>
+<p><b>For Beginners:</b> This setting determines when a model moves from
+"poor" to "very poor" classification.
+<p>The default value of 0.2 means:</p>
+<ul>
+<li>If the model's error rate is between 10% and 20%</li>
+<li>It's classified as having a &quot;poor&quot; fit</li>
+<li>If the error rate exceeds 20%</li>
+<li>It's classified as having a &quot;very poor&quot; fit</li>
+</ul>
+<p>In test score terms:</p>
+<ul>
+<li>A &quot;poor&quot; model gets between 80% and 90% of answers correct</li>
+<li>A &quot;very poor&quot; model gets less than 80% correct</li>
+</ul>
+<p>You might want a lower value (like 0.15) if:</p>
+<ul>
+<li>Even moderately bad performance is unacceptable</li>
+<li>You want to identify more models as needing complete redesign</li>
+<li>The baseline for your problem is already decent</li>
+</ul>
+<p>You might want a higher value (like 0.3) if:</p>
+<ul>
+<li>The problem is extremely difficult or noisy</li>
+<li>You're dealing with very limited or low-quality data</li>
+<li>You want to give more models a chance for improvement before complete rejection</li>
+</ul>
+<p>This threshold helps you decide which underperforming models might be worth
+trying to improve versus which ones should be completely rethought.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkFitDetectorOptions.cs/#L38" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

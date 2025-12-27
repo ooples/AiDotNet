@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TensorRTConfiguration | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TensorRTConfiguration | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration for TensorRT model conversion and execution.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Deployment_TensorRT_TensorRTConfiguration.md&amp;value=---%0Auid%3A%20AiDotNet.Deployment.TensorRT.TensorRTConfiguration%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration">
+
+
+
+  <h1 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration" class="text-break">
+Class TensorRTConfiguration  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L6"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Deployment.html">Deployment</a>.<a class="xref" href="AiDotNet.Deployment.TensorRT.html">TensorRT</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration for TensorRT model conversion and execution.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class TensorRTConfiguration</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">TensorRTConfiguration</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_BuilderOptimizationLevel_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.BuilderOptimizationLevel*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_BuilderOptimizationLevel" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.BuilderOptimizationLevel">
+  BuilderOptimizationLevel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L96"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the builder optimization level (0-5, higher is more optimization).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BuilderOptimizationLevel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_CalibrationDataPath_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.CalibrationDataPath*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_CalibrationDataPath" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.CalibrationDataPath">
+  CalibrationDataPath
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the path to calibration data for INT8 quantization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? CalibrationDataPath { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_CleanupIntermediateFiles_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.CleanupIntermediateFiles*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_CleanupIntermediateFiles" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.CleanupIntermediateFiles">
+  CleanupIntermediateFiles
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to cleanup intermediate files (ONNX, etc.) (default: true).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool CleanupIntermediateFiles { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_CustomPluginPaths_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.CustomPluginPaths*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_CustomPluginPaths" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.CustomPluginPaths">
+  CustomPluginPaths
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets custom plugin library paths.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;string&gt; CustomPluginPaths { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_DeviceId_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.DeviceId*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_DeviceId" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.DeviceId">
+  DeviceId
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the GPU device ID to use (default: 0).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int DeviceId { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_DlaCore_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.DlaCore*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_DlaCore" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.DlaCore">
+  DlaCore
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the DLA core to use (null for GPU only, default: null).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? DlaCore { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_EnableCudaGraphs_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.EnableCudaGraphs*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_EnableCudaGraphs" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.EnableCudaGraphs">
+  EnableCudaGraphs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable CUDA graph capture (default: false).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableCudaGraphs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_EnableDynamicShapes_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.EnableDynamicShapes*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_EnableDynamicShapes" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.EnableDynamicShapes">
+  EnableDynamicShapes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable dynamic shapes (default: false).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableDynamicShapes { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_EnableMultiStream_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.EnableMultiStream*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_EnableMultiStream" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.EnableMultiStream">
+  EnableMultiStream
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use multi-stream execution (default: false).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableMultiStream { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_EnableProfiling_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.EnableProfiling*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_EnableProfiling" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.EnableProfiling">
+  EnableProfiling
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable profiling (default: false).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableProfiling { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_EngineCachePath_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.EngineCachePath*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_EngineCachePath" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.EngineCachePath">
+  EngineCachePath
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the engine cache path for faster reloading.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? EngineCachePath { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_MaxBatchSize_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.MaxBatchSize*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_MaxBatchSize" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.MaxBatchSize">
+  MaxBatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L11"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum batch size for inference (default: 1).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxBatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_MaxWorkspaceSize_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.MaxWorkspaceSize*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_MaxWorkspaceSize" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.MaxWorkspaceSize">
+  MaxWorkspaceSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L16"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum workspace size in bytes for TensorRT (default: 1GB).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long MaxWorkspaceSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_NumStreams_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.NumStreams*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_NumStreams" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.NumStreams">
+  NumStreams
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of streams for multi-stream execution (default: 2).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumStreams { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_OptimizationProfiles_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.OptimizationProfiles*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_OptimizationProfiles" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.OptimizationProfiles">
+  OptimizationProfiles
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets optimization profiles for dynamic shapes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;OptimizationProfileConfig&gt; OptimizationProfiles { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Deployment.TensorRT.OptimizationProfileConfig.html">OptimizationProfileConfig</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_StrictTypeConstraints_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.StrictTypeConstraints*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_StrictTypeConstraints" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.StrictTypeConstraints">
+  StrictTypeConstraints
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable strict type constraints (default: false).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool StrictTypeConstraints { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_UseFp16_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.UseFp16*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_UseFp16" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.UseFp16">
+  UseFp16
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use FP16 precision (default: true).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseFp16 { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_UseInt8_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.UseInt8*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_UseInt8" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.UseInt8">
+  UseInt8
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use INT8 precision (requires calibration, default: false).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseInt8 { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_ForHighThroughput_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.ForHighThroughput*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_ForHighThroughput_System_Int32_System_String_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.ForHighThroughput(System.Int32,System.String)">
+  ForHighThroughput(int, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L138"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a configuration optimized for high throughput.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TensorRTConfiguration ForHighThroughput(int batchSize = 64, string? calibrationDataPath = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum batch size</p>
+</dd>
+    <dt><code>calibrationDataPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional path to calibration data for INT8 quantization. If provided, INT8 will be enabled.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.html">TensorRTConfiguration</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_ForInt8_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.ForInt8*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_ForInt8_System_String_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.ForInt8(System.String)">
+  ForInt8(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L161"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a configuration with INT8 quantization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TensorRTConfiguration ForInt8(string calibrationDataPath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>calibrationDataPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to calibration data file (required for INT8 quantization)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.html">TensorRTConfiguration</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when calibrationDataPath is null or whitespace</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_ForLowLatency_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.ForLowLatency*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_ForLowLatency" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.ForLowLatency">
+  ForLowLatency()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a configuration optimized for low latency (batch size 1).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TensorRTConfiguration ForLowLatency()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.html">TensorRTConfiguration</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_ForMaxPerformance_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.ForMaxPerformance*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_ForMaxPerformance" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.ForMaxPerformance">
+  ForMaxPerformance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a configuration optimized for maximum performance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TensorRTConfiguration ForMaxPerformance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.html">TensorRTConfiguration</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_Validate_" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.Validate*"></a>
+
+  <h3 id="AiDotNet_Deployment_TensorRT_TensorRTConfiguration_Validate" data-uid="AiDotNet.Deployment.TensorRT.TensorRTConfiguration.Validate">
+  Validate()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L182"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates the configuration and throws exceptions for invalid settings.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Validate()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when INT8 is enabled without calibration data</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.filenotfoundexception">FileNotFoundException</a></dt>
+    <dd><p>Thrown when calibration data path is specified but file doesn't exist</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/TensorRT/TensorRTConfiguration.cs/#L6" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

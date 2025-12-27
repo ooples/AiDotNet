@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ML Training Infrastructure - Revised Implementation Plan | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ML Training Infrastructure - Revised Implementation Plan | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/ML_INFRASTRUCTURE_IMPLEMENTATION_PLAN.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="ml-training-infrastructure---revised-implementation-plan">ML Training Infrastructure - Revised Implementation Plan</h1>
+
+<h2 id="executive-summary">Executive Summary</h2>
+<p>This document outlines the <strong>REVISED</strong> implementation plan based on proper codebase analysis. The initial assessment was fundamentally incorrect - AiDotNet already has <strong>comprehensive ML training infrastructure</strong> that meets or exceeds industry standards.</p>
+<p><strong>Actual Current State:</strong> 80-90% feature parity with MLflow, W&amp;B, Optuna, and DVC
+<strong>Target State:</strong> Complete integration, testing, documentation, and facade compliance
+<strong>Revised Effort:</strong> 3 required sprints + 1 optional (2-week sprints = 6-8 weeks)</p>
+<hr>
+<h2 id="actual-codebase-inventory">Actual Codebase Inventory</h2>
+<h3 id="what-already-exists-previously-missed">What Already Exists (Previously Missed)</h3>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Components</th>
+<th>File Count</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Hyperparameter Optimization</strong></td>
+<td>BayesianOptimizer, GridSearch, RandomSearch, Hyperband, ASHA, PopulationBasedTraining, TrialPruner, EarlyStopping</td>
+<td>9 files</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td><strong>Experiment Tracking</strong></td>
+<td>ExperimentTracker, ExperimentTrackerBase, IExperimentTracker, IExperiment, IExperimentRun</td>
+<td>5+ files</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td><strong>Model Registry</strong></td>
+<td>ModelRegistry, ModelRegistryBase, IModelRegistry, ModelStage, ModelLineage</td>
+<td>5+ files</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td><strong>Checkpoint Management</strong></td>
+<td>CheckpointManager, CheckpointManagerBase, ICheckpointManager</td>
+<td>3+ files</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td><strong>Training Monitoring</strong></td>
+<td>TrainingMonitor, TrainingMonitorBase, ITrainingMonitor, ResourceMonitor</td>
+<td>4+ files</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td><strong>Data Version Control</strong></td>
+<td>DataVersionControl, DataVersionControlBase, IDataVersionControl</td>
+<td>3+ files</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td><strong>Dashboards</strong></td>
+<td>MetricsDashboard, HtmlDashboard, ConsoleDashboard, LiveDashboard, TrainingCurves, ProgressBar</td>
+<td>6+ files</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td><strong>Notifications</strong></td>
+<td>SlackNotificationService, EmailNotificationService, NotificationManager, INotificationService</td>
+<td>4+ files</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td><strong>Model Serving</strong></td>
+<td>InferenceController, ModelsController, 6 batching strategies, 4 padding strategies, PerformanceMetrics</td>
+<td>30+ files</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td><strong>Knowledge Distillation</strong></td>
+<td>15 distillation strategies, 10 teacher types, curriculum learning</td>
+<td>44 files</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td><strong>LoRA Fine-tuning</strong></td>
+<td>StandardLoRA, QLoRA, DoRA, LoHa, LoKr, AdaLoRA, VeRA, + 30 more adapters</td>
+<td>37 files</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td><strong>Reinforcement Learning</strong></td>
+<td>PPO, A2C, A3C, SAC, TD3, DQN, MuZero, Dreamer, Decision Transformer, + 50 more agents</td>
+<td>85+ files</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td><strong>Meta-Learning</strong></td>
+<td>MAML, Reptile, ProtoNets, MatchingNetworks, LEO, ANIL, CNAP, + 10 more</td>
+<td>47 files</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td><strong>RAG</strong></td>
+<td>GraphRAG, FLARE, 10+ document stores, embeddings, rerankers, chunking strategies</td>
+<td>100+ files</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td><strong>Interpretability</strong></td>
+<td>LIME, SHAP, Anchors, Counterfactual, Fairness evaluators, Bias detectors</td>
+<td>18+ files</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td><strong>Transfer Learning</strong></td>
+<td>CORAL, MMD domain adaptation, feature mappers</td>
+<td>8 files</td>
+<td>Complete</td>
+</tr>
+<tr>
+<td><strong>AutoML</strong></td>
+<td>Neural Architecture Search, CompressionOptimizer, SearchSpace</td>
+<td>8 files</td>
+<td>Complete</td>
+</tr>
+</tbody>
+</table>
+<h3 id="facade-architecture-already-integrated">Facade Architecture (Already Integrated)</h3>
+<p><strong>PredictionModelBuilder.cs</strong> (~4000+ lines) already has:</p>
+<pre><code class="lang-csharp">// Training infrastructure configuration (lines 113-118)
+private IExperimentTracker&lt;T&gt;? _experimentTracker;
+private ICheckpointManager&lt;T, TInput, TOutput&gt;? _checkpointManager;
+private ITrainingMonitor&lt;T&gt;? _trainingMonitor;
+private IModelRegistry&lt;T, TInput, TOutput&gt;? _modelRegistry;
+private IDataVersionControl&lt;T&gt;? _dataVersionControl;
+private IHyperparameterOptimizer&lt;T, TInput, TOutput&gt;? _hyperparameterOptimizer;
+</code></pre>
+<p>With configuration methods:</p>
+<ul>
+<li><code>ConfigureExperimentTracker(IExperimentTracker&lt;T&gt; tracker)</code></li>
+<li><code>ConfigureCheckpointManager(ICheckpointManager&lt;T, TInput, TOutput&gt; manager)</code></li>
+<li><code>ConfigureTrainingMonitor(ITrainingMonitor&lt;T&gt; monitor)</code></li>
+<li><code>ConfigureModelRegistry(IModelRegistry&lt;T, TInput, TOutput&gt; registry)</code></li>
+<li><code>ConfigureDataVersionControl(IDataVersionControl&lt;T&gt; dataVersionControl)</code></li>
+<li><code>ConfigureHyperparameterOptimizer(IHyperparameterOptimizer&lt;T, TInput, TOutput&gt; optimizer)</code></li>
+</ul>
+<hr>
+<h2 id="revised-gap-analysis">Revised Gap Analysis</h2>
+<h3 id="whats-actually-missing-required-for-pr">What's Actually Missing (Required for PR)</h3>
+<table>
+<thead>
+<tr>
+<th>Gap</th>
+<th>Priority</th>
+<th>Effort</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Build() integration</td>
+<td>High</td>
+<td>1 day</td>
+<td>Ensure training infrastructure components are used in Build() method</td>
+</tr>
+<tr>
+<td>Unit tests</td>
+<td>High</td>
+<td>3-5 days</td>
+<td>Tests for HPO, experiment tracking, model registry</td>
+</tr>
+<tr>
+<td>Usage documentation</td>
+<td>High</td>
+<td>2-3 days</td>
+<td>Examples showing how to use training infrastructure</td>
+</tr>
+<tr>
+<td>Integration tests</td>
+<td>High</td>
+<td>2-3 days</td>
+<td>End-to-end tests for full training workflows</td>
+</tr>
+<tr>
+<td><strong>Facade compliance</strong></td>
+<td><strong>High</strong></td>
+<td><strong>2-3 days</strong></td>
+<td><strong>Ensure all access goes through PredictionModelBuilder/PredictionModelResult</strong></td>
+</tr>
+<tr>
+<td><strong>Dashboard integration</strong></td>
+<td><strong>High</strong></td>
+<td><strong>2-3 days</strong></td>
+<td><strong>Connect MetricsDashboard to ITrainingMonitor</strong></td>
+</tr>
+<tr>
+<td><strong>Serving integration</strong></td>
+<td><strong>High</strong></td>
+<td><strong>2-3 days</strong></td>
+<td><strong>Bridge IModelRepository ↔ IModelRegistry</strong></td>
+</tr>
+<tr>
+<td>External export</td>
+<td>Low</td>
+<td>Optional</td>
+<td>MLflow/W&amp;B export adapters (nice-to-have)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="integration-gaps-identified">Integration Gaps Identified</h3>
+<p><strong>1. AiDotNet.Dashboard ↔ Main Library Gap:</strong></p>
+<pre><code class="lang-text">Current: MetricsDashboard is standalone, manually updated
+Target:  MetricsDashboard receives updates from ITrainingMonitor automatically
+</code></pre>
+<p><strong>2. AiDotNet.Serving ↔ Main Library Gap:</strong></p>
+<pre><code class="lang-text">Current: IModelRepository (Serving) is separate from IModelRegistry (main)
+Target:  Models registered via PredictionModelBuilder are loadable in REST API
+</code></pre>
+<p><strong>3. PredictionModelResult Gap:</strong></p>
+<pre><code class="lang-text">Current: PredictionModelResult contains model but not infrastructure metadata
+Target:  PredictionModelResult contains experiment ID, model version, checkpoint path
+</code></pre>
+<h3 id="what-does-not-need-to-be-built">What Does NOT Need to Be Built</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bayesian Optimizer</td>
+<td>Already exists: <code>BayesianOptimizer&lt;T, TInput, TOutput&gt;</code></td>
+</tr>
+<tr>
+<td>Hyperband/ASHA</td>
+<td>Already exists: <code>HyperbandOptimizer</code>, <code>ASHAOptimizer</code></td>
+</tr>
+<tr>
+<td>Experiment Tracking</td>
+<td>Already exists: <code>ExperimentTracker&lt;T&gt;</code></td>
+</tr>
+<tr>
+<td>Model Registry</td>
+<td>Already exists: <code>ModelRegistry&lt;T, TInput, TOutput&gt;</code></td>
+</tr>
+<tr>
+<td>Data Versioning</td>
+<td>Already exists: <code>DataVersionControl&lt;T&gt;</code></td>
+</tr>
+<tr>
+<td>Dashboard</td>
+<td>Already exists: <code>MetricsDashboard</code>, <code>HtmlDashboard</code>, <code>LiveDashboard</code></td>
+</tr>
+<tr>
+<td>Notifications</td>
+<td>Already exists: <code>SlackNotificationService</code>, <code>EmailNotificationService</code></td>
+</tr>
+<tr>
+<td>Model Serving API</td>
+<td>Already exists: <code>InferenceController</code>, <code>ModelsController</code></td>
+</tr>
+<tr>
+<td>Performance Metrics</td>
+<td>Already exists: <code>PerformanceMetrics</code> (p50/p95/p99)</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="revised-implementation-plan">Revised Implementation Plan</h2>
+<h3 id="sprint-1-integration-verification-2-weeks">Sprint 1: Integration Verification (2 weeks)</h3>
+<p><strong>Goal:</strong> Ensure all existing components work together correctly</p>
+<h4 id="week-1-build-method-integration">Week 1: Build() Method Integration</h4>
+<ul>
+<li>[ ] Verify <code>_experimentTracker</code> is used during training in <code>Build()</code></li>
+<li>[ ] Verify <code>_checkpointManager</code> saves/loads checkpoints correctly</li>
+<li>[ ] Verify <code>_trainingMonitor</code> receives training updates</li>
+<li>[ ] Verify <code>_hyperparameterOptimizer</code> can drive training runs</li>
+<li>[ ] Verify <code>_modelRegistry</code> stores trained models</li>
+<li>[ ] Verify <code>_dataVersionControl</code> tracks training data</li>
+</ul>
+<h4 id="week-2-end-to-end-workflow-testing">Week 2: End-to-End Workflow Testing</h4>
+<ul>
+<li>[ ] Create integration test: Full training with experiment tracking</li>
+<li>[ ] Create integration test: HPO with Bayesian optimizer</li>
+<li>[ ] Create integration test: Checkpoint save/resume</li>
+<li>[ ] Create integration test: Model registry workflow</li>
+<li>[ ] Create integration test: Dashboard updates during training</li>
+</ul>
+<h3 id="sprint-2-testing--documentation-2-weeks">Sprint 2: Testing &amp; Documentation (2 weeks)</h3>
+<p><strong>Goal:</strong> Comprehensive tests and usage documentation</p>
+<h4 id="week-1-unit-tests">Week 1: Unit Tests</h4>
+<ul>
+<li>[ ] Tests for <code>BayesianOptimizer</code> suggest/report cycle</li>
+<li>[ ] Tests for <code>HyperbandOptimizer</code> bracket management</li>
+<li>[ ] Tests for <code>ExperimentTracker</code> CRUD operations</li>
+<li>[ ] Tests for <code>ModelRegistry</code> versioning and stages</li>
+<li>[ ] Tests for <code>CheckpointManager</code> serialization</li>
+<li>[ ] Tests for <code>DataVersionControl</code> hashing and lineage</li>
+</ul>
+<h4 id="week-2-documentation">Week 2: Documentation</h4>
+<ul>
+<li>[ ] Usage guide: Setting up experiment tracking</li>
+<li>[ ] Usage guide: Hyperparameter optimization examples</li>
+<li>[ ] Usage guide: Model registry workflow</li>
+<li>[ ] Usage guide: Dashboard and monitoring</li>
+<li>[ ] API reference: Training infrastructure interfaces</li>
+<li>[ ] Example project: Complete training pipeline</li>
+</ul>
+<h3 id="sprint-3-facade--project-integration-required">Sprint 3: Facade &amp; Project Integration (REQUIRED)</h3>
+<p><strong>Goal:</strong> Ensure all infrastructure complies with the facade design pattern and integrates with Dashboard/Serving projects</p>
+<h4 id="week-1-facade-design-compliance">Week 1: Facade Design Compliance</h4>
+<p><strong>PredictionModelBuilder → PredictionModelResult Flow:</strong></p>
+<ul>
+<li>[ ] Verify <code>PredictionModelBuilder.Build()</code> produces <code>PredictionModelResult</code> with all infrastructure data</li>
+<li>[ ] Ensure <code>PredictionModelResult</code> contains experiment run ID, model version, checkpoint path</li>
+<li>[ ] Add <code>PredictionModelResult.GetExperimentInfo()</code> method to access training metadata</li>
+<li>[ ] Add <code>PredictionModelResult.GetModelRegistryInfo()</code> method to access registry data</li>
+<li>[ ] Verify <code>PredictionModelResult</code> can be serialized/deserialized with infrastructure metadata</li>
+</ul>
+<p><strong>Two Entry Points Validation:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Entry Point</th>
+<th>Purpose</th>
+<th>Infrastructure Integration</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PredictionModelBuilder&lt;T, TInput, TOutput&gt;</code></td>
+<td>Training facade</td>
+<td>Uses all training infrastructure (experiment tracking, checkpoints, HPO, monitoring)</td>
+</tr>
+<tr>
+<td><code>PredictionModelResult&lt;T, TInput, TOutput&gt;</code></td>
+<td>Inference facade</td>
+<td>Contains trained model + all metadata from training infrastructure</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>[ ] Ensure no direct access to training infrastructure except through <code>PredictionModelBuilder</code></li>
+<li>[ ] Ensure no direct access to inference except through <code>PredictionModelResult</code></li>
+<li>[ ] Add validation that infrastructure components are only used via facades</li>
+</ul>
+<h4 id="week-2-dashboard--serving-project-integration">Week 2: Dashboard &amp; Serving Project Integration</h4>
+<p><strong>AiDotNet.Dashboard Integration:</strong></p>
+<p>Current Gap: <code>MetricsDashboard</code> is standalone, not connected to <code>ITrainingMonitor</code></p>
+<ul>
+<li>[ ] Create <code>ITrainingMonitor</code> adapter for <code>MetricsDashboard</code></li>
+<li>[ ] Add <code>MetricsDashboard.FromTrainingMonitor(ITrainingMonitor&lt;T&gt; monitor)</code> factory method</li>
+<li>[ ] Ensure <code>PredictionModelBuilder.ConfigureTrainingMonitor()</code> can accept <code>MetricsDashboard</code></li>
+<li>[ ] Add real-time metric streaming from <code>ITrainingMonitor</code> to <code>MetricsDashboard</code></li>
+<li>[ ] Ensure <code>HtmlDashboard</code>, <code>ConsoleDashboard</code>, <code>LiveDashboard</code> all implement <code>ITrainingDashboard</code></li>
+</ul>
+<p><strong>AiDotNet.Serving Integration:</strong></p>
+<p>Current Gap: <code>IModelRepository</code> (Serving) is separate from <code>IModelRegistry</code> (main lib)</p>
+<ul>
+<li>[ ] Create <code>ModelRegistryAdapter</code> that bridges <code>IModelRegistry</code> → <code>IModelRepository</code></li>
+<li>[ ] Add <code>IModelRepository.LoadFromRegistry(IModelRegistry registry, string modelName, int? version)</code> method</li>
+<li>[ ] Ensure models registered via <code>PredictionModelBuilder</code> are loadable in Serving project</li>
+<li>[ ] Add <code>PredictionModelResult.ToServableModel()</code> conversion method</li>
+<li>[ ] Ensure <code>InferenceController</code> can load models from <code>IModelRegistry</code></li>
+</ul>
+<p><strong>Integration Architecture:</strong></p>
+<pre><code class="lang-text">┌─────────────────────────────────────────────────────────────────────┐
+│                    TRAINING (via PredictionModelBuilder)             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │
+│  │ Experiment  │  │  Checkpoint │  │  Training   │  │   Model     │ │
+│  │  Tracker    │  │   Manager   │  │   Monitor   │  │  Registry   │ │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘ │
+│         │                │                │                │        │
+│         └────────────────┴────────────────┴────────────────┘        │
+│                                   │                                  │
+│                                   ▼                                  │
+│                    ┌──────────────────────────┐                     │
+│                    │   PredictionModelResult   │                     │
+│                    │   (Inference Facade)      │                     │
+│                    └─────────────┬────────────┘                     │
+└──────────────────────────────────┼──────────────────────────────────┘
+                                   │
+          ┌────────────────────────┼────────────────────────┐
+          │                        │                        │
+          ▼                        ▼                        ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│ AiDotNet.Dashboard│    │ Direct Inference │    │ AiDotNet.Serving │
+│  - MetricsDashboard│    │  - Predict()     │    │  - REST API      │
+│  - HtmlDashboard  │    │  - Batch()       │    │  - Batching      │
+│  - LiveDashboard  │    │  - Stream()      │    │  - LoRA routing  │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+</code></pre>
+<h3 id="sprint-4-optional-external-integrations">Sprint 4 (Optional): External Integrations</h3>
+<p><strong>Goal:</strong> Nice-to-have external platform integrations</p>
+<ul>
+<li>[ ] MLflow export adapter</li>
+<li>[ ] W&amp;B export adapter</li>
+<li>[ ] TensorBoard export adapter</li>
+<li>[ ] Additional notification channels (Teams, Discord)</li>
+<li>[ ] Cloud storage adapters (S3, Azure Blob, GCS)</li>
+</ul>
+<hr>
+<h2 id="technical-details">Technical Details</h2>
+<h3 id="existing-interfaces-already-defined">Existing Interfaces (Already Defined)</h3>
+<pre><code class="lang-csharp">// Experiment Tracking
+public interface IExperimentTracker&lt;T&gt;
+{
+    string CreateExperiment(string name, string? description = null, Dictionary&lt;string, string&gt;? tags = null);
+    IExperimentRun&lt;T&gt; StartRun(string experimentId, string? runName = null, Dictionary&lt;string, string&gt;? tags = null);
+    IExperiment GetExperiment(string experimentId);
+    IExperimentRun&lt;T&gt; GetRun(string runId);
+    IEnumerable&lt;IExperiment&gt; ListExperiments(string? filter = null);
+    IEnumerable&lt;IExperimentRun&lt;T&gt;&gt; ListRuns(string experimentId, string? filter = null);
+    void DeleteExperiment(string experimentId);
+    void DeleteRun(string runId);
+    IEnumerable&lt;IExperimentRun&lt;T&gt;&gt; SearchRuns(string filter, int maxResults = 100);
+}
+
+// Model Registry
+public interface IModelRegistry&lt;T, TInput, TOutput&gt;
+{
+    string RegisterModel&lt;TMetadata&gt;(string name, IModel&lt;TInput, TOutput, TMetadata&gt; model, ModelMetadata&lt;T&gt; metadata, Dictionary&lt;string, string&gt;? tags = null);
+    int CreateModelVersion&lt;TMetadata&gt;(string modelName, IModel&lt;TInput, TOutput, TMetadata&gt; model, ModelMetadata&lt;T&gt; metadata, string? description = null);
+    RegisteredModel&lt;T, TInput, TOutput&gt; GetModel(string modelName, int? version = null);
+    RegisteredModel&lt;T, TInput, TOutput&gt; GetLatestModel(string modelName);
+    RegisteredModel&lt;T, TInput, TOutput&gt;? GetModelByStage(string modelName, ModelStage stage);
+    void TransitionModelStage(string modelName, int version, ModelStage targetStage, bool archivePrevious = true);
+    List&lt;string&gt; ListModels(string? filter = null, Dictionary&lt;string, string&gt;? tags = null);
+    ModelComparison&lt;T&gt; CompareModels(string modelName, int version1, int version2);
+    ModelLineage GetModelLineage(string modelName, int version);
+}
+
+// Hyperparameter Optimization
+public interface IHyperparameterOptimizer&lt;T, TInput, TOutput&gt;
+{
+    HyperparameterOptimizationResult&lt;T&gt; Optimize(Func&lt;Dictionary&lt;string, object&gt;, T&gt; objectiveFunction, HyperparameterSearchSpace searchSpace, int nTrials);
+    HyperparameterOptimizationResult&lt;T&gt; OptimizeModel&lt;TMetadata&gt;(IModel&lt;TInput, TOutput, TMetadata&gt; model, (TInput X, TOutput Y) trainingData, (TInput X, TOutput Y) validationData, HyperparameterSearchSpace searchSpace, int nTrials);
+    HyperparameterTrial&lt;T&gt; GetBestTrial();
+    List&lt;HyperparameterTrial&lt;T&gt;&gt; GetAllTrials();
+    Dictionary&lt;string, object&gt; SuggestNext(HyperparameterTrial&lt;T&gt; trial);
+    bool ShouldPrune(HyperparameterTrial&lt;T&gt; trial, int step, T intermediateValue);
+}
+</code></pre>
+<h3 id="existing-implementations">Existing Implementations</h3>
+<table>
+<thead>
+<tr>
+<th>Interface</th>
+<th>Implementation</th>
+<th>Location</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>IExperimentTracker&lt;T&gt;</code></td>
+<td><code>ExperimentTracker&lt;T&gt;</code></td>
+<td><code>src/ExperimentTracking/ExperimentTracker.cs</code></td>
+</tr>
+<tr>
+<td><code>IModelRegistry&lt;T, TInput, TOutput&gt;</code></td>
+<td><code>ModelRegistry&lt;T, TInput, TOutput&gt;</code></td>
+<td><code>src/ModelRegistry/ModelRegistry.cs</code></td>
+</tr>
+<tr>
+<td><code>IHyperparameterOptimizer&lt;T, TInput, TOutput&gt;</code></td>
+<td><code>BayesianOptimizer&lt;T, TInput, TOutput&gt;</code></td>
+<td><code>src/HyperparameterOptimization/BayesianOptimizer.cs</code></td>
+</tr>
+<tr>
+<td><code>IHyperparameterOptimizer&lt;T, TInput, TOutput&gt;</code></td>
+<td><code>HyperbandOptimizer&lt;T, TInput, TOutput&gt;</code></td>
+<td><code>src/HyperparameterOptimization/HyperbandOptimizer.cs</code></td>
+</tr>
+<tr>
+<td><code>IHyperparameterOptimizer&lt;T, TInput, TOutput&gt;</code></td>
+<td><code>ASHAOptimizer&lt;T, TInput, TOutput&gt;</code></td>
+<td><code>src/HyperparameterOptimization/ASHAOptimizer.cs</code></td>
+</tr>
+<tr>
+<td><code>IHyperparameterOptimizer&lt;T, TInput, TOutput&gt;</code></td>
+<td><code>GridSearchOptimizer&lt;T, TInput, TOutput&gt;</code></td>
+<td><code>src/HyperparameterOptimization/GridSearchOptimizer.cs</code></td>
+</tr>
+<tr>
+<td><code>IHyperparameterOptimizer&lt;T, TInput, TOutput&gt;</code></td>
+<td><code>RandomSearchOptimizer&lt;T, TInput, TOutput&gt;</code></td>
+<td><code>src/HyperparameterOptimization/RandomSearchOptimizer.cs</code></td>
+</tr>
+<tr>
+<td><code>IHyperparameterOptimizer&lt;T, TInput, TOutput&gt;</code></td>
+<td><code>PopulationBasedTrainingOptimizer&lt;T, TInput, TOutput&gt;</code></td>
+<td><code>src/HyperparameterOptimization/PopulationBasedTrainingOptimizer.cs</code></td>
+</tr>
+<tr>
+<td><code>ICheckpointManager&lt;T, TInput, TOutput&gt;</code></td>
+<td><code>CheckpointManager&lt;T, TInput, TOutput&gt;</code></td>
+<td><code>src/CheckpointManagement/CheckpointManager.cs</code></td>
+</tr>
+<tr>
+<td><code>ITrainingMonitor&lt;T&gt;</code></td>
+<td><code>TrainingMonitor&lt;T&gt;</code></td>
+<td><code>src/TrainingMonitoring/TrainingMonitor.cs</code></td>
+</tr>
+<tr>
+<td><code>IDataVersionControl&lt;T&gt;</code></td>
+<td><code>DataVersionControl&lt;T&gt;</code></td>
+<td><code>src/DataVersionControl/DataVersionControl.cs</code></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="example-usage-what-users-can-do-today">Example Usage (What Users Can Do TODAY)</h2>
+<pre><code class="lang-csharp">// Full training pipeline with all infrastructure
+var result = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    // Core model configuration
+    .ConfigureModel(new FeedForwardNeuralNetwork&lt;double&gt;(...))
+    .ConfigureOptimizer(new AdamOptimizer&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;())
+
+    // Training infrastructure (ALL OF THIS EXISTS!)
+    .ConfigureExperimentTracker(new ExperimentTracker&lt;double&gt;(&quot;./experiments&quot;))
+    .ConfigureCheckpointManager(new CheckpointManager&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(&quot;./checkpoints&quot;))
+    .ConfigureTrainingMonitor(new TrainingMonitor&lt;double&gt;())
+    .ConfigureModelRegistry(new ModelRegistry&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(&quot;./models&quot;))
+    .ConfigureDataVersionControl(new DataVersionControl&lt;double&gt;(&quot;./data_versions&quot;))
+    .ConfigureHyperparameterOptimizer(new BayesianOptimizer&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(
+        maximize: false,  // Minimize loss
+        acquisitionFunction: AcquisitionFunctionType.ExpectedImprovement,
+        nInitialPoints: 5
+    ))
+
+    // Build and train
+    .Build(trainingData, validationData);
+</code></pre>
+<hr>
+<h2 id="success-metrics">Success Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+<th>How to Measure</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>All infrastructure integrated</td>
+<td>100%</td>
+<td>Build() uses all configured components</td>
+</tr>
+<tr>
+<td>Unit test coverage</td>
+<td>&gt;80%</td>
+<td>Code coverage report</td>
+</tr>
+<tr>
+<td>Integration tests passing</td>
+<td>100%</td>
+<td>CI/CD pipeline</td>
+</tr>
+<tr>
+<td>Documentation complete</td>
+<td>100%</td>
+<td>All interfaces documented with examples</td>
+</tr>
+<tr>
+<td>Example projects</td>
+<td>2-3</td>
+<td>Working sample applications</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="conclusion">Conclusion</h2>
+<p>The original 16-sprint implementation plan was based on incorrect analysis. AiDotNet already has:</p>
+<ul>
+<li><strong>9 hyperparameter optimizers</strong> (vs. originally claimed &quot;none&quot;)</li>
+<li><strong>Full experiment tracking</strong> (vs. originally claimed &quot;basic&quot;)</li>
+<li><strong>Complete model registry</strong> (vs. originally claimed &quot;missing&quot;)</li>
+<li><strong>Multiple dashboards</strong> (vs. originally claimed &quot;static HTML only&quot;)</li>
+<li><strong>Model serving REST API</strong> (vs. originally claimed &quot;missing&quot;)</li>
+</ul>
+<p>The actual work needed is:</p>
+<table>
+<thead>
+<tr>
+<th>Sprint</th>
+<th>Focus</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sprint 1</td>
+<td>Integration Verification</td>
+<td>REQUIRED</td>
+</tr>
+<tr>
+<td>Sprint 2</td>
+<td>Testing &amp; Documentation</td>
+<td>REQUIRED</td>
+</tr>
+<tr>
+<td>Sprint 3</td>
+<td>Facade &amp; Project Integration</td>
+<td>REQUIRED</td>
+</tr>
+<tr>
+<td>Sprint 4</td>
+<td>External Integrations</td>
+<td>Optional</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Key Integration Requirements (Sprint 3):</strong></p>
+<ol>
+<li><p><strong>Facade Design Compliance:</strong></p>
+<ul>
+<li>All training infrastructure accessed ONLY via <code>PredictionModelBuilder</code></li>
+<li>All inference accessed ONLY via <code>PredictionModelResult</code></li>
+<li>No direct instantiation of infrastructure components outside facades</li>
+</ul>
+</li>
+<li><p><strong>AiDotNet.Dashboard Integration:</strong></p>
+<ul>
+<li><code>MetricsDashboard</code> must integrate with <code>ITrainingMonitor</code></li>
+<li>All dashboard types implement <code>ITrainingDashboard</code></li>
+</ul>
+</li>
+<li><p><strong>AiDotNet.Serving Integration:</strong></p>
+<ul>
+<li><code>IModelRepository</code> must bridge to <code>IModelRegistry</code></li>
+<li>Models from <code>PredictionModelBuilder</code> loadable in Serving REST API</li>
+<li><code>PredictionModelResult.ToServableModel()</code> conversion method</li>
+</ul>
+</li>
+</ol>
+<p>This can be completed in <strong>3 required sprints</strong> (6 weeks), not 16 sprints (8 months).</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/ML_INFRASTRUCTURE_IMPLEMENTATION_PLAN.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

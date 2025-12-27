@@ -1,0 +1,1440 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ActiveLearnerConfig&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ActiveLearnerConfig&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Comprehensive configuration for active learning. All properties are nullable - null values use industry-standard defaults.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1.md&amp;value=---%0Auid%3A%20AiDotNet.ActiveLearning.Config.ActiveLearnerConfig%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1">
+
+
+
+  <h1 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1" class="text-break">
+Class ActiveLearnerConfig&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ActiveLearning.html">ActiveLearning</a>.<a class="xref" href="AiDotNet.ActiveLearning.Config.html">Config</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Comprehensive configuration for active learning.
+All properties are nullable - null values use industry-standard defaults.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ActiveLearnerConfig&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ActiveLearnerConfig&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Active learning is a machine learning paradigm where the algorithm
+actively selects which data points should be labeled by an oracle (human expert). This is
+particularly useful when labeling data is expensive or time-consuming.</p>
+<p><b>How Active Learning Works:</b></p>
+<ol><li>Start with a small labeled dataset and a large unlabeled pool</li><li>Train a model on the labeled data</li><li>Use a query strategy to select the most informative unlabeled samples</li><li>Request labels for these samples from an oracle</li><li>Add newly labeled samples to the training set and repeat</li></ol>
+<p><b>Key Concepts:</b></p>
+<ul><li><b>Query Strategy:</b> The method used to select which samples to label next</li><li><b>Uncertainty Sampling:</b> Select samples where the model is most uncertain</li><li><b>Query By Committee:</b> Use an ensemble to find disagreement</li><li><b>Diversity Sampling:</b> Select samples that are diverse in feature space</li></ul>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_BatchBaldCandidates_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.BatchBaldCandidates*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_BatchBaldCandidates" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.BatchBaldCandidates">
+  BatchBaldCandidates
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L138"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of candidates to consider for BatchBALD selection.
+Default: 100.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? BatchBaldCandidates { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_BatchBaldCandidates_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> BatchBALD considers the joint information of a batch.
+This limits how many samples are considered for computational efficiency.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_BatchBaldGreedy_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.BatchBaldGreedy*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_BatchBaldGreedy" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.BatchBaldGreedy">
+  BatchBaldGreedy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L144"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether to use greedy approximation for BatchBALD.
+Default: true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool? BatchBaldGreedy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_ColdStart_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.ColdStart*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_ColdStart" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.ColdStart">
+  ColdStart
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L254"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Strategy for selecting initial labeled samples.
+Default: Random.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ColdStartStrategy? ColdStart { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ActiveLearning.Config.ColdStartStrategy.html">ColdStartStrategy</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_ColdStart_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This determines how the initial labeled pool is selected.
+Random is simple, but stratified ensures class balance.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_CommitteeSize_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.CommitteeSize*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_CommitteeSize" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.CommitteeSize">
+  CommitteeSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of models in the committee for QBC.
+Default: 5.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? CommitteeSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_CommitteeSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> QBC trains multiple models and queries samples where
+they disagree the most. More committee members give more robust disagreement
+estimates but require more computation.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_CoresetDistance_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.CoresetDistance*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_CoresetDistance" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.CoresetDistance">
+  CoresetDistance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L175"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Distance metric for coreset selection.
+Default: Euclidean.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DistanceMetric? CoresetDistance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ActiveLearning.Config.DistanceMetric.html">DistanceMetric</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_CoresetDistance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> CoreSet selection finds samples that are representative
+of the unlabeled pool. The distance metric determines how similarity is measured.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_CoresetGreedy_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.CoresetGreedy*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_CoresetGreedy" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.CoresetGreedy">
+  CoresetGreedy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L181"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether to use greedy k-center algorithm.
+Default: true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool? CoresetGreedy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_DisagreementMeasure_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.DisagreementMeasure*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_DisagreementMeasure" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.DisagreementMeasure">
+  DisagreementMeasure
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>How to measure disagreement in the committee.
+Default: VoteEntropy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DisagreementMeasure? DisagreementMeasure { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ActiveLearning.Config.DisagreementMeasure.html">DisagreementMeasure</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_DiversityClustering_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.DiversityClustering*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_DiversityClustering" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.DiversityClustering">
+  DiversityClustering
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L199"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clustering method for diversity-based sampling.
+Default: KMeans.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ClusteringMethod? DiversityClustering { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ActiveLearning.Config.ClusteringMethod.html">ClusteringMethod</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_DiversityWeight_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.DiversityWeight*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_DiversityWeight" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.DiversityWeight">
+  DiversityWeight
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L193"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Weight for diversity in hybrid uncertainty-diversity strategies.
+Default: 0.5 (equal weight for uncertainty and diversity).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T? DiversityWeight { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_DiversityWeight_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Some strategies combine uncertainty with diversity.
+This weight controls the balance: 0 = pure uncertainty, 1 = pure diversity.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_EnableAutoStop_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.EnableAutoStop*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_EnableAutoStop" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.EnableAutoStop">
+  EnableAutoStop
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L224"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether to enable automatic stopping before budget exhaustion.
+Default: false.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool? EnableAutoStop { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_EnableAutoStop_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> If enabled, the algorithm may stop early if it
+determines that additional labels won't significantly improve the model.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_EpochsPerIteration_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.EpochsPerIteration*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_EpochsPerIteration" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.EpochsPerIteration">
+  EpochsPerIteration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of training epochs per active learning iteration.
+Default: 10.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? EpochsPerIteration { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_EvaluatePerIteration_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.EvaluatePerIteration*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_EvaluatePerIteration" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.EvaluatePerIteration">
+  EvaluatePerIteration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L292"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether to evaluate on a held-out test set after each iteration.
+Default: true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool? EvaluatePerIteration { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_ExpectedErrorReduction_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.ExpectedErrorReduction*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_ExpectedErrorReduction" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.ExpectedErrorReduction">
+  ExpectedErrorReduction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L274"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Use expected error reduction for query selection.
+Default: false.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool? ExpectedErrorReduction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_GradientMethod_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.GradientMethod*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_GradientMethod" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.GradientMethod">
+  GradientMethod
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L212"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient approximation method for expected model change.
+Default: FirstOrder.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GradientApproximation? GradientMethod { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ActiveLearning.Config.GradientApproximation.html">GradientApproximation</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_GradientMethod_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Expected Model Change selects samples that would
+cause the largest change to the model. This parameter controls how that
+change is estimated.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_HandleLabelNoise_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.HandleLabelNoise*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_HandleLabelNoise" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.HandleLabelNoise">
+  HandleLabelNoise
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L268"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether to handle label noise in the oracle's responses.
+Default: false.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool? HandleLabelNoise { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_InitialPoolSize_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.InitialPoolSize*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_InitialPoolSize" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.InitialPoolSize">
+  InitialPoolSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of initially labeled samples to start with.
+Default: 100.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? InitialPoolSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_InitialPoolSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The algorithm needs some labeled data to start with.
+This is typically a small random sample from your data.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_LearningRate_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.LearningRate*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_LearningRate" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.LearningRate">
+  LearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Learning rate for model training.
+Default: 0.001.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T? LearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_MaxBudget_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.MaxBudget*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_MaxBudget" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.MaxBudget">
+  MaxBudget
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Maximum total samples that can be labeled (labeling budget).
+Default: 1000.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? MaxBudget { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_MaxBudget_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This limits how many samples can be labeled in total.
+Set this based on your labeling budget or time constraints.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_McDropoutRate_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.McDropoutRate*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_McDropoutRate" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.McDropoutRate">
+  McDropoutRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Dropout rate for Monte Carlo Dropout.
+Default: 0.5.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T? McDropoutRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_McDropoutSamples_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.McDropoutSamples*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_McDropoutSamples" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.McDropoutSamples">
+  McDropoutSamples
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of Monte Carlo Dropout forward passes for BALD.
+Default: 20.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? McDropoutSamples { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_McDropoutSamples_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> BALD uses dropout at inference time multiple times
+to estimate uncertainty. More samples give better estimates but are slower.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_MinAccuracyGain_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.MinAccuracyGain*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_MinAccuracyGain" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.MinAccuracyGain">
+  MinAccuracyGain
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L242"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Minimum accuracy gain required to continue.
+Default: 0.001 (0.1% improvement).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T? MinAccuracyGain { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_QueryBatchSize_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.QueryBatchSize*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_QueryBatchSize" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.QueryBatchSize">
+  QueryBatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of samples to query in each active learning iteration.
+Default: 10.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? QueryBatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_QueryBatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is how many samples the algorithm will ask to be labeled
+in each round. Smaller values give more opportunities to update the model but require
+more iterations.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_QueryStrategy_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.QueryStrategy*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_QueryStrategy" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.QueryStrategy">
+  QueryStrategy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Primary query strategy to use for sample selection.
+Default: UncertaintySampling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public QueryStrategyType? QueryStrategy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ActiveLearning.Config.QueryStrategyType.html">QueryStrategyType</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_QueryStrategy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The query strategy determines how the algorithm chooses
+which samples to label next. Different strategies work better for different problems.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_Seed_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.Seed*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_Seed" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.Seed">
+  Seed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L286"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Random seed for reproducibility.
+Default: null (random).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? Seed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_StoppingCriterion_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.StoppingCriterion*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_StoppingCriterion" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.StoppingCriterion">
+  StoppingCriterion
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L230"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Type of stopping criterion to use.
+Default: StabilizingPredictions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public StoppingCriterionType? StoppingCriterion { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ActiveLearning.Config.StoppingCriterionType.html">StoppingCriterionType</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_StoppingPatience_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.StoppingPatience*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_StoppingPatience" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.StoppingPatience">
+  StoppingPatience
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L236"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Patience for stopping criteria (number of iterations without improvement).
+Default: 5.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? StoppingPatience { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_StratifiedInitial_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.StratifiedInitial*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_StratifiedInitial" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.StratifiedInitial">
+  StratifiedInitial
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L260"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether to use stratified sampling for initial selection.
+Default: true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool? StratifiedInitial { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_TestSetFraction_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.TestSetFraction*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_TestSetFraction" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.TestSetFraction">
+  TestSetFraction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L298"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Fraction of data to use as held-out test set.
+Default: 0.2 (20%).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T? TestSetFraction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_TrainingBatchSize_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.TrainingBatchSize*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_TrainingBatchSize" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.TrainingBatchSize">
+  TrainingBatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batch size for training.
+Default: 32.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? TrainingBatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_UncertaintyMeasure_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.UncertaintyMeasure*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_UncertaintyMeasure" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.UncertaintyMeasure">
+  UncertaintyMeasure
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Uncertainty measure for uncertainty-based sampling.
+Default: Entropy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UncertaintyMeasure? UncertaintyMeasure { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ActiveLearning.Config.UncertaintyMeasure.html">UncertaintyMeasure</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_UncertaintyMeasure_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> When using uncertainty sampling, this determines how
+uncertainty is measured. Entropy considers the full probability distribution,
+while margin and least confidence focus on the top predictions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_WarmStart_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.WarmStart*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_WarmStart" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.WarmStart">
+  WarmStart
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L280"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enable warm starting between iterations (keep model weights).
+Default: true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool? WarmStart { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_GetEffectiveInitialPoolSize_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.GetEffectiveInitialPoolSize*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_GetEffectiveInitialPoolSize" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.GetEffectiveInitialPoolSize">
+  GetEffectiveInitialPoolSize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L310"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the effective initial pool size with default fallback.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GetEffectiveInitialPoolSize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_GetEffectiveLearningRate_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.GetEffectiveLearningRate*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_GetEffectiveLearningRate" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.GetEffectiveLearningRate">
+  GetEffectiveLearningRate()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L320"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the effective learning rate with default fallback.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetEffectiveLearningRate()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_GetEffectiveMaxBudget_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.GetEffectiveMaxBudget*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_GetEffectiveMaxBudget" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.GetEffectiveMaxBudget">
+  GetEffectiveMaxBudget()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L315"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the effective max budget with default fallback.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GetEffectiveMaxBudget()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_GetEffectiveQueryBatchSize_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.GetEffectiveQueryBatchSize*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_GetEffectiveQueryBatchSize" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.GetEffectiveQueryBatchSize">
+  GetEffectiveQueryBatchSize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L305"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the effective query batch size with default fallback.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GetEffectiveQueryBatchSize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_GetEffectiveQueryStrategy_" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.GetEffectiveQueryStrategy*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Config_ActiveLearnerConfig_1_GetEffectiveQueryStrategy" data-uid="AiDotNet.ActiveLearning.Config.ActiveLearnerConfig`1.GetEffectiveQueryStrategy">
+  GetEffectiveQueryStrategy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L325"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the effective query strategy with default fallback.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public QueryStrategyType GetEffectiveQueryStrategy()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ActiveLearning.Config.QueryStrategyType.html">QueryStrategyType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Config/ActiveLearnerConfig.cs/#L32" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

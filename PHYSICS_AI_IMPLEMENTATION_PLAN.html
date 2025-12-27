@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Physics-Informed AI Module - Comprehensive Implementation Plan | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Physics-Informed AI Module - Comprehensive Implementation Plan | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/PHYSICS_AI_IMPLEMENTATION_PLAN.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="physics-informed-ai-module---comprehensive-implementation-plan">Physics-Informed AI Module - Comprehensive Implementation Plan</h1>
+
+<h2 id="executive-summary">Executive Summary</h2>
+<p><strong>Goal</strong>: Make physics neural networks work exactly like regular neural networks in AiDotNet.</p>
+<p><strong>What We Fixed</strong>: The physics networks (Hamiltonian, Lagrangian) had custom, complicated training code that didn't match how other networks work. We simplified them to follow the same patterns as <code>FeedForwardNeuralNetwork</code>.</p>
+<p><strong>Why This Matters</strong>: When all networks follow the same pattern:</p>
+<ul>
+<li>Easier to maintain (fix one bug, fix it everywhere)</li>
+<li>Easier to understand (learn one pattern, understand all networks)</li>
+<li>Fewer bugs (standard code is better tested)</li>
+<li>Better performance (no unnecessary fallback calculations)</li>
+</ul>
+<hr>
+<h2 id="understanding-neural-network-training-for-beginners">Understanding Neural Network Training (For Beginners)</h2>
+<h3 id="what-happens-when-you-train-a-neural-network">What Happens When You Train a Neural Network?</h3>
+<p>Think of training a neural network like teaching a child to throw a ball at a target:</p>
+<ol>
+<li><strong>Forward Pass</strong> - The child throws the ball (network makes a prediction)</li>
+<li><strong>Loss Calculation</strong> - We measure how far the ball landed from the target (calculate error)</li>
+<li><strong>Backward Pass</strong> - We figure out what went wrong (compute gradients)</li>
+<li><strong>Parameter Update</strong> - The child adjusts their technique (update weights)</li>
+</ol>
+<p>This happens over and over until the child gets good at hitting the target.</p>
+<h3 id="the-standard-training-pattern">The Standard Training Pattern</h3>
+<p>Every neural network in AiDotNet follows this exact pattern:</p>
+<pre><code class="lang-csharp">public override void Train(Tensor&lt;T&gt; input, Tensor&lt;T&gt; expectedOutput)
+{
+    // Step 1: Make a prediction
+    var prediction = Forward(input);
+
+    // Step 2: Calculate how wrong we were
+    var loss = _lossFunction.CalculateLoss(prediction, expectedOutput);
+
+    // Step 3: Figure out how to improve (backpropagation)
+    var gradient = _lossFunction.CalculateDerivative(prediction, expectedOutput);
+    Backward(gradient);
+
+    // Step 4: Update the network's parameters
+    _optimizer.UpdateParameters(Layers);
+}
+</code></pre>
+<p><strong>Key Point</strong>: The &quot;Backward&quot; pass computes gradients by going through each layer in reverse order. Each layer knows how to compute its own gradients. This is called <strong>backpropagation</strong>.</p>
+<h3 id="what-was-wrong-with-physics-networks">What Was Wrong With Physics Networks?</h3>
+<p>The old physics networks had a &quot;safety net&quot; that used <strong>finite difference gradients</strong> when backpropagation failed:</p>
+<pre><code class="lang-csharp">// OLD, WRONG WAY
+if (TryBackpropagate(gradient, out gradients))
+{
+    ApplyGradients(gradients);
+}
+else
+{
+    // This is like saying &quot;if throwing fails, calculate physics manually&quot;
+    gradients = ComputeFiniteDifferenceGradients(...);  // SLOW and unnecessary!
+    ApplyGradients(gradients);
+}
+</code></pre>
+<p><strong>Why this was bad:</strong></p>
+<ol>
+<li><strong>Slow</strong>: Finite difference requires many forward passes to approximate gradients</li>
+<li><strong>Inaccurate</strong>: It's an approximation, not exact like backpropagation</li>
+<li><strong>Confusing</strong>: Different from how other networks work</li>
+<li><strong>Unnecessary</strong>: If a layer can't backpropagate, that's a bug to fix, not work around</li>
+</ol>
+<hr>
+<h2 id="phase-1-standard-neural-network-patterns-completed">Phase 1: Standard Neural Network Patterns (COMPLETED)</h2>
+<h3 id="11-the-golden-pattern-feedforwardneuralnetwork">1.1 The Golden Pattern: FeedForwardNeuralNetwork</h3>
+<p>All neural networks must follow this structure:</p>
+<pre><code class="lang-csharp">public class MyNeuralNetwork&lt;T&gt; : NeuralNetworkBase&lt;T&gt;
+{
+    // 1. USE LAYERHELPER FOR DEFAULT LAYERS
+    protected override void InitializeLayers()
+    {
+        if (Architecture.Layers != null &amp;&amp; Architecture.Layers.Count &gt; 0)
+        {
+            // User provided custom layers
+            Layers.AddRange(Architecture.Layers);
+            ValidateCustomLayers(Layers);
+        }
+        else
+        {
+            // Use standard layer creation from LayerHelper
+            Layers.AddRange(LayerHelper&lt;T&gt;.CreateDefaultMyNetworkLayers(Architecture));
+        }
+    }
+
+    // 2. STANDARD FORWARD PASS
+    public Tensor&lt;T&gt; Forward(Tensor&lt;T&gt; input)
+    {
+        Tensor&lt;T&gt; output = input;
+        foreach (var layer in Layers)
+        {
+            output = layer.Forward(output);
+        }
+        return output;
+    }
+
+    // 3. STANDARD BACKWARD PASS
+    public Tensor&lt;T&gt; Backward(Tensor&lt;T&gt; outputGradient)
+    {
+        Tensor&lt;T&gt; gradient = outputGradient;
+        for (int i = Layers.Count - 1; i &gt;= 0; i--)
+        {
+            gradient = Layers[i].Backward(gradient);
+        }
+        return gradient;
+    }
+
+    // 4. STANDARD TRAIN METHOD
+    public override void Train(Tensor&lt;T&gt; input, Tensor&lt;T&gt; expectedOutput)
+    {
+        IsTrainingMode = true;
+
+        var prediction = Forward(input);
+        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
+
+        var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
+        Backward(Tensor&lt;T&gt;.FromVector(outputGradient));
+        _optimizer.UpdateParameters(Layers);
+
+        IsTrainingMode = false;
+    }
+}
+</code></pre>
+<h3 id="12-using-layerhelper-for-default-layers">1.2 Using LayerHelper for Default Layers</h3>
+<p><strong>Why LayerHelper?</strong></p>
+<p>LayerHelper is like a factory that creates the right layers for each type of network. This keeps layer creation logic in one place instead of scattered across many network classes.</p>
+<p><strong>Location</strong>: <code>src/Helpers/LayerHelper.cs</code></p>
+<p><strong>Pattern</strong>:</p>
+<pre><code class="lang-csharp">// In LayerHelper.cs
+public static IEnumerable&lt;ILayer&lt;T&gt;&gt; CreateDefaultHamiltonianLayers(
+    NeuralNetworkArchitecture&lt;T&gt; architecture,
+    int hiddenLayerCount = 3,
+    int hiddenLayerSize = 64)
+{
+    // Validation
+    if (architecture.OutputSize != 1)
+        throw new ArgumentException(&quot;Hamiltonian networks require scalar output.&quot;);
+
+    // Create layers with appropriate activations
+    var hiddenActivation = new TanhActivation&lt;T&gt;() as IActivationFunction&lt;T&gt;;
+
+    yield return new DenseLayer&lt;T&gt;(inputSize, hiddenLayerSize, hiddenActivation);
+    // ... more layers ...
+    yield return new DenseLayer&lt;T&gt;(hiddenLayerSize, 1, new IdentityActivation&lt;T&gt;());
+}
+</code></pre>
+<p><strong>Existing LayerHelper Methods</strong>:</p>
+<ul>
+<li><code>CreateDefaultFeedForwardLayers()</code> - Standard feed-forward networks</li>
+<li><code>CreateDefaultDeepQNetworkLayers()</code> - Reinforcement learning</li>
+<li><code>CreateDefaultNodeClassificationLayers()</code> - Graph neural networks</li>
+<li><code>CreateDefaultHamiltonianLayers()</code> - Hamiltonian physics networks (NEW)</li>
+<li><code>CreateDefaultLagrangianLayers()</code> - Lagrangian physics networks (NEW)</li>
+</ul>
+<h3 id="13-iengine-already-inherited-never-injected">1.3 IEngine: Already Inherited, Never Injected</h3>
+<p><strong>What is IEngine?</strong></p>
+<p>IEngine provides optimized math operations (like matrix multiplication) that can use SIMD or GPU acceleration.</p>
+<p><strong>The Rule</strong>: Never add IEngine as a constructor parameter. It's already available through inheritance:</p>
+<pre><code class="lang-csharp">// In NeuralNetworkBase&lt;T&gt;
+protected IEngine Engine =&gt; AiDotNetEngine.Current;
+
+// In your network class, just use it:
+var result = Engine.MatrixMultiply(a, b);
+</code></pre>
+<p><strong>Why?</strong> Engine is a global service. Injecting it through constructors:</p>
+<ul>
+<li>Adds unnecessary complexity</li>
+<li>Creates inconsistency (some networks take it, some don't)</li>
+<li>Doesn't match how other networks work</li>
+</ul>
+<h3 id="14-refactoring-status">1.4 Refactoring Status</h3>
+<table>
+<thead>
+<tr>
+<th>Network</th>
+<th>Status</th>
+<th>Changes Made</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>HamiltonianNeuralNetwork</code></td>
+<td>COMPLETED</td>
+<td>Removed <code>EnableAutodiffOnLayers()</code>, removed FD fallbacks, uses <code>LayerHelper.CreateDefaultHamiltonianLayers()</code></td>
+</tr>
+<tr>
+<td><code>LagrangianNeuralNetwork</code></td>
+<td>COMPLETED</td>
+<td>Removed <code>EnableAutodiffOnLayers()</code>, removed FD fallbacks, uses <code>LayerHelper.CreateDefaultLagrangianLayers()</code></td>
+</tr>
+<tr>
+<td><code>PhysicsInformedNeuralNetwork</code></td>
+<td>COMPLETED</td>
+<td>Already correct - uses <code>NeuralNetworkDerivatives</code> for physics (not training)</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="understanding-physics-gradients-vs-training-gradients">Understanding Physics Gradients vs Training Gradients</h2>
+<p>This is a crucial distinction that was causing confusion:</p>
+<h3 id="training-gradients-for-learning">Training Gradients (For Learning)</h3>
+<p><strong>Question</strong>: &quot;How should I adjust the network's weights to make better predictions?&quot;</p>
+<p><strong>Computed via</strong>: Standard backpropagation through layers</p>
+<p><strong>Used in</strong>: The <code>Train()</code> method</p>
+<p><strong>Symbol</strong>: dLoss/dWeights (derivative of loss with respect to weights)</p>
+<pre><code class="lang-csharp">// This is TRAINING - adjusting weights to reduce error
+public override void Train(Tensor&lt;T&gt; input, Tensor&lt;T&gt; expectedOutput)
+{
+    var prediction = Forward(input);
+    var loss = _lossFunction.CalculateLoss(prediction, expectedOutput);
+    Backward(outputGradient);  // This computes dLoss/dWeights
+    _optimizer.UpdateParameters(Layers);  // This applies the update
+}
+</code></pre>
+<h3 id="physics-gradients-for-simulation">Physics Gradients (For Simulation)</h3>
+<p><strong>Question</strong>: &quot;Given the current state of a physical system, what are the forces/velocities?&quot;</p>
+<p><strong>Computed via</strong>: <code>NeuralNetworkDerivatives</code> utility (uses finite difference or autodiff)</p>
+<p><strong>Used in</strong>: Physics simulation methods like <code>Simulate()</code> or <code>ComputeTimeDerivative()</code></p>
+<p><strong>Symbol</strong>: dH/dq (derivative of Hamiltonian with respect to position)</p>
+<pre><code class="lang-csharp">// This is PHYSICS - computing forces from energy gradients
+public T[] ComputeTimeDerivative(T[] state)
+{
+    // We need dH/dq and dH/dp to apply Hamilton's equations
+    T[,] gradient = NeuralNetworkDerivatives&lt;T&gt;.ComputeGradient(this, state, 1);
+
+    // Hamilton's equations: dq/dt = dH/dp, dp/dt = -dH/dq
+    for (int i = 0; i &lt; n; i++)
+    {
+        derivative[i] = gradient[0, n + i];       // dq/dt = dH/dp
+        derivative[n + i] = -gradient[0, i];      // dp/dt = -dH/dq
+    }
+    return derivative;
+}
+</code></pre>
+<h3 id="the-key-insight">The Key Insight</h3>
+<ul>
+<li><strong>Training gradients</strong> are computed with respect to the network's <strong>weights</strong> (to make the network learn)</li>
+<li><strong>Physics gradients</strong> are computed with respect to the <strong>inputs</strong> (to simulate the physical system)</li>
+</ul>
+<p>These are completely different operations with different purposes!</p>
+<hr>
+<h2 id="phase-2-physicsinformedloss-design-already-correct">Phase 2: PhysicsInformedLoss Design (Already Correct)</h2>
+<p>The <code>PhysicsInformedLoss</code> class was already designed correctly:</p>
+<ol>
+<li><strong>Spatial derivatives</strong> (like dT/dx for temperature) - Uses <code>NeuralNetworkDerivatives</code></li>
+<li><strong>PDE residual gradients</strong> - Built-in PDEs implement <code>IPDEResidualGradient&lt;T&gt;</code></li>
+<li><strong>FD fallback</strong> - Only for custom PDEs that don't provide analytic gradients</li>
+</ol>
+<p>This is the correct design because:</p>
+<ul>
+<li>Spatial derivatives ARE physics gradients (input-space)</li>
+<li>The FD fallback here is reasonable for user-defined PDEs</li>
+</ul>
+<hr>
+<h2 id="phase-3-future-work---expanding-pde-library">Phase 3: Future Work - Expanding PDE Library</h2>
+<h3 id="pdes-already-implemented">PDEs Already Implemented</h3>
+<table>
+<thead>
+<tr>
+<th>PDE</th>
+<th>Description</th>
+<th>Has Analytic Gradient?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Heat Equation</td>
+<td>Heat diffusion (dT/dt = k*d2T/dx2)</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Poisson Equation</td>
+<td>Electrostatics (d2u/dx2 = f)</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Wave Equation</td>
+<td>Sound/light waves (d2u/dt2 = c2*d2u/dx2)</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Burgers Equation</td>
+<td>Shock waves (du/dt + u<em>du/dx = v</em>d2u/dx2)</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Allen-Cahn Equation</td>
+<td>Phase transitions</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Navier-Stokes</td>
+<td>2D incompressible fluid dynamics</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Maxwell's Equations</td>
+<td>2D TE mode electromagnetics</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Schrödinger Equation</td>
+<td>1D time-dependent quantum mechanics</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Black-Scholes</td>
+<td>Option pricing in finance</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Linear Elasticity</td>
+<td>2D Navier-Cauchy solid mechanics</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Advection-Diffusion</td>
+<td>1D/2D transport phenomena</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Korteweg-de Vries</td>
+<td>Soliton waves (KdV equation)</td>
+<td>Yes</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="implementation-checklist">Implementation Checklist</h2>
+<h3 id="sprint-1-align-with-standard-patterns-completed">Sprint 1: Align with Standard Patterns (COMPLETED)</h3>
+<ul>
+<li>[x] PhysicsInformedNeuralNetwork uses NeuralNetworkDerivatives for physics gradients</li>
+<li>[x] IEngine available via inheritance (no constructor injection)</li>
+<li>[x] PhysicsInformedLoss has correct design</li>
+<li>[x] Refactor HamiltonianNeuralNetwork to use LayerHelper and standard Train</li>
+<li>[x] Refactor LagrangianNeuralNetwork to use LayerHelper and standard Train</li>
+<li>[x] Remove <code>EnableAutodiffOnLayers()</code> calls from Hamiltonian/Lagrangian</li>
+<li>[x] Remove FD fallbacks from Hamiltonian/Lagrangian Train methods</li>
+<li>[x] Add <code>CreateDefaultHamiltonianLayers()</code> to LayerHelper</li>
+<li>[x] Add <code>CreateDefaultLagrangianLayers()</code> to LayerHelper</li>
+<li>[x] Add deprecation documentation to FiniteDifferenceGradient.cs</li>
+</ul>
+<h3 id="sprint-15-remaining-network-refactoring-completed">Sprint 1.5: Remaining Network Refactoring (COMPLETED)</h3>
+<p>All physics networks now use the standard pattern:</p>
+<ul>
+<li>[x] Refactor <code>UniversalDifferentialEquations.cs</code> to use standard Train pattern</li>
+<li>[x] Refactor <code>DeepOperatorNetwork.cs</code> to use standard Train pattern</li>
+<li>[x] Refactor <code>FourierNeuralOperator.cs</code> to use standard Train pattern</li>
+<li>[x] Refactor <code>VariationalPINN.cs</code> to use standard Train pattern</li>
+<li>[x] Refactor <code>DeepRitzMethod.cs</code> to use standard Train pattern</li>
+<li>[x] Refactor <code>PhysicsInformedNeuralNetwork.cs</code> to use standard Train pattern</li>
+<li>[x] Add <code>CreateDefaultUniversalDELayers()</code> to LayerHelper</li>
+<li>[x] Add <code>CreateDefaultDeepOperatorNetworkLayers()</code> to LayerHelper</li>
+<li>[x] Add <code>CreateDefaultFourierNeuralOperatorLayers()</code> to LayerHelper</li>
+<li>[x] Add <code>CreateDefaultVariationalPINNLayers()</code> to LayerHelper</li>
+<li>[x] Add <code>CreateDefaultDeepRitzLayers()</code> to LayerHelper</li>
+<li>[x] Add <code>CreateDefaultPINNLayers()</code> to LayerHelper</li>
+</ul>
+<h3 id="sprint-2-core-pdes-completed">Sprint 2: Core PDEs (COMPLETED)</h3>
+<ul>
+<li>[x] Implement Navier-Stokes equation</li>
+<li>[x] Implement Maxwell's equations</li>
+<li>[x] Implement Schrödinger equation</li>
+<li>[x] Add PDE unit tests with known analytical solutions</li>
+</ul>
+<h3 id="sprint-3-advanced-features-completed">Sprint 3: Advanced Features (COMPLETED)</h3>
+<ul>
+<li>[x] Multi-scale physics support (IMultiScalePDE interface, MultiScalePINN implementation)</li>
+<li>[x] Inverse problems (IInverseProblem interface, InverseProblemPINN for parameter identification)</li>
+<li>[x] Unit tests for multi-scale and inverse problem features</li>
+</ul>
+<p><strong>Multi-scale Physics:</strong></p>
+<ul>
+<li><code>IMultiScalePDE&lt;T&gt;</code> interface for PDEs with multiple length/time scales</li>
+<li><code>MultiScalePINN&lt;T&gt;</code> implementation with support for:
+<ul>
+<li>Sequential (coarse-to-fine) and simultaneous training</li>
+<li>Adaptive scale weighting</li>
+<li>Scale coupling between different resolution levels</li>
+</ul>
+</li>
+</ul>
+<p><strong>Inverse Problems:</strong></p>
+<ul>
+<li><code>IInverseProblem&lt;T&gt;</code> interface for parameter identification</li>
+<li><code>InverseProblemPINN&lt;T&gt;</code> implementation with support for:
+<ul>
+<li>Multiple regularization types (L2 Tikhonov, L1 Lasso, Elastic Net, Bayesian, Total Variation)</li>
+<li>Parameter bounds and validation</li>
+<li>Uncertainty estimation for identified parameters</li>
+<li>Separate learning rates for network and parameters</li>
+</ul>
+</li>
+</ul>
+<h3 id="sprint-4-multi-fidelity-and-domain-decomposition-completed">Sprint 4: Multi-Fidelity and Domain Decomposition (COMPLETED)</h3>
+<ul>
+<li>[x] Multi-fidelity physics-informed learning (<code>MultiFidelityPINN&lt;T&gt;</code>)</li>
+<li>[x] Domain decomposition for large-scale problems (<code>DomainDecompositionPINN&lt;T&gt;</code>)</li>
+<li>[x] Extended training history interfaces (<code>IMultiFidelityTrainingHistory&lt;T&gt;</code>, <code>IDomainDecompositionTrainingHistory&lt;T&gt;</code>)</li>
+<li>[x] Unit tests for Sprint 4 features</li>
+</ul>
+<p><strong>Multi-Fidelity PINN:</strong></p>
+<ul>
+<li><code>MultiFidelityPINN&lt;T&gt;</code> implementation with support for:
+<ul>
+<li>Combining low-fidelity (cheap) and high-fidelity (expensive) data</li>
+<li>Nonlinear correlation learning between fidelity levels</li>
+<li>Pretraining on low-fidelity data before joint optimization</li>
+<li>Optional freezing of low-fidelity network after pretraining</li>
+<li>Customizable fidelity weights</li>
+</ul>
+</li>
+</ul>
+<p><strong>Domain Decomposition PINN:</strong></p>
+<ul>
+<li><code>DomainDecompositionPINN&lt;T&gt;</code> implementation with support for:
+<ul>
+<li>Non-overlapping domain decomposition</li>
+<li>Automatic interface detection between subdomains</li>
+<li>Schwarz-style iterative training</li>
+<li>Interface continuity enforcement</li>
+<li>Per-subdomain network customization</li>
+</ul>
+</li>
+</ul>
+<h3 id="sprint-5-gpu-acceleration-completed">Sprint 5: GPU Acceleration (COMPLETED)</h3>
+<ul>
+<li>[x] GPU acceleration for physics-informed training</li>
+<li>[x] <code>IGpuAcceleratedPINN&lt;T&gt;</code> interface for GPU-capable networks</li>
+<li>[x] <code>GpuPINNTrainingOptions</code> configuration class with presets (Default, HighEnd, LowMemory, CpuOnly)</li>
+<li>[x] <code>GpuPINNTrainer&lt;T&gt;</code> for GPU-accelerated PINN training</li>
+<li>[x] <code>GpuTrainingHistory&lt;T&gt;</code> with GPU-specific metrics</li>
+<li>[x] Unit tests for GPU acceleration features (22 tests)</li>
+</ul>
+<p><strong>GPU Acceleration Features:</strong></p>
+<ul>
+<li><code>IGpuAcceleratedPINN&lt;T&gt;</code> interface for marking GPU-capable PINNs</li>
+<li><code>GpuPINNTrainingOptions</code> with configuration for:
+<ul>
+<li>Batch size optimization for GPU (default 1024)</li>
+<li>Parallel derivative computation</li>
+<li>Asynchronous GPU transfers</li>
+<li>Mixed precision support (FP16)</li>
+<li>Pinned memory for faster transfers</li>
+<li>Multi-stream execution</li>
+</ul>
+</li>
+<li><code>GpuPINNTrainer&lt;T&gt;</code> providing:
+<ul>
+<li>Automatic GPU detection and fallback</li>
+<li>GPU memory usage tracking</li>
+<li>Training time metrics</li>
+<li>Easy integration with existing PINNs</li>
+</ul>
+</li>
+</ul>
+<h3 id="sprint-6-advanced-pde-library-completed">Sprint 6: Advanced PDE Library (COMPLETED)</h3>
+<ul>
+<li>[x] Black-Scholes equation for option pricing in finance</li>
+<li>[x] Linear Elasticity equation (2D Navier-Cauchy) for solid mechanics</li>
+<li>[x] Advection-Diffusion equation (1D and 2D) for transport phenomena</li>
+<li>[x] Korteweg-de Vries equation for soliton/solitary wave modeling</li>
+<li>[x] Third-order derivative support in <code>PDEDerivatives&lt;T&gt;</code> and <code>PDEResidualGradient&lt;T&gt;</code></li>
+<li>[x] Unit tests for all new PDEs (32 tests)</li>
+</ul>
+<p><strong>New PDE Features:</strong></p>
+<ul>
+<li><code>BlackScholesEquation&lt;T&gt;</code>: Option pricing with volatility and risk-free rate parameters</li>
+<li><code>LinearElasticityEquation&lt;T&gt;</code>: 2D solid mechanics with Lamé parameters or engineering constants (E, ν)</li>
+<li><code>AdvectionDiffusionEquation&lt;T&gt;</code>: Transport phenomena with both advection and diffusion
+<ul>
+<li>Supports 1D and 2D configurations</li>
+<li>Configurable velocity field, diffusion coefficient, and source term</li>
+</ul>
+</li>
+<li><code>KortewegDeVriesEquation&lt;T&gt;</code>: Nonlinear wave propagation with soliton solutions
+<ul>
+<li>Factory methods for canonical (α=6, β=1) and physical (α=1, β=1) forms</li>
+<li>Third-order spatial derivative support</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h2 id="success-criteria">Success Criteria</h2>
+<ol>
+<li><strong>Pattern Alignment</strong>: All physics networks follow the <code>FeedForwardNeuralNetwork</code> pattern</li>
+<li><strong>LayerHelper Integration</strong>: All networks use <code>LayerHelper.CreateDefault*Layers()</code></li>
+<li><strong>No Forced Autodiff</strong>: Removed all <code>EnableAutodiffOnLayers()</code> calls</li>
+<li><strong>No Training FD</strong>: Removed finite difference fallbacks from <code>Train()</code> methods</li>
+<li><strong>Clean Separation</strong>: Physics gradients (simulation) vs Training gradients (learning)</li>
+</ol>
+<hr>
+<h2 id="appendix-code-comparison">Appendix: Code Comparison</h2>
+<h3 id="before-wrong">Before (WRONG)</h3>
+<pre><code class="lang-csharp">public class HamiltonianNeuralNetwork&lt;T&gt; : NeuralNetworkBase&lt;T&gt;
+{
+    // Custom layer creation (should use LayerHelper)
+    private void AddDefaultLayers(int inputSize, int outputSize, int[] hiddenLayerSizes)
+    {
+        // ... custom logic scattered in network class ...
+    }
+
+    // Forced autodiff (not needed)
+    private void EnableAutodiffOnLayers()
+    {
+        foreach (var layer in Layers)
+            if (layer is LayerBase&lt;T&gt; layerBase)
+                layerBase.UseAutodiff = true;
+    }
+
+    // Training with FD fallback (overcomplicated)
+    public override void Train(...)
+    {
+        if (TryBackpropagate(gradient, out gradients))
+            ApplyGradients(gradients);
+        else
+            gradients = ComputeFiniteDifferenceGradients(...);  // BAD
+            ApplyGradients(gradients);
+    }
+}
+</code></pre>
+<h3 id="after-correct">After (CORRECT)</h3>
+<pre><code class="lang-csharp">public class HamiltonianNeuralNetwork&lt;T&gt; : NeuralNetworkBase&lt;T&gt;
+{
+    // Use LayerHelper (layer logic centralized)
+    protected override void InitializeLayers()
+    {
+        if (Architecture.Layers != null &amp;&amp; Architecture.Layers.Count &gt; 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            ValidateCustomLayers(Layers);
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper&lt;T&gt;.CreateDefaultHamiltonianLayers(Architecture));
+        }
+    }
+
+    // Standard train (same as all other networks)
+    public override void Train(Tensor&lt;T&gt; input, Tensor&lt;T&gt; expectedOutput)
+    {
+        IsTrainingMode = true;
+        var prediction = Forward(input);
+        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
+        Backward(Tensor&lt;T&gt;.FromVector(outputGradient));
+        _optimizer.UpdateParameters(Layers);
+        IsTrainingMode = false;
+    }
+
+    // Physics simulation uses NeuralNetworkDerivatives (correct!)
+    public T[] ComputeTimeDerivative(T[] state)
+    {
+        T[,] gradient = NeuralNetworkDerivatives&lt;T&gt;.ComputeGradient(this, state, 1);
+        // Apply Hamilton's equations...
+    }
+}
+</code></pre>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/PHYSICS_AI_IMPLEMENTATION_PLAN.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

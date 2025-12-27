@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum CompressionType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum CompressionType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the types of model compression strategies available in the AiDotNet library.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_CompressionType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.CompressionType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.CompressionType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_CompressionType" data-uid="AiDotNet.Enums.CompressionType" class="text-break">
+Enum CompressionType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/CompressionType.cs/#L13"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the types of model compression strategies available in the AiDotNet library.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum CompressionType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_CompressionType_DeepCompression"><code>DeepCompression = 9</code></dt>
+  <dd><p>Deep Compression combines pruning, quantization, and Huffman coding (Han et al. 2015).</p>
+<p>
+<b>For Beginners:</b> Deep Compression is the "full treatment" that combines multiple techniques:
+1. Prune: Remove unimportant weights (typically 90%+ of weights)
+2. Quantize: Group remaining weights into clusters (8-256 clusters)
+3. Encode: Use Huffman coding for efficient storage
+<p>This three-stage pipeline from the famous Han et al. 2015 paper achieves 35-50x compression
+on large neural networks with minimal accuracy loss.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_CompressionType_HuffmanEncoding"><code>HuffmanEncoding = 2</code></dt>
+  <dd><p>Huffman encoding uses variable-length codes where frequent values get shorter codes.</p>
+<p>
+<b>For Beginners:</b> Huffman encoding is like text message abbreviations. Common words like
+"you" become "u" (shorter), while rare words keep their full spelling. Similarly, weights that
+appear often in your model get stored with fewer bits, and rare weights use more bits.
+This creates an efficient compression without losing any information.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_CompressionType_HybridClusteringPruning"><code>HybridClusteringPruning = 5</code></dt>
+  <dd><p>Combines weight clustering with pruning (removing unimportant weights).</p>
+<p>
+<b>For Beginners:</b> This combines two powerful techniques: clustering (grouping similar weights)
+and pruning (removing weights that barely affect the output). It's like cleaning and organizing
+a room - you throw away things you don't need (pruning) and organize what's left (clustering).
+This can achieve extreme compression while maintaining good accuracy.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_CompressionType_HybridClusteringQuantization"><code>HybridClusteringQuantization = 4</code></dt>
+  <dd><p>Combines weight clustering with quantization for improved compression.</p>
+<p>
+<b>For Beginners:</b> This hybrid approach first groups similar weights (clustering) and then
+further compresses the cluster centers using quantization. It's like first organizing your
+closet by type (shirts, pants, etc.), then within each type, arranging by color codes.
+This two-stage process achieves better compression than either technique alone.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_CompressionType_HybridHuffmanClustering"><code>HybridHuffmanClustering = 6</code></dt>
+  <dd><p>Combines Huffman encoding with weight clustering for maximum compression.</p>
+<p>
+<b>For Beginners:</b> This technique first groups weights into clusters, then uses Huffman encoding
+to efficiently store which cluster each weight belongs to. It's like first organizing books by
+category, then creating a shorthand code where popular categories get short codes (like "F" for
+Fiction) and rare categories get longer codes. This layered approach maximizes compression.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_CompressionType_LowRankFactorization"><code>LowRankFactorization = 8</code></dt>
+  <dd><p>Low-rank matrix factorization approximates weight matrices with lower-rank representations.</p>
+<p>
+<b>For Beginners:</b> Low-rank factorization is like summarizing a complex document.
+A large weight matrix is replaced with two smaller matrices that, when multiplied together,
+approximate the original. This reduces both storage and computation. It works especially
+well for layers with redundant patterns in their weights.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_CompressionType_None"><code>None = 0</code></dt>
+  
+  <dd><p>No compression applied to the model.</p>
+</dd>
+    <dt id="AiDotNet_Enums_CompressionType_ProductQuantization"><code>ProductQuantization = 3</code></dt>
+  <dd><p>Product quantization divides weight vectors into sub-vectors and quantizes each separately.</p>
+<p>
+<b>For Beginners:</b> Product quantization is like describing a color by breaking it into
+red, green, and blue components separately, then rounding each component to the nearest
+standard value. For model weights, it divides weight vectors into smaller pieces, compresses
+each piece independently, then combines them. This provides better compression than treating
+all weights the same way.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_CompressionType_SparsePruning"><code>SparsePruning = 7</code></dt>
+  <dd><p>Sparse pruning removes small-magnitude weights, setting them to zero.</p>
+<p>
+<b>For Beginners:</b> Sparse pruning is like weeding a garden - you remove the smallest,
+least important weights (weeds) to make room for the important ones (flowers). Research shows
+that 90%+ of neural network weights can often be removed with minimal accuracy loss.
+The remaining weights are stored in a sparse format that only records non-zero values.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_CompressionType_WeightClustering"><code>WeightClustering = 1</code></dt>
+  <dd><p>Weight clustering groups similar weight values together and replaces them with cluster representatives.</p>
+<p>
+<b>For Beginners:</b> Weight clustering is like organizing a messy drawer by grouping similar items.
+Instead of storing thousands of slightly different weight values (like 0.501, 0.502, 0.503),
+the model groups them into clusters and stores just the cluster centers (like 0.5).
+This dramatically reduces model size while maintaining most of the model's intelligence.
+</p>
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_CompressionType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Model compression reduces the size of AI models while trying to maintain their accuracy.
+Think of it like compressing a photo - you want a smaller file size but still a recognizable image.
+Different compression techniques work better for different scenarios and model types.
+</p>
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/CompressionType.cs/#L13" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

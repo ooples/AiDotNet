@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum PreferenceLossType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum PreferenceLossType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Types of loss functions for preference optimization methods.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_PreferenceLossType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.PreferenceLossType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.PreferenceLossType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_PreferenceLossType" data-uid="AiDotNet.Enums.PreferenceLossType" class="text-break">
+Enum PreferenceLossType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/PreferenceLossType.cs/#L14"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Types of loss functions for preference optimization methods.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum PreferenceLossType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_PreferenceLossType_Conservative"><code>Conservative = 4</code></dt>
+  <dd><p>Conservative DPO loss (cDPO).</p>
+<p>Adds a conservative constraint to prevent over-optimization.
+Useful when concerned about reward hacking.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_PreferenceLossType_Hinge"><code>Hinge = 1</code></dt>
+  <dd><p>Hinge loss for preference optimization.</p>
+<p>max(0, margin - (log_p_chosen - log_p_rejected)).
+More aggressive margin-based learning, can be unstable.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_PreferenceLossType_IPO"><code>IPO = 2</code></dt>
+  <dd><p>Identity Preference Optimization (IPO) loss.</p>
+<p>Squared loss on log probability ratios.
+Addresses overfitting issues in DPO with noisy preferences.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_PreferenceLossType_KTO"><code>KTO = 7</code></dt>
+  <dd><p>Kahneman-Tversky Optimization loss.</p>
+<p>Based on prospect theory, handles unpaired preference data.
+Asymmetric treatment of gains (good responses) and losses (bad responses).</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_PreferenceLossType_OddsRatio"><code>OddsRatio = 5</code></dt>
+  <dd><p>Odds ratio preference loss (used in ORPO).</p>
+<p>Uses odds ratios instead of log probability differences.
+Combines SFT and preference optimization in a single objective.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_PreferenceLossType_Robust"><code>Robust = 3</code></dt>
+  <dd><p>Robust DPO loss with outlier handling.</p>
+<p>Modified sigmoid loss that's more robust to noisy preference labels.
+Useful when preference data quality is uncertain.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_PreferenceLossType_Sigmoid"><code>Sigmoid = 0</code></dt>
+  <dd><p>Standard sigmoid loss used in DPO.</p>
+<p>The original DPO loss: -log(sigmoid(beta * (log_p_chosen - log_p_rejected))).
+Works well in most cases and is the recommended default.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_PreferenceLossType_Simple"><code>Simple = 6</code></dt>
+  <dd><p>Simple preference optimization loss (used in SimPO).</p>
+<p>Reference-free loss based on length-normalized log probabilities.
+More memory efficient as it doesn't require a reference model.</p>
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_PreferenceLossType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Different preference optimization methods use different loss formulations.
+Each has tradeoffs in terms of stability, sample efficiency, and robustness.
+</p>
+<p><b>For Beginners:</b> This controls how the model learns from preference data.
+Start with Sigmoid (standard DPO) and only switch if you have specific needs.</p>
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/PreferenceLossType.cs/#L14" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

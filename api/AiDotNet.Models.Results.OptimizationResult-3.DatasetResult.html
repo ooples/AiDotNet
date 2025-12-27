@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class OptimizationResult&lt;T, TInput, TOutput&gt;.DatasetResult | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class OptimizationResult&lt;T, TInput, TOutput&gt;.DatasetResult | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents detailed results and statistics for a specific dataset (training, validation, or test).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Results_OptimizationResult_3_DatasetResult.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Results.OptimizationResult%603.DatasetResult%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Results.OptimizationResult`3.DatasetResult">
+
+
+
+  <h1 id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult" data-uid="AiDotNet.Models.Results.OptimizationResult`3.DatasetResult" class="text-break">
+Class OptimizationResult&lt;T, TInput, TOutput&gt;.DatasetResult  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L535"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Results.html">Results</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents detailed results and statistics for a specific dataset (training, validation, or test).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class OptimizationResult&lt;T, TInput, TOutput&gt;.DatasetResult</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">OptimizationResult&lt;T, TInput, TOutput&gt;.DatasetResult</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This nested class encapsulates all the data and statistics related to model performance on a specific dataset. 
+It includes the input features (X), target values (Y), model predictions, and various statistical measures that 
+quantify different aspects of model performance. These statistics include error metrics (such as mean squared error, 
+mean absolute error), prediction quality metrics (such as R-squared, correlation), and basic descriptive statistics 
+for both the actual and predicted values. This comprehensive collection of information allows for thorough analysis 
+of model performance on the dataset.
+</p>
+<p><b>For Beginners:</b> This class stores all the details about how the model performs on a specific dataset.
+<p>For each dataset (training, validation, or test), this stores:</p>
+<ul>
+<li>The actual input data (X) and target values (Y)</li>
+<li>The model's predictions</li>
+<li>Various error measurements (how far predictions are from actual values)</li>
+<li>Statistics about prediction quality (how well the model captures patterns)</li>
+<li>Basic statistics about both actual values and predictions</li>
+</ul>
+<p>This detailed information helps you:</p>
+<ul>
+<li>Understand exactly how well your model is performing</li>
+<li>Identify specific strengths and weaknesses</li>
+<li>Compare performance across different datasets</li>
+<li>Diagnose issues like overfitting or underfitting</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult__ctor_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.DatasetResult.#ctor*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult__ctor" data-uid="AiDotNet.Models.Results.OptimizationResult`3.DatasetResult.#ctor">
+  DatasetResult()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L752"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the DatasetResult class with empty data structures.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DatasetResult()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new DatasetResult instance and initializes all properties to empty data structures. It creates 
+empty matrices and vectors for the data and predictions, and empty statistics objects for the various statistical measures. 
+This provides a clean starting point for storing dataset results. The empty data structures will be populated with actual 
+data and statistics during the evaluation of the model on the dataset.
+</p>
+<p><b>For Beginners:</b> This constructor creates a new dataset result object with empty defaults.
+<p>When a new DatasetResult is created:</p>
+<ul>
+<li>All data structures (matrices, vectors) are initialized as empty</li>
+<li>All statistics objects are initialized as empty</li>
+</ul>
+<p>This initialization is important because:</p>
+<ul>
+<li>It ensures consistent behavior regardless of how the object is created</li>
+<li>It prevents potential issues with uninitialized values</li>
+<li>It provides a clean slate for storing dataset results</li>
+</ul>
+<p>You typically won't need to call this constructor directly, as it will be
+used internally when creating the OptimizationResult.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_ActualBasicStats_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.DatasetResult.ActualBasicStats*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_ActualBasicStats" data-uid="AiDotNet.Models.Results.OptimizationResult`3.DatasetResult.ActualBasicStats">
+  ActualBasicStats
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L693"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the basic descriptive statistics for the actual target values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BasicStats&lt;T&gt; ActualBasicStats { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Statistics.BasicStats-1.html">BasicStats</a>&lt;T&gt;</dt>
+    <dd><p>A BasicStats&lt;T&gt; object containing descriptive statistics for the actual values.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_ActualBasicStats_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains basic descriptive statistics for the actual target values (Y) in the dataset. These statistics 
+include measures such as mean, median, standard deviation, minimum, maximum, and others. They provide a summary of the 
+distribution of the target variable and can be useful for understanding the data and interpreting the model's performance.
+</p>
+<p><b>For Beginners:</b> This contains summary statistics about the actual values in your dataset.
+<p>The actual basic statistics:</p>
+<ul>
+<li>Summarize the distribution of the actual target values</li>
+<li>Help you understand the data you're working with</li>
+<li>Provide context for interpreting model performance</li>
+</ul>
+<p>Common statistics include:</p>
+<ul>
+<li>Mean: The average value</li>
+<li>Median: The middle value when sorted</li>
+<li>Standard Deviation: How spread out the values are</li>
+<li>Min/Max: The smallest and largest values</li>
+</ul>
+<p>These statistics help you understand what you're trying to predict
+and provide context for evaluating your model's predictions.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_ErrorStats_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.DatasetResult.ErrorStats*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_ErrorStats" data-uid="AiDotNet.Models.Results.OptimizationResult`3.DatasetResult.ErrorStats">
+  ErrorStats
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L634"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the error statistics for the model's predictions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ErrorStats&lt;T&gt; ErrorStats { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Statistics.ErrorStats-1.html">ErrorStats</a>&lt;T&gt;</dt>
+    <dd><p>An ErrorStats&lt;T&gt; object containing various error metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_ErrorStats_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains various error statistics that quantify the differences between the model's predictions and the 
+actual target values. These statistics include measures such as mean squared error (MSE), root mean squared error (RMSE), 
+mean absolute error (MAE), and others. Error statistics focus on the magnitude of prediction errors and provide different 
+perspectives on the model's accuracy. Lower values for these metrics generally indicate better model performance.
+</p>
+<p><b>For Beginners:</b> This contains measurements of how far off your predictions are from the actual values.
+<p>The error statistics:</p>
+<ul>
+<li>Measure the size of prediction errors in different ways</li>
+<li>Lower values indicate better performance</li>
+<li>Different metrics emphasize different aspects of error</li>
+</ul>
+<p>Common error metrics include:</p>
+<ul>
+<li>MSE (Mean Squared Error): Average of squared differences between predictions and actual values</li>
+<li>RMSE (Root Mean Squared Error): Square root of MSE, in the same units as the target variable</li>
+<li>MAE (Mean Absolute Error): Average of absolute differences between predictions and actual values</li>
+</ul>
+<p>These metrics help you understand how accurate your model is and
+can guide you in improving it.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_PredictedBasicStats_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.DatasetResult.PredictedBasicStats*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_PredictedBasicStats" data-uid="AiDotNet.Models.Results.OptimizationResult`3.DatasetResult.PredictedBasicStats">
+  PredictedBasicStats
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L725"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the basic descriptive statistics for the predicted values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BasicStats&lt;T&gt; PredictedBasicStats { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Statistics.BasicStats-1.html">BasicStats</a>&lt;T&gt;</dt>
+    <dd><p>A BasicStats&lt;T&gt; object containing descriptive statistics for the predicted values.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_PredictedBasicStats_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains basic descriptive statistics for the model's predictions. These statistics include measures such 
+as mean, median, standard deviation, minimum, maximum, and others. They provide a summary of the distribution of the 
+predicted values and can be compared with the statistics for the actual values to assess how well the model captures 
+the overall distribution of the target variable.
+</p>
+<p><b>For Beginners:</b> This contains summary statistics about your model's predictions.
+<p>The predicted basic statistics:</p>
+<ul>
+<li>Summarize the distribution of the values your model predicted</li>
+<li>Can be compared with the actual statistics to see if your model captures the overall distribution</li>
+<li>Help identify systematic biases in your predictions</li>
+</ul>
+<p>Common statistics include:</p>
+<ul>
+<li>Mean: The average predicted value</li>
+<li>Median: The middle predicted value when sorted</li>
+<li>Standard Deviation: How spread out the predictions are</li>
+<li>Min/Max: The smallest and largest predictions</li>
+</ul>
+<p>Comparing these with the actual statistics can reveal issues like:</p>
+<ul>
+<li>Predictions that are systematically too high or too low (comparing means)</li>
+<li>Predictions that don't capture the full range of variation (comparing standard deviations)</li>
+<li>Predictions that don't reach the extremes of the actual data (comparing min/max)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_PredictionStats_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.DatasetResult.PredictionStats*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_PredictionStats" data-uid="AiDotNet.Models.Results.OptimizationResult`3.DatasetResult.PredictionStats">
+  PredictionStats
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L664"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the prediction quality statistics for the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PredictionStats&lt;T&gt; PredictionStats { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Statistics.PredictionStats-1.html">PredictionStats</a>&lt;T&gt;</dt>
+    <dd><p>A PredictionStats&lt;T&gt; object containing various prediction quality metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_PredictionStats_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains various statistics that assess the quality of the model's predictions beyond simple error 
+measurements. These statistics include measures such as R-squared (coefficient of determination), adjusted R-squared, 
+correlation between predictions and actual values, and others. Prediction quality statistics focus on how well the 
+model captures the patterns in the data and explains the variance in the target variable. Higher values for these 
+metrics generally indicate better model performance.
+</p>
+<p><b>For Beginners:</b> This contains measurements of how well your model captures patterns in the data.
+<p>The prediction statistics:</p>
+<ul>
+<li>Assess how well your model explains the patterns in the data</li>
+<li>Higher values typically indicate better performance</li>
+<li>Focus on the relationship between predictions and actual values</li>
+</ul>
+<p>Common prediction metrics include:</p>
+<ul>
+<li>R² (R-squared): Proportion of variance explained by the model (0-1, higher is better)</li>
+<li>Adjusted R²: R-squared adjusted for the number of predictors</li>
+<li>Correlation: How strongly predictions and actual values are related</li>
+</ul>
+<p>These metrics help you understand how well your model captures
+the underlying patterns rather than just measuring error size.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_Predictions_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.DatasetResult.Predictions*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_Predictions" data-uid="AiDotNet.Models.Results.OptimizationResult`3.DatasetResult.Predictions">
+  Predictions
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L605"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the model's predictions for the dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TOutput Predictions { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>A vector of predicted values, one for each observation.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_Predictions_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains the model's predictions for the dataset. Each element in the vector corresponds to an 
+observation (row) in the input feature matrix X and represents the model's prediction for that observation. These 
+predictions are compared with the actual target values (Y) to calculate various performance metrics and assess the 
+model's accuracy.
+</p>
+<p><b>For Beginners:</b> This contains what your model predicted for each data point.
+<p>The predictions:</p>
+<ul>
+<li>Are the values your model output for each data point</li>
+<li>Each prediction corresponds to one row in the feature matrix</li>
+<li>Are compared to the actual values to measure performance</li>
+</ul>
+<p>For example, if predicting house prices, this would contain your model's
+estimated price for each house in the dataset.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_X_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.DatasetResult.X*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_X" data-uid="AiDotNet.Models.Results.OptimizationResult`3.DatasetResult.X">
+  X
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L558"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the input feature matrix for the dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TInput X { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TInput</span></dt>
+    <dd><p>A matrix where each row represents an observation and each column represents a feature.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_X_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains the input feature matrix for the dataset, where each row represents an observation (data point) 
+and each column represents a feature (input variable). This matrix contains the independent variables used to make 
+predictions. It is stored to allow for further analysis, visualization, or reuse of the model with the same data.
+</p>
+<p><b>For Beginners:</b> This contains the input data used for making predictions.
+<p>The feature matrix:</p>
+<ul>
+<li>Contains all the input variables (features) for each data point</li>
+<li>Is organized with each row representing one observation</li>
+<li>Each column represents a different input variable</li>
+</ul>
+<p>For example, if predicting house prices, this might contain features like
+square footage, number of bedrooms, location, etc. for each house.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_Y_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.DatasetResult.Y*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_Y" data-uid="AiDotNet.Models.Results.OptimizationResult`3.DatasetResult.Y">
+  Y
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L581"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the target values for the dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TOutput Y { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>A vector of target values, one for each observation.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_OptimizationResult_3_DatasetResult_Y_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains the target values (dependent variable) for the dataset. Each element in the vector corresponds 
+to an observation (row) in the input feature matrix X. These are the actual values that the model attempts to predict. 
+They are stored to allow for comparison with the model's predictions and calculation of various performance metrics.
+</p>
+<p><b>For Beginners:</b> This contains the actual values you're trying to predict.
+<p>The target values:</p>
+<ul>
+<li>Are what your model is trying to predict</li>
+<li>Each value corresponds to one row in the feature matrix</li>
+<li>Are used to calculate how accurate your predictions are</li>
+</ul>
+<p>For example, if predicting house prices, this would contain the
+actual sale price for each house in your dataset.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L535" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

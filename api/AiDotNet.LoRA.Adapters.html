@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Namespace AiDotNet.LoRA.Adapters | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Namespace AiDotNet.LoRA.Adapters | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.LoRA.Adapters">
+
+  <h1 id="AiDotNet_LoRA_Adapters" data-uid="AiDotNet.LoRA.Adapters" class="text-break">Namespace AiDotNet.LoRA.Adapters</h1>
+  <div class="markdown level0 summary"></div>
+  <div class="markdown level0 conceptual"></div>
+  <div class="markdown level0 remarks"></div>
+
+    <h3 id="classes">
+Classes
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.AdaLoRAAdapter-1.html">AdaLoRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>Adaptive Low-Rank Adaptation (AdaLoRA) adapter that dynamically allocates parameter budgets among weight matrices.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.ChainLoRAAdapter-1.html">ChainLoRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>Chain-of-LoRA adapter that implements sequential composition of multiple LoRA adapters.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.DVoRAAdapter-1.html">DVoRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>DVoRA (DoRA + VeRA) adapter - combines DoRA's magnitude-direction decomposition with VeRA's extreme parameter efficiency.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.DeltaLoRAAdapter-1.html">DeltaLoRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>Delta-LoRA adapter that focuses on parameter-efficient delta updates with momentum.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.DenseLoRAAdapter-1.html">DenseLoRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>LoRA adapter specifically for Dense and FullyConnected layers with 1D input/output shapes.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.DoRAAdapter-1.html">DoRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>DoRA (Weight-Decomposed Low-Rank Adaptation) adapter for parameter-efficient fine-tuning with improved stability.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.DyLoRAAdapter-1.html">DyLoRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>DyLoRA (Dynamic LoRA) adapter that trains with multiple ranks simultaneously.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.FloraAdapter-1.html">FloraAdapter&lt;T&gt;</a></dt>
+      <dd><p>Implements Flora (Low-Rank Adapters Are Secretly Gradient Compressors) adapter for memory-efficient fine-tuning.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.GLoRAAdapter-1.html">GLoRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>Generalized LoRA (GLoRA) implementation that adapts both weights AND activations.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.GraphConvolutionalLoRAAdapter-1.html">GraphConvolutionalLoRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>LoRA adapter for Graph Convolutional layers, enabling parameter-efficient fine-tuning of GNN models.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.HRAAdapter-1.html">HRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>HRA (Hybrid Rank Adaptation) adapter that combines low-rank and full-rank updates for optimal parameter efficiency.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.LoHaAdapter-1.html">LoHaAdapter&lt;T&gt;</a></dt>
+      <dd><p>LoHa (Low-Rank Hadamard Product Adaptation) adapter for parameter-efficient fine-tuning.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.LoKrAdapter-1.html">LoKrAdapter&lt;T&gt;</a></dt>
+      <dd><p>LoKr (Low-Rank Kronecker Product Adaptation) adapter for parameter-efficient fine-tuning.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html">LoRAAdapterBase&lt;T&gt;</a></dt>
+      <dd><p>Abstract base class for LoRA (Low-Rank Adaptation) adapters that wrap existing layers.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.LoRADropAdapter-1.html">LoRADropAdapter&lt;T&gt;</a></dt>
+      <dd><p>LoRA-drop implementation: LoRA with dropout regularization.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.LoRAFAAdapter-1.html">LoRAFAAdapter&lt;T&gt;</a></dt>
+      <dd><p>LoRA-FA (LoRA with Frozen A matrix) adapter for parameter-efficient fine-tuning.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.LoRAPlusAdapter-1.html">LoRAPlusAdapter&lt;T&gt;</a></dt>
+      <dd><p>LoRA+ adapter that uses optimized learning rates for faster convergence and better performance.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.LoRAXSAdapter-1.html">LoRAXSAdapter&lt;T&gt;</a></dt>
+      <dd><p>LoRA-XS (Extremely Small) adapter for ultra-parameter-efficient fine-tuning using SVD with trainable scaling matrix.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.LoRETTAAdapter-1.html">LoRETTAAdapter&lt;T&gt;</a></dt>
+      <dd><p>LoRETTA (Low-Rank Economic Tensor-Train Adaptation) adapter for parameter-efficient fine-tuning.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.LoftQAdapter-1.html">LoftQAdapter&lt;T&gt;</a></dt>
+      <dd><p>LoftQ (LoRA-Fine-Tuning-Quantized) adapter that combines quantization and LoRA with improved initialization.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.LongLoRAAdapter-1.html">LongLoRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>LongLoRA adapter that efficiently extends LoRA to handle longer context lengths using shifted sparse attention.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.MoRAAdapter-1.html">MoRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>Implements MoRA (High-Rank Updating for Parameter-Efficient Fine-Tuning) adapter.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.MultiLoRAAdapter-1.html">MultiLoRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>Multi-task LoRA adapter that manages multiple task-specific LoRA layers for complex multi-task learning scenarios.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.NOLAAdapter-1.html">NOLAAdapter&lt;T&gt;</a></dt>
+      <dd><p>Implements NOLA (Compressing LoRA using Linear Combination of Random Basis) adapter for extreme parameter efficiency.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.PiSSAAdapter-1.html">PiSSAAdapter&lt;T&gt;</a></dt>
+      <dd><p>Principal Singular Values and Singular Vectors Adaptation (PiSSA) adapter for parameter-efficient fine-tuning.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.QALoRAAdapter-1.html">QALoRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>Quantization-Aware LoRA (QA-LoRA) adapter that combines parameter-efficient fine-tuning with group-wise quantization awareness.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.QLoRAAdapter-1.html">QLoRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>QLoRA (Quantized LoRA) adapter for parameter-efficient fine-tuning with 4-bit quantized base weights.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.ReLoRAAdapter-1.html">ReLoRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>Restart LoRA (ReLoRA) adapter that periodically merges and restarts LoRA training for continual learning.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.RoSAAdapter-1.html">RoSAAdapter&lt;T&gt;</a></dt>
+      <dd><p>RoSA (Robust Adaptation) adapter for parameter-efficient fine-tuning with improved robustness to distribution shifts.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.SLoRAAdapter-1.html">SLoRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>S-LoRA adapter for scalable serving of thousands of concurrent LoRA adapters.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.StandardLoRAAdapter-1.html">StandardLoRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>Standard LoRA implementation (original LoRA algorithm).</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.TiedLoRAAdapter-1.html">TiedLoRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>Tied-LoRA adapter - LoRA with weight tying for extreme parameter efficiency across deep networks.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.VBLoRAAdapter-1.html">VBLoRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>Vector Bank LoRA (VB-LoRA) adapter that uses shared parameter banks for efficient multi-client deployment.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.VeRAAdapter-1.html">VeRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>VeRA (Vector-based Random Matrix Adaptation) adapter - an extreme parameter-efficient variant of LoRA.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.XLoRAAdapter-1.html">XLoRAAdapter&lt;T&gt;</a></dt>
+      <dd><p>X-LoRA (Mixture of LoRA Experts) adapter that uses multiple LoRA experts with learned routing.</p>
+</dd>
+    </dl>
+    <h3 id="enums">
+Enums
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.LoftQAdapter-1.QuantizationType.html">LoftQAdapter&lt;T&gt;.QuantizationType</a></dt>
+      <dd><p>Specifies the type of 4-bit quantization to use for base layer weights.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.LoRA.Adapters.QLoRAAdapter-1.QuantizationType.html">QLoRAAdapter&lt;T&gt;.QuantizationType</a></dt>
+      <dd><p>Specifies the type of 4-bit quantization to use for base layer weights.</p>
+</dd>
+    </dl>
+
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

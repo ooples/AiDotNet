@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ContinualLearningResult&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ContinualLearningResult&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Result from training on a single task in continual learning.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ContinualLearning_Results_ContinualLearningResult_1.md&amp;value=---%0Auid%3A%20AiDotNet.ContinualLearning.Results.ContinualLearningResult%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1">
+
+
+
+  <h1 id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1" class="text-break">
+Class ContinualLearningResult&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Results/ContinualLearningResult.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ContinualLearning.html">ContinualLearning</a>.<a class="xref" href="AiDotNet.ContinualLearning.Results.html">Results</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Result from training on a single task in continual learning.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ContinualLearningResult&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ContinualLearningResult&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> This class captures everything that happened during training
+on one task - how well the model learned, how long it took, and whether it forgot
+previous knowledge.</p>
+<p><b>Key Metrics Explained:</b>
+<ul><li><b>Training Loss:</b> How far predictions were from targets (lower is better)</li><li><b>Training Accuracy:</b> Percentage of correct predictions on training data</li><li><b>Average Previous Task Accuracy:</b> How well the model still performs on old tasks</li><li><b>Forgetting:</b> How much accuracy was lost on previous tasks (lower is better)</li></ul>
+
+<p><b>Reference:</b> Parisi et al. "Continual Lifelong Learning with Neural Networks: A Review" (2019)</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1__ctor_" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1__ctor_System_Int32__0__0__0_System_TimeSpan_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.#ctor(System.Int32,`0,`0,`0,System.TimeSpan,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ContinualLearningResult(int, T, T, T, TimeSpan, Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Results/ContinualLearningResult.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.ContinualLearning.Results.ContinualLearningResult-1.html">ContinualLearningResult&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ContinualLearningResult(int taskId, T trainingLoss, T trainingAccuracy, T averagePreviousTaskAccuracy, TimeSpan trainingTime, Vector&lt;T&gt; lossHistory, Vector&lt;T&gt; regularizationLossHistory)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>taskId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>trainingLoss</code> <span class="xref">T</span></dt>
+    <dd></dd>
+    <dt><code>trainingAccuracy</code> <span class="xref">T</span></dt>
+    <dd></dd>
+    <dt><code>averagePreviousTaskAccuracy</code> <span class="xref">T</span></dt>
+    <dd></dd>
+    <dt><code>trainingTime</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd></dd>
+    <dt><code>lossHistory</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>regularizationLossHistory</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_AveragePreviousTaskAccuracy_" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.AveragePreviousTaskAccuracy*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_AveragePreviousTaskAccuracy" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.AveragePreviousTaskAccuracy">
+  AveragePreviousTaskAccuracy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Results/ContinualLearningResult.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the average accuracy on all previously learned tasks after training on this task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T AveragePreviousTaskAccuracy { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_AveragePreviousTaskAccuracy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This is a key metric for detecting catastrophic forgetting.
+If this drops significantly after learning a new task, the model is forgetting.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_EffectiveLearningRate_" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.EffectiveLearningRate*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_EffectiveLearningRate" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.EffectiveLearningRate">
+  EffectiveLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Results/ContinualLearningResult.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the effective learning rate used (may vary with schedulers).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T? EffectiveLearningRate { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_Forgetting_" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.Forgetting*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_Forgetting" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.Forgetting">
+  Forgetting
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Results/ContinualLearningResult.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the amount of forgetting on previous tasks (accuracy drop).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T? Forgetting { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_Forgetting_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Forgetting = (accuracy before learning this task) - (accuracy after learning this task)
+for each previous task, averaged. Positive values indicate forgetting.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_ForwardTransfer_" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.ForwardTransfer*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_ForwardTransfer" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.ForwardTransfer">
+  ForwardTransfer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Results/ContinualLearningResult.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the forward transfer metric.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T? ForwardTransfer { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_ForwardTransfer_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Forward transfer measures how much learning previous tasks helps with learning
+the current task. Positive values indicate positive transfer (prior learning helped).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_GradientUpdates_" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.GradientUpdates*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_GradientUpdates" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.GradientUpdates">
+  GradientUpdates
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Results/ContinualLearningResult.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of gradient updates performed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? GradientUpdates { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_LossHistory_" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.LossHistory*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_LossHistory" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.LossHistory">
+  LossHistory
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Results/ContinualLearningResult.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the loss history across training epochs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; LossHistory { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_PeakMemoryBytes_" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.PeakMemoryBytes*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_PeakMemoryBytes" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.PeakMemoryBytes">
+  PeakMemoryBytes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Results/ContinualLearningResult.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the peak memory usage during training in bytes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long? PeakMemoryBytes { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_RegularizationLossHistory_" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.RegularizationLossHistory*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_RegularizationLossHistory" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.RegularizationLossHistory">
+  RegularizationLossHistory
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Results/ContinualLearningResult.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the regularization loss history (e.g., EWC penalty term).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; RegularizationLossHistory { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_SampleCount_" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.SampleCount*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_SampleCount" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.SampleCount">
+  SampleCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Results/ContinualLearningResult.cs/#L95"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of samples used for training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? SampleCount { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_StrategyMetrics_" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.StrategyMetrics*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_StrategyMetrics" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.StrategyMetrics">
+  StrategyMetrics
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Results/ContinualLearningResult.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets additional strategy-specific metrics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyDictionary&lt;string, object&gt;? StrategyMetrics { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlydictionary-2">IReadOnlyDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_StrategyMetrics_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Different strategies track different metrics:
+- EWC: Fisher Information norm, regularization strength
+- GEM: Number of gradient projections, average projection angle
+- LwF: Distillation loss, temperature used
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_TaskId_" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.TaskId*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_TaskId" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.TaskId">
+  TaskId
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Results/ContinualLearningResult.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the task identifier (0-indexed).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TaskId { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_TrainingAccuracy_" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.TrainingAccuracy*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_TrainingAccuracy" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.TrainingAccuracy">
+  TrainingAccuracy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Results/ContinualLearningResult.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the final training accuracy on this task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T TrainingAccuracy { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_TrainingLoss_" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.TrainingLoss*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_TrainingLoss" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.TrainingLoss">
+  TrainingLoss
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Results/ContinualLearningResult.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the final training loss on this task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T TrainingLoss { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_TrainingTime_" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.TrainingTime*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_TrainingTime" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.TrainingTime">
+  TrainingTime
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Results/ContinualLearningResult.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the time taken to train on this task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TimeSpan TrainingTime { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_ValidationAccuracy_" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.ValidationAccuracy*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_ValidationAccuracy" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.ValidationAccuracy">
+  ValidationAccuracy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Results/ContinualLearningResult.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the validation accuracy on this task, if validation was performed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T? ValidationAccuracy { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_ValidationLoss_" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.ValidationLoss*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_ValidationLoss" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.ValidationLoss">
+  ValidationLoss
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Results/ContinualLearningResult.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the validation loss on this task, if validation was performed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T? ValidationLoss { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_ToString_" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.ToString*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Results_ContinualLearningResult_1_ToString" data-uid="AiDotNet.ContinualLearning.Results.ContinualLearningResult`1.ToString">
+  ToString()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Results/ContinualLearningResult.cs/#L155"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns a string representation of the training result.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string ToString()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Results/ContinualLearningResult.cs/#L23" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

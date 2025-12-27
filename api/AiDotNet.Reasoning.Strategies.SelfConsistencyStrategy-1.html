@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SelfConsistencyStrategy&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SelfConsistencyStrategy&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements Self-Consistency reasoning by sampling multiple reasoning paths and using majority voting.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Reasoning_Strategies_SelfConsistencyStrategy_1.md&amp;value=---%0Auid%3A%20AiDotNet.Reasoning.Strategies.SelfConsistencyStrategy%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Reasoning.Strategies.SelfConsistencyStrategy`1">
+
+
+
+  <h1 id="AiDotNet_Reasoning_Strategies_SelfConsistencyStrategy_1" data-uid="AiDotNet.Reasoning.Strategies.SelfConsistencyStrategy`1" class="text-break">
+Class SelfConsistencyStrategy&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Strategies/SelfConsistencyStrategy.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Reasoning.html">Reasoning</a>.<a class="xref" href="AiDotNet.Reasoning.Strategies.html">Strategies</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements Self-Consistency reasoning by sampling multiple reasoning paths and using majority voting.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SelfConsistencyStrategy&lt;T&gt; : ReasoningStrategyBase&lt;T&gt;, IReasoningStrategy&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for scoring (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html">ReasoningStrategyBase</a>&lt;T&gt;</div>
+      <div><span class="xref">SelfConsistencyStrategy&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IReasoningStrategy-1.html">IReasoningStrategy</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html#AiDotNet_Reasoning_ReasoningStrategyBase_1_ChatModel">ReasoningStrategyBase&lt;T&gt;.ChatModel</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html#AiDotNet_Reasoning_ReasoningStrategyBase_1_Tools">ReasoningStrategyBase&lt;T&gt;.Tools</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html#AiDotNet_Reasoning_ReasoningStrategyBase_1_ReasoningTrace">ReasoningStrategyBase&lt;T&gt;.ReasoningTrace</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html#AiDotNet_Reasoning_ReasoningStrategyBase_1_ReasonAsync_System_String_AiDotNet_Reasoning_Models_ReasoningConfig_System_Threading_CancellationToken_">ReasoningStrategyBase&lt;T&gt;.ReasonAsync(string, ReasoningConfig, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html#AiDotNet_Reasoning_ReasoningStrategyBase_1_AppendTrace_System_String_">ReasoningStrategyBase&lt;T&gt;.AppendTrace(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html#AiDotNet_Reasoning_ReasoningStrategyBase_1_ClearTrace">ReasoningStrategyBase&lt;T&gt;.ClearTrace()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html#AiDotNet_Reasoning_ReasoningStrategyBase_1_FindTool_System_String_">ReasoningStrategyBase&lt;T&gt;.FindTool(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html#AiDotNet_Reasoning_ReasoningStrategyBase_1_GetToolDescriptions">ReasoningStrategyBase&lt;T&gt;.GetToolDescriptions()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html#AiDotNet_Reasoning_ReasoningStrategyBase_1_ExecuteTool_System_String_System_String_">ReasoningStrategyBase&lt;T&gt;.ExecuteTool(string, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Reasoning.ReasoningStrategyBase-1.html#AiDotNet_Reasoning_ReasoningStrategyBase_1_ValidateConfig_AiDotNet_Reasoning_Models_ReasoningConfig_">ReasoningStrategyBase&lt;T&gt;.ValidateConfig(ReasoningConfig)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Reasoning_Strategies_SelfConsistencyStrategy_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Self-Consistency is like solving a problem multiple times independently
+and then comparing answers. If you get the same answer most of the time, you can be confident it's correct.
+<p><strong>How it works:</strong></p>
+<ol>
+<li>Generate multiple independent reasoning chains for the same problem</li>
+<li>Each chain uses slightly different wording/approach (controlled by temperature)</li>
+<li>Extract the final answer from each chain</li>
+<li>Use majority voting to pick the most common answer</li>
+</ol>
+<p><strong>Example:</strong>
+Problem: &quot;What is 15% of 240?&quot;</p>
+<p>Attempt 1: 15% = 0.15, then 0.15 × 240 = 36 ✓
+Attempt 2: 240 ÷ 100 × 15 = 36 ✓
+Attempt 3: 240 × 15/100 = 36 ✓
+Attempt 4: Convert to fraction: 240 × 3/20 = 36 ✓
+Attempt 5: (Error) 240 × 1.5 = 360 ✗</p>
+<p>Majority vote: &quot;36&quot; appears 4 times, &quot;360&quot; appears 1 time → Answer: &quot;36&quot;</p>
+<p><strong>Why it works:</strong></p>
+<ul>
+<li>Random errors don't repeat consistently</li>
+<li>Correct reasoning tends to reach the same answer</li>
+<li>Filters out hallucinations and calculation mistakes</li>
+</ul>
+<p><strong>Research basis:</strong>
+&quot;Self-Consistency Improves Chain of Thought Reasoning in Language Models&quot; (Wang et al., 2022)
+showed significant improvements over standard CoT, especially on reasoning benchmarks.</p>
+<p><strong>When to use:</strong></p>
+<ul>
+<li>Important decisions where accuracy matters</li>
+<li>Mathematical or logical reasoning</li>
+<li>When you can afford multiple LLM calls</li>
+<li>Problems where errors are common</li>
+</ul>
+
+<p><b>Example Usage:</b>
+<pre><code class="lang-csharp">var chatModel = new OpenAIChatModel&lt;double&gt;("gpt-4");
+var strategy = new SelfConsistencyStrategy&lt;double&gt;(chatModel);
+
+var config = new ReasoningConfig
+{
+    NumSamples = 10,  // Try 10 different reasoning paths
+    Temperature = 0.7  // Moderate diversity in approaches
+};
+
+var result = await strategy.ReasonAsync(
+    "If a train travels 60 mph for 2.5 hours, how far does it go?",
+    config
+);
+
+// Result includes all alternative chains for transparency
+Console.WriteLine($"Final answer: {result.FinalAnswer}");
+Console.WriteLine($"Based on {result.AlternativeChains.Count} samples");</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_Strategies_SelfConsistencyStrategy_1__ctor_" data-uid="AiDotNet.Reasoning.Strategies.SelfConsistencyStrategy`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Strategies_SelfConsistencyStrategy_1__ctor_AiDotNet_Interfaces_IChatModel__0__System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_ITool__" data-uid="AiDotNet.Reasoning.Strategies.SelfConsistencyStrategy`1.#ctor(AiDotNet.Interfaces.IChatModel{`0},System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.ITool})">
+  SelfConsistencyStrategy(IChatModel&lt;T&gt;, IEnumerable&lt;ITool&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Strategies/SelfConsistencyStrategy.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Reasoning.Strategies.SelfConsistencyStrategy-1.html">SelfConsistencyStrategy&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SelfConsistencyStrategy(IChatModel&lt;T&gt; chatModel, IEnumerable&lt;ITool&gt;? tools = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>chatModel</code> <a class="xref" href="AiDotNet.Interfaces.IChatModel-1.html">IChatModel</a>&lt;T&gt;</dt>
+    <dd><p>The chat model used for reasoning.</p>
+</dd>
+    <dt><code>tools</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ITool.html">ITool</a>&gt;</dt>
+    <dd><p>Optional tools available during reasoning.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Strategies_SelfConsistencyStrategy_1__ctor_AiDotNet_Interfaces_IChatModel__0__System_Collections_Generic_IEnumerable_AiDotNet_Interfaces_ITool___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Creates a Self-Consistency strategy that uses Chain-of-Thought
+reasoning multiple times and aggregates the results. You can choose how to aggregate:
+- Majority voting (default): Most common answer wins
+- Weighted voting: Higher confidence answers count more
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_Strategies_SelfConsistencyStrategy_1_Description_" data-uid="AiDotNet.Reasoning.Strategies.SelfConsistencyStrategy`1.Description*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Strategies_SelfConsistencyStrategy_1_Description" data-uid="AiDotNet.Reasoning.Strategies.SelfConsistencyStrategy`1.Description">
+  Description
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Strategies/SelfConsistencyStrategy.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a description of what this reasoning strategy does and when to use it.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string Description { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Strategies_SelfConsistencyStrategy_1_Description_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This provides information about what makes this strategy unique
+and what types of problems it's best suited for. For example, Chain-of-Thought might describe
+itself as "Best for problems requiring step-by-step logical deduction."
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Strategies_SelfConsistencyStrategy_1_StrategyName_" data-uid="AiDotNet.Reasoning.Strategies.SelfConsistencyStrategy`1.StrategyName*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Strategies_SelfConsistencyStrategy_1_StrategyName" data-uid="AiDotNet.Reasoning.Strategies.SelfConsistencyStrategy`1.StrategyName">
+  StrategyName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Strategies/SelfConsistencyStrategy.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of this reasoning strategy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string StrategyName { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Strategies_SelfConsistencyStrategy_1_StrategyName_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is a human-readable name that identifies the strategy,
+like "Chain-of-Thought" or "Tree-of-Thoughts". It's useful for logging, debugging,
+or displaying to users which reasoning approach was used.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_Strategies_SelfConsistencyStrategy_1_ReasonCoreAsync_" data-uid="AiDotNet.Reasoning.Strategies.SelfConsistencyStrategy`1.ReasonCoreAsync*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Strategies_SelfConsistencyStrategy_1_ReasonCoreAsync_System_String_AiDotNet_Reasoning_Models_ReasoningConfig_System_Threading_CancellationToken_" data-uid="AiDotNet.Reasoning.Strategies.SelfConsistencyStrategy`1.ReasonCoreAsync(System.String,AiDotNet.Reasoning.Models.ReasoningConfig,System.Threading.CancellationToken)">
+  ReasonCoreAsync(string, ReasoningConfig, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Strategies/SelfConsistencyStrategy.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core reasoning logic to be implemented by derived strategies.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Task&lt;ReasoningResult&lt;T&gt;&gt; ReasonCoreAsync(string query, ReasoningConfig config, CancellationToken cancellationToken)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The problem or question to reason about.</p>
+</dd>
+    <dt><code>config</code> <a class="xref" href="AiDotNet.Reasoning.Models.ReasoningConfig.html">ReasoningConfig</a></dt>
+    <dd><p>Configuration options for the reasoning process.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Token to cancel the operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Reasoning.Models.ReasoningResult-1.html">ReasoningResult</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A reasoning result containing the answer and reasoning process.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Strategies_SelfConsistencyStrategy_1_ReasonCoreAsync_System_String_AiDotNet_Reasoning_Models_ReasoningConfig_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is where the actual reasoning happens - and it's different
+for each strategy. Derived classes must implement this method with their specific approach:
+- ChainOfThoughtStrategy: Linear step-by-step reasoning
+- TreeOfThoughtsStrategy: Explores multiple paths in a tree
+- SelfConsistencyStrategy: Multiple attempts with voting
+<p>The base class handles setup, timing, and error handling; derived classes focus on
+implementing their unique reasoning algorithm.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Strategies/SelfConsistencyStrategy.cs/#L69" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

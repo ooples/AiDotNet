@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class InputOutputDataLoaderBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class InputOutputDataLoaderBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Abstract base class for input-output data loaders providing common supervised learning functionality.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3.md&amp;value=---%0Auid%3A%20AiDotNet.Data.Loaders.InputOutputDataLoaderBase%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3">
+
+
+
+  <h1 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3" class="text-break">
+Class InputOutputDataLoaderBase&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Data.html">Data</a>.<a class="xref" href="AiDotNet.Data.Loaders.html">Loaders</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Abstract base class for input-output data loaders providing common supervised learning functionality.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class InputOutputDataLoaderBase&lt;T, TInput, TOutput&gt; : DataLoaderBase&lt;T&gt;, IInputOutputDataLoader&lt;T, TInput, TOutput&gt;, IDataLoader&lt;T&gt;, IResettable, ICountable, IBatchIterable&lt;(TInput Features, TOutput Labels)&gt;, IShuffleable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;).</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html">DataLoaderBase</a>&lt;T&gt;</div>
+      <div><span class="xref">InputOutputDataLoaderBase&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IInputOutputDataLoader-3.html">IInputOutputDataLoader</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDataLoader-1.html">IDataLoader</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IResettable.html">IResettable</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICountable.html">ICountable</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IBatchIterable-1.html">IBatchIterable</a>&lt;(TInput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.features">Features</a>, TOutput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.labels">Labels</a>)&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IShuffleable.html">IShuffleable</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase-1.html">PointCloudDatasetLoaderBase&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Data.Loaders.InMemoryDataLoader-3.html">InMemoryDataLoader&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Data.Loaders.LeafFederatedDataLoader-1.html">LeafFederatedDataLoader&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Name">DataLoaderBase&lt;T&gt;.Name</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Description">DataLoaderBase&lt;T&gt;.Description</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_IsLoaded">DataLoaderBase&lt;T&gt;.IsLoaded</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_TotalCount">DataLoaderBase&lt;T&gt;.TotalCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_CurrentIndex">DataLoaderBase&lt;T&gt;.CurrentIndex</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_BatchCount">DataLoaderBase&lt;T&gt;.BatchCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_CurrentBatchIndex">DataLoaderBase&lt;T&gt;.CurrentBatchIndex</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Progress">DataLoaderBase&lt;T&gt;.Progress</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Reset">DataLoaderBase&lt;T&gt;.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_LoadAsync_System_Threading_CancellationToken_">DataLoaderBase&lt;T&gt;.LoadAsync(CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Unload">DataLoaderBase&lt;T&gt;.Unload()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_LoadDataCoreAsync_System_Threading_CancellationToken_">DataLoaderBase&lt;T&gt;.LoadDataCoreAsync(CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_UnloadDataCore">DataLoaderBase&lt;T&gt;.UnloadDataCore()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_EnsureLoaded">DataLoaderBase&lt;T&gt;.EnsureLoaded()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_AdvanceIndex_System_Int32_">DataLoaderBase&lt;T&gt;.AdvanceIndex(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_AdvanceBatchIndex">DataLoaderBase&lt;T&gt;.AdvanceBatchIndex()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.ParallelBatchLoaderExtensions.html#AiDotNet_Data_Loaders_ParallelBatchLoaderExtensions_WithParallelLoading__1_AiDotNet_Interfaces_IBatchIterable___0__System_Func_System_Int32_____0__System_Int32_System_Nullable_System_Int32__System_Nullable_System_Int32__">ParallelBatchLoaderExtensions.WithParallelLoading&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;, Func&lt;int[], TBatch&gt;, int, int?, int?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Data.Pipeline.DataPipelineExtensions.html#AiDotNet_Data_Pipeline_DataPipelineExtensions_ToPipeline__1_AiDotNet_Interfaces_IBatchIterable___0__">DataPipelineExtensions.ToPipeline&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.DataLoaderExtensions.html#AiDotNet_Extensions_DataLoaderExtensions_CreateBatchesAsync__1_AiDotNet_Interfaces_IBatchIterable___0__System_Nullable_System_Int32__System_Int32_">DataLoaderExtensions.CreateBatchesAsync&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;, int?, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.DataLoaderExtensions.html#AiDotNet_Extensions_DataLoaderExtensions_CreateBatches__1_AiDotNet_Interfaces_IBatchIterable___0__System_Nullable_System_Int32__">DataLoaderExtensions.CreateBatches&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;, int?)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+InputOutputDataLoaderBase provides shared implementation for all supervised learning data loaders including:
+- Feature (X) and label (Y) data management
+- Train/validation/test splitting
+- Shuffling and batching capabilities
+- Progress tracking through ICountable
+</p>
+<p><b>For Beginners:</b> This base class handles common input-output data operations:
+- Storing features (X) and labels (Y) for supervised learning
+- Splitting data into training, validation, and test sets
+- Shuffling data to improve training
+- Iterating through data in batches
+<p>Concrete implementations (CsvDataLoader, ImageDataLoader) extend this
+to load specific data formats.</p>
+
+</div>
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_Indices" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.Indices">
+  Indices
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indices for current data ordering (used for shuffling).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int[]? Indices</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_LoadedFeatures" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.LoadedFeatures">
+  LoadedFeatures
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Storage for loaded feature data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected TInput? LoadedFeatures</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TInput</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_LoadedLabels" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.LoadedLabels">
+  LoadedLabels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Storage for loaded label data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected TOutput? LoadedLabels</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_NumOps" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Numeric operations helper for type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_BatchSize_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.BatchSize*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_BatchSize" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the batch size for iteration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int BatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_FeatureCount_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.FeatureCount*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_FeatureCount" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.FeatureCount">
+  FeatureCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of features per sample.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract int FeatureCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_Features_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.Features*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_Features" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.Features">
+  Features
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all input features as a single data structure.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TInput Features { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TInput</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_Features_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This provides access to the complete feature set. For large datasets,
+prefer using batch iteration methods instead of loading everything at once.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_HasNext_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.HasNext*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_HasNext" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.HasNext">
+  HasNext
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether there are more batches available in the current iteration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool HasNext { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_IsShuffled_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.IsShuffled*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_IsShuffled" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.IsShuffled">
+  IsShuffled
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether the data is currently shuffled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsShuffled { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_Labels_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.Labels*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_Labels" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.Labels">
+  Labels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all output labels as a single data structure.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TOutput Labels { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_Labels_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This provides access to all labels. For large datasets,
+prefer using batch iteration methods instead of loading everything at once.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_OutputDimension_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.OutputDimension*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_OutputDimension" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.OutputDimension">
+  OutputDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of output dimensions (1 for regression/binary classification,
+N for multi-class with N classes).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract int OutputDimension { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_ComputeSplitSizes_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.ComputeSplitSizes*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_ComputeSplitSizes_System_Int32_System_Double_System_Double_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.ComputeSplitSizes(System.Int32,System.Double,System.Double)">
+  ComputeSplitSizes(int, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L245"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes split sizes from ratios and total count.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static (int TrainSize, int ValidationSize, int TestSize) ComputeSplitSizes(int totalCount, double trainRatio, double validationRatio)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>totalCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Total number of samples.</p>
+</dd>
+    <dt><code>trainRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Training ratio.</p>
+</dd>
+    <dt><code>validationRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Validation ratio.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,system.int32,system.int32-.trainsize">TrainSize</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,system.int32,system.int32-.validationsize">ValidationSize</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,system.int32,system.int32-.testsize">TestSize</a>)</dt>
+    <dd><p>A tuple containing train, validation, and test sizes.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_ExtractBatch_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.ExtractBatch*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_ExtractBatch_System_Int32___" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.ExtractBatch(System.Int32[])">
+  ExtractBatch(int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L212"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts a batch of features and labels at the specified indices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract (TInput Features, TOutput Labels) ExtractBatch(int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The indices of samples to extract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(TInput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.input">Input</a>, TOutput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.output">Output</a>)</dt>
+    <dd><p>A tuple containing the features and labels for the batch.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_ExtractBatch_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Derived classes must implement this to extract data based on their specific
+TInput and TOutput types.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_GetBatches_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.GetBatches*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_GetBatches_System_Nullable_System_Int32__System_Boolean_System_Boolean_System_Nullable_System_Int32__" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.GetBatches(System.Nullable{System.Int32},System.Boolean,System.Boolean,System.Nullable{System.Int32})">
+  GetBatches(int?, bool, bool, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L273"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Iterates through all batches in the dataset using lazy evaluation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IEnumerable&lt;(TInput Features, TOutput Labels)&gt; GetBatches(int? batchSize = null, bool shuffle = true, bool dropLast = false, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional batch size override. Uses default BatchSize if null.</p>
+</dd>
+    <dt><code>shuffle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to shuffle data before batching. Default is true.</p>
+</dd>
+    <dt><code>dropLast</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to drop the last incomplete batch. Default is false.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed for reproducible shuffling.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(TInput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.features">Features</a>, TOutput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.labels">Labels</a>)&gt;</dt>
+    <dd><p>An enumerable sequence of batches using yield return for memory efficiency.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_GetBatches_System_Nullable_System_Int32__System_Boolean_System_Boolean_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method provides a PyTorch-style iteration pattern using IEnumerable and yield return
+for memory-efficient lazy evaluation. Each call creates a fresh iteration, automatically
+handling reset and shuffle operations.
+</p>
+<p><b>For Beginners:</b> This is the recommended way to iterate through your data:
+<pre><code class="lang-csharp">foreach (var (xBatch, yBatch) in dataLoader.GetBatches(batchSize: 32, shuffle: true))
+{
+    // Train on this batch
+    model.TrainOnBatch(xBatch, yBatch);
+}</code></pre>
+<p>Unlike GetNextBatch(), you don't need to call Reset() - each GetBatches() call
+starts fresh. The yield return pattern means batches are generated on-demand,
+not all loaded into memory at once.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_GetBatchesAsync_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.GetBatchesAsync*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_GetBatchesAsync_System_Nullable_System_Int32__System_Boolean_System_Boolean_System_Nullable_System_Int32__System_Int32_System_Threading_CancellationToken_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.GetBatchesAsync(System.Nullable{System.Int32},System.Boolean,System.Boolean,System.Nullable{System.Int32},System.Int32,System.Threading.CancellationToken)">
+  GetBatchesAsync(int?, bool, bool, int?, int, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L359"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously iterates through all batches with prefetching support.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IAsyncEnumerable&lt;(TInput Features, TOutput Labels)&gt; GetBatchesAsync(int? batchSize = null, bool shuffle = true, bool dropLast = false, int? seed = null, int prefetchCount = 2, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional batch size override. Uses default BatchSize if null.</p>
+</dd>
+    <dt><code>shuffle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to shuffle data before batching. Default is true.</p>
+</dd>
+    <dt><code>dropLast</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to drop the last incomplete batch. Default is false.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed for reproducible shuffling.</p>
+</dd>
+    <dt><code>prefetchCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of batches to prefetch ahead. Default is 2.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Token to cancel the iteration.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.iasyncenumerable-1">IAsyncEnumerable</a>&lt;(TInput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.features">Features</a>, TOutput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.labels">Labels</a>)&gt;</dt>
+    <dd><p>An async enumerable sequence of batches.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_GetBatchesAsync_System_Nullable_System_Int32__System_Boolean_System_Boolean_System_Nullable_System_Int32__System_Int32_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method enables async batch iteration with configurable prefetching, similar to
+PyTorch's num_workers or TensorFlow's prefetch(). Batches are prepared in the background
+while the current batch is being processed.
+</p>
+<p><b>For Beginners:</b> Use this for large datasets or when batch preparation is slow:
+<pre><code class="lang-csharp">await foreach (var (xBatch, yBatch) in dataLoader.GetBatchesAsync(prefetchCount: 2))
+{
+    // While training on this batch, the next 2 batches are being prepared
+    await model.TrainOnBatchAsync(xBatch, yBatch);
+}</code></pre>
+<p>Prefetching helps hide data loading latency, especially useful for:</p>
+<ul>
+<li>Large images that need decoding</li>
+<li>Data that requires preprocessing</li>
+<li>Slow storage (network drives, cloud storage)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_GetNextBatch_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.GetNextBatch*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_GetNextBatch" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.GetNextBatch">
+  GetNextBatch()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the next batch of data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (TInput Features, TOutput Labels) GetNextBatch()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(TInput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.input">Input</a>, TOutput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.output">Output</a>)</dt>
+    <dd><p>The next batch of data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when no more batches are available.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_InitializeIndices_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.InitializeIndices*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_InitializeIndices_System_Int32_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.InitializeIndices(System.Int32)">
+  InitializeIndices(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L194"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes indices array after data is loaded.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void InitializeIndices(int count)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of samples in the dataset.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_OnReset_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.OnReset*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_OnReset" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.OnReset">
+  OnReset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L185"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Called after Reset() to allow derived classes to perform additional reset operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void OnReset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_OnReset_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Override this to reset any domain-specific state. The base indices are already reset
+when this is called.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_Shuffle_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.Shuffle*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_Shuffle_System_Nullable_System_Int32__" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.Shuffle(System.Nullable{System.Int32})">
+  Shuffle(int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L144"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Shuffles the data order using the specified seed for reproducibility.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Shuffle(int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional seed for reproducible shuffling. Same seed produces same order.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_Shuffle_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The seed is like a "recipe" for the randomness.
+Using the same seed gives the same "random" order every time, which is useful
+for reproducing experiments or debugging.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_Split_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.Split*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_Split_System_Double_System_Double_System_Nullable_System_Int32__" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.Split(System.Double,System.Double,System.Nullable{System.Int32})">
+  Split(double, double, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L177"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a train/validation/test split of the data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract (IInputOutputDataLoader&lt;T, TInput, TOutput&gt; Train, IInputOutputDataLoader&lt;T, TInput, TOutput&gt; Validation, IInputOutputDataLoader&lt;T, TInput, TOutput&gt; Test) Split(double trainRatio = 0.7, double validationRatio = 0.15, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>trainRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Fraction of data for training (0.0 to 1.0).</p>
+</dd>
+    <dt><code>validationRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Fraction of data for validation (0.0 to 1.0).</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed for reproducible splits.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Interfaces.IInputOutputDataLoader-3.html">IInputOutputDataLoader</a>&lt;T, TInput, TOutput&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.interfaces.iinputoutputdataloader--0,-1,-2-,aidotnet.interfaces.iinputoutputdataloader--0,-1,-2-,aidotnet.interfaces.iinputoutputdataloader--0,-1,-2--.train">Train</a>, <a class="xref" href="AiDotNet.Interfaces.IInputOutputDataLoader-3.html">IInputOutputDataLoader</a>&lt;T, TInput, TOutput&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.interfaces.iinputoutputdataloader--0,-1,-2-,aidotnet.interfaces.iinputoutputdataloader--0,-1,-2-,aidotnet.interfaces.iinputoutputdataloader--0,-1,-2--.validation">Validation</a>, <a class="xref" href="AiDotNet.Interfaces.IInputOutputDataLoader-3.html">IInputOutputDataLoader</a>&lt;T, TInput, TOutput&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.interfaces.iinputoutputdataloader--0,-1,-2-,aidotnet.interfaces.iinputoutputdataloader--0,-1,-2-,aidotnet.interfaces.iinputoutputdataloader--0,-1,-2--.test">Test</a>)</dt>
+    <dd><p>A tuple containing three data loaders: (train, validation, test).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_Split_System_Double_System_Double_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The test ratio is implicitly 1 - trainRatio - validationRatio.
+</p>
+<p><b>For Beginners:</b> Splitting data is crucial for evaluating your model:
+- **Training set**: Data the model learns from
+- **Validation set**: Data used to tune hyperparameters and prevent overfitting
+- **Test set**: Data used only once at the end to get an unbiased performance estimate
+<p>Common splits are 60/20/20 or 70/15/15 (train/validation/test).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_TryGetNextBatch_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.TryGetNextBatch*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_TryGetNextBatch_System_ValueTuple__1__2___" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.TryGetNextBatch(System.ValueTuple{`1,`2}@)">
+  TryGetNextBatch(out (TInput Features, TOutput Labels))
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L131"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Attempts to get the next batch without throwing if unavailable.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool TryGetNextBatch(out (TInput Features, TOutput Labels) batch)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batch</code> (TInput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.input">Input</a>, TOutput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.output">Output</a>)</dt>
+    <dd><p>The batch if available, default otherwise.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if a batch was available, false if iteration is complete.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_TryGetNextBatch_System_ValueTuple__1__2____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>When false is returned, batch contains the default value for TBatch.
+Callers should check the return value before using batch.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_Unshuffle_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.Unshuffle*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_Unshuffle" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.Unshuffle">
+  Unshuffle()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Restores the original (unshuffled) data order.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Unshuffle()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_ValidateSplitRatios_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.ValidateSplitRatios*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_ValidateSplitRatios_System_Double_System_Double_" data-uid="AiDotNet.Data.Loaders.InputOutputDataLoaderBase`3.ValidateSplitRatios(System.Double,System.Double)">
+  ValidateSplitRatios(double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L220"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates split ratios.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static void ValidateSplitRatios(double trainRatio, double validationRatio)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>trainRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Training ratio.</p>
+</dd>
+    <dt><code>validationRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Validation ratio.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when ratios are invalid.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/InputOutputDataLoaderBase.cs/#L32" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface ICheckpointableModel | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface ICheckpointableModel | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for models that support saving and loading their internal state (checkpointing).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_ICheckpointableModel.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.ICheckpointableModel%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.ICheckpointableModel">
+
+
+
+  <h1 id="AiDotNet_Interfaces_ICheckpointableModel" data-uid="AiDotNet.Interfaces.ICheckpointableModel" class="text-break">
+Interface ICheckpointableModel  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ICheckpointableModel.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for models that support saving and loading their internal state (checkpointing).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface ICheckpointableModel</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_ICheckpointableModel_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This interface enables models to save their trained parameters and internal state to persistent storage
+and restore them later, which is essential for model persistence, training interruption/resumption,
+and distributed training scenarios.
+</p>
+<p>
+<b>For Beginners:</b> This interface is like a "save game" feature for machine learning models.
+<p>Just as video games let you save your progress and load it later:</p>
+<ul>
+<li>SaveState: Writes the model's current state (all learned parameters) to a file</li>
+<li>LoadState: Reads a previously saved state back into the model</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Saving the best model during training (so you can use it later)</li>
+<li>Resuming training if it gets interrupted</li>
+<li>Sharing trained models with others</li>
+<li>Deploying models to production systems</li>
+</ul>
+
+<p>
+<b>Design Note:</b> This is a separate interface from IFullModel because not all models
+support checkpointing (e.g., some stateless models or models that can't serialize their state).
+By making it optional, we keep the type system honest and allow models to opt-in to checkpointing.
+</p>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_ICheckpointableModel_LoadState_" data-uid="AiDotNet.Interfaces.ICheckpointableModel.LoadState*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ICheckpointableModel_LoadState_System_IO_Stream_" data-uid="AiDotNet.Interfaces.ICheckpointableModel.LoadState(System.IO.Stream)">
+  LoadState(Stream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ICheckpointableModel.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the model's state (parameters and configuration) from a stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void LoadState(Stream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream to read the model state from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ICheckpointableModel_LoadState_System_IO_Stream__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method deserializes model state that was previously saved with SaveState,
+restoring all parameters and configuration to recreate the saved model state.
+</p>
+<p>
+<b>For Beginners:</b> This is like loading a saved game.
+<p>When you call LoadState:</p>
+<ul>
+<li>All the parameters are read from the stream</li>
+<li>The model is configured to match the saved architecture</li>
+<li>The model becomes identical to when SaveState was called</li>
+</ul>
+<p>After loading, the model can make predictions using the restored parameters.</p>
+
+<p>
+<b>Stream Handling:</b>
+- The stream position will be advanced by the number of bytes read
+- The stream is not closed (caller must dispose)
+- Stream data must match the format written by SaveState
+</p>
+<p>
+<b>Versioning:</b>
+Implementations should consider:
+- Including format version number in serialized data
+- Validating compatibility before deserialization
+- Providing migration paths for old formats when possible
+</p>
+<p>
+<b>Usage:</b>
+<pre><code class="lang-csharp">// Load from file
+using var stream = File.OpenRead("model.bin");
+model.LoadState(stream);</code></pre>
+
+<p>
+<b>Important:</b> The stream must contain state data saved by SaveState from a
+compatible model (same architecture and numeric type).
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when stream is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when stream is not readable or contains invalid data.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when deserialization fails or data is incompatible with model architecture.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Interfaces_ICheckpointableModel_SaveState_" data-uid="AiDotNet.Interfaces.ICheckpointableModel.SaveState*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ICheckpointableModel_SaveState_System_IO_Stream_" data-uid="AiDotNet.Interfaces.ICheckpointableModel.SaveState(System.IO.Stream)">
+  SaveState(Stream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ICheckpointableModel.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the model's current state (parameters and configuration) to a stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SaveState(Stream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream to write the model state to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ICheckpointableModel_SaveState_System_IO_Stream__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method serializes all the information needed to recreate the model's current state,
+including trained parameters, layer configurations, and any internal state variables.
+</p>
+<p>
+<b>For Beginners:</b> This is like creating a snapshot of your trained model.
+<p>When you call SaveState:</p>
+<ul>
+<li>All the learned parameters (weights and biases) are written to the stream</li>
+<li>The model's architecture information is saved</li>
+<li>Any other internal state (like normalization statistics) is preserved</li>
+</ul>
+<p>You can later use LoadState to restore the model to this exact state.</p>
+
+<p>
+<b>Stream Handling:</b>
+- The stream position will be advanced by the number of bytes written
+- The stream is flushed but not closed (caller must dispose)
+- For file-based persistence, wrap in File.Create/FileStream
+</p>
+<p>
+<b>Usage:</b>
+<pre><code class="lang-csharp">// Save to file
+using var stream = File.Create("model.bin");
+model.SaveState(stream);</code></pre>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when stream is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when stream is not writable.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when model state cannot be serialized (e.g., uninitialized model).</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ICheckpointableModel.cs/#L31" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

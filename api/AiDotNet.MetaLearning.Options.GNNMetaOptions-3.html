@@ -1,0 +1,1356 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GNNMetaOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GNNMetaOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the Graph Neural Network Meta-learning algorithm.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_MetaLearning_Options_GNNMetaOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.MetaLearning.Options.GNNMetaOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3">
+
+
+
+  <h1 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3" class="text-break">
+Class GNNMetaOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.MetaLearning.html">MetaLearning</a>.<a class="xref" href="AiDotNet.MetaLearning.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the Graph Neural Network Meta-learning algorithm.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class GNNMetaOptions&lt;T, TInput, TOutput&gt; : IMetaLearnerOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;).</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">GNNMetaOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IMetaLearnerOptions-1.html">IMetaLearnerOptions</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+GNN-based meta-learning models tasks and examples as nodes in a graph,
+with edges representing relationships between them. The graph neural network
+learns to propagate information across the task structure to improve learning.
+</p>
+<p>
+<b>For Beginners:</b> GNN Meta-learning treats the learning process as a graph problem:
+1. Each task or example becomes a node in a graph
+2. Relationships between tasks are edges (e.g., task similarity)
+3. A graph neural network learns to propagate useful information
+4. This allows the model to leverage task relationships for better adaptation
+<p>Imagine a social network where users are tasks and friendships are similarities.
+By looking at what similar tasks learned, new tasks can adapt faster.</p>
+
+<p>
+<b>Key Components:</b>
+- <b>Node Embeddings:</b> Represent tasks/examples as vectors
+- <b>Message Passing:</b> Share information between connected nodes
+- <b>Graph Aggregation:</b> Combine node information for predictions
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3__ctor_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3__ctor_AiDotNet_Interfaces_IFullModel__0__1__2__" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.#ctor(AiDotNet.Interfaces.IFullModel{`0,`1,`2})">
+  GNNMetaOptions(IFullModel&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L240"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the GNNMetaOptions class with the required meta-model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GNNMetaOptions(IFullModel&lt;T, TInput, TOutput&gt; metaModel)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>metaModel</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The meta-model to be trained (required).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when metaModel is null.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_AdaptationSteps_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.AdaptationSteps*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_AdaptationSteps" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.AdaptationSteps">
+  AdaptationSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of gradient steps to take during inner loop adaptation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int AdaptationSteps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 5.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_AggregationType_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.AggregationType*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_AggregationType" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.AggregationType">
+  AggregationType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L187"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the aggregation method for graph-level representations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GNNAggregationType AggregationType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.MetaLearning.Options.GNNAggregationType.html">GNNAggregationType</a></dt>
+    <dd><p>Default: Mean.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_CheckpointFrequency_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.CheckpointFrequency*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_CheckpointFrequency" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.CheckpointFrequency">
+  CheckpointFrequency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L141"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets how often to save checkpoints.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CheckpointFrequency { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_DataLoader_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.DataLoader*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_DataLoader" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.DataLoader">
+  DataLoader
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the episodic data loader for sampling tasks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEpisodicDataLoader&lt;T, TInput, TOutput&gt;? DataLoader { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IEpisodicDataLoader-3.html">IEpisodicDataLoader</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Default: null (tasks must be provided manually to MetaTrain).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_DropoutRate_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.DropoutRate*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_DropoutRate" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.DropoutRate">
+  DropoutRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L181"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the dropout rate for GNN layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double DropoutRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Default: 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_EdgeFeatureDimension_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.EdgeFeatureDimension*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_EdgeFeatureDimension" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.EdgeFeatureDimension">
+  EdgeFeatureDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the dimension of edge features in the task graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int EdgeFeatureDimension { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 64.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_EdgeThreshold_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.EdgeThreshold*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_EdgeThreshold" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.EdgeThreshold">
+  EdgeThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L211"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for creating edges between tasks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double EdgeThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Default: 0.5 (tasks with similarity above this are connected).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_EnableCheckpointing_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.EnableCheckpointing*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_EnableCheckpointing" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.EnableCheckpointing">
+  EnableCheckpointing
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to save checkpoints during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableCheckpointing { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default: false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_EvaluationFrequency_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.EvaluationFrequency*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_EvaluationFrequency" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.EvaluationFrequency">
+  EvaluationFrequency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets how often to evaluate during meta-training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int EvaluationFrequency { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 500.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_EvaluationTasks_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.EvaluationTasks*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_EvaluationTasks" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.EvaluationTasks">
+  EvaluationTasks
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of tasks to use for evaluation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int EvaluationTasks { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 100.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_GNNHiddenDimension_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.GNNHiddenDimension*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_GNNHiddenDimension" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.GNNHiddenDimension">
+  GNNHiddenDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L175"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the hidden dimension for the GNN layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GNNHiddenDimension { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 256.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_GradientClipThreshold_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.GradientClipThreshold*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_GradientClipThreshold" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.GradientClipThreshold">
+  GradientClipThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum gradient norm for gradient clipping.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double? GradientClipThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Default: 10.0.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_InnerLearningRate_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.InnerLearningRate*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_InnerLearningRate" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.InnerLearningRate">
+  InnerLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate for the inner loop (task adaptation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InnerLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Default: 0.01.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_InnerOptimizer_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.InnerOptimizer*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_InnerOptimizer" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.InnerOptimizer">
+  InnerOptimizer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the optimizer for inner-loop adaptation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IGradientBasedOptimizer&lt;T, TInput, TOutput&gt;? InnerOptimizer { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IGradientBasedOptimizer-3.html">IGradientBasedOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Default: null (uses built-in SGD optimizer).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_LearnEdgeWeights_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.LearnEdgeWeights*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_LearnEdgeWeights" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.LearnEdgeWeights">
+  LearnEdgeWeights
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L217"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to learn edge weights during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool LearnEdgeWeights { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default: true.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_LossFunction_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.LossFunction*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_LossFunction" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.LossFunction">
+  LossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the loss function for training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ILossFunction&lt;T&gt;? LossFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>Default: null (uses model's default loss function if available).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_MaxNeighbors_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.MaxNeighbors*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_MaxNeighbors" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.MaxNeighbors">
+  MaxNeighbors
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L229"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of neighbors per node in sparse graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxNeighbors { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 10.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_MetaBatchSize_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.MetaBatchSize*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_MetaBatchSize" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.MetaBatchSize">
+  MetaBatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of tasks to sample per meta-training iteration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MetaBatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 4.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_MetaModel_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.MetaModel*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_MetaModel" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.MetaModel">
+  MetaModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the meta-model to be trained. This is the only required property.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt; MetaModel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_MetaOptimizer_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.MetaOptimizer*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_MetaOptimizer" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.MetaOptimizer">
+  MetaOptimizer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the optimizer for meta-parameter updates (outer loop).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IGradientBasedOptimizer&lt;T, TInput, TOutput&gt;? MetaOptimizer { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IGradientBasedOptimizer-3.html">IGradientBasedOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Default: null (uses built-in Adam optimizer).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_NodeEmbeddingDimension_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.NodeEmbeddingDimension*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_NodeEmbeddingDimension" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.NodeEmbeddingDimension">
+  NodeEmbeddingDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L151"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the dimension of node embeddings in the task graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NodeEmbeddingDimension { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 128.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_NumAttentionHeads_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.NumAttentionHeads*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_NumAttentionHeads" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.NumAttentionHeads">
+  NumAttentionHeads
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L169"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of attention heads for graph attention.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumAttentionHeads { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 4.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_NumMessagePassingLayers_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.NumMessagePassingLayers*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_NumMessagePassingLayers" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.NumMessagePassingLayers">
+  NumMessagePassingLayers
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of message passing layers in the GNN.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumMessagePassingLayers { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 3.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_NumMetaIterations_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.NumMetaIterations*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_NumMetaIterations" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.NumMetaIterations">
+  NumMetaIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L99"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the total number of meta-training iterations to perform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumMetaIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 10000.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_OuterLearningRate_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.OuterLearningRate*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_OuterLearningRate" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.OuterLearningRate">
+  OuterLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate for the outer loop (meta-update).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double OuterLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Default: 0.001.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_RandomSeed_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.RandomSeed*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_RandomSeed" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.RandomSeed">
+  RandomSeed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L117"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the random seed for reproducibility.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? RandomSeed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Default: null (non-deterministic).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_SimilarityMetric_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.SimilarityMetric*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_SimilarityMetric" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.SimilarityMetric">
+  SimilarityMetric
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L205"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets how task similarity is computed for building the task graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TaskSimilarityMetric SimilarityMetric { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.MetaLearning.Options.TaskSimilarityMetric.html">TaskSimilarityMetric</a></dt>
+    <dd><p>Default: ParameterDistance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_UseFirstOrder_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.UseFirstOrder*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_UseFirstOrder" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.UseFirstOrder">
+  UseFirstOrder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use first-order approximation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseFirstOrder { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default: true.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_UseFullyConnectedGraph_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.UseFullyConnectedGraph*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_UseFullyConnectedGraph" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.UseFullyConnectedGraph">
+  UseFullyConnectedGraph
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L223"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use a fully connected task graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseFullyConnectedGraph { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default: false (uses sparse graph based on similarity).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_UseLayerNorm_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.UseLayerNorm*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_UseLayerNorm" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.UseLayerNorm">
+  UseLayerNorm
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L199"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use layer normalization in GNN layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseLayerNorm { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default: true.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_UseResidualConnections_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.UseResidualConnections*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_UseResidualConnections" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.UseResidualConnections">
+  UseResidualConnections
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L193"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use residual connections in GNN layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseResidualConnections { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default: true.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_Clone_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.Clone*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_Clone" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L272"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of the GNN Meta options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IMetaLearnerOptions&lt;T&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IMetaLearnerOptions-1.html">IMetaLearnerOptions</a>&lt;T&gt;</dt>
+    <dd><p>A new GNNMetaOptions instance with the same configuration values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_IsValid_" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.IsValid*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_GNNMetaOptions_3_IsValid" data-uid="AiDotNet.MetaLearning.Options.GNNMetaOptions`3.IsValid">
+  IsValid()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L253"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that all GNN Meta configuration options are properly set.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsValid()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the configuration is valid for GNN Meta training; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/GNNMetaOptions.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
