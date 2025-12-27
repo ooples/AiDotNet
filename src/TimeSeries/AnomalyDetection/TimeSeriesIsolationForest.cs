@@ -130,9 +130,11 @@ public class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
         }
 
         // Fill early indices with neutral score (0.5)
+        // Use HashSet for O(1) lookup instead of List's O(n) Contains
+        var validIndicesSet = new HashSet<int>(validIndices);
         for (int i = 0; i < timeSeries.Length; i++)
         {
-            if (_numOps.ToDouble(fullScores[i]) == 0 && !validIndices.Contains(i))
+            if (!validIndicesSet.Contains(i))
             {
                 fullScores[i] = _numOps.FromDouble(0.5);
             }
