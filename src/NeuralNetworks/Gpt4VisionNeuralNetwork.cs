@@ -30,7 +30,7 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
 {
     #region Execution Mode
 
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
 
     #endregion
 
@@ -71,18 +71,18 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
     #region Shared Fields
 
     private readonly ITokenizer _tokenizer;
-    private readonly int _embeddingDimension;
-    private readonly int _visionEmbeddingDim;
-    private readonly int _maxSequenceLength;
-    private readonly int _contextWindowSize;
-    private readonly int _imageSize;
-    private readonly int _hiddenDim;
-    private readonly int _numVisionLayers;
-    private readonly int _numLanguageLayers;
-    private readonly int _numHeads;
-    private readonly int _patchSize;
-    private readonly int _vocabularySize;
-    private readonly int _maxImagesPerRequest;
+    private int _embeddingDimension;
+    private int _visionEmbeddingDim;
+    private int _maxSequenceLength;
+    private int _contextWindowSize;
+    private int _imageSize;
+    private int _hiddenDim;
+    private int _numVisionLayers;
+    private int _numLanguageLayers;
+    private int _numHeads;
+    private int _patchSize;
+    private int _vocabularySize;
+    private int _maxImagesPerRequest;
     private readonly (int Width, int Height) _maxImageResolution;
     private readonly IReadOnlyList<string> _supportedDetailLevels;
 
@@ -196,7 +196,7 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
         _useNativeMode = true;
-        _tokenizer = tokenizer;
+        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
         _embeddingDimension = embeddingDimension;
         _visionEmbeddingDim = visionEmbeddingDim;
         _maxSequenceLength = maxSequenceLength;
@@ -342,9 +342,19 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
     /// <inheritdoc/>
     public Dictionary<string, T> ZeroShotClassify(Tensor<T> image, IEnumerable<string> labels)
     {
+        if (labels is null)
+        {
+            throw new ArgumentNullException(nameof(labels));
+        }
+
+        var labelList = labels.ToList();
+        if (labelList.Count == 0)
+        {
+            throw new ArgumentException("At least one label must be provided.", nameof(labels));
+        }
+
         var result = new Dictionary<string, T>();
         var imageEmb = GetImageEmbedding(image);
-        var labelList = labels.ToList();
 
         var scores = new List<T>();
         foreach (var label in labelList)
@@ -1566,24 +1576,47 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // embeddingDim
-        _ = reader.ReadInt32(); // visionEmbeddingDim
-        _ = reader.ReadInt32(); // maxSeqLen
-        _ = reader.ReadInt32(); // contextWindowSize
-        _ = reader.ReadInt32(); // imageSize
-        _ = reader.ReadInt32(); // hiddenDim
-        _ = reader.ReadInt32(); // numVisionLayers
-        _ = reader.ReadInt32(); // numLanguageLayers
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadInt32(); // patchSize
-        _ = reader.ReadInt32(); // vocabularySize
-        _ = reader.ReadInt32(); // maxImagesPerRequest
-        _ = reader.ReadBoolean(); // useNativeMode
+        _embeddingDimension = reader.ReadInt32();
+        _visionEmbeddingDim = reader.ReadInt32();
+        _maxSequenceLength = reader.ReadInt32();
+        _contextWindowSize = reader.ReadInt32();
+        _imageSize = reader.ReadInt32();
+        _hiddenDim = reader.ReadInt32();
+        _numVisionLayers = reader.ReadInt32();
+        _numLanguageLayers = reader.ReadInt32();
+        _numHeads = reader.ReadInt32();
+        _patchSize = reader.ReadInt32();
+        _vocabularySize = reader.ReadInt32();
+        _maxImagesPerRequest = reader.ReadInt32();
+        _useNativeMode = reader.ReadBoolean();
     }
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        if (!_useNativeMode)
+        {
+            // For ONNX mode, we need valid paths
+            if (string.IsNullOrEmpty(_visionEncoderPath) || string.IsNullOrEmpty(_languageModelPath))
+            {
+                throw new InvalidOperationException(
+                    "Cannot create new instance in ONNX mode: model paths are not available. " +
+                    "ONNX model paths are not serialized. Use native mode for serialization.");
+            }
+
+            return new Gpt4VisionNeuralNetwork<T>(
+                Architecture,
+                _visionEncoderPath,
+                _languageModelPath,
+                _tokenizer,
+                _embeddingDimension,
+                _visionEmbeddingDim,
+                _maxSequenceLength,
+                _contextWindowSize,
+                _imageSize,
+                _maxImagesPerRequest);
+        }
+
         return new Gpt4VisionNeuralNetwork<T>(
             Architecture,
             _tokenizer,

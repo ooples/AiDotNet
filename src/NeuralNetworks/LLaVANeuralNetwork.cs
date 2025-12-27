@@ -387,7 +387,17 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     /// <inheritdoc/>
     public Dictionary<string, T> ZeroShotClassify(Tensor<T> image, IEnumerable<string> classLabels)
     {
+        if (classLabels is null)
+        {
+            throw new ArgumentNullException(nameof(classLabels));
+        }
+
         var labels = classLabels.ToList();
+        if (labels.Count == 0)
+        {
+            throw new ArgumentException("At least one class label must be provided.", nameof(classLabels));
+        }
+
         var imageEmbedding = GetImageEmbedding(image);
         var textEmbeddings = GetTextEmbeddings(labels.Select(l => $"a photo of {l}")).ToList();
 
@@ -1178,7 +1188,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
                 { "VisionHiddenDim", _visionHiddenDim },
                 { "LMHiddenDim", _lmHiddenDim },
                 { "NumVisionLayers", _numVisionLayers },
-                { "NumLMayers", _numLmLayers },
+                { "NumLMLayers", _numLmLayers },
                 { "VocabularySize", _vocabularySize },
                 { "UseNativeMode", _useNativeMode }
             },

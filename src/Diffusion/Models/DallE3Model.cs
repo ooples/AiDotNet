@@ -40,7 +40,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
     private readonly StandardVAE<T> _vae;
     private readonly IConditioningModule<T>? _conditioner;
     private readonly IReadOnlyList<DallE3ImageSize> _supportedSizes;
-    private readonly Random _randomGenerator;
+    private readonly int? _userSeed;
 
     // Safety patterns for content filtering
     private readonly HashSet<string> _unsafePatterns;
@@ -108,9 +108,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
             numHeads: 8);
 
         _conditioner = conditioner;
-        _randomGenerator = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
-            : RandomHelper.CreateSeededRandom(Environment.TickCount);
+        _userSeed = seed;
 
         _supportedSizes = new List<DallE3ImageSize>
         {
@@ -128,6 +126,14 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
     #endregion
 
     #region IDallE3Model Implementation
+
+    /// <summary>
+    /// Gets a thread-safe random seed using RandomHelper.
+    /// </summary>
+    private int GetNextRandomSeed()
+    {
+        return RandomHelper.ThreadSafeRandom.Next();
+    }
 
     /// <inheritdoc/>
     public Tensor<T> Generate(
@@ -150,7 +156,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
             height: height,
             numInferenceSteps: numSteps,
             guidanceScale: style == DallE3Style.Vivid ? 8.0 : 6.0,
-            seed: seed ?? _randomGenerator.Next());
+            seed: seed ?? GetNextRandomSeed());
     }
 
     /// <inheritdoc/>
@@ -166,7 +172,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
 
         for (int i = 0; i < count; i++)
         {
-            var image = Generate(prompt, size, quality, style, _randomGenerator.Next());
+            var image = Generate(prompt, size, quality, style, GetNextRandomSeed());
             results.Add(image);
         }
 
@@ -221,7 +227,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
                 prompt: string.Empty,
                 strength: variationStrength,
                 numInferenceSteps: 30,
-                seed: _randomGenerator.Next());
+                seed: GetNextRandomSeed());
             results.Add(variation);
         }
 
@@ -299,6 +305,14 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
         int extensionPixels,
         string? prompt = null)
     {
+        if (extensionPixels <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(extensionPixels),
+                extensionPixels,
+                "Extension pixels must be a positive value.");
+        }
+
         var shape = image.Shape;
         var channels = shape[^3];
         var height = shape[^2];

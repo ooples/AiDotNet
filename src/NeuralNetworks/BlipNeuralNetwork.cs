@@ -615,8 +615,18 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     /// <inheritdoc/>
     public Dictionary<string, T> ZeroShotClassify(Tensor<T> image, IEnumerable<string> classLabels)
     {
-        var imageEmbedding = GetImageEmbedding(image);
+        if (classLabels is null)
+        {
+            throw new ArgumentNullException(nameof(classLabels));
+        }
+
         var labelList = classLabels.ToList();
+        if (labelList.Count == 0)
+        {
+            throw new ArgumentException("At least one class label must be provided.", nameof(classLabels));
+        }
+
+        var imageEmbedding = GetImageEmbedding(image);
         var scores = new Dictionary<string, T>();
 
         // Get embeddings for all labels
@@ -1414,17 +1424,21 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     }
 
     /// <summary>
-    /// Finds argmax of last dimension.
+    /// Finds argmax of last dimension at the last sequence position for autoregressive decoding.
     /// </summary>
     private int ArgMax(Tensor<T> logits)
     {
         int lastDim = logits.Shape[^1];
         int bestIdx = 0;
-        T bestVal = logits.Shape.Length == 3 ? logits[0, 0, 0] : logits[0, 0];
+
+        // For 3D tensor [batch, seq_len, vocab_size], use last sequence position
+        // For 2D tensor [batch, vocab_size], use first batch
+        int seqPos = logits.Shape.Length == 3 ? logits.Shape[1] - 1 : 0;
+        T bestVal = logits.Shape.Length == 3 ? logits[0, seqPos, 0] : logits[0, 0];
 
         for (int i = 1; i < lastDim; i++)
         {
-            T val = logits.Shape.Length == 3 ? logits[0, 0, i] : logits[0, i];
+            T val = logits.Shape.Length == 3 ? logits[0, seqPos, i] : logits[0, i];
             if (NumOps.ToDouble(val) > NumOps.ToDouble(bestVal))
             {
                 bestVal = val;
@@ -1436,7 +1450,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     }
 
     /// <summary>
-    /// Samples token with temperature.
+    /// Samples token with temperature at the last sequence position for autoregressive decoding.
     /// </summary>
     private int SampleWithTemperature(Tensor<T> logits, double temperature, Random random)
     {
@@ -1444,10 +1458,13 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         var probs = new double[lastDim];
         double maxLogit = double.MinValue;
 
+        // For 3D tensor [batch, seq_len, vocab_size], use last sequence position
+        int seqPos = logits.Shape.Length == 3 ? logits.Shape[1] - 1 : 0;
+
         // Find max for numerical stability
         for (int i = 0; i < lastDim; i++)
         {
-            double val = NumOps.ToDouble(logits.Shape.Length == 3 ? logits[0, 0, i] : logits[0, i]);
+            double val = NumOps.ToDouble(logits.Shape.Length == 3 ? logits[0, seqPos, i] : logits[0, i]);
             if (val > maxLogit) maxLogit = val;
         }
 
@@ -1455,7 +1472,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         double sum = 0;
         for (int i = 0; i < lastDim; i++)
         {
-            double val = NumOps.ToDouble(logits.Shape.Length == 3 ? logits[0, 0, i] : logits[0, i]);
+            double val = NumOps.ToDouble(logits.Shape.Length == 3 ? logits[0, seqPos, i] : logits[0, i]);
             probs[i] = Math.Exp((val - maxLogit) / temperature);
             sum += probs[i];
         }
@@ -1618,8 +1635,23 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
             if (_visionPositionalEmbeddings is not null) count += _visionPositionalEmbeddings.Rows * _visionPositionalEmbeddings.Columns;
             if (_textPositionalEmbeddings is not null) count += _textPositionalEmbeddings.Rows * _textPositionalEmbeddings.Columns;
 
-            // Add layer parameters
-            foreach (var layer in Layers)
+            // Add layer parameters from all native layer lists
+            foreach (var layer in _visionEncoderLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            foreach (var layer in _textEncoderLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            foreach (var layer in _textDecoderLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            foreach (var layer in _crossAttentionLayers)
             {
                 count += layer.ParameterCount;
             }
@@ -1681,8 +1713,35 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
             }
         }
 
-        // Layer parameters
-        foreach (var layer in Layers)
+        // Layer parameters from all native layer lists
+        foreach (var layer in _visionEncoderLayers)
+        {
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
+            {
+                parameters[index++] = layerParams[i];
+            }
+        }
+
+        foreach (var layer in _textEncoderLayers)
+        {
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
+            {
+                parameters[index++] = layerParams[i];
+            }
+        }
+
+        foreach (var layer in _textDecoderLayers)
+        {
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
+            {
+                parameters[index++] = layerParams[i];
+            }
+        }
+
+        foreach (var layer in _crossAttentionLayers)
         {
             var layerParams = layer.GetParameters();
             for (int i = 0; i < layerParams.Length; i++)
@@ -1754,8 +1813,41 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
             }
         }
 
-        // Update layer parameters
-        foreach (var layer in Layers)
+        // Update layer parameters from all native layer lists
+        foreach (var layer in _visionEncoderLayers)
+        {
+            int layerParameterCount = layer.ParameterCount;
+            if (layerParameterCount > 0)
+            {
+                var layerParameters = parameters.Slice(index, layerParameterCount);
+                layer.UpdateParameters(layerParameters);
+                index += layerParameterCount;
+            }
+        }
+
+        foreach (var layer in _textEncoderLayers)
+        {
+            int layerParameterCount = layer.ParameterCount;
+            if (layerParameterCount > 0)
+            {
+                var layerParameters = parameters.Slice(index, layerParameterCount);
+                layer.UpdateParameters(layerParameters);
+                index += layerParameterCount;
+            }
+        }
+
+        foreach (var layer in _textDecoderLayers)
+        {
+            int layerParameterCount = layer.ParameterCount;
+            if (layerParameterCount > 0)
+            {
+                var layerParameters = parameters.Slice(index, layerParameterCount);
+                layer.UpdateParameters(layerParameters);
+                index += layerParameterCount;
+            }
+        }
+
+        foreach (var layer in _crossAttentionLayers)
         {
             int layerParameterCount = layer.ParameterCount;
             if (layerParameterCount > 0)
