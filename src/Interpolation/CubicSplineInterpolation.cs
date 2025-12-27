@@ -167,7 +167,7 @@ public class CubicSplineInterpolation<T> : IInterpolation<T>
         for (int i = 1; i < n; i++)
         {
             l[i] = _numOps.Subtract(
-                _numOps.Multiply(_numOps.FromDouble(2), _numOps.Add(_x[i + 1], _x[i - 1])),
+                _numOps.Multiply(_numOps.FromDouble(2), _numOps.Subtract(_x[i + 1], _x[i - 1])),
                 _numOps.Multiply(mu[i - 1], h[i - 1])
             );
             mu[i] = _numOps.Divide(h[i], l[i]);
@@ -188,11 +188,13 @@ public class CubicSplineInterpolation<T> : IInterpolation<T>
             _c[j] = _numOps.Subtract(z[j], _numOps.Multiply(mu[j], _c[j + 1]));
 
             // Calculate b and d coefficients from c coefficients
-            _b[j] = _numOps.Divide(
-                _numOps.Subtract(_numOps.Subtract(_y[j + 1], _y[j]), _numOps.Multiply(h[j], _numOps.Add(_c[j + 1], _numOps.Multiply(_numOps.FromDouble(2), _c[j])))),
-                h[j]
+            // Standard formulas: b[j] = (y[j+1] - y[j])/h[j] - h[j]*(c[j+1] + 2*c[j])/3
+            //                    d[j] = (c[j+1] - c[j])/(3*h[j])
+            _b[j] = _numOps.Subtract(
+                _numOps.Divide(_numOps.Subtract(_y[j + 1], _y[j]), h[j]),
+                _numOps.Divide(_numOps.Multiply(h[j], _numOps.Add(_c[j + 1], _numOps.Multiply(_numOps.FromDouble(2), _c[j]))), _numOps.FromDouble(3))
             );
-            _d[j] = _numOps.Divide(_numOps.Subtract(_c[j + 1], _c[j]), h[j]);
+            _d[j] = _numOps.Divide(_numOps.Subtract(_c[j + 1], _c[j]), _numOps.Multiply(_numOps.FromDouble(3), h[j]));
         }
     }
 

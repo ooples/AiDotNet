@@ -1,79 +1,156 @@
 using AiDotNet.Interfaces;
-using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Serving.Models;
 
+/// <summary>
+/// Adapter that wraps a CLIP model implementing <see cref="IMultimodalEmbedding{T}"/>
+/// to make it servable via the REST API.
+/// </summary>
+/// <typeparam name="T">The numeric type used by the model.</typeparam>
+/// <remarks>
+/// <para>
+/// This adapter bridges the gap between the core <see cref="IMultimodalEmbedding{T}"/>
+/// interface and the serving infrastructure's <see cref="IServableMultimodalModel{T}"/>
+/// interface, enabling CLIP models to be served via HTTP endpoints.
+/// </para>
+/// <para><b>For Beginners:</b> Think of this as a translator that makes a CLIP model
+/// speak the same language as the web server. The CLIP model knows how to encode
+/// text and images, and this adapter packages that functionality in a way the
+/// web server understands.
+/// </para>
+/// </remarks>
 public class ServableClipModel<T> : IServableMultimodalModel<T>
 {
     private readonly IMultimodalEmbedding<T> _clipModel;
     private readonly string _modelName;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ServableClipModel{T}"/> class.
+    /// </summary>
+    /// <param name="clipModel">The underlying CLIP model.</param>
+    /// <param name="modelName">The name to identify this model in the serving API.</param>
+    /// <exception cref="ArgumentNullException">Thrown when clipModel or modelName is null.</exception>
     public ServableClipModel(IMultimodalEmbedding<T> clipModel, string modelName)
     {
         _clipModel = clipModel ?? throw new ArgumentNullException(nameof(clipModel));
         _modelName = modelName ?? throw new ArgumentNullException(nameof(modelName));
     }
 
+    /// <inheritdoc/>
     public string ModelName => _modelName;
-    public int InputDimension => _clipModel.ImageSize * _clipModel.ImageSize * 3;
-    public int OutputDimension => _clipModel.EmbeddingDimension;
-    public int EmbeddingDimension => _clipModel.EmbeddingDimension;
-    public int MaxSequenceLength => _clipModel.MaxSequenceLength;
-    public int ImageSize => _clipModel.ImageSize;
-    public IReadOnlyList<Modality> SupportedModalities { get; } = new List<Modality> { Modality.Text, Modality.Image }.AsReadOnly();
 
+    /// <inheritdoc/>
+    public int InputDimension => _clipModel.ImageSize * _clipModel.ImageSize * 3; // RGB image
+
+    /// <inheritdoc/>
+    public int OutputDimension => _clipModel.EmbeddingDimension;
+
+    /// <inheritdoc/>
+    public int EmbeddingDimension => _clipModel.EmbeddingDimension;
+
+    /// <inheritdoc/>
+    public int MaxSequenceLength => _clipModel.MaxSequenceLength;
+
+    /// <inheritdoc/>
+    public int ImageSize => _clipModel.ImageSize;
+
+    /// <inheritdoc/>
+    public IReadOnlyList<Modality> SupportedModalities { get; } = new List<Modality>
+    {
+        Modality.Text,
+        Modality.Image
+    }.AsReadOnly();
+
+    /// <summary>
+    /// Performs prediction by generating an image embedding from the input vector.
+    /// </summary>
+    /// <param name="input">The input image data as a flattened vector.</param>
+    /// <returns>The image embedding as a vector.</returns>
+    /// <remarks>
+    /// For CLIP models, prediction treats the input as image data and returns
+    /// the image embedding. For text-based predictions, use <see cref="EncodeText"/>.
+    /// </remarks>
     public Vector<T> Predict(Vector<T> input)
     {
-        if (input == null) throw new ArgumentNullException(nameof(input));
-        var imageTensor = ConvertToImageTensor(input);
-        return _clipModel.GetImageEmbedding(imageTensor);
+        if (input == null)
+        {
+            throw new ArgumentNullException(nameof(input));
+        }
+
+        // Convert vector to double array for image encoding
+        var imageData = new double[input.Length];
+        var numOps = MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < input.Length; i++)
+        {
+            imageData[i] = numOps.ToDouble(input[i]);
+        }
+
+        return _clipModel.EncodeImage(imageData);
     }
 
+    /// <summary>
+    /// Performs batch prediction by generating image embeddings from multiple inputs.
+    /// </summary>
+    /// <param name="inputs">The input images as rows in a matrix.</param>
+    /// <returns>A matrix where each row is an embedding for the corresponding input.</returns>
     public Matrix<T> PredictBatch(Matrix<T> inputs)
     {
-        if (inputs == null) throw new ArgumentNullException(nameof(inputs));
-        var imageTensors = new List<Tensor<T>>();
+        if (inputs == null)
+        {
+            throw new ArgumentNullException(nameof(inputs));
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var imageBatch = new List<double[]>();
+
         for (int i = 0; i < inputs.Rows; i++)
         {
-            var rowData = new T[inputs.Columns];
-            for (int j = 0; j < inputs.Columns; j++) rowData[j] = inputs[i, j];
-            var vector = new Vector<T>(rowData);
-            imageTensors.Add(ConvertToImageTensor(vector));
+            var imageData = new double[inputs.Columns];
+            for (int j = 0; j < inputs.Columns; j++)
+            {
+                imageData[j] = numOps.ToDouble(inputs[i, j]);
+            }
+            imageBatch.Add(imageData);
         }
-        var embeddings = _clipModel.GetImageEmbeddings(imageTensors).ToList();
-        return ConvertEmbeddingsToMatrix(embeddings);
+
+        return _clipModel.EncodeImageBatch(imageBatch);
     }
 
-    public Vector<T> EncodeText(string text) => _clipModel.GetTextEmbedding(text);
-    public Matrix<T> EncodeTextBatch(IEnumerable<string> texts) => ConvertEmbeddingsToMatrix(_clipModel.GetTextEmbeddings(texts).ToList());
-    public Vector<T> EncodeImage(Vector<T> imageData) => _clipModel.GetImageEmbedding(ConvertToImageTensor(imageData));
-    public Matrix<T> EncodeImageBatch(IEnumerable<Vector<T>> imageDataBatch) => ConvertEmbeddingsToMatrix(_clipModel.GetImageEmbeddings(imageDataBatch.Select(ConvertToImageTensor)).ToList());
-    public T ComputeSimilarity(Vector<T> textEmbedding, Vector<T> imageEmbedding) => _clipModel.ComputeSimilarity(textEmbedding, imageEmbedding);
-    public Dictionary<string, T> ZeroShotClassify(Vector<T> imageData, IEnumerable<string> classLabels) => _clipModel.ZeroShotClassify(ConvertToImageTensor(imageData), classLabels);
-
-    private Tensor<T> ConvertToImageTensor(Vector<T> input)
+    /// <inheritdoc/>
+    public Vector<T> EncodeText(string text)
     {
-        int imageSize = _clipModel.ImageSize;
-        int channels = 3;
-        int expectedSize = channels * imageSize * imageSize;
-        if (input.Length != expectedSize) throw new ArgumentException("Input vector size mismatch", nameof(input));
-        var tensor = new Tensor<T>(new[] { channels, imageSize, imageSize });
-        for (int i = 0; i < input.Length; i++) tensor[i] = input[i];
-        return tensor;
+        return _clipModel.EncodeText(text);
     }
 
-
-    private Matrix<T> ConvertEmbeddingsToMatrix(List<Vector<T>> embeddings)
+    /// <inheritdoc/>
+    public Matrix<T> EncodeTextBatch(IEnumerable<string> texts)
     {
-        if (embeddings.Count == 0) return new Matrix<T>(0, _clipModel.EmbeddingDimension);
-        int rows = embeddings.Count;
-        int cols = embeddings[0].Length;
-        var matrix = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                matrix[i, j] = embeddings[i][j];
-        return matrix;
+        return _clipModel.EncodeTextBatch(texts);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> EncodeImage(double[] imageData)
+    {
+        return _clipModel.EncodeImage(imageData);
+    }
+
+    /// <inheritdoc/>
+    public Matrix<T> EncodeImageBatch(IEnumerable<double[]> imageDataBatch)
+    {
+        return _clipModel.EncodeImageBatch(imageDataBatch);
+    }
+
+    /// <inheritdoc/>
+    public T ComputeSimilarity(Vector<T> textEmbedding, Vector<T> imageEmbedding)
+    {
+        return _clipModel.ComputeSimilarity(textEmbedding, imageEmbedding);
+    }
+
+    /// <inheritdoc/>
+    public Dictionary<string, T> ZeroShotClassify(double[] imageData, IEnumerable<string> classLabels)
+    {
+        return _clipModel.ZeroShotClassify(imageData, classLabels);
     }
 }
-

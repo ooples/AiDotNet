@@ -93,7 +93,7 @@ public class AkimaInterpolation<T> : IInterpolation<T>
         _numOps = MathHelper.GetNumericOperations<T>();
 
         int n = x.Length;
-        _b = new Vector<T>(n - 1);
+        _b = new Vector<T>(n);  // Need slopes at all n data points
         _c = new Vector<T>(n - 1);
         _d = new Vector<T>(n - 1);
 
@@ -163,8 +163,8 @@ public class AkimaInterpolation<T> : IInterpolation<T>
         m[n + 1] = _numOps.Add(m[n], _numOps.Subtract(m[n], m[n - 1]));
         m[n + 2] = _numOps.Add(m[n + 1], _numOps.Subtract(m[n + 1], m[n]));
 
-        // Calculate Akima weights
-        for (int i = 0; i < n - 1; i++)
+        // Calculate Akima weights (slopes at all n data points)
+        for (int i = 0; i < n; i++)
         {
             T w1 = _numOps.Abs(_numOps.Subtract(m[i + 3], m[i + 2]));
             T w2 = _numOps.Abs(_numOps.Subtract(m[i + 1], m[i]));
@@ -185,7 +185,7 @@ public class AkimaInterpolation<T> : IInterpolation<T>
             T h = _numOps.Subtract(_x[i + 1], _x[i]);
             T slope = _numOps.Divide(_numOps.Subtract(_y[i + 1], _y[i]), h);
             _c[i] = _numOps.Divide(_numOps.Subtract(_numOps.Multiply(_numOps.FromDouble(3), slope), _numOps.Add(_numOps.Multiply(_numOps.FromDouble(2), _b[i]), _b[i + 1])), h);
-            _d[i] = _numOps.Divide(_numOps.Add(_numOps.Subtract(_b[i], slope), _numOps.Subtract(slope, _b[i + 1])), _numOps.Multiply(h, h));
+            _d[i] = _numOps.Divide(_numOps.Subtract(_numOps.Add(_b[i], _b[i + 1]), _numOps.Multiply(_numOps.FromDouble(2), slope)), _numOps.Multiply(h, h));
         }
     }
 
