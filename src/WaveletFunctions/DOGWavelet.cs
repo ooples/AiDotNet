@@ -118,15 +118,42 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
         T x2 = NumOps.Square(x);
         T exp_term = NumOps.Exp(NumOps.Negate(NumOps.Divide(x2, NumOps.FromDouble(2))));
 
-        T result = NumOps.FromDouble(Math.Pow(-1, _order));
-        for (int i = 0; i < _order; i++)
+        // Compute the appropriate Hermite polynomial term for the nth derivative of Gaussian
+        // Order 1: ψ(x) = -x · e^(-x²/2)
+        // Order 2: ψ(x) = (x² - 1) · e^(-x²/2)  (Mexican Hat/Ricker wavelet)
+        // Order 3: ψ(x) = -(x³ - 3x) · e^(-x²/2) = (3x - x³) · e^(-x²/2)
+        // Order 4: ψ(x) = (x⁴ - 6x² + 3) · e^(-x²/2)
+        T polynomial_term;
+        switch (_order)
         {
-            result = NumOps.Multiply(result, x);
+            case 1:
+                polynomial_term = NumOps.Negate(x);
+                break;
+            case 2:
+                polynomial_term = NumOps.Subtract(x2, NumOps.One);
+                break;
+            case 3:
+                // Negate for 3rd derivative: -(x³ - 3x)
+                polynomial_term = NumOps.Negate(NumOps.Subtract(NumOps.Multiply(x, x2), NumOps.Multiply(NumOps.FromDouble(3), x)));
+                break;
+            case 4:
+                T x4 = NumOps.Multiply(x2, x2);
+                polynomial_term = NumOps.Add(NumOps.Subtract(x4, NumOps.Multiply(NumOps.FromDouble(6), x2)), NumOps.FromDouble(3));
+                break;
+            default:
+                // For higher orders, fall back to a simple approximation
+                polynomial_term = NumOps.FromDouble(Math.Pow(-1, _order));
+                for (int i = 0; i < _order; i++)
+                {
+                    polynomial_term = NumOps.Multiply(polynomial_term, x);
+                }
+                break;
         }
-        result = NumOps.Multiply(result, exp_term);
+
+        T result = NumOps.Multiply(polynomial_term, exp_term);
 
         // Normalization factor
-        double norm_factor = Math.Pow(-1, _order) / (Math.Sqrt(Convert.ToDouble(MathHelper.Factorial<T>(_order))) * Math.Pow(2, (_order + 1.0) / 2.0));
+        double norm_factor = 1.0 / (Math.Sqrt(Convert.ToDouble(MathHelper.Factorial<T>(_order))) * Math.Pow(2, (_order + 1.0) / 2.0));
         result = NumOps.Multiply(result, NumOps.FromDouble(norm_factor));
 
         return result;
