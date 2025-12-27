@@ -969,7 +969,39 @@ internal class AutoformerEncoderLayer<T>
     public void ApplyGradients(Dictionary<string, Tensor<T>> accumulators, T scale, int layerIndex)
     {
         string prefix = $"encoder_{layerIndex}_";
-        // Apply gradients to each parameter (simplified)
+
+        // Apply gradients: param = param - scale * gradient
+        ApplyGradientToParameter(ref _queryProj, accumulators, $"{prefix}queryProj", scale);
+        ApplyGradientToParameter(ref _keyProj, accumulators, $"{prefix}keyProj", scale);
+        ApplyGradientToParameter(ref _valueProj, accumulators, $"{prefix}valueProj", scale);
+        ApplyGradientToParameter(ref _outputProj, accumulators, $"{prefix}outputProj", scale);
+        ApplyGradientToParameter(ref _ff1Weight, accumulators, $"{prefix}ff1Weight", scale);
+        ApplyGradientToParameter(ref _ff1Bias, accumulators, $"{prefix}ff1Bias", scale);
+        ApplyGradientToParameter(ref _ff2Weight, accumulators, $"{prefix}ff2Weight", scale);
+        ApplyGradientToParameter(ref _ff2Bias, accumulators, $"{prefix}ff2Bias", scale);
+    }
+
+    private void ApplyGradientToParameter(ref Tensor<T> param, Dictionary<string, Tensor<T>> accumulators, string key, T scale)
+    {
+        if (!accumulators.TryGetValue(key, out var gradient))
+            return;
+
+        // param = param - scale * gradient
+        for (int i = 0; i < param.Shape[0]; i++)
+        {
+            for (int j = 0; j < (param.Shape.Length > 1 ? param.Shape[1] : 1); j++)
+            {
+                var currentValue = param.Shape.Length > 1 ? param[i, j] : param[i];
+                var gradValue = gradient.Shape.Length > 1 ? gradient[i, j] : gradient[i];
+                var update = _numOps.Multiply(scale, gradValue);
+                var newValue = _numOps.Subtract(currentValue, update);
+
+                if (param.Shape.Length > 1)
+                    param[i, j] = newValue;
+                else
+                    param[i] = newValue;
+            }
+        }
     }
 
     public void Serialize(BinaryWriter writer)
@@ -1293,7 +1325,44 @@ internal class AutoformerDecoderLayer<T>
 
     public void ApplyGradients(Dictionary<string, Tensor<T>> accumulators, T scale, int layerIndex)
     {
-        // Apply gradients to each parameter (simplified)
+        string prefix = $"decoder_{layerIndex}_";
+
+        // Apply gradients: param = param - scale * gradient
+        ApplyGradientToParameter(ref _selfQueryProj, accumulators, $"{prefix}selfQueryProj", scale);
+        ApplyGradientToParameter(ref _selfKeyProj, accumulators, $"{prefix}selfKeyProj", scale);
+        ApplyGradientToParameter(ref _selfValueProj, accumulators, $"{prefix}selfValueProj", scale);
+        ApplyGradientToParameter(ref _selfOutputProj, accumulators, $"{prefix}selfOutputProj", scale);
+        ApplyGradientToParameter(ref _crossQueryProj, accumulators, $"{prefix}crossQueryProj", scale);
+        ApplyGradientToParameter(ref _crossKeyProj, accumulators, $"{prefix}crossKeyProj", scale);
+        ApplyGradientToParameter(ref _crossValueProj, accumulators, $"{prefix}crossValueProj", scale);
+        ApplyGradientToParameter(ref _crossOutputProj, accumulators, $"{prefix}crossOutputProj", scale);
+        ApplyGradientToParameter(ref _ff1Weight, accumulators, $"{prefix}ff1Weight", scale);
+        ApplyGradientToParameter(ref _ff1Bias, accumulators, $"{prefix}ff1Bias", scale);
+        ApplyGradientToParameter(ref _ff2Weight, accumulators, $"{prefix}ff2Weight", scale);
+        ApplyGradientToParameter(ref _ff2Bias, accumulators, $"{prefix}ff2Bias", scale);
+    }
+
+    private void ApplyGradientToParameter(ref Tensor<T> param, Dictionary<string, Tensor<T>> accumulators, string key, T scale)
+    {
+        if (!accumulators.TryGetValue(key, out var gradient))
+            return;
+
+        // param = param - scale * gradient
+        for (int i = 0; i < param.Shape[0]; i++)
+        {
+            for (int j = 0; j < (param.Shape.Length > 1 ? param.Shape[1] : 1); j++)
+            {
+                var currentValue = param.Shape.Length > 1 ? param[i, j] : param[i];
+                var gradValue = gradient.Shape.Length > 1 ? gradient[i, j] : gradient[i];
+                var update = _numOps.Multiply(scale, gradValue);
+                var newValue = _numOps.Subtract(currentValue, update);
+
+                if (param.Shape.Length > 1)
+                    param[i, j] = newValue;
+                else
+                    param[i] = newValue;
+            }
+        }
     }
 
     public void Serialize(BinaryWriter writer)
