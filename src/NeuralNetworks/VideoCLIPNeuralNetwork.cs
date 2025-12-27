@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
@@ -296,7 +297,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
 
     private void InitializeWeights()
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         double scale = 0.02;
 
         InitializeMatrix(_visionClsToken, random, scale);
@@ -734,7 +735,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         var normalizedProbs = nucleusProbs.Select(p => p / nucleusSum).ToArray();
 
         // Sample from nucleus
-        var random = new Random();
+        var random = RandomHelper.Shared;
         double sample = random.NextDouble();
         double cumulative = 0.0;
 
@@ -931,7 +932,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             NumOps.ToDouble(logits[UNKNOWN_TOKEN_APPROX]) : double.MinValue;
 
         // Add small noise for diversity
-        var random = new Random();
+        var random = RandomHelper.Shared;
         yesLogit += random.NextDouble() * 0.1;
         noLogit += random.NextDouble() * 0.1;
         unknownLogit += random.NextDouble() * 0.05; // Slight bias against unknown

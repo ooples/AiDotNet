@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -301,7 +302,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
 
     private void InitializePerceiverQueries(Matrix<T> queries)
     {
-        var rand = new Random(42);
+        var rand = RandomHelper.CreateSeededRandom(42);
         double scale = 1.0 / Math.Sqrt(queries.Columns);
         for (int i = 0; i < queries.Rows; i++)
         {

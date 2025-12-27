@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -28,6 +29,11 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel<T>
 {
+    /// <summary>
+    /// Timeout for regex operations to prevent ReDoS attacks.
+    /// </summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
     #region Execution Mode
 
     private bool _useNativeMode;
@@ -820,9 +826,9 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
             // Create patterns that match category followed by YES/FLAGGED within the same line
             // This prevents false positives from unrelated YES/FLAGGED responses
             var categoryUpper = category.ToUpperInvariant().Replace("_", "[\\s_-]*");
-            var pattern = new System.Text.RegularExpressions.Regex(
+            var pattern = new Regex(
                 $@"{categoryUpper}[:\s\-]*\b(YES|FLAGGED)\b",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                RegexOptions.IgnoreCase, RegexTimeout);
 
             bool flagged = pattern.IsMatch(response);
 
@@ -831,9 +837,9 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
             if (flagged)
             {
                 // Look for confidence level after category
-                var confPattern = new System.Text.RegularExpressions.Regex(
+                var confPattern = new Regex(
                     $@"{categoryUpper}[^.]*\b(HIGH|MEDIUM|LOW)\b",
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    RegexOptions.IgnoreCase, RegexTimeout);
                 var confMatch = confPattern.Match(response);
                 if (confMatch.Success)
                 {

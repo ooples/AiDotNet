@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
@@ -356,7 +357,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
 
     private void InitializeWeights()
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         double scale = 0.02;
 
         InitializeMatrix(_imageClsToken, random, scale);
