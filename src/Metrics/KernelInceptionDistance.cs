@@ -282,7 +282,7 @@ public class KernelInceptionDistance<T>
         // MMD^2 = E[k(x,x')] + E[k(y,y')] - 2*E[k(x,y)]
         double mmdSquared = k11 + k22 - 2.0 * k12;
 
-        // Return MMD (not squared) to match common usage
+        // Return MMD² (squared) as is standard for KID
         return Math.Max(0, mmdSquared);
     }
 

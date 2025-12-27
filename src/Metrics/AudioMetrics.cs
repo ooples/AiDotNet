@@ -614,7 +614,7 @@ public class ScaleInvariantSignalToDistortionRatio<T> where T : struct
         double tarNormSqDouble = _numOps.ToDouble(tarNormSq);
         if (tarNormSqDouble < 1e-10)
         {
-            return _numOps.FromDouble(double.NegativeInfinity);
+            return _numOps.FromDouble(-100.0); // Return very low SI-SDR for zero target
         }
 
         T alpha = _numOps.Divide(dotProduct, tarNormSq);

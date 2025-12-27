@@ -160,22 +160,34 @@ public class VideoSSIM<T> where T : struct
     /// <summary>
     /// Computes VSSIM between predicted and ground truth videos.
     /// </summary>
-    /// <param name="predicted">Predicted video tensor [T, H, W, C].</param>
+    /// <param name="predicted">Predicted video tensor [T, H, W, C] or [T, C, H, W] if isChannelsFirst is true.</param>
     /// <param name="groundTruth">Ground truth video tensor.</param>
+    /// <param name="isChannelsFirst">If true, expects [T, C, H, W] format; otherwise [T, H, W, C].</param>
     /// <returns>Mean SSIM across all frames.</returns>
-    public T Compute(Tensor<T> predicted, Tensor<T> groundTruth)
+    public T Compute(Tensor<T> predicted, Tensor<T> groundTruth, bool isChannelsFirst = false)
     {
         int numFrames = predicted.Shape[0];
-        int height = predicted.Shape[1];
-        int width = predicted.Shape[2];
-        int channels = predicted.Shape[3];
+        int height, width, channels;
+
+        if (isChannelsFirst)
+        {
+            channels = predicted.Shape[1];
+            height = predicted.Shape[2];
+            width = predicted.Shape[3];
+        }
+        else
+        {
+            height = predicted.Shape[1];
+            width = predicted.Shape[2];
+            channels = predicted.Shape[3];
+        }
 
         T sum = _numOps.Zero;
 
         for (int t = 0; t < numFrames; t++)
         {
-            var predFrame = ExtractFrame(predicted, t, height, width, channels);
-            var gtFrame = ExtractFrame(groundTruth, t, height, width, channels);
+            var predFrame = ExtractFrame(predicted, t, height, width, channels, isChannelsFirst);
+            var gtFrame = ExtractFrame(groundTruth, t, height, width, channels, isChannelsFirst);
 
             T frameScore = _frameSsim.Compute(predFrame, gtFrame);
             sum = _numOps.Add(sum, frameScore);
@@ -184,15 +196,33 @@ public class VideoSSIM<T> where T : struct
         return _numOps.Divide(sum, _numOps.FromDouble(numFrames));
     }
 
-    private Tensor<T> ExtractFrame(Tensor<T> video, int frameIdx, int height, int width, int channels)
+    private Tensor<T> ExtractFrame(Tensor<T> video, int frameIdx, int height, int width, int channels, bool isChannelsFirst = false)
     {
         var frame = new Tensor<T>(new[] { height, width, channels });
         int frameSize = height * width * channels;
         int offset = frameIdx * frameSize;
 
-        for (int i = 0; i < frameSize; i++)
+        if (isChannelsFirst)
         {
-            frame.SetFlat(i, video.GetFlat(offset + i));
+            // TCHW to HWC conversion
+            for (int c = 0; c < channels; c++)
+            {
+                for (int h = 0; h < height; h++)
+                {
+                    for (int w = 0; w < width; w++)
+                    {
+                        int srcIdx = frameIdx * channels * height * width + c * height * width + h * width + w;
+                        frame[h, w, c] = video.GetFlat(srcIdx);
+                    }
+                }
+            }
+        }
+        else
+        {
+            for (int i = 0; i < frameSize; i++)
+            {
+                frame.SetFlat(i, video.GetFlat(offset + i));
+            }
         }
 
         return frame;

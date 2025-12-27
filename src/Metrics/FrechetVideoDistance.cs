@@ -3,6 +3,7 @@ using AiDotNet.Engines;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks;
 
+using AiDotNet.Tensors.Helpers;
 namespace AiDotNet.Metrics;
 
 /// <summary>
@@ -154,8 +155,8 @@ public class FrechetVideoDistance<T>
 
         try
         {
-            // Determine video format (NTCHW or NCTHW)
-            bool isNTCHW = videos.Shape[1] > 3; // If second dim > 3, likely temporal
+            // Determine video format (NTCHW or NCTHW)            // Heuristic: If second dimension > 3, assume temporal (NTCHW format)            // since channels are typically 1-3. For videos with exactly 3 frames,            // this may misidentify the format - ensure input uses proper format.
+            bool isNTCHW = videos.Shape[1] > 3; 
 
             for (int v = 0; v < numVideos; v++)
             {
@@ -264,7 +265,7 @@ public class FrechetVideoDistance<T>
 
             case FrameSamplingStrategy.Random:
                 // Random sampling
-                var random = new Random(42);
+                var random = RandomHelper.CreateSeededRandom(42);
                 for (int i = 0; i < FramesPerClip; i++)
                 {
                     indices[i] = random.Next(totalFrames);

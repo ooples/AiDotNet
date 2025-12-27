@@ -200,13 +200,9 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
     /// </summary>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // Note: In a full implementation, you would read these values
-        // and reinitialize the network. For now, we just read past them.
-        _ = reader.ReadString(); // imageEncoderPath
-        _ = reader.ReadString(); // textEncoderPath
-        _ = reader.ReadInt32();  // embeddingDimension
-        _ = reader.ReadInt32();  // maxSequenceLength
-        _ = reader.ReadInt32();  // imageSize
+        throw new NotSupportedException(
+            "CLIP neural network deserialization is not supported. " +
+            "Create a new instance with the appropriate configuration instead.");
     }
 
     /// <summary>

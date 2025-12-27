@@ -367,7 +367,7 @@ public class EmbeddingsController : ControllerBase
                 Predictions = predictions,
                 RequestId = request.RequestId,
                 ProcessingTimeMs = sw.ElapsedMilliseconds,
-                TopLabel = predictions.OrderByDescending(p => p.Value).First().Key
+                TopLabel = predictions.Count > 0 ? predictions.OrderByDescending(p => p.Value).First().Key : string.Empty
             };
 
             _logger.LogInformation(
