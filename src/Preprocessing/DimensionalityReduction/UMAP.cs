@@ -255,60 +255,15 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     private double ComputeDistance(double[,] data, int i, int j, int p)
     {
-        double dist = 0;
-        switch (_metric)
+        // Extract points and delegate to array-based overload to avoid code duplication
+        var pointI = new double[p];
+        var pointJ = new double[p];
+        for (int k = 0; k < p; k++)
         {
-            case UMAPMetric.Euclidean:
-                for (int k = 0; k < p; k++)
-                {
-                    double diff = data[i, k] - data[j, k];
-                    dist += diff * diff;
-                }
-                return Math.Sqrt(dist);
-
-            case UMAPMetric.Manhattan:
-                for (int k = 0; k < p; k++)
-                {
-                    dist += Math.Abs(data[i, k] - data[j, k]);
-                }
-                return dist;
-
-            case UMAPMetric.Cosine:
-                double dot = 0, normI = 0, normJ = 0;
-                for (int k = 0; k < p; k++)
-                {
-                    dot += data[i, k] * data[j, k];
-                    normI += data[i, k] * data[i, k];
-                    normJ += data[j, k] * data[j, k];
-                }
-                double denom = Math.Sqrt(normI * normJ);
-                return denom > 1e-10 ? 1 - dot / denom : 1;
-
-            case UMAPMetric.Correlation:
-                double meanI = 0, meanJ = 0;
-                for (int k = 0; k < p; k++)
-                {
-                    meanI += data[i, k];
-                    meanJ += data[j, k];
-                }
-                meanI /= p;
-                meanJ /= p;
-
-                double cov = 0, varI = 0, varJ = 0;
-                for (int k = 0; k < p; k++)
-                {
-                    double diffI = data[i, k] - meanI;
-                    double diffJ = data[j, k] - meanJ;
-                    cov += diffI * diffJ;
-                    varI += diffI * diffI;
-                    varJ += diffJ * diffJ;
-                }
-                double denomCorr = Math.Sqrt(varI * varJ);
-                return denomCorr > 1e-10 ? 1 - cov / denomCorr : 1;
-
-            default:
-                throw new NotSupportedException($"Metric {_metric} is not supported.");
+            pointI[k] = data[i, k];
+            pointJ[k] = data[j, k];
         }
+        return ComputeDistance(pointI, pointJ);
     }
 
     /// <summary>
@@ -483,8 +438,8 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         var embedding = new double[n, _nComponents];
 
-        // Spectral initialization using graph Laplacian
-        // For simplicity, use random initialization scaled appropriately
+        // Random initialization scaled appropriately
+        // (Spectral initialization using graph Laplacian could be added for better convergence)
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < _nComponents; j++)

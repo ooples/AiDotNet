@@ -137,6 +137,18 @@ public class PaCMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
+        if (n < 2)
+        {
+            throw new ArgumentException("PaCMAP requires at least 2 samples.", nameof(data));
+        }
+
+        if (p < _nComponents)
+        {
+            throw new ArgumentException(
+                $"Number of features ({p}) must be at least the number of components ({_nComponents}).",
+                nameof(data));
+        }
+
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSeededRandom(42);

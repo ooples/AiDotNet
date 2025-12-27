@@ -83,6 +83,21 @@ public class NCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new ArgumentException("Number of components must be at least 1.", nameof(nComponents));
         }
 
+        if (maxIter < 1)
+        {
+            throw new ArgumentException("Maximum iterations must be at least 1.", nameof(maxIter));
+        }
+
+        if (learningRate <= 0)
+        {
+            throw new ArgumentException("Learning rate must be positive.", nameof(learningRate));
+        }
+
+        if (tol <= 0)
+        {
+            throw new ArgumentException("Tolerance must be positive.", nameof(tol));
+        }
+
         _nComponents = nComponents;
         _maxIter = maxIter;
         _learningRate = learningRate;
@@ -171,16 +186,31 @@ public class NCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 }
             }
 
-            // Compute softmax probabilities p_ij
+            // Compute softmax probabilities p_ij with numerical stability
             var probabilities = new double[n, n];
             var sumExp = new double[n];
+            var minDist = new double[n];
+
+            // Find min distance per row (excluding diagonal) for numerical stability
+            for (int i = 0; i < n; i++)
+            {
+                minDist[i] = double.MaxValue;
+                for (int j = 0; j < n; j++)
+                {
+                    if (i != j && distances[i, j] < minDist[i])
+                    {
+                        minDist[i] = distances[i, j];
+                    }
+                }
+            }
 
             for (int i = 0; i < n; i++)
             {
                 for (int j = 0; j < n; j++)
                 {
                     if (i == j) continue;
-                    probabilities[i, j] = Math.Exp(-distances[i, j]);
+                    // Subtract min distance to prevent underflow (equivalent to multiplying by constant)
+                    probabilities[i, j] = Math.Exp(-(distances[i, j] - minDist[i]));
                     sumExp[i] += probabilities[i, j];
                 }
             }
@@ -414,7 +444,7 @@ public class NCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public Matrix<T> FitTransformSupervised(Matrix<T> data, int[] labels)
     {
         Fit(data, labels);
-        return TransformCore(data);
+        return Transform(data);
     }
 
     /// <summary>

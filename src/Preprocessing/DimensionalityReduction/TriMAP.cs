@@ -106,6 +106,16 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new ArgumentException("Number of iterations must be at least 1.", nameof(nIter));
         }
 
+        if (nOutliers < 0)
+        {
+            throw new ArgumentException("Number of outliers cannot be negative.", nameof(nOutliers));
+        }
+
+        if (nRandom < 0)
+        {
+            throw new ArgumentException("Number of random triplets cannot be negative.", nameof(nRandom));
+        }
+
         _nComponents = nComponents;
         _nInliers = nInliers;
         _nOutliers = nOutliers;
