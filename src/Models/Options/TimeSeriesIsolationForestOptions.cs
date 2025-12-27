@@ -30,7 +30,11 @@ public class TimeSeriesIsolationForestOptions<T> : TimeSeriesRegressionOptions<T
     /// <summary>
     /// Creates a new instance with default values.
     /// </summary>
-    public TimeSeriesIsolationForestOptions() { }
+    public TimeSeriesIsolationForestOptions()
+    {
+        // Override base class default (0) with a sensible default for time series
+        SeasonalPeriod = 24; // Default to hourly data with daily patterns
+    }
 
     /// <summary>
     /// Creates a copy of the specified options.
@@ -47,6 +51,7 @@ public class TimeSeriesIsolationForestOptions<T> : TimeSeriesRegressionOptions<T
         UseSeasonalDecomposition = other.UseSeasonalDecomposition;
         SeasonalPeriod = other.SeasonalPeriod;
         UseTrendFeatures = other.UseTrendFeatures;
+        RandomSeed = other.RandomSeed;
     }
 
     /// <summary>
@@ -124,16 +129,6 @@ public class TimeSeriesIsolationForestOptions<T> : TimeSeriesRegressionOptions<T
     /// </remarks>
     public bool UseSeasonalDecomposition { get; set; } = false;
 
-    /// <summary>
-    /// Gets or sets the seasonal period for decomposition.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The number of time steps in one seasonal cycle.
-    /// For hourly data with daily patterns, use 24.
-    /// For daily data with weekly patterns, use 7.
-    /// </para>
-    /// </remarks>
-    public new int SeasonalPeriod { get; set; } = 24;
 
     /// <summary>
     /// Gets or sets whether to include trend-based features.
