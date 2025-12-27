@@ -183,40 +183,40 @@ public class CatmullRomSplineInterpolation<T> : IInterpolation<T>
         T t2 = _numOps.Multiply(t, t);      // t²
         T t3 = _numOps.Multiply(t2, t);     // t³
 
-        // Calculate the coefficients of the cubic polynomial
-        // These formulas implement the Catmull-Rom spline equations
-        T c0 = _numOps.Multiply(_numOps.FromDouble(-0.5), _numOps.Add(_numOps.Multiply(_tension, y0), _numOps.Multiply(_tension, y2)));
-        T c1 = _numOps.Add(_numOps.Multiply(_numOps.FromDouble(1.5), y1), _numOps.Multiply(_numOps.FromDouble(-1.5), y2));
-        T c2 = _numOps.Add(
-            _numOps.Add(
-                _numOps.Multiply(_numOps.FromDouble(2), y2),
-                _numOps.Multiply(_numOps.FromDouble(-2), y1)
-            ),
-            _numOps.Add(
-                _numOps.Multiply(_numOps.Multiply(_numOps.FromDouble(0.5), _tension), y0),
-                _numOps.Multiply(_numOps.Multiply(_numOps.FromDouble(0.5), _tension), y3)
-            )
-        );
-        T c3 = _numOps.Add(
-            _numOps.Add(
-                _numOps.Multiply(_numOps.FromDouble(-0.5), y2),
-                _numOps.Multiply(_numOps.FromDouble(0.5), y1)
-            ),
-            _numOps.Add(
-                _numOps.Multiply(_numOps.Multiply(_numOps.FromDouble(-0.25), _tension), y0),
-                _numOps.Multiply(_numOps.Multiply(_numOps.FromDouble(0.25), _tension), y3)
-            )
-        );
+        // Calculate tangents at y1 and y2 using Catmull-Rom formula:
+        // m1 = tension * (y2 - y0)
+        // m2 = tension * (y3 - y1)
+        T m1 = _numOps.Multiply(_tension, _numOps.Subtract(y2, y0));
+        T m2 = _numOps.Multiply(_tension, _numOps.Subtract(y3, y1));
 
-        // Evaluate the cubic polynomial: y = c3*t³ + c2*t² + c1*t + y1
+        // Hermite basis functions:
+        // h00(t) = 2t³ - 3t² + 1
+        // h10(t) = t³ - 2t² + t
+        // h01(t) = -2t³ + 3t²
+        // h11(t) = t³ - t²
+        T h00 = _numOps.Add(
+            _numOps.Subtract(_numOps.Multiply(_numOps.FromDouble(2), t3), _numOps.Multiply(_numOps.FromDouble(3), t2)),
+            _numOps.One
+        );
+        T h10 = _numOps.Add(
+            _numOps.Subtract(t3, _numOps.Multiply(_numOps.FromDouble(2), t2)),
+            t
+        );
+        T h01 = _numOps.Add(
+            _numOps.Multiply(_numOps.FromDouble(-2), t3),
+            _numOps.Multiply(_numOps.FromDouble(3), t2)
+        );
+        T h11 = _numOps.Subtract(t3, t2);
+
+        // P(t) = h00*y1 + h10*m1 + h01*y2 + h11*m2
         return _numOps.Add(
             _numOps.Add(
-                _numOps.Multiply(c3, t3),
-                _numOps.Multiply(c2, t2)
+                _numOps.Multiply(h00, y1),
+                _numOps.Multiply(h10, m1)
             ),
             _numOps.Add(
-                _numOps.Multiply(c1, t),
-                y1
+                _numOps.Multiply(h01, y2),
+                _numOps.Multiply(h11, m2)
             )
         );
     }

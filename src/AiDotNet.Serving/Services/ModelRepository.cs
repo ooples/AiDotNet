@@ -147,17 +147,20 @@ public class ModelRepository : IModelRepository
             IsMultimodal = entry.IsMultimodal
         };
 
-        // For multimodal models, extract additional properties
-        if (entry.IsMultimodal)
+        // Early return for non-multimodal models - no additional property lookups needed
+        if (!entry.IsMultimodal)
         {
-            var embeddingDimProperty = modelType.GetProperty("EmbeddingDimension");
-            var maxSeqLengthProperty = modelType.GetProperty("MaxSequenceLength");
-            var imageSizeProperty = modelType.GetProperty("ImageSize");
-
-            modelInfo.EmbeddingDimension = embeddingDimProperty?.GetValue(entry.Model) as int?;
-            modelInfo.MaxSequenceLength = maxSeqLengthProperty?.GetValue(entry.Model) as int?;
-            modelInfo.ImageSize = imageSizeProperty?.GetValue(entry.Model) as int?;
+            return modelInfo;
         }
+
+        // For multimodal models, extract additional properties via reflection
+        var embeddingDimProperty = modelType.GetProperty("EmbeddingDimension");
+        var maxSeqLengthProperty = modelType.GetProperty("MaxSequenceLength");
+        var imageSizeProperty = modelType.GetProperty("ImageSize");
+
+        modelInfo.EmbeddingDimension = embeddingDimProperty?.GetValue(entry.Model) as int?;
+        modelInfo.MaxSequenceLength = maxSeqLengthProperty?.GetValue(entry.Model) as int?;
+        modelInfo.ImageSize = imageSizeProperty?.GetValue(entry.Model) as int?;
 
         return modelInfo;
     }

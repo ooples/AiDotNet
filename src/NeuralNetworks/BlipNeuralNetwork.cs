@@ -1977,4 +1977,109 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     }
 
     #endregion
+
+    #region IMultimodalEmbedding Interface (Standard API)
+
+    /// <inheritdoc/>
+    public Vector<T> EncodeText(string text)
+    {
+        return GetTextEmbedding(text);
+    }
+
+    /// <inheritdoc/>
+    public Matrix<T> EncodeTextBatch(IEnumerable<string> texts)
+    {
+        var embeddings = GetTextEmbeddings(texts).ToList();
+        if (embeddings.Count == 0)
+        {
+            return new Matrix<T>(0, EmbeddingDimension);
+        }
+
+        var matrix = new Matrix<T>(embeddings.Count, embeddings[0].Length);
+        for (int i = 0; i < embeddings.Count; i++)
+        {
+            for (int j = 0; j < embeddings[i].Length; j++)
+            {
+                matrix[i, j] = embeddings[i][j];
+            }
+        }
+        return matrix;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> EncodeImage(double[] imageData)
+    {
+        // Convert double[] to Tensor<T> in CHW format
+        var tensor = ConvertToTensor(imageData);
+        return GetImageEmbedding(tensor);
+    }
+
+    /// <inheritdoc/>
+    public Matrix<T> EncodeImageBatch(IEnumerable<double[]> imageDataBatch)
+    {
+        var tensors = imageDataBatch.Select(ConvertToTensor);
+        var embeddings = GetImageEmbeddings(tensors).ToList();
+        if (embeddings.Count == 0)
+        {
+            return new Matrix<T>(0, EmbeddingDimension);
+        }
+
+        var matrix = new Matrix<T>(embeddings.Count, embeddings[0].Length);
+        for (int i = 0; i < embeddings.Count; i++)
+        {
+            for (int j = 0; j < embeddings[i].Length; j++)
+            {
+                matrix[i, j] = embeddings[i][j];
+            }
+        }
+        return matrix;
+    }
+
+    /// <inheritdoc/>
+    public Dictionary<string, T> ZeroShotClassify(double[] imageData, IEnumerable<string> labels)
+    {
+        var tensor = ConvertToTensor(imageData);
+        return ZeroShotClassify(tensor, labels);
+    }
+
+    /// <summary>
+    /// Converts a double[] image to Tensor format.
+    /// </summary>
+    private Tensor<T> ConvertToTensor(double[] imageData)
+    {
+        if (imageData == null || imageData.Length == 0)
+        {
+            throw new ArgumentException("Image data cannot be null or empty.", nameof(imageData));
+        }
+
+        int channels = 3;
+        if (imageData.Length % channels != 0)
+        {
+            throw new ArgumentException($"Image data length ({imageData.Length}) must be divisible by {channels} channels.", nameof(imageData));
+        }
+
+        int pixels = imageData.Length / channels;
+        int size = (int)Math.Sqrt(pixels);
+        if (size * size != pixels)
+        {
+            throw new ArgumentException($"Image must be square. Got {pixels} pixels which is not a perfect square.", nameof(imageData));
+        }
+
+        var tensor = new Tensor<T>(new[] { channels, size, size });
+        int idx = 0;
+        for (int c = 0; c < channels; c++)
+        {
+            for (int h = 0; h < size; h++)
+            {
+                for (int w = 0; w < size; w++)
+                {
+                    tensor[c, h, w] = NumOps.FromDouble(imageData[idx++]);
+                }
+            }
+        }
+        return tensor;
+    }
+
+    #endregion
+
 }
