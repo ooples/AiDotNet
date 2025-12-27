@@ -1,7 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.NeuralNetworks.Diffusion;
 using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks.Diffusion;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.Diffusion.VAE;
