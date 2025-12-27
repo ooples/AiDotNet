@@ -16,7 +16,7 @@ internal sealed class ModelEntry
     public string? RegistryStage { get; set; }
 
     /// <summary>
-    /// Indicates whether this model supports multimodal operations (text and image encoding).
+    /// Gets or sets whether this model supports multimodal inputs (text, images, etc.).
     /// </summary>
     public bool IsMultimodal { get; set; }
 }

@@ -51,7 +51,7 @@ public interface IServableMultimodalModel<T> : IServableModel<T>
     /// <summary>
     /// Encodes an image into an embedding vector.
     /// </summary>
-    /// <param name="imageData">The preprocessed image data as a flattened vector.</param>
+    /// <param name="imageData">The preprocessed image data as a flattened array.</param>
     /// <returns>A normalized embedding vector representing the image.</returns>
     /// <remarks>
     /// <para>
@@ -59,14 +59,14 @@ public interface IServableMultimodalModel<T> : IServableModel<T>
     /// The expected format is typically [channels, height, width] flattened.
     /// </para>
     /// </remarks>
-    Vector<T> EncodeImage(Vector<T> imageData);
+    Vector<T> EncodeImage(double[] imageData);
 
     /// <summary>
     /// Encodes multiple images into embedding vectors in a batch operation.
     /// </summary>
     /// <param name="imageDataBatch">The preprocessed images as flattened arrays.</param>
     /// <returns>A matrix where each row is an embedding for the corresponding image.</returns>
-    Matrix<T> EncodeImageBatch(IEnumerable<Vector<T>> imageDataBatch);
+    Matrix<T> EncodeImageBatch(IEnumerable<double[]> imageDataBatch);
 
     /// <summary>
     /// Computes the similarity score between a text embedding and an image embedding.
@@ -94,7 +94,7 @@ public interface IServableMultimodalModel<T> : IServableModel<T>
     /// it has never explicitly been trained on, using natural language descriptions.
     /// </para>
     /// </remarks>
-    Dictionary<string, T> ZeroShotClassify(Vector<T> imageData, IEnumerable<string> classLabels);
+    Dictionary<string, T> ZeroShotClassify(double[] imageData, IEnumerable<string> classLabels);
 
     /// <summary>
     /// Gets the dimensionality of the embedding space.

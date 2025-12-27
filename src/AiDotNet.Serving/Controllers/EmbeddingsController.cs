@@ -367,7 +367,7 @@ public class EmbeddingsController : ControllerBase
                 Predictions = predictions,
                 RequestId = request.RequestId,
                 ProcessingTimeMs = sw.ElapsedMilliseconds,
-                TopLabel = predictions.OrderByDescending(p => p.Value).First().Key
+                TopLabel = predictions.Count > 0 ? predictions.OrderByDescending(p => p.Value).First().Key : string.Empty
             };
 
             _logger.LogInformation(
@@ -444,13 +444,11 @@ public class EmbeddingsController : ControllerBase
 
         if (images.Length == 1)
         {
-            var imageVector = ConvertToVector<T>(images[0]);
-            var embedding = model.EncodeImage(imageVector);
+            var embedding = model.EncodeImage(images[0]);
             return new[] { ConvertFromVector(embedding) };
         }
 
-        var imageVectors = images.Select(ConvertToVector<T>);
-        var embeddings = model.EncodeImageBatch(imageVectors);
+        var embeddings = model.EncodeImageBatch(images);
         return ConvertFromMatrix(embeddings);
     }
 
@@ -487,8 +485,7 @@ public class EmbeddingsController : ControllerBase
             throw new InvalidOperationException($"Multimodal model '{modelName}' not found or type mismatch");
         }
 
-        var imageVector = ConvertToVector<T>(imageData);
-        var result = model.ZeroShotClassify(imageVector, classLabels);
+        var result = model.ZeroShotClassify(imageData, classLabels);
         return result.ToDictionary(kvp => kvp.Key, kvp => Convert.ToDouble(kvp.Value));
     }
 
