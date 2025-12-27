@@ -2047,17 +2047,31 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     /// </summary>
     private Tensor<T> ConvertToTensor(double[] imageData)
     {
+        if (imageData == null || imageData.Length == 0)
+        {
+            throw new ArgumentException("Image data cannot be null or empty.", nameof(imageData));
+        }
+
         int channels = 3;
+        if (imageData.Length % channels != 0)
+        {
+            throw new ArgumentException($"Image data length ({imageData.Length}) must be divisible by {channels} channels.", nameof(imageData));
+        }
+
         int pixels = imageData.Length / channels;
         int size = (int)Math.Sqrt(pixels);
+        if (size * size != pixels)
+        {
+            throw new ArgumentException($"Image must be square. Got {pixels} pixels which is not a perfect square.", nameof(imageData));
+        }
 
         var tensor = new Tensor<T>(new[] { channels, size, size });
         int idx = 0;
-        for (int c = 0; c < channels && idx < imageData.Length; c++)
+        for (int c = 0; c < channels; c++)
         {
-            for (int h = 0; h < size && idx < imageData.Length; h++)
+            for (int h = 0; h < size; h++)
             {
-                for (int w = 0; w < size && idx < imageData.Length; w++)
+                for (int w = 0; w < size; w++)
                 {
                     tensor[c, h, w] = NumOps.FromDouble(imageData[idx++]);
                 }

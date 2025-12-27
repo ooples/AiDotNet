@@ -407,6 +407,17 @@ public class AestheticScore<T> where T : struct
         _aestheticWeights = aestheticWeights;
         _positivePrompts = positivePrompts ?? DefaultPositivePrompts;
         _negativePrompts = negativePrompts ?? DefaultNegativePrompts;
+
+        // Validate prompt arrays are not empty to avoid divide-by-zero in ComputeZeroShot
+        if (_positivePrompts.Length == 0)
+        {
+            throw new ArgumentException("Positive prompts array cannot be empty.", nameof(positivePrompts));
+        }
+
+        if (_negativePrompts.Length == 0)
+        {
+            throw new ArgumentException("Negative prompts array cannot be empty.", nameof(negativePrompts));
+        }
     }
 
     /// <summary>

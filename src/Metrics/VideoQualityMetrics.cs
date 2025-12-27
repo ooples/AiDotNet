@@ -60,7 +60,21 @@ public class VideoPSNR<T> where T : struct
     public (T mean, T min, T max, T[] perFrame) ComputeWithStats(
         Tensor<T> predicted, Tensor<T> groundTruth, bool isChannelsFirst = false)
     {
+        if (predicted.Shape.Length < 4 || groundTruth.Shape.Length < 4)
+        {
+            throw new ArgumentException("Video tensors must have at least 4 dimensions (T, H, W, C or T, C, H, W).");
+        }
+
+        if (!predicted.Shape.SequenceEqual(groundTruth.Shape))
+        {
+            throw new ArgumentException("Predicted and ground truth videos must have the same shape.");
+        }
+
         int numFrames = predicted.Shape[0];
+        if (numFrames == 0)
+        {
+            throw new ArgumentException("Video tensors must have at least one frame.");
+        }
         var frameScores = new T[numFrames];
 
         int height, width, channels;
@@ -166,7 +180,22 @@ public class VideoSSIM<T> where T : struct
     /// <returns>Mean SSIM across all frames.</returns>
     public T Compute(Tensor<T> predicted, Tensor<T> groundTruth, bool isChannelsFirst = false)
     {
+        if (predicted.Shape.Length < 4 || groundTruth.Shape.Length < 4)
+        {
+            throw new ArgumentException("Video tensors must have at least 4 dimensions (T, H, W, C or T, C, H, W).");
+        }
+
+        if (!predicted.Shape.SequenceEqual(groundTruth.Shape))
+        {
+            throw new ArgumentException("Predicted and ground truth videos must have the same shape.");
+        }
+
         int numFrames = predicted.Shape[0];
+        if (numFrames == 0)
+        {
+            throw new ArgumentException("Video tensors must have at least one frame.");
+        }
+
         int height, width, channels;
 
         if (isChannelsFirst)

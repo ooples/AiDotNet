@@ -245,7 +245,7 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         var textList = texts.ToList();
         if (textList.Count == 0)
         {
-            throw new ArgumentException("Texts collection cannot be empty", nameof(texts));
+            return new Matrix<T>(0, _embeddingDimension);
         }
 
         var embeddings = new T[textList.Count, _embeddingDimension];
@@ -305,7 +305,7 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         var imageList = imageDataBatch.ToList();
         if (imageList.Count == 0)
         {
-            throw new ArgumentException("Image batch cannot be empty", nameof(imageDataBatch));
+            return new Matrix<T>(0, _embeddingDimension);
         }
 
         var embeddings = new T[imageList.Count, _embeddingDimension];

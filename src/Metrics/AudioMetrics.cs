@@ -345,6 +345,26 @@ public class ShortTimeObjectiveIntelligibility<T> where T : struct
         int hopLength = 128,
         int numBands = 15)
     {
+        if (sampleRate <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(sampleRate), "Sample rate must be positive.");
+        }
+
+        if (frameLength <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(frameLength), "Frame length must be positive.");
+        }
+
+        if (hopLength <= 0 || hopLength > frameLength)
+        {
+            throw new ArgumentOutOfRangeException(nameof(hopLength), "Hop length must be positive and not exceed frame length.");
+        }
+
+        if (numBands <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numBands), "Number of bands must be positive.");
+        }
+
         _numOps = MathHelper.GetNumericOperations<T>();
         _sampleRate = sampleRate;
         _frameLength = frameLength;
@@ -461,11 +481,20 @@ public class ShortTimeObjectiveIntelligibility<T> where T : struct
     }
 
     /// <summary>
-    /// Computes energy in a frequency band (simplified approximation).
+    /// Computes weighted energy approximation for a frequency band.
     /// </summary>
+    /// <remarks>
+    /// This is a simplified approximation that computes RMS energy with frequency-dependent
+    /// weighting based on band position. It does NOT perform actual bandpass filtering.
+    /// The bandLow and bandHigh parameters are used only for computing a perceptual weight.
+    /// For production use with strict accuracy requirements, consider using FFT-based
+    /// bandpass filtering instead.
+    /// </remarks>
     private T ComputeBandEnergy(Tensor<T> signal, int startSample, int endSample, double bandLow, double bandHigh)
     {
         // Simplified: compute RMS energy weighted by approximate band response
+        // Note: This does not perform actual bandpass filtering - it applies
+        // frequency-dependent weighting based on band center frequency
         T sum = _numOps.Zero;
         int count = 0;
 
@@ -482,8 +511,9 @@ public class ShortTimeObjectiveIntelligibility<T> where T : struct
         }
 
         // Apply frequency-dependent weighting based on band position
+        // Higher frequencies get higher weights to approximate perceptual importance
         double bandCenter = (bandLow + bandHigh) / 2.0;
-        double weight = Math.Log10(bandCenter / 100.0 + 1.0); // Higher weight for higher frequencies
+        double weight = Math.Log10(bandCenter / 100.0 + 1.0);
 
         T energy = _numOps.Divide(sum, _numOps.FromDouble(count));
         return _numOps.Multiply(energy, _numOps.FromDouble(weight));
