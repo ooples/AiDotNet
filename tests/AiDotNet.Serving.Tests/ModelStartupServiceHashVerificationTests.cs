@@ -69,10 +69,5 @@ public sealed class ModelStartupServiceHashVerificationTests
             string registryStage,
             string? sourcePath = null)
             => true;
-
-        public bool LoadMultimodalModel<T>(string name, IServableMultimodalModel<T> model, string? sourcePath = null)
-            => true;
-
-        public IServableMultimodalModel<T>? GetMultimodalModel<T>(string name) => null;
     }
 }
