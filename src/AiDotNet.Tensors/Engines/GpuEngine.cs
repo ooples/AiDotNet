@@ -12869,6 +12869,22 @@ public class GpuEngine : IEngine, IDisposable
         return _cpuFallback.TensorBroadcastAdd(a, b);
     }
 
+    /// <inheritdoc/>
+    public Tensor<T> TensorBroadcastMultiply<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+
+        // Fast path: same shapes - use regular TensorMultiply
+        if (a.Shape.SequenceEqual(b.Shape))
+        {
+            return TensorMultiply(a, b);
+        }
+
+        // General case: fallback to CPU which uses Tensor.BroadcastMultiply
+        return _cpuFallback.TensorBroadcastMultiply(a, b);
+    }
+
     private Tensor<float> Conv2DBiasAddGpu(Tensor<float> input, Tensor<float> bias)
     {
         try

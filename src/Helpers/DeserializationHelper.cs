@@ -265,14 +265,15 @@ public static class DeserializationHelper
         else if (genericDef == typeof(ConvolutionalLayer<>))
         {
             // ConvolutionalLayer(int inputDepth, int outputDepth, int kernelSize, int inputHeight, int inputWidth, int stride, int padding, IActivationFunction<T>?)
-            int kernelSize = additionalParams?.TryGetValue("FilterSize", out var fs) == true ? (int)fs : 3;
-            int stride = additionalParams?.TryGetValue("Stride", out var s) == true ? (int)s : 1;
-            int padding = additionalParams?.TryGetValue("Padding", out var p) == true ? (int)p : 0;
-            // inputShape format: [height, width, depth]
-            int inputDepth = inputShape.Length > 2 ? inputShape[2] : inputShape[0];
-            int inputHeight = inputShape.Length > 0 ? inputShape[0] : 1;
-            int inputWidth = inputShape.Length > 1 ? inputShape[1] : 1;
-            int outputDepth = outputShape[0];
+            int kernelSize = TryGetInt(additionalParams, "FilterSize") ?? 3;
+            int stride = TryGetInt(additionalParams, "Stride") ?? 1;
+            int padding = TryGetInt(additionalParams, "Padding") ?? 0;
+            // inputShape format: [batch, depth, height, width] (NCHW format)
+            int inputDepth = inputShape.Length > 1 ? inputShape[1] : inputShape[0];
+            int inputHeight = inputShape.Length > 2 ? inputShape[2] : 1;
+            int inputWidth = inputShape.Length > 3 ? inputShape[3] : 1;
+            // outputShape format: [batch, depth, height, width] (NCHW format)
+            int outputDepth = outputShape.Length > 1 ? outputShape[1] : outputShape[0];
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType });
@@ -285,14 +286,13 @@ public static class DeserializationHelper
         else if (genericDef == typeof(PoolingLayer<>))
         {
             // PoolingLayer(int inputDepth, int inputHeight, int inputWidth, int poolSize, int stride, PoolingType type)
-            int poolSize = additionalParams?.TryGetValue("PoolSize", out var ps) == true ? (int)ps : 2;
-            int stride = additionalParams?.TryGetValue("Stride", out var s) == true ? (int)s : 2;
-            PoolingType poolingType = additionalParams?.TryGetValue("PoolingType", out var pt) == true
-                ? (PoolingType)pt : PoolingType.Max;
-            // inputShape format: [height, width, depth]
-            int inputDepth = inputShape.Length > 2 ? inputShape[2] : inputShape[0];
-            int inputHeight = inputShape.Length > 0 ? inputShape[0] : 1;
-            int inputWidth = inputShape.Length > 1 ? inputShape[1] : 1;
+            int poolSize = TryGetInt(additionalParams, "PoolSize") ?? 2;
+            int stride = TryGetInt(additionalParams, "Stride") ?? 2;
+            PoolingType poolingType = TryGetEnum<PoolingType>(additionalParams, "PoolingType") ?? PoolingType.Max;
+            // inputShape format: [batch, depth, height, width] (NCHW format)
+            int inputDepth = inputShape.Length > 1 ? inputShape[1] : inputShape[0];
+            int inputHeight = inputShape.Length > 2 ? inputShape[2] : 1;
+            int inputWidth = inputShape.Length > 3 ? inputShape[3] : 1;
 
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(PoolingType) });
             if (ctor is null)
@@ -300,6 +300,99 @@ public static class DeserializationHelper
                 throw new InvalidOperationException($"Cannot find PoolingLayer constructor.");
             }
             instance = ctor.Invoke(new object[] { inputDepth, inputHeight, inputWidth, poolSize, stride, poolingType });
+        }
+        else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.MaxPoolingLayer<>) ||
+                 (openGenericType.FullName != null && openGenericType.FullName.Contains("NeuralNetworks.Layers.MaxPoolingLayer")))
+        {
+            // MaxPoolingLayer(int[] inputShape, int poolSize, int strides)
+            int poolSize = TryGetInt(additionalParams, "PoolSize") ?? 2;
+            int strides = TryGetInt(additionalParams, "Strides") ?? 2;
+            // inputShape format for MaxPoolingLayer: [channels, height, width]
+            int channels = inputShape.Length > 1 ? inputShape[1] : inputShape[0];
+            int height = inputShape.Length > 2 ? inputShape[2] : 1;
+            int width = inputShape.Length > 3 ? inputShape[3] : 1;
+            int[] layerInputShape = new int[] { channels, height, width };
+
+            var ctor = type.GetConstructor(new Type[] { typeof(int[]), typeof(int), typeof(int) });
+            if (ctor is null)
+            {
+                throw new InvalidOperationException($"Cannot find MaxPoolingLayer constructor.");
+            }
+            instance = ctor.Invoke(new object[] { layerInputShape, poolSize, strides });
+        }
+        else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.DenseBlock<>) ||
+                 (openGenericType.FullName != null && openGenericType.FullName.Contains("NeuralNetworks.Layers.DenseBlock")))
+        {
+            // DenseBlock(int inputChannels, int numLayers, int growthRate, int inputHeight, int inputWidth, double bnMomentum = 0.1)
+            int inputChannels = TryGetInt(additionalParams, "InputChannels") ?? (inputShape.Length > 1 ? inputShape[1] : inputShape[0]);
+            int numLayers = TryGetInt(additionalParams, "NumLayers") ?? 4;
+            int growthRate = TryGetInt(additionalParams, "GrowthRate") ?? 32;
+            int inputHeight = inputShape.Length > 2 ? inputShape[2] : 1;
+            int inputWidth = inputShape.Length > 3 ? inputShape[3] : 1;
+            double bnMomentum = TryGetDouble(additionalParams, "BnMomentum") ?? 0.1;
+
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(double) });
+            if (ctor is null)
+            {
+                throw new InvalidOperationException($"Cannot find DenseBlock constructor.");
+            }
+            instance = ctor.Invoke(new object[] { inputChannels, numLayers, growthRate, inputHeight, inputWidth, bnMomentum });
+        }
+        else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.InvertedResidualBlock<>) ||
+                 (openGenericType.FullName != null && openGenericType.FullName.Contains("NeuralNetworks.Layers.InvertedResidualBlock")))
+        {
+            // InvertedResidualBlock(int inChannels, int outChannels, int inputHeight, int inputWidth, int expansionRatio, int stride, bool useSE, int seRatio, IActivationFunction<T>?)
+            int inChannels = TryGetInt(additionalParams, "InChannels") ?? (inputShape.Length > 1 ? inputShape[1] : inputShape[0]);
+            int outChannels = TryGetInt(additionalParams, "OutChannels") ?? (outputShape.Length > 1 ? outputShape[1] : outputShape[0]);
+            int inputHeight = inputShape.Length > 2 ? inputShape[2] : 1;
+            int inputWidth = inputShape.Length > 3 ? inputShape[3] : 1;
+            int expansionRatio = TryGetInt(additionalParams, "ExpansionRatio") ?? 6;
+            int stride = TryGetInt(additionalParams, "Stride") ?? 1;
+            bool useSE = TryGetBool(additionalParams, "UseSE") ?? false;
+            int seRatio = TryGetInt(additionalParams, "SERatio") ?? 4;
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(bool), typeof(int), activationFuncType });
+            if (ctor is null)
+            {
+                throw new InvalidOperationException($"Cannot find InvertedResidualBlock constructor.");
+            }
+            instance = ctor.Invoke(new object?[] { inChannels, outChannels, inputHeight, inputWidth, expansionRatio, stride, useSE, seRatio, null });
+        }
+        else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.TransitionLayer<>) ||
+                 (openGenericType.FullName != null && openGenericType.FullName.Contains("NeuralNetworks.Layers.TransitionLayer")))
+        {
+            // TransitionLayer(int inputChannels, int inputHeight, int inputWidth, double compressionFactor = 0.5)
+            int inputChannels = TryGetInt(additionalParams, "InputChannels") ?? (inputShape.Length > 1 ? inputShape[1] : inputShape[0]);
+            int inputHeight = inputShape.Length > 2 ? inputShape[2] : 1;
+            int inputWidth = inputShape.Length > 3 ? inputShape[3] : 1;
+            // Calculate compression factor from input and output channels
+            int outputChannels = TryGetInt(additionalParams, "OutputChannels") ?? (outputShape.Length > 1 ? outputShape[1] : outputShape[0]);
+            double compressionFactor = inputChannels > 0 ? (double)outputChannels / inputChannels : 0.5;
+
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double) });
+            if (ctor is null)
+            {
+                throw new InvalidOperationException($"Cannot find TransitionLayer constructor.");
+            }
+            instance = ctor.Invoke(new object[] { inputChannels, inputHeight, inputWidth, compressionFactor });
+        }
+        else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.AdaptiveAvgPoolingLayer<>) ||
+                 (openGenericType.FullName != null && openGenericType.FullName.Contains("NeuralNetworks.Layers.AdaptiveAvgPoolingLayer")))
+        {
+            // AdaptiveAvgPoolingLayer(int inputChannels, int inputHeight, int inputWidth, int outputHeight = 1, int outputWidth = 1)
+            int inputChannels = inputShape.Length > 1 ? inputShape[1] : inputShape[0];
+            int inputHeight = inputShape.Length > 2 ? inputShape[2] : 1;
+            int inputWidth = inputShape.Length > 3 ? inputShape[3] : 1;
+            int outputHeight = outputShape.Length > 2 ? outputShape[2] : 1;
+            int outputWidth = outputShape.Length > 3 ? outputShape[3] : 1;
+
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int) });
+            if (ctor is null)
+            {
+                throw new InvalidOperationException($"Cannot find AdaptiveAvgPoolingLayer constructor.");
+            }
+            instance = ctor.Invoke(new object[] { inputChannels, inputHeight, inputWidth, outputHeight, outputWidth });
         }
         else if (genericDef == typeof(ActivationLayer<>))
         {
@@ -675,6 +768,18 @@ public static class DeserializationHelper
             if (value is bool b)
                 return b;
             if (bool.TryParse(value.ToString() ?? string.Empty, out bool parsed))
+                return parsed;
+        }
+        return null;
+    }
+
+    private static TEnum? TryGetEnum<TEnum>(Dictionary<string, object>? parameters, string key) where TEnum : struct, Enum
+    {
+        if (parameters != null && parameters.TryGetValue(key, out var value) && value != null)
+        {
+            if (value is TEnum e)
+                return e;
+            if (Enum.TryParse<TEnum>(value.ToString() ?? string.Empty, out TEnum parsed))
                 return parsed;
         }
         return null;

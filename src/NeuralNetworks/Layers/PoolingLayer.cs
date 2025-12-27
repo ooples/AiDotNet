@@ -646,4 +646,17 @@ public class PoolingLayer<T> : LayerBase<T>
             return InputShape != null && InputShape.Length > 0;
         }
     }
+
+    /// <summary>
+    /// Returns layer-specific metadata for serialization purposes.
+    /// </summary>
+    /// <returns>A dictionary of metadata key-value pairs including pool size, stride, and pooling type.</returns>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["PoolSize"] = PoolSize.ToString();
+        metadata["Stride"] = Stride.ToString();
+        metadata["PoolingType"] = Type.ToString();
+        return metadata;
+    }
 }

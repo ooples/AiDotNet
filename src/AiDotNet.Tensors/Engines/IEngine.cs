@@ -1706,6 +1706,22 @@ public interface IEngine
     Tensor<T> TensorBroadcastAdd<T>(Tensor<T> a, Tensor<T> b);
 
     /// <summary>
+    /// Multiplies two tensors element-wise with NumPy-style broadcasting.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor.</param>
+    /// <param name="b">The second tensor (will be broadcast to match a if needed).</param>
+    /// <returns>A new tensor containing the element-wise product with broadcasting.</returns>
+    /// <remarks>
+    /// <para>
+    /// Broadcasting allows tensors of different shapes to be multiplied together by automatically
+    /// expanding the smaller tensor. For example, [B,H,W,C] * [B,1,1,C] broadcasts the [B,1,1,C]
+    /// tensor across the spatial dimensions.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorBroadcastMultiply<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
     /// Adds multiple tensors element-wise in a single optimized operation.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>

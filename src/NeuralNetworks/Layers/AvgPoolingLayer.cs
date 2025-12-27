@@ -66,6 +66,11 @@ public class AvgPoolingLayer<T> : LayerBase<T>
     private int[]? _lastOutputShape;
 
     /// <summary>
+    /// Tracks whether a batch dimension was added during the forward pass.
+    /// </summary>
+    private bool _addedBatchDimension;
+
+    /// <summary>
     /// Creates a new average pooling layer with the specified parameters.
     /// </summary>
     /// <param name="inputShape">The shape of the input data (channels, height, width).</param>
@@ -143,23 +148,44 @@ public class AvgPoolingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        if (input.Shape.Length != 3)
-            throw new ArgumentException("Input tensor must have 3 dimensions (channels, height, width)");
+        // Support both 3D [C, H, W] and 4D [B, C, H, W] input
+        if (input.Shape.Length != 3 && input.Shape.Length != 4)
+            throw new ArgumentException("Input tensor must have 3 dimensions (channels, height, width) or 4 dimensions (batch, channels, height, width)");
 
         // Store input for autodiff backward pass
         _lastInput = input;
 
-        // Reshape to 4D [1, C, H, W] for Engine
-        var input4D = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2]);
+        Tensor<T> input4D;
+        if (input.Shape.Length == 3)
+        {
+            // Add batch dimension: [C, H, W] -> [1, C, H, W]
+            _addedBatchDimension = true;
+            input4D = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2]);
+        }
+        else
+        {
+            // Already 4D: [B, C, H, W]
+            _addedBatchDimension = false;
+            input4D = input;
+        }
 
-        // Use GPU-accelerated AvgPool2D via Engine
+        // Use Engine's GPU-accelerated AvgPool2D (operates on 4D); return shape matches input rank (3D or 4D)
         var output4D = Engine.AvgPool2D(input4D, PoolSize, Strides, padding: 0);
 
-        // Reshape back to 3D
-        var output = output4D.Reshape(OutputShape);
-        _lastOutputShape = OutputShape;
-
-        return output;
+        // Return with matching dimensions
+        if (_addedBatchDimension)
+        {
+            // Remove batch dimension: [1, C, H, W] -> [C, H, W]
+            var output = output4D.Reshape(OutputShape);
+            _lastOutputShape = OutputShape;
+            return output;
+        }
+        else
+        {
+            // Keep 4D: [B, C, outH, outW]
+            _lastOutputShape = output4D.Shape;
+            return output4D;
+        }
     }
 
     /// <summary>
@@ -196,22 +222,36 @@ public class AvgPoolingLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        if (outputGradient.Shape.Length != 3)
-            throw new ArgumentException("Output gradient tensor must have 3 dimensions (channels, height, width)");
+        // Support both 3D and 4D gradients (matching forward pass)
+        if (outputGradient.Shape.Length != 3 && outputGradient.Shape.Length != 4)
+            throw new ArgumentException("Output gradient tensor must have 3 or 4 dimensions");
 
-        // Reshape gradient to 4D [1, C, H, W]
-        var gradient4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
+        Tensor<T> gradient4D;
+        int[] inputShape4D;
 
-        // Prepare parameters for Engine operation
-        var inputShape4D = new int[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2] };
+        if (outputGradient.Shape.Length == 3)
+        {
+            // Reshape to 4D: [C, H, W] -> [1, C, H, W]
+            gradient4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
+            inputShape4D = new int[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2] };
+        }
+        else
+        {
+            // Already 4D
+            gradient4D = outputGradient;
+            inputShape4D = _lastInput.Shape;
+        }
+
         var poolSizeArr = new int[] { PoolSize, PoolSize };
         var strideArr = new int[] { Strides, Strides };
 
-        // Use GPU-accelerated AvgPool2DBackward via Engine
+        // Use GPU-accelerated AvgPool2DBackward via Engine (operates on 4D tensors internally; result is reshaped to match the input dimensions)
         var inputGradient4D = Engine.AvgPool2DBackward(gradient4D, inputShape4D, poolSizeArr, strideArr);
 
-        // Reshape back to 3D
-        return inputGradient4D.Reshape(_lastInput.Shape);
+        // Return with matching dimensions
+        return _addedBatchDimension 
+            ? inputGradient4D.Reshape(_lastInput.Shape) 
+            : inputGradient4D;
     }
 
     /// <summary>
@@ -233,10 +273,24 @@ public class AvgPoolingLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // The layer uses 3D tensors (channels, height, width), but TensorOperations.AvgPool2D
-        // expects 4D tensors (batch, channels, height, width). We add a batch dimension of 1.
-        var input4D = _lastInput.Reshape(new int[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2] });
-        var gradient4D = outputGradient.Reshape(new int[] { 1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2] });
+        // Handle both 3D and 4D input
+        Tensor<T> input4D;
+        Tensor<T> gradient4D;
+
+        if (_lastInput.Shape.Length == 3)
+        {
+            // Reshape to 4D: [C, H, W] -> [1, C, H, W]
+            input4D = _lastInput.Reshape(new int[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2] });
+            gradient4D = outputGradient.Shape.Length == 3
+                ? outputGradient.Reshape(new int[] { 1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2] })
+                : outputGradient;
+        }
+        else
+        {
+            // Already 4D
+            input4D = _lastInput;
+            gradient4D = outputGradient;
+        }
 
         // Convert input to computation node
         var inputNode = Autodiff.TensorOperations<T>.Variable(input4D, "input", requiresGradient: true);
@@ -290,9 +344,9 @@ public class AvgPoolingLayer<T> : LayerBase<T>
             }
         }
 
-        // Extract input gradient and reshape back to 3D
+        // Extract input gradient and reshape back to original dimensions
         var inputGrad4D = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-        return inputGrad4D.Reshape(_lastInput.Shape);
+        return _addedBatchDimension ? inputGrad4D.Reshape(_lastInput.Shape) : inputGrad4D;
     }
 
     /// <summary>
@@ -404,6 +458,7 @@ public class AvgPoolingLayer<T> : LayerBase<T>
         // Clear cached values from forward pass
         _lastInput = null;
         _lastOutputShape = null;
+        _addedBatchDimension = false;
     }
 
     /// <summary>
