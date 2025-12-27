@@ -24,6 +24,16 @@ public abstract class SSLMethodBase<T> : ISSLMethod<T>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// Gets the global execution engine for vector operations and GPU/CPU acceleration.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The engine handles hardware-accelerated computations.
+    /// It automatically selects the best available hardware (GPU if available, otherwise CPU)
+    /// for matrix operations, making SSL training much faster.</para>
+    /// </remarks>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// The main encoder neural network.
     /// </summary>
     protected readonly INeuralNetwork<T> _encoder;
@@ -222,6 +232,13 @@ public abstract class SSLMethodBase<T> : ISSLMethod<T>
             throw new ArgumentNullException(nameof(parameters));
         }
 
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) does not match expected count ({ParameterCount}).",
+                nameof(parameters));
+        }
+
         int offset = 0;
 
         // Set encoder parameters
@@ -400,15 +417,18 @@ public abstract class SSLMethodBase<T> : ISSLMethod<T>
 
         for (int i = 0; i < batchSize; i++)
         {
-            // Compute L2 norm
-            T sumSquared = NumOps.Zero;
+            // Use Engine for accelerated vector operations when available
+            var row = new T[dim];
             for (int j = 0; j < dim; j++)
             {
-                var val = tensor[i, j];
-                sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(val, val));
+                row[j] = tensor[i, j];
             }
 
-            var norm = NumOps.Sqrt(NumOps.Add(sumSquared, NumOps.FromDouble(1e-8)));
+            var vec = new Vector<T>(row);
+
+            // Compute L2 norm using engine's dot product
+            var normSquared = Engine.DotProduct(vec, vec);
+            var norm = NumOps.Sqrt(NumOps.Add(normSquared, NumOps.FromDouble(1e-8)));
 
             // Normalize
             for (int j = 0; j < dim; j++)
@@ -418,5 +438,138 @@ public abstract class SSLMethodBase<T> : ISSLMethod<T>
         }
 
         return new Tensor<T>(result, [batchSize, dim]);
+    }
+
+    /// <summary>
+    /// Computes matrix multiplication with engine-accelerated dot products.
+    /// </summary>
+    /// <param name="a">First matrix [M, K].</param>
+    /// <param name="b">Second matrix [K, N].</param>
+    /// <returns>Result matrix [M, N].</returns>
+    protected virtual Tensor<T> MatMul(Tensor<T> a, Tensor<T> b)
+    {
+        var m = a.Shape[0];
+        var k = a.Shape[1];
+        var n = b.Shape[1];
+        var result = new T[m * n];
+
+        // Transpose b for better cache locality: [K, N] -> column vectors of length K
+        for (int i = 0; i < m; i++)
+        {
+            // Extract row i from a
+            var rowA = new T[k];
+            for (int j = 0; j < k; j++)
+            {
+                rowA[j] = a[i, j];
+            }
+            var vecA = new Vector<T>(rowA);
+
+            for (int j = 0; j < n; j++)
+            {
+                // Extract column j from b
+                var colB = new T[k];
+                for (int l = 0; l < k; l++)
+                {
+                    colB[l] = b[l, j];
+                }
+                var vecB = new Vector<T>(colB);
+
+                // Use engine for accelerated dot product
+                result[i * n + j] = Engine.DotProduct(vecA, vecB);
+            }
+        }
+
+        return new Tensor<T>(result, [m, n]);
+    }
+
+    /// <summary>
+    /// Computes similarity matrix between two sets of embeddings.
+    /// </summary>
+    /// <param name="embeddings1">First set of embeddings [N, D].</param>
+    /// <param name="embeddings2">Second set of embeddings [M, D].</param>
+    /// <param name="normalize">Whether to L2-normalize before computing similarity.</param>
+    /// <returns>Similarity matrix [N, M].</returns>
+    protected virtual Tensor<T> ComputeSimilarityMatrix(
+        Tensor<T> embeddings1,
+        Tensor<T> embeddings2,
+        bool normalize = true)
+    {
+        var n = embeddings1.Shape[0];
+        var m = embeddings2.Shape[0];
+        var d = embeddings1.Shape[1];
+
+        var e1 = normalize ? L2Normalize(embeddings1) : embeddings1;
+        var e2 = normalize ? L2Normalize(embeddings2) : embeddings2;
+
+        var result = new T[n * m];
+
+        // Compute dot products using engine
+        for (int i = 0; i < n; i++)
+        {
+            var row1 = new T[d];
+            for (int k = 0; k < d; k++)
+            {
+                row1[k] = e1[i, k];
+            }
+            var vec1 = new Vector<T>(row1);
+
+            for (int j = 0; j < m; j++)
+            {
+                var row2 = new T[d];
+                for (int k = 0; k < d; k++)
+                {
+                    row2[k] = e2[j, k];
+                }
+                var vec2 = new Vector<T>(row2);
+
+                result[i * m + j] = Engine.DotProduct(vec1, vec2);
+            }
+        }
+
+        return new Tensor<T>(result, [n, m]);
+    }
+
+    /// <summary>
+    /// Computes the pairwise squared distances between embeddings.
+    /// </summary>
+    /// <param name="embeddings">Embeddings [N, D].</param>
+    /// <returns>Distance matrix [N, N].</returns>
+    protected virtual Tensor<T> ComputePairwiseDistances(Tensor<T> embeddings)
+    {
+        var n = embeddings.Shape[0];
+        var d = embeddings.Shape[1];
+        var result = new T[n * n];
+
+        // ||a - b||^2 = ||a||^2 + ||b||^2 - 2 * a.b
+        // First compute norms using engine
+        var norms = new T[n];
+        for (int i = 0; i < n; i++)
+        {
+            var row = new T[d];
+            for (int j = 0; j < d; j++)
+            {
+                row[j] = embeddings[i, j];
+            }
+            var vec = new Vector<T>(row);
+            norms[i] = Engine.DotProduct(vec, vec);
+        }
+
+        // Compute similarity matrix using engine
+        var similarity = ComputeSimilarityMatrix(embeddings, embeddings, normalize: false);
+
+        // Compute distances: ||a||^2 + ||b||^2 - 2 * a.b
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                var dist = NumOps.Subtract(
+                    NumOps.Add(norms[i], norms[j]),
+                    NumOps.Multiply(NumOps.FromDouble(2.0), similarity[i, j]));
+                // Clamp negative values due to floating point errors
+                result[i * n + j] = NumOps.GreaterThan(dist, NumOps.Zero) ? dist : NumOps.Zero;
+            }
+        }
+
+        return new Tensor<T>(result, [n, n]);
     }
 }

@@ -128,7 +128,7 @@ public class LinearEvaluator<T>
 
                 // Compute loss and gradients
                 var (loss, gradWeights, gradBias) = ComputeCrossEntropyLossAndGrad(
-                    logits, batchLabels);
+                    logits, batchLabels, representations);
 
                 epochLoss = NumOps.Add(epochLoss, loss);
 
@@ -261,12 +261,22 @@ public class LinearEvaluator<T>
     }
 
     private (T loss, T[] gradWeights, T[] gradBias) ComputeCrossEntropyLossAndGrad(
-        Tensor<T> logits, int[] labels)
+        Tensor<T> logits, int[] labels, Tensor<T> representations)
     {
         var batchSize = logits.Shape[0];
         var gradWeights = new T[_inputDim * _numClasses];
         var gradBias = new T[_numClasses];
         T totalLoss = NumOps.Zero;
+
+        // Initialize gradients to zero
+        for (int i = 0; i < gradWeights.Length; i++)
+        {
+            gradWeights[i] = NumOps.Zero;
+        }
+        for (int i = 0; i < gradBias.Length; i++)
+        {
+            gradBias[i] = NumOps.Zero;
+        }
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -296,7 +306,7 @@ public class LinearEvaluator<T>
             totalLoss = NumOps.Subtract(totalLoss,
                 NumOps.Log(NumOps.Add(trueProb, NumOps.FromDouble(1e-8))));
 
-            // Gradients (simplified)
+            // Compute gradients: dL/dW = (prob - target) * input, dL/db = (prob - target)
             for (int c = 0; c < _numClasses; c++)
             {
                 var grad = probs[c];
@@ -305,11 +315,26 @@ public class LinearEvaluator<T>
                     grad = NumOps.Subtract(grad, NumOps.One);
                 }
 
+                // Accumulate bias gradients
                 gradBias[c] = NumOps.Add(gradBias[c], grad);
+
+                // Accumulate weight gradients: dL/dW[d,c] = grad * input[d]
+                for (int d = 0; d < _inputDim; d++)
+                {
+                    var inputVal = representations[b, d];
+                    gradWeights[d * _numClasses + c] = NumOps.Add(
+                        gradWeights[d * _numClasses + c],
+                        NumOps.Multiply(grad, inputVal));
+                }
             }
         }
 
+        // Scale gradients by 1/batchSize
         var scale = NumOps.FromDouble(1.0 / batchSize);
+        for (int i = 0; i < gradWeights.Length; i++)
+        {
+            gradWeights[i] = NumOps.Multiply(gradWeights[i], scale);
+        }
         for (int i = 0; i < gradBias.Length; i++)
         {
             gradBias[i] = NumOps.Multiply(gradBias[i], scale);

@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.SelfSupervisedLearning.Core.Interfaces;
 
 namespace AiDotNet.SelfSupervisedLearning.Infrastructure.ProjectorHeads;
@@ -27,6 +28,11 @@ namespace AiDotNet.SelfSupervisedLearning.Infrastructure.ProjectorHeads;
 public class MLPProjector<T> : IProjectorHead<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>
+    /// Gets the global execution engine for vector operations and GPU/CPU acceleration.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
 
     private readonly int _inputDim;
     private readonly int _hiddenDim;
@@ -368,16 +374,30 @@ public class MLPProjector<T> : IProjectorHead<T>
 
         var result = new T[batchSize * outputDim];
 
+        // Use Engine-accelerated dot products for each row x column combination
         for (int b = 0; b < batchSize; b++)
         {
+            // Extract input row
+            var inputRow = new T[inputDim];
+            for (int i = 0; i < inputDim; i++)
+            {
+                inputRow[i] = input[b, i];
+            }
+            var inputVec = new Vector<T>(inputRow);
+
             for (int o = 0; o < outputDim; o++)
             {
-                T sum = bias[o];
+                // Extract weight column
+                var weightCol = new T[inputDim];
                 for (int i = 0; i < inputDim; i++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(input[b, i], weight[i, o]));
+                    weightCol[i] = weight[i, o];
                 }
-                result[b * outputDim + o] = sum;
+                var weightVec = new Vector<T>(weightCol);
+
+                // Use engine for accelerated dot product
+                var dot = Engine.DotProduct(inputVec, weightVec);
+                result[b * outputDim + o] = NumOps.Add(bias[o], dot);
             }
         }
 
@@ -521,7 +541,6 @@ public class MLPProjector<T> : IProjectorHead<T>
         var batchSize = outputGrad.Shape[0];
         var dim = outputGrad.Shape[1];
 
-        // Simplified backward pass - compute gradients
         var inputGrad = new T[batchSize * dim];
         var gammaGrad = new T[dim];
         var betaGrad = new T[dim];
@@ -529,6 +548,7 @@ public class MLPProjector<T> : IProjectorHead<T>
         // Compute mean and variance for normalization
         var mean = new T[dim];
         var variance = new T[dim];
+        var normalized = new T[batchSize * dim];
 
         for (int d = 0; d < dim; d++)
         {
@@ -551,29 +571,57 @@ public class MLPProjector<T> : IProjectorHead<T>
             variance[d] = NumOps.Divide(sum, NumOps.FromDouble(batchSize));
         }
 
-        // Compute gradients
+        // Precompute normalized values: x_norm = (x - mean) / std
         for (int d = 0; d < dim; d++)
         {
             var std = NumOps.Sqrt(NumOps.Add(variance[d], NumOps.FromDouble(_batchNormEpsilon)));
+            for (int b = 0; b < batchSize; b++)
+            {
+                normalized[b * dim + d] = NumOps.Divide(NumOps.Subtract(input[b, d], mean[d]), std);
+            }
+        }
 
-            // Beta gradient (sum of output gradients)
-            T betaSum = NumOps.Zero;
-            T gammaSum = NumOps.Zero;
+        // Compute parameter gradients and input gradient using full BatchNorm formula:
+        // dL/dx = (1/N) * γ * (1/σ) * [N * dL/dy - sum(dL/dy) - x_norm * sum(dL/dy * x_norm)]
+        var n = NumOps.FromDouble(batchSize);
+
+        for (int d = 0; d < dim; d++)
+        {
+            var std = NumOps.Sqrt(NumOps.Add(variance[d], NumOps.FromDouble(_batchNormEpsilon)));
+            var invStd = NumOps.Divide(NumOps.One, std);
+
+            // dL/dβ = sum(dL/dy)
+            T sumDy = NumOps.Zero;
+            // dL/dγ = sum(dL/dy * x_norm)
+            T sumDyXnorm = NumOps.Zero;
 
             for (int b = 0; b < batchSize; b++)
             {
-                betaSum = NumOps.Add(betaSum, outputGrad[b, d]);
-                var normalized = NumOps.Divide(NumOps.Subtract(input[b, d], mean[d]), std);
-                gammaSum = NumOps.Add(gammaSum, NumOps.Multiply(outputGrad[b, d], normalized));
+                var dy = outputGrad[b, d];
+                var xn = normalized[b * dim + d];
+                sumDy = NumOps.Add(sumDy, dy);
+                sumDyXnorm = NumOps.Add(sumDyXnorm, NumOps.Multiply(dy, xn));
             }
 
-            betaGrad[d] = betaSum;
-            gammaGrad[d] = gammaSum;
+            betaGrad[d] = sumDy;
+            gammaGrad[d] = sumDyXnorm;
 
-            // Input gradient (simplified)
+            // dL/dx = (γ / (N * σ)) * [N * dL/dy - sum(dL/dy) - x_norm * sum(dL/dy * x_norm)]
+            var scale = NumOps.Multiply(gamma[d], NumOps.Divide(invStd, n));
+
             for (int b = 0; b < batchSize; b++)
             {
-                inputGrad[b * dim + d] = NumOps.Divide(NumOps.Multiply(gamma[d], outputGrad[b, d]), std);
+                var dy = outputGrad[b, d];
+                var xn = normalized[b * dim + d];
+
+                // N * dL/dy - sum(dL/dy) - x_norm * sum(dL/dy * x_norm)
+                var term = NumOps.Subtract(
+                    NumOps.Subtract(
+                        NumOps.Multiply(n, dy),
+                        sumDy),
+                    NumOps.Multiply(xn, sumDyXnorm));
+
+                inputGrad[b * dim + d] = NumOps.Multiply(scale, term);
             }
         }
 
