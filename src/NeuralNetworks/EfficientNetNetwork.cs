@@ -324,18 +324,47 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
         writer.Write(_configuration.NumClasses);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Deserializes and validates network-specific configuration data.
+    /// </summary>
+    /// <param name="reader">The binary reader to read from.</param>
+    /// <exception cref="InvalidDataException">
+    /// Thrown when the serialized configuration does not match the current instance's configuration.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// This method performs validation-only deserialization. The serialized configuration values
+    /// are read and compared against the current instance's configuration to ensure compatibility.
+    /// </para>
+    /// <para>
+    /// <b>Design rationale:</b> The network's layer structure is created during construction based
+    /// on the configuration. Changing the configuration during deserialization would not recreate
+    /// the layers, leading to an inconsistent state. Therefore, deserialization requires that the
+    /// target instance was created with a matching configuration.
+    /// </para>
+    /// <para>
+    /// To load a model with a different configuration, create a new network instance with the
+    /// desired configuration, then call <see cref="NeuralNetworkBase{T}.Load"/> on that instance.
+    /// </para>
+    /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
+        // Read serialized configuration values
         var variant = (EfficientNetVariant)reader.ReadInt32();
         var inputChannels = reader.ReadInt32();
         var numClasses = reader.ReadInt32();
 
+        // Validate configuration matches - layer structure depends on these values
+        // and cannot be changed after construction
         if (variant != _configuration.Variant ||
             inputChannels != _configuration.InputChannels ||
             numClasses != _configuration.NumClasses)
         {
-            throw new InvalidDataException("Serialized EfficientNet configuration does not match current configuration.");
+            throw new InvalidDataException(
+                $"Serialized EfficientNet configuration (Variant={variant}, InputChannels={inputChannels}, " +
+                $"NumClasses={numClasses}) does not match current configuration " +
+                $"(Variant={_configuration.Variant}, InputChannels={_configuration.InputChannels}, " +
+                $"NumClasses={_configuration.NumClasses}). Create a new network with matching configuration to load this model.");
         }
     }
 
