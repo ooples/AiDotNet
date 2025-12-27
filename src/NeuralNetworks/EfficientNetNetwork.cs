@@ -578,7 +578,9 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
             Variant = _config.Variant,
             InputChannels = _config.InputChannels,
             NumClasses = _config.NumClasses,
-            MaxGradNorm = _config.MaxGradNorm
+            MaxGradNorm = _config.MaxGradNorm,
+            LossFunction = _lossFunction,
+            Optimizer = _optimizer
         });
     }
 

@@ -506,7 +506,9 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
             InputHeight = _config.InputHeight,
             InputWidth = _config.InputWidth,
             NumClasses = _config.NumClasses,
-            MaxGradNorm = _config.MaxGradNorm
+            MaxGradNorm = _config.MaxGradNorm,
+            LossFunction = _lossFunction,
+            Optimizer = _optimizer
         });
     }
 

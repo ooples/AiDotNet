@@ -480,7 +480,9 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
             NumClasses = _config.NumClasses,
             GrowthRate = _config.GrowthRate,
             CompressionFactor = _config.CompressionFactor,
-            MaxGradNorm = _config.MaxGradNorm
+            MaxGradNorm = _config.MaxGradNorm,
+            LossFunction = _lossFunction,
+            Optimizer = _optimizer
         });
     }
 
