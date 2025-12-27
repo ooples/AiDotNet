@@ -3740,4 +3740,49 @@ public static class LayerHelper<T>
             outputSize: numClasses,
             activationFunction: outputActivation);
     }
+
+    /// <summary>
+    /// Creates default layers for CLIP-style multimodal networks.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="projectionDim">The projection dimension for embeddings (default: 512).</param>
+    /// <returns>A collection of projection layers for CLIP fine-tuning.</returns>
+    /// <remarks>
+    /// <para>
+    /// CLIP uses pre-trained ONNX encoders for most of its work,
+    /// but these layers provide optional projection heads for fine-tuning or feature extraction.
+    /// </para>
+    /// <para><b>For Beginners:</b> CLIP has two main parts: an image encoder and a text encoder.
+    /// These pre-trained encoders are loaded from ONNX files. The projection layers here are
+    /// optional additions that can:
+    /// - Adapt the embeddings for specific tasks
+    /// - Allow fine-tuning on new domains
+    /// - Match embedding dimensions between different model variants
+    ///
+    /// If you're just using CLIP for inference (getting embeddings), you typically don't
+    /// need these layers. They're useful when you want to adapt CLIP for a specific task.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultClipLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int projectionDim = 512)
+    {
+        // CLIP typically uses 768 (ViT-L) or 512 (ViT-B) as embedding dimensions
+        int imageEmbeddingDim = architecture.ImageEmbeddingDim > 0 ? architecture.ImageEmbeddingDim : 768;
+        int textEmbeddingDim = architecture.TextEmbeddingDim > 0 ? architecture.TextEmbeddingDim : 512;
+
+        // Image projection head (optional, for fine-tuning)
+        // Projects image embeddings to the shared projection space
+        yield return new DenseLayer<T>(
+            inputSize: imageEmbeddingDim,
+            outputSize: projectionDim,
+            activationFunction: null); // Linear projection (no activation)
+
+        // Text projection head (optional, for fine-tuning)
+        // Projects text embeddings to the shared projection space
+        yield return new DenseLayer<T>(
+            inputSize: textEmbeddingDim,
+            outputSize: projectionDim,
+            activationFunction: null); // Linear projection (no activation)
+    }
 }
