@@ -17,6 +17,7 @@ public class DetectionVisualizer<T>
     private readonly INumericOperations<T> _numOps;
     private readonly VisualizationOptions _options;
     private readonly Dictionary<int, (byte R, byte G, byte B)> _classColors;
+    private readonly BitmapFont<T> _font;
 
     /// <summary>
     /// Creates a new detection visualizer.
@@ -26,6 +27,7 @@ public class DetectionVisualizer<T>
         _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         _options = options ?? new VisualizationOptions();
         _classColors = new Dictionary<int, (byte R, byte G, byte B)>();
+        _font = new BitmapFont<T>();
     }
 
     /// <summary>
@@ -174,63 +176,46 @@ public class DetectionVisualizer<T>
     private void DrawLabel(Tensor<T> image, int x, int y, string label,
         (byte R, byte G, byte B) color)
     {
-        int channels = image.Shape[1];
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        // Simple label background (8 pixels high per character, 6 wide)
-        int labelHeight = 18;
-        int labelWidth = label.Length * 8 + 4;
+        // Calculate font scale based on options
+        int scale = Math.Max(1, (int)_options.FontScale);
 
+        // Calculate label dimensions
+        int textWidth = _font.MeasureWidth(label) * scale;
+        int textHeight = BitmapFont<T>.CharHeight * scale;
+        int padding = 2 * scale;
+        int labelHeight = textHeight + padding * 2;
+        int labelWidth = textWidth + padding * 2;
+
+        // Position label above the bounding box
         int labelY = Math.Max(0, y - labelHeight);
         int labelX = Math.Max(0, x);
 
+        // Clamp to image bounds
+        if (labelX + labelWidth > width)
+            labelX = Math.Max(0, width - labelWidth);
+
         // Draw background
-        double r = color.R / 255.0;
-        double g = color.G / 255.0;
-        double b = color.B / 255.0;
+        double bgR = color.R / 255.0;
+        double bgG = color.G / 255.0;
+        double bgB = color.B / 255.0;
 
         for (int ly = labelY; ly < Math.Min(labelY + labelHeight, height); ly++)
         {
             for (int lx = labelX; lx < Math.Min(labelX + labelWidth, width); lx++)
             {
-                SetPixel(image, 0, ly, lx, r, g, b);
+                SetPixel(image, 0, ly, lx, bgR, bgG, bgB);
             }
         }
 
-        // Draw text (simplified: just white dots for now)
-        // In a real implementation, you'd use a bitmap font
-        DrawSimpleText(image, label, labelX + 2, labelY + 2);
-    }
+        // Calculate text color (white or black for contrast)
+        double luminance = 0.299 * bgR + 0.587 * bgG + 0.114 * bgB;
+        var textColor = luminance > 0.5 ? (0.0, 0.0, 0.0) : (1.0, 1.0, 1.0);
 
-    private void DrawSimpleText(Tensor<T> image, string text, int x, int y)
-    {
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        // Simple 5x7 font representation (just draw white rectangles for each char)
-        int charWidth = 6;
-        int charHeight = 10;
-
-        for (int i = 0; i < text.Length; i++)
-        {
-            int cx = x + i * charWidth;
-            if (cx >= width)
-                break;
-
-            // Draw a simple character representation (white rectangle)
-            for (int cy = y; cy < Math.Min(y + charHeight, height); cy++)
-            {
-                for (int cxp = cx; cxp < Math.Min(cx + charWidth - 1, width); cxp++)
-                {
-                    // Skip some pixels to make it look like text
-                    if (cy == y || cy == y + charHeight - 1)
-                    {
-                        SetPixel(image, 0, cy, cxp, 1.0, 1.0, 1.0);
-                    }
-                }
-            }
-        }
+        // Draw text using bitmap font
+        _font.DrawText(image, label, labelX + padding, labelY + padding, textColor, scale);
     }
 
     private void SetPixel(Tensor<T> image, int batch, int y, int x, double r, double g, double b)

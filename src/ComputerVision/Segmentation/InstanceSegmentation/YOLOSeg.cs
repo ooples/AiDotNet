@@ -4,6 +4,7 @@ using AiDotNet.ComputerVision.Detection.Necks;
 using AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 
@@ -184,10 +185,10 @@ public class YOLOSeg<T> : InstanceSegmenterBase<T>
                     double w = Math.Exp(GetTensorValue(rawPreds, 3, y, x)) * stride;
                     double h = Math.Exp(GetTensorValue(rawPreds, 4, y, x)) * stride;
 
-                    double x1 = Math.Clamp(cx - w / 2, 0, imageWidth);
-                    double y1 = Math.Clamp(cy - h / 2, 0, imageHeight);
-                    double x2 = Math.Clamp(cx + w / 2, 0, imageWidth);
-                    double y2 = Math.Clamp(cy + h / 2, 0, imageHeight);
+                    double x1 = MathHelper.Clamp(cx - w / 2, 0, imageWidth);
+                    double y1 = MathHelper.Clamp(cy - h / 2, 0, imageHeight);
+                    double x2 = MathHelper.Clamp(cx + w / 2, 0, imageWidth);
+                    double y2 = MathHelper.Clamp(cy + h / 2, 0, imageHeight);
 
                     if (x2 > x1 && y2 > y1)
                     {
@@ -286,8 +287,8 @@ public class YOLOSeg<T> : InstanceSegmenterBase<T>
                     double sampY = y1 + (ph + 0.5) * binH;
                     double sampX = x1 + (pw + 0.5) * binW;
 
-                    int fy = Math.Clamp((int)sampY, 0, featH - 1);
-                    int fx = Math.Clamp((int)sampX, 0, featW - 1);
+                    int fy = MathHelper.Clamp((int)sampY, 0, featH - 1);
+                    int fx = MathHelper.Clamp((int)sampX, 0, featW - 1);
 
                     output[0, c, ph, pw] = features[0, c, fy, fx];
                 }

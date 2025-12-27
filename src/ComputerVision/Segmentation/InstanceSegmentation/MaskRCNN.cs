@@ -3,6 +3,7 @@ using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
 using AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 
@@ -173,14 +174,14 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
 
                 double predX = anchorX + dx * anchorW;
                 double predY = anchorY + dy * anchorH;
-                double predW = anchorW * Math.Exp(Math.Clamp(dw, -4, 4));
-                double predH = anchorH * Math.Exp(Math.Clamp(dh, -4, 4));
+                double predW = anchorW * Math.Exp(MathHelper.Clamp(dw, -4, 4));
+                double predH = anchorH * Math.Exp(MathHelper.Clamp(dh, -4, 4));
 
                 // Convert to corner format and clip
-                double x1 = Math.Clamp(predX - predW / 2, 0, imageWidth);
-                double y1 = Math.Clamp(predY - predH / 2, 0, imageHeight);
-                double x2 = Math.Clamp(predX + predW / 2, 0, imageWidth);
-                double y2 = Math.Clamp(predY + predH / 2, 0, imageHeight);
+                double x1 = MathHelper.Clamp(predX - predW / 2, 0, imageWidth);
+                double y1 = MathHelper.Clamp(predY - predH / 2, 0, imageHeight);
+                double x2 = MathHelper.Clamp(predX + predW / 2, 0, imageWidth);
+                double y2 = MathHelper.Clamp(predY + predH / 2, 0, imageHeight);
 
                 if (x2 > x1 && y2 > y1)
                 {
@@ -340,12 +341,20 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
         int maskH = mask.Shape[0];
         int maskW = mask.Shape[1];
 
+        // Guard against degenerate boxes (zero height or width)
+        int boxH = y2 - y1;
+        int boxW = x2 - x1;
+        if (boxH <= 0 || boxW <= 0)
+        {
+            return;
+        }
+
         for (int y = y1; y < y2; y++)
         {
             for (int x = x1; x < x2; x++)
             {
-                int my = (int)((double)(y - y1) / (y2 - y1) * maskH);
-                int mx = (int)((double)(x - x1) / (x2 - x1) * maskW);
+                int my = (int)((double)(y - y1) / boxH * maskH);
+                int mx = (int)((double)(x - x1) / boxW * maskW);
 
                 my = Math.Min(my, maskH - 1);
                 mx = Math.Min(mx, maskW - 1);

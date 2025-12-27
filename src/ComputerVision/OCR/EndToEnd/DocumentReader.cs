@@ -2,6 +2,7 @@ using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.TextDetection;
 using AiDotNet.ComputerVision.OCR.Recognition;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.ComputerVision.OCR.EndToEnd;
 
@@ -163,7 +164,7 @@ public class DocumentReader<T>
 
                         // Simple contrast enhancement
                         val = (val - 128) * 1.2 + 128;
-                        val = Math.Clamp(val, 0, 255);
+                        val = MathHelper.Clamp(val, 0, 255);
 
                         result[b, c, h, w] = _numOps.FromDouble(val);
                     }

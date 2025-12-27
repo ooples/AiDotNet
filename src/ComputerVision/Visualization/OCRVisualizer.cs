@@ -1,6 +1,7 @@
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.OCR;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.ComputerVision.Visualization;
 
@@ -16,6 +17,7 @@ public class OCRVisualizer<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly VisualizationOptions _options;
+    private readonly BitmapFont<T> _font;
 
     // Default colors
     private readonly (byte R, byte G, byte B) _textBoxColor = (0, 255, 0); // Green
@@ -27,6 +29,7 @@ public class OCRVisualizer<T>
     {
         _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         _options = options ?? new VisualizationOptions();
+        _font = new BitmapFont<T>();
     }
 
     /// <summary>
@@ -334,23 +337,43 @@ public class OCRVisualizer<T>
         int x = Math.Max(0, (int)_numOps.ToDouble(box.X1));
         int y = Math.Max(0, (int)_numOps.ToDouble(box.Y1));
 
-        int labelHeight = 16;
-        int labelWidth = Math.Min(label.Length * 7 + 4, width - x);
+        // Calculate font scale based on options
+        int scale = Math.Max(1, (int)_options.FontScale);
 
+        // Calculate label dimensions
+        int textWidth = _font.MeasureWidth(label) * scale;
+        int textHeight = BitmapFont<T>.CharHeight * scale;
+        int padding = 2 * scale;
+        int labelHeight = textHeight + padding * 2;
+        int labelWidth = Math.Min(textWidth + padding * 2, width - x);
+
+        // Position label above the bounding box
         int labelY = Math.Max(0, y - labelHeight);
+        int labelX = x;
 
-        double r = color.R / 255.0;
-        double g = color.G / 255.0;
-        double b = color.B / 255.0;
+        // Clamp to image bounds
+        if (labelX + labelWidth > width)
+            labelX = Math.Max(0, width - labelWidth);
 
         // Draw background
+        double bgR = color.R / 255.0 * 0.8;
+        double bgG = color.G / 255.0 * 0.8;
+        double bgB = color.B / 255.0 * 0.8;
+
         for (int ly = labelY; ly < Math.Min(labelY + labelHeight, height); ly++)
         {
-            for (int lx = x; lx < Math.Min(x + labelWidth, width); lx++)
+            for (int lx = labelX; lx < Math.Min(labelX + labelWidth, width); lx++)
             {
-                SetPixel(image, 0, ly, lx, r * 0.8, g * 0.8, b * 0.8);
+                SetPixel(image, 0, ly, lx, bgR, bgG, bgB);
             }
         }
+
+        // Calculate text color (white or black for contrast)
+        double luminance = 0.299 * bgR + 0.587 * bgG + 0.114 * bgB;
+        var textColor = luminance > 0.5 ? (0.0, 0.0, 0.0) : (1.0, 1.0, 1.0);
+
+        // Draw text using bitmap font
+        _font.DrawText(image, label, labelX + padding, labelY + padding, textColor, scale);
     }
 
     private void DrawReadingOrder(Tensor<T> image, DocumentLayoutResult<T> layout)
@@ -427,11 +450,11 @@ public class OCRVisualizer<T>
             return;
 
         if (channels >= 1)
-            image[batch, 0, y, x] = _numOps.FromDouble(Math.Clamp(r, 0, 1));
+            image[batch, 0, y, x] = _numOps.FromDouble(MathHelper.Clamp(r, 0, 1));
         if (channels >= 2)
-            image[batch, 1, y, x] = _numOps.FromDouble(Math.Clamp(g, 0, 1));
+            image[batch, 1, y, x] = _numOps.FromDouble(MathHelper.Clamp(g, 0, 1));
         if (channels >= 3)
-            image[batch, 2, y, x] = _numOps.FromDouble(Math.Clamp(b, 0, 1));
+            image[batch, 2, y, x] = _numOps.FromDouble(MathHelper.Clamp(b, 0, 1));
     }
 
     private Tensor<T> CloneImage(Tensor<T> image)

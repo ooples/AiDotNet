@@ -1,3 +1,5 @@
+using System.Net.Http;
+
 namespace AiDotNet.ComputerVision.Weights;
 
 /// <summary>

@@ -18,6 +18,7 @@ public class MaskVisualizer<T>
     private readonly VisualizationOptions _options;
     private readonly DetectionVisualizer<T> _detectionVisualizer;
     private readonly Dictionary<int, (byte R, byte G, byte B)> _instanceColors;
+    private readonly BitmapFont<T> _font;
 
     /// <summary>
     /// Creates a new mask visualizer.
@@ -28,6 +29,7 @@ public class MaskVisualizer<T>
         _options = options ?? new VisualizationOptions();
         _detectionVisualizer = new DetectionVisualizer<T>(_options);
         _instanceColors = new Dictionary<int, (byte R, byte G, byte B)>();
+        _font = new BitmapFont<T>();
     }
 
     /// <summary>
@@ -302,24 +304,43 @@ public class MaskVisualizer<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        int labelHeight = 18;
-        int labelWidth = label.Length * 8 + 4;
+        // Calculate font scale based on options
+        int scale = Math.Max(1, (int)_options.FontScale);
 
+        // Calculate label dimensions
+        int textWidth = _font.MeasureWidth(label) * scale;
+        int textHeight = BitmapFont<T>.CharHeight * scale;
+        int padding = 2 * scale;
+        int labelHeight = textHeight + padding * 2;
+        int labelWidth = textWidth + padding * 2;
+
+        // Position label above the bounding box
         int labelY = Math.Max(0, y - labelHeight);
         int labelX = Math.Max(0, x);
 
-        double r = color.R / 255.0;
-        double g = color.G / 255.0;
-        double b = color.B / 255.0;
+        // Clamp to image bounds
+        if (labelX + labelWidth > width)
+            labelX = Math.Max(0, width - labelWidth);
 
         // Draw background
+        double bgR = color.R / 255.0;
+        double bgG = color.G / 255.0;
+        double bgB = color.B / 255.0;
+
         for (int ly = labelY; ly < Math.Min(labelY + labelHeight, height); ly++)
         {
             for (int lx = labelX; lx < Math.Min(labelX + labelWidth, width); lx++)
             {
-                SetPixel(image, 0, ly, lx, r, g, b);
+                SetPixel(image, 0, ly, lx, bgR, bgG, bgB);
             }
         }
+
+        // Calculate text color (white or black for contrast)
+        double luminance = 0.299 * bgR + 0.587 * bgG + 0.114 * bgB;
+        var textColor = luminance > 0.5 ? (0.0, 0.0, 0.0) : (1.0, 1.0, 1.0);
+
+        // Draw text using bitmap font
+        _font.DrawText(image, label, labelX + padding, labelY + padding, textColor, scale);
     }
 
     private void SetPixel(Tensor<T> image, int batch, int y, int x, double r, double g, double b)

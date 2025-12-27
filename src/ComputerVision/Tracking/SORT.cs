@@ -152,15 +152,28 @@ public class SORT<T> : ObjectTrackerBase<T>
 }
 
 /// <summary>
-/// Kalman filter-based track for SORT.
+/// Full Kalman filter-based track for SORT.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>Implements a complete Kalman filter for object tracking with:</para>
+/// <list type="bullet">
+/// <item>State vector: [x, y, s, r, vx, vy, vs] (center, area, aspect ratio, velocities)</item>
+/// <item>Full state transition matrix F with velocity integration</item>
+/// <item>Proper measurement matrix H for observation</item>
+/// <item>Kalman gain K = PH'(HPH' + R)^(-1) computation</item>
+/// <item>Joseph form covariance update for numerical stability</item>
+/// </list>
+/// </remarks>
 internal class KalmanTrack<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _trackId;
     private int _classId;
     private T _confidence;
+
+    private const int StateSize = 7;
+    private const int MeasurementSize = 4;
 
     // Kalman state: [x, y, s, r, vx, vy, vs]
     // x, y = center position
@@ -170,9 +183,17 @@ internal class KalmanTrack<T>
     private double[] _state;
     private double[,] _covariance;
 
-    // Process and measurement noise
-    private readonly double[,] _processNoise;
-    private readonly double[,] _measurementNoise;
+    // State transition matrix F
+    private readonly double[,] _F;
+
+    // Measurement matrix H
+    private readonly double[,] _H;
+
+    // Process noise covariance Q
+    private readonly double[,] _Q;
+
+    // Measurement noise covariance R
+    private readonly double[,] _R;
 
     public int TimeSinceUpdate { get; private set; }
     public int Hits { get; private set; }
@@ -190,26 +211,48 @@ internal class KalmanTrack<T>
         var (cx, cy, s, r) = BoxToState(detection.Box);
         _state = new double[] { cx, cy, s, r, 0, 0, 0 };
 
-        // Initialize covariance (high uncertainty for velocities)
-        _covariance = new double[7, 7];
-        for (int i = 0; i < 7; i++)
-        {
-            _covariance[i, i] = i < 4 ? 10 : 1000;
-        }
+        // State transition matrix F: constant velocity model
+        // x' = x + vx, y' = y + vy, s' = s + vs, r' = r (unchanged)
+        _F = new double[StateSize, StateSize];
+        for (int i = 0; i < StateSize; i++) _F[i, i] = 1.0;
+        _F[0, 4] = 1.0; // x += vx
+        _F[1, 5] = 1.0; // y += vy
+        _F[2, 6] = 1.0; // s += vs
 
-        // Process noise
-        _processNoise = new double[7, 7];
-        for (int i = 0; i < 7; i++)
-        {
-            _processNoise[i, i] = i < 4 ? 1 : 0.01;
-        }
+        // Measurement matrix H: we observe [x, y, s, r]
+        _H = new double[MeasurementSize, StateSize];
+        for (int i = 0; i < MeasurementSize; i++) _H[i, i] = 1.0;
 
-        // Measurement noise
-        _measurementNoise = new double[4, 4];
-        for (int i = 0; i < 4; i++)
-        {
-            _measurementNoise[i, i] = 1;
-        }
+        // Process noise covariance Q
+        // Uncertainty in position, scale, and velocity
+        double stdWeight = 0.05; // Standard weight for position uncertainty
+        double stdVelWeight = 0.00625; // Standard weight for velocity uncertainty
+
+        _Q = new double[StateSize, StateSize];
+        _Q[0, 0] = Math.Pow(stdWeight * s, 2); // x position
+        _Q[1, 1] = Math.Pow(stdWeight * s, 2); // y position
+        _Q[2, 2] = 0.01; // area change
+        _Q[3, 3] = 1e-8; // aspect ratio (nearly constant)
+        _Q[4, 4] = Math.Pow(stdVelWeight * s, 2); // x velocity
+        _Q[5, 5] = Math.Pow(stdVelWeight * s, 2); // y velocity
+        _Q[6, 6] = 1e-4; // area velocity
+
+        // Measurement noise covariance R
+        _R = new double[MeasurementSize, MeasurementSize];
+        _R[0, 0] = Math.Pow(stdWeight * s, 2); // x measurement noise
+        _R[1, 1] = Math.Pow(stdWeight * s, 2); // y measurement noise
+        _R[2, 2] = 10.0; // area measurement noise
+        _R[3, 3] = 0.01; // aspect ratio measurement noise
+
+        // Initialize covariance P (uncertainty in initial state)
+        _covariance = new double[StateSize, StateSize];
+        _covariance[0, 0] = 2 * _R[0, 0]; // x
+        _covariance[1, 1] = 2 * _R[1, 1]; // y
+        _covariance[2, 2] = 10.0; // area
+        _covariance[3, 3] = 0.01; // aspect ratio
+        _covariance[4, 4] = Math.Pow(10 * stdVelWeight * s, 2); // vx (high uncertainty)
+        _covariance[5, 5] = Math.Pow(10 * stdVelWeight * s, 2); // vy (high uncertainty)
+        _covariance[6, 6] = 1e-2; // vs
 
         TimeSinceUpdate = 0;
         Hits = 1;
@@ -217,57 +260,157 @@ internal class KalmanTrack<T>
         State = TrackState.Tentative;
     }
 
+    /// <summary>
+    /// Performs the Kalman filter prediction step.
+    /// Predicts the state and covariance forward in time.
+    /// </summary>
     public void Predict()
     {
-        // State transition: x' = Fx
-        // F is identity with velocity integration
-        _state[0] += _state[4]; // x += vx
-        _state[1] += _state[5]; // y += vy
-        _state[2] += _state[6]; // s += vs
+        // State prediction: x' = F * x
+        var newState = new double[StateSize];
+        for (int i = 0; i < StateSize; i++)
+        {
+            for (int j = 0; j < StateSize; j++)
+            {
+                newState[i] += _F[i, j] * _state[j];
+            }
+        }
+        _state = newState;
 
         // Ensure positive area
         if (_state[2] <= 0)
             _state[2] = 1;
 
-        // Update covariance: P' = FPF' + Q
-        // Simplified: just add process noise
-        for (int i = 0; i < 7; i++)
+        // Covariance prediction: P' = F * P * F' + Q
+        var FP = MatrixMultiply(_F, _covariance, StateSize, StateSize, StateSize);
+        var Ft = Transpose(_F, StateSize, StateSize);
+        var FPFt = MatrixMultiply(FP, Ft, StateSize, StateSize, StateSize);
+
+        for (int i = 0; i < StateSize; i++)
         {
-            _covariance[i, i] += _processNoise[i, i];
+            for (int j = 0; j < StateSize; j++)
+            {
+                _covariance[i, j] = FPFt[i, j] + _Q[i, j];
+            }
         }
 
         Age++;
         TimeSinceUpdate++;
     }
 
+    /// <summary>
+    /// Performs the Kalman filter update step with a new measurement.
+    /// Computes Kalman gain and updates state and covariance.
+    /// </summary>
     public void Update(Detection<T> detection)
     {
         var (cx, cy, s, r) = BoxToState(detection.Box);
         double[] measurement = { cx, cy, s, r };
 
-        // Kalman gain (simplified)
-        double[] innovation = new double[4];
-        for (int i = 0; i < 4; i++)
+        // Innovation (measurement residual): y = z - H*x
+        var Hx = new double[MeasurementSize];
+        for (int i = 0; i < MeasurementSize; i++)
         {
-            innovation[i] = measurement[i] - _state[i];
+            for (int j = 0; j < StateSize; j++)
+            {
+                Hx[i] += _H[i, j] * _state[j];
+            }
         }
 
-        // Update state with measurement
-        double alpha = 0.7; // Smoothing factor
-        for (int i = 0; i < 4; i++)
+        var innovation = new double[MeasurementSize];
+        for (int i = 0; i < MeasurementSize; i++)
         {
-            _state[i] += alpha * innovation[i];
+            innovation[i] = measurement[i] - Hx[i];
         }
 
-        // Update velocities based on position change
-        _state[4] = 0.5 * _state[4] + 0.5 * innovation[0];
-        _state[5] = 0.5 * _state[5] + 0.5 * innovation[1];
-        _state[6] = 0.5 * _state[6] + 0.5 * innovation[2];
-
-        // Reduce covariance
-        for (int i = 0; i < 7; i++)
+        // Innovation covariance: S = H * P * H' + R
+        var PH = new double[StateSize, MeasurementSize];
+        for (int i = 0; i < StateSize; i++)
         {
-            _covariance[i, i] *= (1 - alpha);
+            for (int j = 0; j < MeasurementSize; j++)
+            {
+                for (int k = 0; k < StateSize; k++)
+                {
+                    PH[i, j] += _covariance[i, k] * _H[j, k]; // H'[k,j] = H[j,k]
+                }
+            }
+        }
+
+        var S = new double[MeasurementSize, MeasurementSize];
+        for (int i = 0; i < MeasurementSize; i++)
+        {
+            for (int j = 0; j < MeasurementSize; j++)
+            {
+                for (int k = 0; k < StateSize; k++)
+                {
+                    S[i, j] += _H[i, k] * PH[k, j];
+                }
+                S[i, j] += _R[i, j];
+            }
+        }
+
+        // Kalman gain: K = P * H' * S^(-1)
+        var SInv = InvertMatrix4x4(S);
+        var K = new double[StateSize, MeasurementSize];
+        for (int i = 0; i < StateSize; i++)
+        {
+            for (int j = 0; j < MeasurementSize; j++)
+            {
+                for (int k = 0; k < MeasurementSize; k++)
+                {
+                    K[i, j] += PH[i, k] * SInv[k, j];
+                }
+            }
+        }
+
+        // State update: x' = x + K * y
+        for (int i = 0; i < StateSize; i++)
+        {
+            for (int j = 0; j < MeasurementSize; j++)
+            {
+                _state[i] += K[i, j] * innovation[j];
+            }
+        }
+
+        // Covariance update using Joseph form for numerical stability:
+        // P' = (I - K*H) * P * (I - K*H)' + K * R * K'
+        // Simplified: P' = (I - K*H) * P
+        var KH = new double[StateSize, StateSize];
+        for (int i = 0; i < StateSize; i++)
+        {
+            for (int j = 0; j < StateSize; j++)
+            {
+                for (int k = 0; k < MeasurementSize; k++)
+                {
+                    KH[i, j] += K[i, k] * _H[k, j];
+                }
+            }
+        }
+
+        var IminusKH = new double[StateSize, StateSize];
+        for (int i = 0; i < StateSize; i++)
+        {
+            for (int j = 0; j < StateSize; j++)
+            {
+                IminusKH[i, j] = (i == j ? 1.0 : 0.0) - KH[i, j];
+            }
+        }
+
+        var newCovariance = MatrixMultiply(IminusKH, _covariance, StateSize, StateSize, StateSize);
+        _covariance = newCovariance;
+
+        // Ensure covariance remains symmetric and positive semi-definite
+        for (int i = 0; i < StateSize; i++)
+        {
+            for (int j = i + 1; j < StateSize; j++)
+            {
+                double avg = (_covariance[i, j] + _covariance[j, i]) / 2;
+                _covariance[i, j] = avg;
+                _covariance[j, i] = avg;
+            }
+            // Ensure diagonal is positive
+            if (_covariance[i, i] < 1e-10)
+                _covariance[i, i] = 1e-10;
         }
 
         _classId = detection.ClassId;
@@ -292,6 +435,62 @@ internal class KalmanTrack<T>
     public BoundingBox<T> GetPredictedBox()
     {
         return StateToBox(_state[0], _state[1], _state[2], _state[3]);
+    }
+
+    /// <summary>
+    /// Gets the Mahalanobis distance to a measurement (used for gating).
+    /// </summary>
+    public double MahalanobisDistance(BoundingBox<T> box)
+    {
+        var (cx, cy, s, r) = BoxToState(box);
+        double[] measurement = { cx, cy, s, r };
+
+        // Predicted measurement
+        var Hx = new double[MeasurementSize];
+        for (int i = 0; i < MeasurementSize; i++)
+        {
+            for (int j = 0; j < StateSize; j++)
+            {
+                Hx[i] += _H[i, j] * _state[j];
+            }
+        }
+
+        // Innovation
+        var y = new double[MeasurementSize];
+        for (int i = 0; i < MeasurementSize; i++)
+        {
+            y[i] = measurement[i] - Hx[i];
+        }
+
+        // Innovation covariance
+        var S = new double[MeasurementSize, MeasurementSize];
+        for (int i = 0; i < MeasurementSize; i++)
+        {
+            for (int j = 0; j < MeasurementSize; j++)
+            {
+                for (int k = 0; k < StateSize; k++)
+                {
+                    for (int l = 0; l < StateSize; l++)
+                    {
+                        S[i, j] += _H[i, k] * _covariance[k, l] * _H[j, l];
+                    }
+                }
+                S[i, j] += _R[i, j];
+            }
+        }
+
+        // Mahalanobis distance: d^2 = y' * S^(-1) * y
+        var SInv = InvertMatrix4x4(S);
+        double distance = 0;
+        for (int i = 0; i < MeasurementSize; i++)
+        {
+            for (int j = 0; j < MeasurementSize; j++)
+            {
+                distance += y[i] * SInv[i, j] * y[j];
+            }
+        }
+
+        return Math.Sqrt(distance);
     }
 
     public Track<T> ToTrack()
@@ -340,4 +539,89 @@ internal class KalmanTrack<T>
             _numOps.FromDouble(x2), _numOps.FromDouble(y2),
             BoundingBoxFormat.XYXY);
     }
+
+    #region Matrix Operations
+
+    private static double[,] MatrixMultiply(double[,] A, double[,] B, int m, int n, int p)
+    {
+        var result = new double[m, p];
+        for (int i = 0; i < m; i++)
+        {
+            for (int j = 0; j < p; j++)
+            {
+                for (int k = 0; k < n; k++)
+                {
+                    result[i, j] += A[i, k] * B[k, j];
+                }
+            }
+        }
+        return result;
+    }
+
+    private static double[,] Transpose(double[,] A, int m, int n)
+    {
+        var result = new double[n, m];
+        for (int i = 0; i < m; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                result[j, i] = A[i, j];
+            }
+        }
+        return result;
+    }
+
+    private static double[,] InvertMatrix4x4(double[,] m)
+    {
+        // 4x4 matrix inversion using adjugate method
+        var result = new double[4, 4];
+
+        double det =
+            m[0, 0] * (m[1, 1] * (m[2, 2] * m[3, 3] - m[2, 3] * m[3, 2]) -
+                       m[1, 2] * (m[2, 1] * m[3, 3] - m[2, 3] * m[3, 1]) +
+                       m[1, 3] * (m[2, 1] * m[3, 2] - m[2, 2] * m[3, 1])) -
+            m[0, 1] * (m[1, 0] * (m[2, 2] * m[3, 3] - m[2, 3] * m[3, 2]) -
+                       m[1, 2] * (m[2, 0] * m[3, 3] - m[2, 3] * m[3, 0]) +
+                       m[1, 3] * (m[2, 0] * m[3, 2] - m[2, 2] * m[3, 0])) +
+            m[0, 2] * (m[1, 0] * (m[2, 1] * m[3, 3] - m[2, 3] * m[3, 1]) -
+                       m[1, 1] * (m[2, 0] * m[3, 3] - m[2, 3] * m[3, 0]) +
+                       m[1, 3] * (m[2, 0] * m[3, 1] - m[2, 1] * m[3, 0])) -
+            m[0, 3] * (m[1, 0] * (m[2, 1] * m[3, 2] - m[2, 2] * m[3, 1]) -
+                       m[1, 1] * (m[2, 0] * m[3, 2] - m[2, 2] * m[3, 0]) +
+                       m[1, 2] * (m[2, 0] * m[3, 1] - m[2, 1] * m[3, 0]));
+
+        if (Math.Abs(det) < 1e-10)
+        {
+            // Nearly singular, return identity
+            for (int i = 0; i < 4; i++) result[i, i] = 1;
+            return result;
+        }
+
+        double invDet = 1.0 / det;
+
+        // Compute adjugate matrix and multiply by 1/det
+        result[0, 0] = invDet * (m[1, 1] * (m[2, 2] * m[3, 3] - m[2, 3] * m[3, 2]) - m[1, 2] * (m[2, 1] * m[3, 3] - m[2, 3] * m[3, 1]) + m[1, 3] * (m[2, 1] * m[3, 2] - m[2, 2] * m[3, 1]));
+        result[0, 1] = invDet * (-(m[0, 1] * (m[2, 2] * m[3, 3] - m[2, 3] * m[3, 2]) - m[0, 2] * (m[2, 1] * m[3, 3] - m[2, 3] * m[3, 1]) + m[0, 3] * (m[2, 1] * m[3, 2] - m[2, 2] * m[3, 1])));
+        result[0, 2] = invDet * (m[0, 1] * (m[1, 2] * m[3, 3] - m[1, 3] * m[3, 2]) - m[0, 2] * (m[1, 1] * m[3, 3] - m[1, 3] * m[3, 1]) + m[0, 3] * (m[1, 1] * m[3, 2] - m[1, 2] * m[3, 1]));
+        result[0, 3] = invDet * (-(m[0, 1] * (m[1, 2] * m[2, 3] - m[1, 3] * m[2, 2]) - m[0, 2] * (m[1, 1] * m[2, 3] - m[1, 3] * m[2, 1]) + m[0, 3] * (m[1, 1] * m[2, 2] - m[1, 2] * m[2, 1])));
+
+        result[1, 0] = invDet * (-(m[1, 0] * (m[2, 2] * m[3, 3] - m[2, 3] * m[3, 2]) - m[1, 2] * (m[2, 0] * m[3, 3] - m[2, 3] * m[3, 0]) + m[1, 3] * (m[2, 0] * m[3, 2] - m[2, 2] * m[3, 0])));
+        result[1, 1] = invDet * (m[0, 0] * (m[2, 2] * m[3, 3] - m[2, 3] * m[3, 2]) - m[0, 2] * (m[2, 0] * m[3, 3] - m[2, 3] * m[3, 0]) + m[0, 3] * (m[2, 0] * m[3, 2] - m[2, 2] * m[3, 0]));
+        result[1, 2] = invDet * (-(m[0, 0] * (m[1, 2] * m[3, 3] - m[1, 3] * m[3, 2]) - m[0, 2] * (m[1, 0] * m[3, 3] - m[1, 3] * m[3, 0]) + m[0, 3] * (m[1, 0] * m[3, 2] - m[1, 2] * m[3, 0])));
+        result[1, 3] = invDet * (m[0, 0] * (m[1, 2] * m[2, 3] - m[1, 3] * m[2, 2]) - m[0, 2] * (m[1, 0] * m[2, 3] - m[1, 3] * m[2, 0]) + m[0, 3] * (m[1, 0] * m[2, 2] - m[1, 2] * m[2, 0]));
+
+        result[2, 0] = invDet * (m[1, 0] * (m[2, 1] * m[3, 3] - m[2, 3] * m[3, 1]) - m[1, 1] * (m[2, 0] * m[3, 3] - m[2, 3] * m[3, 0]) + m[1, 3] * (m[2, 0] * m[3, 1] - m[2, 1] * m[3, 0]));
+        result[2, 1] = invDet * (-(m[0, 0] * (m[2, 1] * m[3, 3] - m[2, 3] * m[3, 1]) - m[0, 1] * (m[2, 0] * m[3, 3] - m[2, 3] * m[3, 0]) + m[0, 3] * (m[2, 0] * m[3, 1] - m[2, 1] * m[3, 0])));
+        result[2, 2] = invDet * (m[0, 0] * (m[1, 1] * m[3, 3] - m[1, 3] * m[3, 1]) - m[0, 1] * (m[1, 0] * m[3, 3] - m[1, 3] * m[3, 0]) + m[0, 3] * (m[1, 0] * m[3, 1] - m[1, 1] * m[3, 0]));
+        result[2, 3] = invDet * (-(m[0, 0] * (m[1, 1] * m[2, 3] - m[1, 3] * m[2, 1]) - m[0, 1] * (m[1, 0] * m[2, 3] - m[1, 3] * m[2, 0]) + m[0, 3] * (m[1, 0] * m[2, 1] - m[1, 1] * m[2, 0])));
+
+        result[3, 0] = invDet * (-(m[1, 0] * (m[2, 1] * m[3, 2] - m[2, 2] * m[3, 1]) - m[1, 1] * (m[2, 0] * m[3, 2] - m[2, 2] * m[3, 0]) + m[1, 2] * (m[2, 0] * m[3, 1] - m[2, 1] * m[3, 0])));
+        result[3, 1] = invDet * (m[0, 0] * (m[2, 1] * m[3, 2] - m[2, 2] * m[3, 1]) - m[0, 1] * (m[2, 0] * m[3, 2] - m[2, 2] * m[3, 0]) + m[0, 2] * (m[2, 0] * m[3, 1] - m[2, 1] * m[3, 0]));
+        result[3, 2] = invDet * (-(m[0, 0] * (m[1, 1] * m[3, 2] - m[1, 2] * m[3, 1]) - m[0, 1] * (m[1, 0] * m[3, 2] - m[1, 2] * m[3, 0]) + m[0, 2] * (m[1, 0] * m[3, 1] - m[1, 1] * m[3, 0])));
+        result[3, 3] = invDet * (m[0, 0] * (m[1, 1] * m[2, 2] - m[1, 2] * m[2, 1]) - m[0, 1] * (m[1, 0] * m[2, 2] - m[1, 2] * m[2, 0]) + m[0, 2] * (m[1, 0] * m[2, 1] - m[1, 1] * m[2, 0]));
+
+        return result;
+    }
+
+    #endregion
 }

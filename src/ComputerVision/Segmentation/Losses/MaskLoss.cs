@@ -1,4 +1,5 @@
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.ComputerVision.Segmentation.Losses;
 
@@ -40,7 +41,7 @@ public class MaskBCELoss<T>
 
         for (int i = 0; i < predicted.Length; i++)
         {
-            double p = Math.Clamp(_numOps.ToDouble(predicted[i]), _eps, 1 - _eps);
+            double p = MathHelper.Clamp(_numOps.ToDouble(predicted[i]), _eps, 1 - _eps);
             double t = _numOps.ToDouble(target[i]);
 
             loss -= t * Math.Log(p) + (1 - t) * Math.Log(1 - p);
@@ -58,7 +59,7 @@ public class MaskBCELoss<T>
 
         for (int i = 0; i < predicted.Length; i++)
         {
-            double p = Math.Clamp(_numOps.ToDouble(predicted[i]), _eps, 1 - _eps);
+            double p = MathHelper.Clamp(_numOps.ToDouble(predicted[i]), _eps, 1 - _eps);
             double t = _numOps.ToDouble(target[i]);
 
             // d/dp [-(t*log(p) + (1-t)*log(1-p))] = -t/p + (1-t)/(1-p)
@@ -196,7 +197,7 @@ public class MaskFocalLoss<T>
 
         for (int i = 0; i < predicted.Length; i++)
         {
-            double p = Math.Clamp(_numOps.ToDouble(predicted[i]), _eps, 1 - _eps);
+            double p = MathHelper.Clamp(_numOps.ToDouble(predicted[i]), _eps, 1 - _eps);
             double t = _numOps.ToDouble(target[i]);
 
             // Focal loss: -alpha * (1-pt)^gamma * log(pt)
@@ -218,7 +219,7 @@ public class MaskFocalLoss<T>
 
         for (int i = 0; i < predicted.Length; i++)
         {
-            double p = Math.Clamp(_numOps.ToDouble(predicted[i]), _eps, 1 - _eps);
+            double p = MathHelper.Clamp(_numOps.ToDouble(predicted[i]), _eps, 1 - _eps);
             double t = _numOps.ToDouble(target[i]);
 
             double pt = t * p + (1 - t) * (1 - p);

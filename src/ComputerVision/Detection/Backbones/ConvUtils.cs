@@ -21,6 +21,16 @@ internal class Conv2D<T>
     private readonly int _stride;
     private readonly int _padding;
 
+    /// <summary>
+    /// Gets the weight tensor for this convolutional layer.
+    /// </summary>
+    public Tensor<T> Weights => _weights;
+
+    /// <summary>
+    /// Gets the bias tensor for this convolutional layer, or null if bias is not used.
+    /// </summary>
+    public Tensor<T>? Bias => _bias;
+
     public Conv2D(int inChannels, int outChannels, int kernelSize, int stride = 1, int padding = 0, bool useBias = true)
     {
         _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
@@ -130,6 +140,16 @@ internal class Dense<T>
     private readonly Tensor<T> _bias;
     private readonly int _inFeatures;
     private readonly int _outFeatures;
+
+    /// <summary>
+    /// Gets the weight tensor for this dense layer.
+    /// </summary>
+    public Tensor<T> Weights => _weights;
+
+    /// <summary>
+    /// Gets the bias tensor for this dense layer.
+    /// </summary>
+    public Tensor<T> Bias => _bias;
 
     public Dense(int inFeatures, int outFeatures)
     {

@@ -1,6 +1,7 @@
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.ObjectDetection;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.ComputerVision.Tracking;
 
@@ -199,8 +200,8 @@ public class DeepSORT<T> : ObjectTrackerBase<T>
                     int srcH = y1 + (int)(h * (double)cropH / targetH);
                     int srcW = x1 + (int)(w * (double)cropW / targetW);
 
-                    srcH = Math.Clamp(srcH, 0, imgH - 1);
-                    srcW = Math.Clamp(srcW, 0, imgW - 1);
+                    srcH = MathHelper.Clamp(srcH, 0, imgH - 1);
+                    srcW = MathHelper.Clamp(srcW, 0, imgW - 1);
 
                     crop[0, c, h, w] = image[0, c, srcH, srcW];
                 }

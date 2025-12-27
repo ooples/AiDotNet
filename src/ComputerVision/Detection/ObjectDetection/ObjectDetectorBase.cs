@@ -4,6 +4,7 @@ using AiDotNet.ComputerVision.Detection.PostProcessing;
 using AiDotNet.ComputerVision.Weights;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.ComputerVision.Detection.ObjectDetection;
 
@@ -210,7 +211,7 @@ public abstract class ObjectDetectorBase<T>
             url = PretrainedRegistry.GetUrl(modelKey);
         }
 
-        if (string.IsNullOrEmpty(url))
+        if (url is null || url.Length == 0)
         {
             throw new InvalidOperationException(
                 $"No pre-trained weights URL found for {Options.Architecture} {Options.Size}. " +
