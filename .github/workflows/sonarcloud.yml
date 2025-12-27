@@ -321,6 +321,7 @@ jobs:
       - name: Upload coverage + test results
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         if: always()
+        continue-on-error: true  # Prevent transient GitHub artifact service issues from failing the job
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: |
@@ -516,6 +517,7 @@ jobs:
       - name: Upload test results
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         if: always()
+        continue-on-error: true  # Prevent transient GitHub artifact service issues from failing the job
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: ./TestResults/**/*.trx
