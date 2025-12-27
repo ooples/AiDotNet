@@ -183,12 +183,15 @@ public readonly struct DetachedTensor<T> : IDetachedTensor<T>
     }
 
     /// <inheritdoc />
-    public Tensor<T> Data => _data;
+    public Tensor<T> Data => _data ?? throw new InvalidOperationException(
+        "DetachedTensor was not properly initialized. Use the constructor or From() factory method.");
 
     /// <summary>
     /// Implicitly converts a DetachedTensor to its underlying Tensor.
     /// </summary>
-    public static implicit operator Tensor<T>(DetachedTensor<T> detached) => detached._data;
+    public static implicit operator Tensor<T>(DetachedTensor<T> detached) =>
+        detached._data ?? throw new InvalidOperationException(
+            "DetachedTensor was not properly initialized. Use the constructor or From() factory method.");
 
     /// <summary>
     /// Creates a DetachedTensor from a regular tensor.

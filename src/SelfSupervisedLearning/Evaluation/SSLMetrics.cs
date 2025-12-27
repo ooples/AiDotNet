@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.SelfSupervisedLearning.Evaluation;
@@ -206,6 +207,7 @@ public class SSLMetrics<T>
         }
 
         const double tolerance = 1e-10;
+        bool converged = false;
 
         for (int iter = 0; iter < maxIterations; iter++)
         {
@@ -229,6 +231,7 @@ public class SSLMetrics<T>
             // Check convergence
             if (maxOffDiag < tolerance)
             {
+                converged = true;
                 break;
             }
 
@@ -271,6 +274,14 @@ public class SSLMetrics<T>
                     A[q, k] = A[k, q];
                 }
             }
+        }
+
+        if (!converged)
+        {
+            // Log warning about non-convergence
+            Trace.TraceWarning(
+                $"Jacobi eigenvalue algorithm did not converge after {maxIterations} iterations. " +
+                "Effective rank metrics may be inaccurate. Consider increasing maxIterations for high-dimensional matrices.");
         }
 
         // Eigenvalues are on the diagonal
@@ -370,6 +381,15 @@ public class SSLMetrics<T>
     {
         var batchSize = representations.Shape[0];
         var dim = representations.Shape[1];
+
+        // Require at least 2 samples for covariance computation (Bessel's correction uses batchSize - 1)
+        if (batchSize < 2)
+        {
+            throw new ArgumentException(
+                $"Covariance computation requires at least 2 samples, but got {batchSize}. " +
+                "Provide a batch with more samples for meaningful covariance estimation.",
+                nameof(representations));
+        }
 
         // Compute mean
         var mean = new T[dim];

@@ -273,11 +273,57 @@ public class SSLPretrainingPipeline<T>
         result.LinearEvaluation = linearEval.Train(
             validationData, validationLabels);
 
-        // k-NN evaluation
-        var knn = new KNNEvaluator<T>(result.Encoder!);
-        knn.Fit(validationData, validationLabels);
-        result.KNNAccuracy = knn.Evaluate(validationData, validationLabels);
+        // k-NN evaluation with proper train/test split to avoid data leakage
+        // Using 80/20 split: fit on 80%, evaluate on held-out 20%
+        var numSamples = validationData.Shape[0];
+        var splitIdx = (int)(numSamples * 0.8);
+
+        if (splitIdx > 0 && splitIdx < numSamples)
+        {
+            var (trainData, testData) = SplitData(validationData, splitIdx);
+            var trainLabels = validationLabels.Take(splitIdx).ToArray();
+            var testLabels = validationLabels.Skip(splitIdx).ToArray();
+
+            var knn = new KNNEvaluator<T>(result.Encoder!);
+            knn.Fit(trainData, trainLabels);
+            result.KNNAccuracy = knn.Evaluate(testData, testLabels);
+        }
+        else
+        {
+            // Not enough data for split - skip k-NN evaluation
+            result.KNNAccuracy = 0.0;
+        }
 
         return result;
+    }
+
+    private static (Tensor<T> train, Tensor<T> test) SplitData(Tensor<T> data, int splitIdx)
+    {
+        var numSamples = data.Shape[0];
+        var featureDim = data.Shape[1];
+
+        var trainData = new T[splitIdx * featureDim];
+        var testData = new T[(numSamples - splitIdx) * featureDim];
+
+        for (int i = 0; i < splitIdx; i++)
+        {
+            for (int j = 0; j < featureDim; j++)
+            {
+                trainData[i * featureDim + j] = data[i, j];
+            }
+        }
+
+        for (int i = splitIdx; i < numSamples; i++)
+        {
+            for (int j = 0; j < featureDim; j++)
+            {
+                testData[(i - splitIdx) * featureDim + j] = data[i, j];
+            }
+        }
+
+        return (
+            new Tensor<T>(trainData, [splitIdx, featureDim]),
+            new Tensor<T>(testData, [numSamples - splitIdx, featureDim])
+        );
     }
 }

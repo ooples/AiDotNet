@@ -113,6 +113,14 @@ public class TemperatureScheduler
 
     private double GetLinearWarmupTemperature(int step)
     {
+        // Guard against division by zero when warmupSteps is 0
+        if (_warmupSteps <= 0)
+        {
+            // No warmup phase, use linear interpolation over all steps
+            var progress = Math.Min(1.0, (double)step / _totalSteps);
+            return _initialTemperature + (_finalTemperature - _initialTemperature) * progress;
+        }
+
         if (step >= _warmupSteps)
         {
             // After warmup, use final temperature or decay
@@ -156,6 +164,12 @@ public class TemperatureScheduler
 
     private double GetCosineWarmupTemperature(int step)
     {
+        // Guard against division by zero when warmupSteps is 0
+        if (_warmupSteps <= 0)
+        {
+            return _finalTemperature;
+        }
+
         if (step >= _warmupSteps)
         {
             return _finalTemperature;

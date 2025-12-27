@@ -48,6 +48,23 @@ public class SSLFineTuningPipeline<T>
         int numClasses)
     {
         _encoder = encoder ?? throw new ArgumentNullException(nameof(encoder));
+
+        if (encoderOutputDim <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(encoderOutputDim),
+                encoderOutputDim,
+                "Encoder output dimension must be positive.");
+        }
+
+        if (numClasses <= 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(numClasses),
+                numClasses,
+                "Number of classes must be greater than 1 for classification.");
+        }
+
         _encoderOutputDim = encoderOutputDim;
         _numClasses = numClasses;
         _config = new FineTuningConfig();

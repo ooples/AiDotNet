@@ -132,9 +132,29 @@ public class iBOT<T> : TeacherStudentSSL<T>
         var mimWeightT = NumOps.FromDouble(_mimWeight);
         var loss = NumOps.Add(clsLoss, NumOps.Multiply(mimWeightT, patchLoss));
 
-        // Backward pass
-        var (_, gradStudent) = _clsLoss.ComputeLossWithGradients(studentOut1, teacherOut2);
-        var gradH = _projector!.Backward(gradStudent);
+        // Backward pass - include both CLS and MIM loss gradients
+        // Compute CLS gradients from both symmetric views
+        var (_, gradCls1) = _clsLoss.ComputeLossWithGradients(studentOut1, teacherOut2);
+        var (_, gradCls2) = _clsLoss.ComputeLossWithGradients(studentOut2, teacherOut1);
+
+        // Compute MIM (patch) gradients
+        var gradMim1 = ComputeMaskedPatchGradients(studentOut1, teacherOut2, mask1);
+        var gradMim2 = ComputeMaskedPatchGradients(studentOut2, teacherOut1, mask2);
+
+        // Combine gradients: avg(CLS) + mimWeight * avg(MIM)
+        var half = NumOps.FromDouble(0.5);
+        var gradCombined = new T[gradCls1.Length];
+        for (int i = 0; i < gradCls1.Length; i++)
+        {
+            // Average CLS gradients
+            var avgCls = NumOps.Multiply(half, NumOps.Add(gradCls1.Data[i], gradCls2.Data[i]));
+            // Average MIM gradients
+            var avgMim = NumOps.Multiply(half, NumOps.Add(gradMim1.Data[i], gradMim2.Data[i]));
+            // Total gradient with MIM weighting
+            gradCombined[i] = NumOps.Add(avgCls, NumOps.Multiply(mimWeightT, avgMim));
+        }
+
+        var gradH = _projector!.Backward(new Tensor<T>(gradCombined, gradCls1.Shape));
         _encoder.Backpropagate(gradH);
 
         // Update networks
@@ -252,6 +272,98 @@ public class iBOT<T> : TeacherStudentSSL<T>
         // Weight loss by proportion of masked patches
         var maskWeight = numMasked > 0 ? (double)numMasked / (batchSize * numPatches) : 0.0;
         return NumOps.Multiply(baseLoss, NumOps.FromDouble(maskWeight));
+    }
+
+    /// <summary>
+    /// Computes gradients for the MIM (Masked Image Modeling) loss.
+    /// </summary>
+    /// <remarks>
+    /// For MSE loss L = (1/n) * sum((s - t)^2), the gradient w.r.t. s is: dL/ds = (2/n) * (s - t)
+    /// This is computed only for masked positions.
+    /// </remarks>
+    private Tensor<T> ComputeMaskedPatchGradients(Tensor<T> studentOut, Tensor<T> teacherOut, Tensor<T> mask)
+    {
+        var batchSize = studentOut.Shape[0];
+        var numPatches = mask.Shape[1];
+        var gradients = new T[studentOut.Length];
+
+        // For sequence outputs [batch, seq_len, dim]
+        if (studentOut.Shape.Length == 3 && studentOut.Shape[1] > 1)
+        {
+            var seqLen = studentOut.Shape[1];
+            var dim = studentOut.Shape[2];
+            var patchStartIdx = 1; // Skip CLS token
+            var numPatchTokens = Math.Min(seqLen - patchStartIdx, numPatches);
+
+            if (numPatchTokens <= 0)
+            {
+                return new Tensor<T>(gradients, studentOut.Shape);
+            }
+
+            // Count masked patches for normalization
+            int maskedCount = 0;
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int p = 0; p < numPatchTokens; p++)
+                {
+                    if (NumOps.GreaterThan(mask[b, p], NumOps.FromDouble(0.5)))
+                    {
+                        maskedCount++;
+                    }
+                }
+            }
+
+            if (maskedCount == 0)
+            {
+                return new Tensor<T>(gradients, studentOut.Shape);
+            }
+
+            // Compute gradients only for masked positions
+            var scale = NumOps.FromDouble(2.0 / (maskedCount * dim));
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int p = 0; p < numPatchTokens; p++)
+                {
+                    if (NumOps.GreaterThan(mask[b, p], NumOps.FromDouble(0.5)))
+                    {
+                        var patchIdx = patchStartIdx + p;
+                        for (int d = 0; d < dim; d++)
+                        {
+                            var idx = (b * seqLen + patchIdx) * dim + d;
+                            var diff = NumOps.Subtract(studentOut[b, patchIdx, d], teacherOut[b, patchIdx, d]);
+                            gradients[idx] = NumOps.Multiply(scale, diff);
+                        }
+                    }
+                }
+            }
+
+            return new Tensor<T>(gradients, studentOut.Shape);
+        }
+
+        // For 2D outputs [batch, dim], compute full gradient weighted by mask ratio
+        var (_, grad) = _patchLoss.ComputeLossWithGradients(studentOut, teacherOut);
+
+        // Weight by mask ratio
+        int numMasked = 0;
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int p = 0; p < numPatches; p++)
+            {
+                if (NumOps.GreaterThan(mask[b, p], NumOps.FromDouble(0.5)))
+                {
+                    numMasked++;
+                }
+            }
+        }
+
+        var maskWeight = numMasked > 0 ? (double)numMasked / (batchSize * numPatches) : 0.0;
+        var weightT = NumOps.FromDouble(maskWeight);
+        for (int i = 0; i < grad.Length; i++)
+        {
+            gradients[i] = NumOps.Multiply(grad.Data[i], weightT);
+        }
+
+        return new Tensor<T>(gradients, studentOut.Shape);
     }
 
     private Tensor<T> GenerateMask(int batchSize, int numPatches)

@@ -75,6 +75,7 @@ public class DINOConfig
         if (StudentTemperature.HasValue) config["studentTemperature"] = StudentTemperature.Value;
         if (TeacherTemperatureStart.HasValue) config["teacherTemperatureStart"] = TeacherTemperatureStart.Value;
         if (TeacherTemperatureEnd.HasValue) config["teacherTemperatureEnd"] = TeacherTemperatureEnd.Value;
+        if (TeacherTemperatureWarmupEpochs.HasValue) config["teacherTemperatureWarmupEpochs"] = TeacherTemperatureWarmupEpochs.Value;
         if (CenterMomentum.HasValue) config["centerMomentum"] = CenterMomentum.Value;
         if (NumLocalCrops.HasValue) config["numLocalCrops"] = NumLocalCrops.Value;
         if (NumGlobalCrops.HasValue) config["numGlobalCrops"] = NumGlobalCrops.Value;

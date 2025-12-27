@@ -134,12 +134,11 @@ public class MAE<T> : SSLMethodBase<T>
         // Backward pass through decoder and encoder
         if (_decoder is not null)
         {
-            // Backpropagate through decoder
-            _decoder.Backpropagate(gradRecon);
+            // Backpropagate through decoder to get input gradients
+            var decoderInputGrad = _decoder.Backpropagate(gradRecon);
 
-            // Get decoder input gradients and route to encoder
-            var decoderInputGrad = _decoder.GetParameterGradients();
-            var encoderGrad = RouteGradientsToEncoder(gradRecon, visibleIndices, mask);
+            // Route decoder input gradients to encoder (through visible positions)
+            var encoderGrad = RouteGradientsToEncoder(decoderInputGrad, visibleIndices, mask);
             _encoder.Backpropagate(encoderGrad);
         }
         else
@@ -487,8 +486,9 @@ public class MAE<T> : SSLMethodBase<T>
                         var idx = (b * _numPatches + p) * patchDim + d;
                         if (idx < reconGrad.Length)
                         {
-                            meanMaskedGrad = NumOps.Add(meanMaskedGrad,
-                                NumOps.Abs(reconGrad.Data[idx]));
+                            // Note: Do NOT use Abs here - preserving gradient direction is critical
+                            // for proper backpropagation. Abs destroys sign information.
+                            meanMaskedGrad = NumOps.Add(meanMaskedGrad, reconGrad.Data[idx]);
                         }
                     }
                     maskedCount++;

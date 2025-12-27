@@ -200,7 +200,7 @@ public class SSLSession<T>
         OnEpochStart?.Invoke(_currentEpoch);
         _method.OnEpochStart(_currentEpoch);
 
-        T epochLoss = default!;
+        T epochLossSum = NumOps.Zero;
         int stepCount = 0;
 
         // Get gradient sync frequency for DDP
@@ -209,7 +209,8 @@ public class SSLSession<T>
         foreach (var batch in dataLoader())
         {
             var result = _method.TrainStep(batch);
-            epochLoss = result.Loss;
+            // Accumulate loss for averaging instead of just keeping the last batch's loss
+            epochLossSum = NumOps.Add(epochLossSum, result.Loss);
             stepCount++;
             _globalStep++;
             _localStepCounter++;
@@ -236,6 +237,11 @@ public class SSLSession<T>
                 }
             }
         }
+
+        // Compute average epoch loss
+        T epochLoss = stepCount > 0
+            ? NumOps.Divide(epochLossSum, NumOps.FromDouble(stepCount))
+            : NumOps.Zero;
 
         // Epoch-end k-NN evaluation
         double knnAcc = 0;

@@ -438,9 +438,28 @@ public class SSLAugmentationPolicies<T>
         return new Tensor<T>(result, image.Shape);
     }
 
+    /// <summary>
+    /// Applies color jitter augmentation to the image.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Current Implementation:</b> Only brightness and contrast adjustments are implemented.
+    /// Saturation and hue adjustments require HSV color space conversion which adds significant
+    /// computational overhead. For most SSL applications, brightness and contrast jitter alone
+    /// provide substantial augmentation diversity.</para>
+    ///
+    /// <para><b>TODO:</b> saturationRange and hueRange parameters are accepted for API compatibility
+    /// but not currently applied. Full implementation would require RGB↔HSV conversion.</para>
+    /// </remarks>
     private Tensor<T> ColorJitter(Tensor<T> image,
         double brightnessRange, double contrastRange, double saturationRange, double hueRange)
     {
+        // Note: saturationRange and hueRange are not currently implemented.
+        // Full saturation/hue jitter would require RGB to HSV color space conversion,
+        // which adds computational overhead. Brightness and contrast provide effective
+        // color augmentation for most SSL applications.
+        _ = saturationRange; // Suppress unused parameter warning (API compatibility)
+        _ = hueRange;        // Suppress unused parameter warning (API compatibility)
+
         var result = new T[image.Length];
 
         // Apply random brightness/contrast adjustments
