@@ -848,7 +848,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
             avgQueryEmbedding[j] = NumOps.Divide(sum, NumOps.FromDouble(queryEmbeddings.Count));
         }
 
-        if (!string.IsNullOrEmpty(queryDescription))
+        if (queryDescription is not null && queryDescription.Length > 0)
         {
             var textEmbedding = GetTextEmbedding(queryDescription);
             for (int j = 0; j < _embeddingDimension && j < textEmbedding.Length; j++)
@@ -1203,7 +1203,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     }
 
     /// <inheritdoc/>
-    protected override NeuralNetworkBase<T> CreateNewInstance()
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         // Create a fresh optimizer instance to avoid state sharing between models
         var freshOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -1233,15 +1233,18 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         else
         {
             // ONNX mode - use the stored paths
-            if (string.IsNullOrEmpty(_visionEncoderPath) || string.IsNullOrEmpty(_languageModelPath))
+            string visionPath = _visionEncoderPath ?? string.Empty;
+            string languagePath = _languageModelPath ?? string.Empty;
+
+            if (visionPath.Length == 0 || languagePath.Length == 0)
             {
                 throw new InvalidOperationException("Cannot clone ONNX mode instance without valid model paths.");
             }
 
             return new FlamingoNeuralNetwork<T>(
                 Architecture,
-                _visionEncoderPath,
-                _languageModelPath,
+                visionPath,
+                languagePath,
                 _tokenizer,
                 _embeddingDimension,
                 _maxSequenceLength,

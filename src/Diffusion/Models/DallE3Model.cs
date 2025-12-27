@@ -189,7 +189,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
         DallE3Quality quality = DallE3Quality.Standard,
         DallE3Style style = DallE3Style.Vivid)
     {
-        count = Math.Clamp(count, 1, 4);
+        count = Math.Max(1, Math.Min(4, count));
         var results = new List<Tensor<T>>();
 
         for (int i = 0; i < count; i++)
@@ -237,8 +237,8 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
         double variationStrength = 0.5,
         DallE3ImageSize size = DallE3ImageSize.Square1024)
     {
-        count = Math.Clamp(count, 1, 4);
-        variationStrength = Math.Clamp(variationStrength, 0.0, 1.0);
+        count = Math.Max(1, Math.Min(4, count));
+        variationStrength = Math.Max(0.0, Math.Min(1.0, variationStrength));
         var (width, height) = GetDimensionsForSize(size);
 
         var results = new List<Tensor<T>>();
@@ -285,7 +285,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
         int scaleFactor = 2,
         bool enhanceDetails = true)
     {
-        scaleFactor = Math.Clamp(scaleFactor, 2, 4);
+        scaleFactor = Math.Max(2, Math.Min(4, scaleFactor));
 
         // Get current dimensions
         var shape = image.Shape;
@@ -512,7 +512,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
             suggestions.Add("Specifying composition or camera angle can help");
         }
 
-        qualityScore = Math.Clamp(qualityScore, 0.0, 1.0);
+        qualityScore = Math.Max(0.0, Math.Min(1.0, qualityScore));
         return (NumOps.FromDouble(qualityScore), suggestions);
     }
 

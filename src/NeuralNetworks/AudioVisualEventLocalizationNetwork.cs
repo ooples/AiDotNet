@@ -1058,7 +1058,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
     {
         // Simple bag-of-words encoding
         var result = new Vector<T>(_embeddingDimension);
-        var words = description.ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var words = description.ToLowerInvariant().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
 
         foreach (var word in words)
         {
@@ -1235,12 +1235,12 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
     private IEnumerable<AudioVisualEvent> FindRelevantEvents(List<AudioVisualEvent> events, string query)
     {
         var queryWords = query.ToLowerInvariant()
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
             .ToHashSet();
 
         return events.Where(e =>
         {
-            var labelWords = e.Label.ToLowerInvariant().Replace('_', ' ').Split(' ');
+            var labelWords = e.Label.ToLowerInvariant().Replace('_', ' ').Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             return labelWords.Any(w => queryWords.Contains(w));
         });
     }

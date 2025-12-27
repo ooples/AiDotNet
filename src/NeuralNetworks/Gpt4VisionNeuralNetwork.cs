@@ -597,7 +597,7 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
 
         // Parse detection results
         var detections = new List<(string Label, T Confidence, int X, int Y, int Width, int Height)>();
-        var lines = response.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var lines = response.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
 
         foreach (var line in lines)
         {
@@ -1635,8 +1635,11 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
     {
         if (!_useNativeMode)
         {
-            // For ONNX mode, we need valid paths
-            if (string.IsNullOrEmpty(_visionEncoderPath) || string.IsNullOrEmpty(_languageModelPath))
+            // For ONNX mode, we need valid paths - extract to local variables for null safety
+            string visionPath = _visionEncoderPath ?? string.Empty;
+            string languagePath = _languageModelPath ?? string.Empty;
+
+            if (visionPath.Length == 0 || languagePath.Length == 0)
             {
                 throw new InvalidOperationException(
                     "Cannot create new instance in ONNX mode: model paths are not available. " +
@@ -1645,8 +1648,8 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
 
             return new Gpt4VisionNeuralNetwork<T>(
                 Architecture,
-                _visionEncoderPath,
-                _languageModelPath,
+                visionPath,
+                languagePath,
                 _tokenizer,
                 _embeddingDimension,
                 _visionEmbeddingDim,
