@@ -321,6 +321,9 @@ internal class DecoderLayer<T>
     private readonly MultiHeadCrossAttention<T> _crossAttn;
     private readonly Dense<T> _ffn1;
     private readonly Dense<T> _ffn2;
+    private readonly LayerNorm<T> _norm1;
+    private readonly LayerNorm<T> _norm2;
+    private readonly LayerNorm<T> _norm3;
 
     public DecoderLayer(int hiddenDim, int numHeads)
     {
@@ -332,6 +335,9 @@ internal class DecoderLayer<T>
         _crossAttn = new MultiHeadCrossAttention<T>(hiddenDim, numHeads);
         _ffn1 = new Dense<T>(hiddenDim, hiddenDim * 4);
         _ffn2 = new Dense<T>(hiddenDim * 4, hiddenDim);
+        _norm1 = new LayerNorm<T>(hiddenDim);
+        _norm2 = new LayerNorm<T>(hiddenDim);
+        _norm3 = new LayerNorm<T>(hiddenDim);
     }
 
     public Tensor<T> Forward(Tensor<T> queries, Tensor<T> memory, Tensor<T>? posEncoding)
@@ -339,17 +345,17 @@ internal class DecoderLayer<T>
         // Self-attention among queries
         var selfAttnOut = _selfAttn.Forward(queries);
         var q1 = AddTensors(queries, selfAttnOut);
-        q1 = LayerNorm(q1);
+        q1 = _norm1.Forward(q1);
 
         // Cross-attention with encoder memory
         var crossAttnOut = _crossAttn.Forward(q1, memory, posEncoding);
         var q2 = AddTensors(q1, crossAttnOut);
-        q2 = LayerNorm(q2);
+        q2 = _norm2.Forward(q2);
 
         // FFN
         var ffnOut = ApplyFFN(q2);
         var output = AddTensors(q2, ffnOut);
-        output = LayerNorm(output);
+        output = _norm3.Forward(output);
 
         return output;
     }
@@ -361,6 +367,9 @@ internal class DecoderLayer<T>
         count += _crossAttn.GetParameterCount();
         count += _ffn1.GetParameterCount();
         count += _ffn2.GetParameterCount();
+        count += _norm1.GetParameterCount();
+        count += _norm2.GetParameterCount();
+        count += _norm3.GetParameterCount();
         return count;
     }
 
@@ -415,49 +424,6 @@ internal class DecoderLayer<T>
         }
         return result;
     }
-
-    private Tensor<T> LayerNorm(Tensor<T> x)
-    {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-        int hiddenDim = x.Shape[2];
-
-        var result = new Tensor<T>(x.Shape);
-        double eps = 1e-6;
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                // Compute mean and variance
-                double mean = 0;
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    mean += _numOps.ToDouble(x[b, s, d]);
-                }
-                mean /= hiddenDim;
-
-                double variance = 0;
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    double diff = _numOps.ToDouble(x[b, s, d]) - mean;
-                    variance += diff * diff;
-                }
-                variance /= hiddenDim;
-
-                // Normalize
-                double std = Math.Sqrt(variance + eps);
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    double val = (_numOps.ToDouble(x[b, s, d]) - mean) / std;
-                    result[b, s, d] = _numOps.FromDouble(val);
-                }
-            }
-        }
-
-        return result;
-    }
-
     private static double GELU(double x)
     {
         // Approximate GELU: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))

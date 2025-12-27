@@ -133,28 +133,25 @@ public class ByteTrack<T> : ObjectTrackerBase<T>
         }
 
         // Step 5: Deal with unconfirmed tracks
-        var (matchedPairs3, unmatchedUnconfirmed, unmatchedDets3) =
-            Associate(unconfirmedTracks, highConfDets, 0.7);
-
-        // Filter to only use remaining detections from first high-conf match
+        // Associate with remaining high-confidence detections (not matched in Step 3)
         var remainingHighDets = unmatchedDets1.Select(i => highConfDets[i]).ToList();
-        var (matchedPairs3b, unmatchedUnconfirmed2, unmatchedDets3b) =
+        var (matchedPairs3, unmatchedUnconfirmed, unmatchedDets3) =
             Associate(unconfirmedTracks, remainingHighDets, 0.7);
 
-        foreach (var (trackIdx, detIdx) in matchedPairs3b)
+        foreach (var (trackIdx, detIdx) in matchedPairs3)
         {
             unconfirmedTracks[trackIdx].Update(remainingHighDets[detIdx], FrameCount);
         }
 
         // Remove unconfirmed tracks that weren't matched
-        var tracksToRemove = unmatchedUnconfirmed2.Select(i => unconfirmedTracks[i]).ToList();
+        var tracksToRemove = unmatchedUnconfirmed.Select(i => unconfirmedTracks[i]).ToList();
         foreach (var track in tracksToRemove)
         {
             track.MarkRemoved();
         }
 
         // Step 6: Init new tracks from unmatched high confidence detections
-        foreach (int detIdx in unmatchedDets3b)
+        foreach (int detIdx in unmatchedDets3)
         {
             var det = remainingHighDets[detIdx];
             if (NumOps.ToDouble(det.Confidence) >= _newTrackThresh)

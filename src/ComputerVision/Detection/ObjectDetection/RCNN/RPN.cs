@@ -65,8 +65,14 @@ public class RPN<T>
         // Regression head: bbox deltas (4 values per anchor: dx, dy, dw, dh)
         _regHead = new Conv2D<T>(hiddenDim, _numAnchors * 4, kernelSize: 1);
 
-        // Anchor generator using Faster R-CNN style
-        _anchorGenerator = AnchorGenerator<T>.CreateFasterRCNNAnchors();
+        // Create anchor generator with specified sizes and aspect ratios
+        var baseSizes = anchorSizes.Select(s => (double)s).ToArray();
+        var strides = anchorSizes.Select((_, i) => (int)Math.Pow(2, i + 2)).ToArray();
+        _anchorGenerator = new AnchorGenerator<T>(
+            baseSizes: baseSizes,
+            aspectRatios: aspectRatios,
+            scales: new double[] { 1.0 },
+            strides: strides);
     }
 
     /// <summary>

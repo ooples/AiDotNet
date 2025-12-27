@@ -130,6 +130,15 @@ public class DETR<T> : ObjectDetectorBase<T>
         var classLogits = outputs[0];
         var boxPreds = outputs[1];
 
+        // Validate single-image input (batch processing handled by ObjectDetectorBase.DetectBatch)
+        int batchSize = classLogits.Shape[0];
+        if (batchSize != 1)
+        {
+            throw new ArgumentException(
+                $"PostProcess expects single-image input (batch size 1), got batch size {batchSize}. " +
+                "Use DetectBatch for multi-image processing.");
+        }
+
         // Decode outputs
         var decoded = _decoder.DecodeOutputs(classLogits, boxPreds, imageHeight, imageWidth);
 
@@ -184,7 +193,9 @@ public class DETR<T> : ObjectDetectorBase<T>
     /// <inheritdoc/>
     public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
     {
-        return Task.CompletedTask;
+        throw new NotImplementedException(
+            "Weight loading not yet implemented for DETR. " +
+            "The model will run with randomly initialized weights.");
     }
 
     /// <inheritdoc/>
@@ -257,6 +268,11 @@ internal class DETREncoder<T>
     private readonly int _numLayers;
     private readonly List<EncoderLayer<T>> _layers;
 
+    /// <summary>
+    /// Gets the encoder layers for weight loading.
+    /// </summary>
+    public IReadOnlyList<EncoderLayer<T>> Layers => _layers;
+
     public DETREncoder(int hiddenDim, int numHeads, int numLayers)
     {
         _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
@@ -314,7 +330,16 @@ internal class EncoderLayer<T>
     private readonly MultiHeadSelfAttention<T> _selfAttn;
     private readonly Dense<T> _ffn1;
     private readonly Dense<T> _ffn2;
+    private readonly LayerNorm<T> _norm1;
+    private readonly LayerNorm<T> _norm2;
     private readonly int _hiddenDim;
+
+    // Public properties for weight loading
+    public MultiHeadSelfAttention<T> SelfAttn => _selfAttn;
+    public Dense<T> FFN1 => _ffn1;
+    public Dense<T> FFN2 => _ffn2;
+    public LayerNorm<T> Norm1 => _norm1;
+    public LayerNorm<T> Norm2 => _norm2;
 
     public EncoderLayer(int hiddenDim, int numHeads)
     {
@@ -324,19 +349,21 @@ internal class EncoderLayer<T>
         _selfAttn = new MultiHeadSelfAttention<T>(hiddenDim, numHeads);
         _ffn1 = new Dense<T>(hiddenDim, hiddenDim * 4);
         _ffn2 = new Dense<T>(hiddenDim * 4, hiddenDim);
+        _norm1 = new LayerNorm<T>(hiddenDim);
+        _norm2 = new LayerNorm<T>(hiddenDim);
     }
 
     public Tensor<T> Forward(Tensor<T> x)
     {
-        // Self-attention with residual
+        // Self-attention with residual and layer norm
         var attnOut = _selfAttn.Forward(x);
         var x1 = AddTensors(x, attnOut);
-        x1 = LayerNorm(x1);
+        x1 = _norm1.Forward(x1);
 
-        // FFN with residual
+        // FFN with residual and layer norm
         var ffnOut = ApplyFFN(x1);
         var output = AddTensors(x1, ffnOut);
-        output = LayerNorm(output);
+        output = _norm2.Forward(output);
 
         return output;
     }
@@ -345,7 +372,9 @@ internal class EncoderLayer<T>
     {
         return _selfAttn.GetParameterCount() +
                _ffn1.GetParameterCount() +
-               _ffn2.GetParameterCount();
+               _ffn2.GetParameterCount() +
+               _norm1.GetParameterCount() +
+               _norm2.GetParameterCount();
     }
 
     private Tensor<T> ApplyFFN(Tensor<T> x)
@@ -397,19 +426,65 @@ internal class EncoderLayer<T>
         return result;
     }
 
-    private Tensor<T> LayerNorm(Tensor<T> x)
+    private static double GELU(double x)
+    {
+        double c = Math.Sqrt(2.0 / Math.PI);
+        return 0.5 * x * (1.0 + Math.Tanh(c * (x + 0.044715 * x * x * x)));
+    }
+}
+
+/// <summary>
+/// Layer normalization with learnable affine parameters (gamma and beta).
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+internal class LayerNorm<T>
+{
+    private readonly INumericOperations<T> _numOps;
+    private readonly int _hiddenDim;
+    private readonly Tensor<T> _gamma; // Scale parameter
+    private readonly Tensor<T> _beta;  // Shift parameter
+    private readonly double _eps;
+
+    /// <summary>
+    /// Gets the gamma (scale) parameter for weight loading.
+    /// </summary>
+    public Tensor<T> Gamma => _gamma;
+
+    /// <summary>
+    /// Gets the beta (shift) parameter for weight loading.
+    /// </summary>
+    public Tensor<T> Beta => _beta;
+
+    public LayerNorm(int hiddenDim, double eps = 1e-6)
+    {
+        _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        _hiddenDim = hiddenDim;
+        _eps = eps;
+
+        // Initialize gamma to 1 and beta to 0 (standard initialization)
+        _gamma = new Tensor<T>(new[] { hiddenDim });
+        _beta = new Tensor<T>(new[] { hiddenDim });
+
+        for (int i = 0; i < hiddenDim; i++)
+        {
+            _gamma[i] = _numOps.FromDouble(1.0);
+            _beta[i] = _numOps.FromDouble(0.0);
+        }
+    }
+
+    public Tensor<T> Forward(Tensor<T> x)
     {
         int batch = x.Shape[0];
         int seqLen = x.Shape[1];
         int hiddenDim = x.Shape[2];
 
         var result = new Tensor<T>(x.Shape);
-        double eps = 1e-6;
 
         for (int b = 0; b < batch; b++)
         {
             for (int s = 0; s < seqLen; s++)
             {
+                // Compute mean
                 double mean = 0;
                 for (int d = 0; d < hiddenDim; d++)
                 {
@@ -417,6 +492,7 @@ internal class EncoderLayer<T>
                 }
                 mean /= hiddenDim;
 
+                // Compute variance
                 double variance = 0;
                 for (int d = 0; d < hiddenDim; d++)
                 {
@@ -425,11 +501,14 @@ internal class EncoderLayer<T>
                 }
                 variance /= hiddenDim;
 
-                double std = Math.Sqrt(variance + eps);
+                // Normalize and apply affine transformation: gamma * (x - mean) / std + beta
+                double std = Math.Sqrt(variance + _eps);
                 for (int d = 0; d < hiddenDim; d++)
                 {
-                    double val = (_numOps.ToDouble(x[b, s, d]) - mean) / std;
-                    result[b, s, d] = _numOps.FromDouble(val);
+                    double normalized = (_numOps.ToDouble(x[b, s, d]) - mean) / std;
+                    double gamma = _numOps.ToDouble(_gamma[d]);
+                    double beta = _numOps.ToDouble(_beta[d]);
+                    result[b, s, d] = _numOps.FromDouble(gamma * normalized + beta);
                 }
             }
         }
@@ -437,9 +516,9 @@ internal class EncoderLayer<T>
         return result;
     }
 
-    private static double GELU(double x)
+    public long GetParameterCount()
     {
-        double c = Math.Sqrt(2.0 / Math.PI);
-        return 0.5 * x * (1.0 + Math.Tanh(c * (x + 0.044715 * x * x * x)));
+        return 2 * _hiddenDim; // gamma + beta
     }
 }
+

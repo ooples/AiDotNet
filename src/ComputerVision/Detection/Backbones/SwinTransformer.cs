@@ -458,23 +458,35 @@ internal class PatchMergingBlock<T>
         }
         else
         {
-            // Try to infer from sequence length - prefer slight height preference for landscapes
-            double sqrtSeq = Math.Sqrt(seqLen);
-            h = (int)Math.Ceiling(sqrtSeq);
-            w = (int)Math.Floor(sqrtSeq);
-            
-            // Adjust to match sequence length exactly
-            while (h * w != seqLen && h > 0 && w > 0)
+            // Find valid factorization h×w = seqLen where both h and w are even (required for 2×2 patch merging)
+            // Start from sqrt and search for closest factors
+            int sqrtSeq = (int)Math.Sqrt(seqLen);
+            h = 0;
+            w = 0;
+
+            // Search for factors, preferring those close to square
+            for (int candidate = sqrtSeq; candidate >= 1; candidate--)
             {
-                if (h * w < seqLen) h++;
-                else w--;
+                if (seqLen % candidate == 0)
+                {
+                    int other = seqLen / candidate;
+                    // Both dimensions must be even for 2×2 patch merging
+                    if (candidate % 2 == 0 && other % 2 == 0)
+                    {
+                        h = other;  // height >= width (for typical image aspect ratios)
+                        w = candidate;
+                        break;
+                    }
+                }
             }
-            
-            // Fallback to square if no match found
-            if (h * w != seqLen)
+
+            // If no valid even factorization found, throw exception
+            if (h == 0 || w == 0)
             {
-                h = (int)Math.Sqrt(seqLen);
-                w = h;
+                throw new ArgumentException(
+                    $"Cannot infer spatial dimensions from sequence length {seqLen}. " +
+                    "Sequence length must be factorizable into two even integers for patch merging. " +
+                    "Please provide explicit inputHeight and inputWidth parameters.");
             }
         }
         

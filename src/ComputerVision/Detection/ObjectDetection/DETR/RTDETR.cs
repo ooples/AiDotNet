@@ -175,7 +175,7 @@ public class RTDETR<T> : ObjectDetectorBase<T>
     /// <inheritdoc/>
     public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
     {
-        return Task.CompletedTask;
+        throw new NotImplementedException("Weight loading not yet implemented for RT-DETR");
     }
 
     /// <inheritdoc/>
@@ -186,48 +186,7 @@ public class RTDETR<T> : ObjectDetectorBase<T>
 
     private (Tensor<T> flattened, int[] levelStarts, int[][] spatialShapes) FlattenMultiScale(List<Tensor<T>> features)
     {
-        int batch = features[0].Shape[0];
-        int totalTokens = 0;
-        var spatialShapes = new int[features.Count][];
-        var levelStarts = new int[features.Count];
-
-        for (int i = 0; i < features.Count; i++)
-        {
-            int h = features[i].Shape[2];
-            int w = features[i].Shape[3];
-            spatialShapes[i] = new[] { h, w };
-            levelStarts[i] = totalTokens;
-            totalTokens += h * w;
-        }
-
-        var flattened = new Tensor<T>(new[] { batch, totalTokens, _hiddenDim });
-
-        int offset = 0;
-        for (int level = 0; level < features.Count; level++)
-        {
-            var feat = features[level];
-            int c = feat.Shape[1];
-            int h = feat.Shape[2];
-            int w = feat.Shape[3];
-
-            for (int b = 0; b < batch; b++)
-            {
-                for (int y = 0; y < h; y++)
-                {
-                    for (int x = 0; x < w; x++)
-                    {
-                        int tokenIdx = offset + y * w + x;
-                        for (int d = 0; d < c && d < _hiddenDim; d++)
-                        {
-                            flattened[b, tokenIdx, d] = feat[b, d, y, x];
-                        }
-                    }
-                }
-            }
-            offset += h * w;
-        }
-
-        return (flattened, levelStarts, spatialShapes);
+        return DETRHelpers.FlattenMultiScale(features, _hiddenDim);
     }
 }
 
@@ -707,8 +666,10 @@ internal class RTDETRDecoder<T>
 
     private Tensor<T> SelectQueries(Tensor<T> memory, int batch)
     {
-        // For simplicity, use fixed queries
-        // Full implementation would use uncertainty-minimal selection
+        // TODO: Implement uncertainty-minimal query selection as described in RT-DETR paper.
+        // Current simplified implementation uses fixed learnable queries.
+        // Full implementation should compute uncertainty scores from encoder output
+        // and select top-K positions with minimal uncertainty.
         var queries = new Tensor<T>(new[] { batch, _numQueries, _hiddenDim });
 
         for (int b = 0; b < batch; b++)

@@ -152,8 +152,9 @@ internal class YOLOHead<T>
                             // Decode box coordinates
                             double cx = (Sigmoid(tx) + w) * stride;
                             double cy = (Sigmoid(ty) + h) * stride;
-                            double bw = Math.Exp(tw) * stride;
-                            double bh = Math.Exp(th) * stride;
+                            // Clamp exponential inputs to prevent overflow (exp(88) ≈ 1.65e38, near double.MaxValue)
+                            double bw = Math.Exp(Math.Clamp(tw, -88.0, 88.0)) * stride;
+                            double bh = Math.Exp(Math.Clamp(th, -88.0, 88.0)) * stride;
 
                             // Convert to xyxy format
                             float x1 = (float)Math.Max(0, cx - bw / 2);
@@ -432,7 +433,13 @@ internal class YOLOv8Head<T>
         for (int i = 0; i < x.Length; i++)
         {
             double val = _numOps.ToDouble(x[i]);
-            double silu = val * (1.0 / (1.0 + Math.Exp(-val)));
+            // Numerically stable SiLU: x * sigmoid(x)
+            // For large positive x: sigmoid(x) ≈ 1, so SiLU ≈ x
+            // For large negative x: sigmoid(x) ≈ 0, so SiLU ≈ 0
+            // Clamp to prevent overflow in exp(-val) when val is very negative
+            double clampedVal = Math.Clamp(val, -88.0, 88.0);
+            double sigmoid = 1.0 / (1.0 + Math.Exp(-clampedVal));
+            double silu = val * sigmoid;
             result[i] = _numOps.FromDouble(silu);
         }
         return result;

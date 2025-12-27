@@ -287,7 +287,10 @@ public class TrOCR<T> : OCRBase<T>
             {
                 for (int i = 0; i < hiddenDim; i++)
                 {
-                    double angle = pos / Math.Pow(10000.0, (2.0 * (i / 2)) / hiddenDim);
+                    // Use explicit floor division to get the pair index (0,1->0, 2,3->1, etc.)
+                    int pairIndex = i / 2;
+                    double exponent = (2.0 * pairIndex) / hiddenDim;
+                    double angle = pos / Math.Pow(10000.0, exponent);
                     double pe = (i % 2 == 0) ? Math.Sin(angle) : Math.Cos(angle);
 
                     result[b, pos, i] = NumOps.FromDouble(
@@ -467,8 +470,16 @@ public class TrOCR<T> : OCRBase<T>
 
     private void CopyWeights(Tensor<float> source, Tensor<T> dest)
     {
-        int count = Math.Min(source.Length, dest.Length);
-        for (int i = 0; i < count; i++)
+        if (source.Length != dest.Length)
+        {
+            throw new ArgumentException(
+                $"Weight shape mismatch: source has {source.Length} elements, " +
+                $"destination has {dest.Length} elements. " +
+                $"Source shape: [{string.Join(", ", source.Shape)}], " +
+                $"Destination shape: [{string.Join(", ", dest.Shape)}]");
+        }
+
+        for (int i = 0; i < source.Length; i++)
         {
             dest[i] = NumOps.FromDouble(source[i]);
         }
@@ -503,6 +514,10 @@ internal class TrOCREncoderLayer<T>
     private readonly Dense<T> _ffn1;
     private readonly Dense<T> _ffn2;
 
+    // Layer normalization with learnable affine parameters
+    private readonly TrOCRLayerNorm<T> _norm1;
+    private readonly TrOCRLayerNorm<T> _norm2;
+
     // Public properties for weight loading
     public Dense<T> QueryProj => _queryProj;
     public Dense<T> KeyProj => _keyProj;
@@ -510,6 +525,8 @@ internal class TrOCREncoderLayer<T>
     public Dense<T> OutputProj => _outputProj;
     public Dense<T> FFN1 => _ffn1;
     public Dense<T> FFN2 => _ffn2;
+    public TrOCRLayerNorm<T> Norm1 => _norm1;
+    public TrOCRLayerNorm<T> Norm2 => _norm2;
 
     public TrOCREncoderLayer(int hiddenDim, int numHeads)
     {
@@ -526,6 +543,10 @@ internal class TrOCREncoderLayer<T>
 
         _ffn1 = new Dense<T>(hiddenDim, hiddenDim * 4);
         _ffn2 = new Dense<T>(hiddenDim * 4, hiddenDim);
+
+        // Layer normalization with learnable gamma/beta parameters
+        _norm1 = new TrOCRLayerNorm<T>(hiddenDim);
+        _norm2 = new TrOCRLayerNorm<T>(hiddenDim);
     }
 
     public Tensor<T> Forward(Tensor<T> x)
@@ -536,16 +557,34 @@ internal class TrOCREncoderLayer<T>
         // Self-attention with proper scaled dot-product attention
         var attnOut = ApplySelfAttention(x, batch, seqLen);
 
-        // Add & LayerNorm
-        var x1 = AddAndNorm(x, attnOut, batch, seqLen);
+        // Add residual & LayerNorm with learnable parameters
+        var residual1 = AddTensors(x, attnOut, batch, seqLen);
+        var x1 = _norm1.Forward(residual1);
 
         // FFN
         var ffnOut = ApplyFFN(x1, batch, seqLen);
 
-        // Add & LayerNorm
-        var output = AddAndNorm(x1, ffnOut, batch, seqLen);
+        // Add residual & LayerNorm with learnable parameters
+        var residual2 = AddTensors(x1, ffnOut, batch, seqLen);
+        var output = _norm2.Forward(residual2);
 
         return output;
+    }
+
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b, int batch, int seqLen)
+    {
+        var result = new Tensor<T>(a.Shape);
+        for (int i = 0; i < batch; i++)
+        {
+            for (int j = 0; j < seqLen; j++)
+            {
+                for (int k = 0; k < _hiddenDim; k++)
+                {
+                    result[i, j, k] = _numOps.Add(a[i, j, k], b[i, j, k]);
+                }
+            }
+        }
+        return result;
     }
 
     private Tensor<T> ApplySelfAttention(Tensor<T> x, int batch, int seqLen)
@@ -695,47 +734,6 @@ internal class TrOCREncoderLayer<T>
         return result;
     }
 
-    private Tensor<T> AddAndNorm(Tensor<T> x, Tensor<T> residual, int batch, int seqLen)
-    {
-        var result = new Tensor<T>(x.Shape);
-        double eps = 1e-6;
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                // Add residual
-                double mean = 0;
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    double val = _numOps.ToDouble(x[b, s, d]) + _numOps.ToDouble(residual[b, s, d]);
-                    result[b, s, d] = _numOps.FromDouble(val);
-                    mean += val;
-                }
-                mean /= _hiddenDim;
-
-                // Compute variance
-                double variance = 0;
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    double diff = _numOps.ToDouble(result[b, s, d]) - mean;
-                    variance += diff * diff;
-                }
-                variance /= _hiddenDim;
-
-                // Normalize
-                double std = Math.Sqrt(variance + eps);
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    double val = (_numOps.ToDouble(result[b, s, d]) - mean) / std;
-                    result[b, s, d] = _numOps.FromDouble(val);
-                }
-            }
-        }
-
-        return result;
-    }
-
     private static double GELU(double x)
     {
         double c = Math.Sqrt(2.0 / Math.PI);
@@ -749,7 +747,9 @@ internal class TrOCREncoderLayer<T>
                _valueProj.GetParameterCount() +
                _outputProj.GetParameterCount() +
                _ffn1.GetParameterCount() +
-               _ffn2.GetParameterCount();
+               _ffn2.GetParameterCount() +
+               _norm1.GetParameterCount() +
+               _norm2.GetParameterCount();
     }
 }
 
@@ -781,6 +781,11 @@ internal class TrOCRDecoderLayer<T>
     private readonly Dense<T> _ffn1;
     private readonly Dense<T> _ffn2;
 
+    // Layer normalization with learnable affine parameters
+    private readonly TrOCRLayerNorm<T> _norm1;
+    private readonly TrOCRLayerNorm<T> _norm2;
+    private readonly TrOCRLayerNorm<T> _norm3;
+
     // Public properties for weight loading - self-attention
     public Dense<T> SelfQueryProj => _selfQueryProj;
     public Dense<T> SelfKeyProj => _selfKeyProj;
@@ -796,6 +801,11 @@ internal class TrOCRDecoderLayer<T>
     // Public properties for weight loading - FFN
     public Dense<T> FFN1 => _ffn1;
     public Dense<T> FFN2 => _ffn2;
+
+    // Public properties for weight loading - LayerNorm
+    public TrOCRLayerNorm<T> Norm1 => _norm1;
+    public TrOCRLayerNorm<T> Norm2 => _norm2;
+    public TrOCRLayerNorm<T> Norm3 => _norm3;
 
     public TrOCRDecoderLayer(int hiddenDim, int numHeads)
     {
@@ -820,6 +830,11 @@ internal class TrOCRDecoderLayer<T>
         // FFN
         _ffn1 = new Dense<T>(hiddenDim, hiddenDim * 4);
         _ffn2 = new Dense<T>(hiddenDim * 4, hiddenDim);
+
+        // Layer normalization with learnable gamma/beta parameters
+        _norm1 = new TrOCRLayerNorm<T>(hiddenDim);
+        _norm2 = new TrOCRLayerNorm<T>(hiddenDim);
+        _norm3 = new TrOCRLayerNorm<T>(hiddenDim);
     }
 
     public Tensor<T> Forward(Tensor<T> x, Tensor<T> encoderOutput)
@@ -830,17 +845,36 @@ internal class TrOCRDecoderLayer<T>
 
         // Masked self-attention (causal mask for autoregressive decoding)
         var selfAttnOut = ApplyCausalSelfAttention(x, batch, seqLen);
-        var x1 = AddAndNorm(x, selfAttnOut, batch, seqLen);
+        var residual1 = AddTensors(x, selfAttnOut, batch, seqLen);
+        var x1 = _norm1.Forward(residual1);
 
         // Cross-attention to encoder output
         var crossAttnOut = ApplyCrossAttention(x1, encoderOutput, batch, seqLen, encoderLen);
-        var x2 = AddAndNorm(x1, crossAttnOut, batch, seqLen);
+        var residual2 = AddTensors(x1, crossAttnOut, batch, seqLen);
+        var x2 = _norm2.Forward(residual2);
 
         // FFN
         var ffnOut = ApplyFFN(x2, batch, seqLen);
-        var output = AddAndNorm(x2, ffnOut, batch, seqLen);
+        var residual3 = AddTensors(x2, ffnOut, batch, seqLen);
+        var output = _norm3.Forward(residual3);
 
         return output;
+    }
+
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b, int batch, int seqLen)
+    {
+        var result = new Tensor<T>(a.Shape);
+        for (int i = 0; i < batch; i++)
+        {
+            for (int j = 0; j < seqLen; j++)
+            {
+                for (int k = 0; k < _hiddenDim; k++)
+                {
+                    result[i, j, k] = _numOps.Add(a[i, j, k], b[i, j, k]);
+                }
+            }
+        }
+        return result;
     }
 
     private Tensor<T> ApplyCausalSelfAttention(Tensor<T> x, int batch, int seqLen)
@@ -1086,47 +1120,6 @@ internal class TrOCRDecoderLayer<T>
         return result;
     }
 
-    private Tensor<T> AddAndNorm(Tensor<T> x, Tensor<T> residual, int batch, int seqLen)
-    {
-        var result = new Tensor<T>(x.Shape);
-        double eps = 1e-6;
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                // Add residual
-                double mean = 0;
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    double val = _numOps.ToDouble(x[b, s, d]) + _numOps.ToDouble(residual[b, s, d]);
-                    result[b, s, d] = _numOps.FromDouble(val);
-                    mean += val;
-                }
-                mean /= _hiddenDim;
-
-                // Compute variance
-                double variance = 0;
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    double diff = _numOps.ToDouble(result[b, s, d]) - mean;
-                    variance += diff * diff;
-                }
-                variance /= _hiddenDim;
-
-                // Normalize
-                double std = Math.Sqrt(variance + eps);
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    double val = (_numOps.ToDouble(result[b, s, d]) - mean) / std;
-                    result[b, s, d] = _numOps.FromDouble(val);
-                }
-            }
-        }
-
-        return result;
-    }
-
     private static double GELU(double x)
     {
         double c = Math.Sqrt(2.0 / Math.PI);
@@ -1144,6 +1137,98 @@ internal class TrOCRDecoderLayer<T>
                _crossValueProj.GetParameterCount() +
                _crossOutputProj.GetParameterCount() +
                _ffn1.GetParameterCount() +
-               _ffn2.GetParameterCount();
+               _ffn2.GetParameterCount() +
+               _norm1.GetParameterCount() +
+               _norm2.GetParameterCount() +
+               _norm3.GetParameterCount();
+    }
+}
+
+/// <summary>
+/// Layer normalization with learnable affine parameters for TrOCR.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+internal class TrOCRLayerNorm<T>
+{
+    private readonly INumericOperations<T> _numOps;
+    private readonly int _hiddenDim;
+    private readonly Tensor<T> _gamma; // Scale parameter
+    private readonly Tensor<T> _beta;  // Shift parameter
+    private readonly double _eps;
+
+    /// <summary>
+    /// Gets the gamma (scale) parameter for weight loading.
+    /// </summary>
+    public Tensor<T> Gamma => _gamma;
+
+    /// <summary>
+    /// Gets the beta (shift) parameter for weight loading.
+    /// </summary>
+    public Tensor<T> Beta => _beta;
+
+    public TrOCRLayerNorm(int hiddenDim, double eps = 1e-6)
+    {
+        _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        _hiddenDim = hiddenDim;
+        _eps = eps;
+
+        // Initialize gamma to 1 and beta to 0 (standard initialization)
+        _gamma = new Tensor<T>(new[] { hiddenDim });
+        _beta = new Tensor<T>(new[] { hiddenDim });
+
+        for (int i = 0; i < hiddenDim; i++)
+        {
+            _gamma[i] = _numOps.FromDouble(1.0);
+            _beta[i] = _numOps.FromDouble(0.0);
+        }
+    }
+
+    public Tensor<T> Forward(Tensor<T> x)
+    {
+        int batch = x.Shape[0];
+        int seqLen = x.Shape[1];
+        int hiddenDim = x.Shape[2];
+
+        var result = new Tensor<T>(x.Shape);
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int s = 0; s < seqLen; s++)
+            {
+                // Compute mean
+                double mean = 0;
+                for (int d = 0; d < hiddenDim; d++)
+                {
+                    mean += _numOps.ToDouble(x[b, s, d]);
+                }
+                mean /= hiddenDim;
+
+                // Compute variance
+                double variance = 0;
+                for (int d = 0; d < hiddenDim; d++)
+                {
+                    double diff = _numOps.ToDouble(x[b, s, d]) - mean;
+                    variance += diff * diff;
+                }
+                variance /= hiddenDim;
+
+                // Normalize and apply affine transformation
+                double std = Math.Sqrt(variance + _eps);
+                for (int d = 0; d < hiddenDim; d++)
+                {
+                    double normalized = (_numOps.ToDouble(x[b, s, d]) - mean) / std;
+                    double gamma = _numOps.ToDouble(_gamma[d]);
+                    double beta = _numOps.ToDouble(_beta[d]);
+                    result[b, s, d] = _numOps.FromDouble(gamma * normalized + beta);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    public long GetParameterCount()
+    {
+        return 2 * _hiddenDim; // gamma + beta
     }
 }

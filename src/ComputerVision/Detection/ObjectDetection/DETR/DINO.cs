@@ -184,7 +184,7 @@ public class DINO<T> : ObjectDetectorBase<T>
     /// <inheritdoc/>
     public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
     {
-        return Task.CompletedTask;
+        throw new NotImplementedException("Weight loading not yet implemented for DINO");
     }
 
     /// <inheritdoc/>
@@ -195,48 +195,7 @@ public class DINO<T> : ObjectDetectorBase<T>
 
     private (Tensor<T> flattened, int[] levelStarts, int[][] spatialShapes) FlattenMultiScale(List<Tensor<T>> features)
     {
-        int batch = features[0].Shape[0];
-        int totalTokens = 0;
-        var spatialShapes = new int[features.Count][];
-        var levelStarts = new int[features.Count];
-
-        for (int i = 0; i < features.Count; i++)
-        {
-            int h = features[i].Shape[2];
-            int w = features[i].Shape[3];
-            spatialShapes[i] = new[] { h, w };
-            levelStarts[i] = totalTokens;
-            totalTokens += h * w;
-        }
-
-        var flattened = new Tensor<T>(new[] { batch, totalTokens, _hiddenDim });
-
-        int offset = 0;
-        for (int level = 0; level < features.Count; level++)
-        {
-            var feat = features[level];
-            int c = feat.Shape[1];
-            int h = feat.Shape[2];
-            int w = feat.Shape[3];
-
-            for (int b = 0; b < batch; b++)
-            {
-                for (int y = 0; y < h; y++)
-                {
-                    for (int x = 0; x < w; x++)
-                    {
-                        int tokenIdx = offset + y * w + x;
-                        for (int d = 0; d < c && d < _hiddenDim; d++)
-                        {
-                            flattened[b, tokenIdx, d] = feat[b, d, y, x];
-                        }
-                    }
-                }
-            }
-            offset += h * w;
-        }
-
-        return (flattened, levelStarts, spatialShapes);
+        return DETRHelpers.FlattenMultiScale(features, _hiddenDim);
     }
 
     private Tensor<T> ProjectFeatures(Tensor<T> features)
@@ -275,6 +234,15 @@ public class DINO<T> : ObjectDetectorBase<T>
         int seqLen = shape[1];
         int hiddenDim = shape[2];
 
+        // Pre-compute frequencies to avoid repeated Math.Pow calls
+        var freqsX = new double[hiddenDim / 2];
+        var freqsY = new double[hiddenDim / 2];
+        for (int i = 0; i < hiddenDim / 2; i++)
+        {
+            freqsX[i] = 1.0 / Math.Pow(10000.0, (2.0 * i) / hiddenDim);
+            freqsY[i] = 1.0 / Math.Pow(10000.0, (2.0 * i + 1) / hiddenDim);
+        }
+
         var encoding = new Tensor<T>(shape);
 
         for (int level = 0; level < spatialShapes.Length; level++)
@@ -282,6 +250,9 @@ public class DINO<T> : ObjectDetectorBase<T>
             int h = spatialShapes[level][0];
             int w = spatialShapes[level][1];
             int start = levelStarts[level];
+
+            // Pre-compute level embedding value with proper scaling
+            double levelEmbedValue = level * 0.1;
 
             for (int b = 0; b < batch; b++)
             {
@@ -291,18 +262,15 @@ public class DINO<T> : ObjectDetectorBase<T>
                     {
                         int tokenIdx = start + y * w + x;
 
-                        // 2D positional encoding
+                        // 2D positional encoding using pre-computed frequencies
                         for (int i = 0; i < hiddenDim / 2; i++)
                         {
-                            double freqX = 1.0 / Math.Pow(10000.0, (2.0 * i) / hiddenDim);
-                            double freqY = 1.0 / Math.Pow(10000.0, (2.0 * i + 1) / hiddenDim);
-
-                            encoding[b, tokenIdx, i * 2] = NumOps.FromDouble(Math.Sin(x * freqX));
-                            encoding[b, tokenIdx, i * 2 + 1] = NumOps.FromDouble(Math.Cos(y * freqY));
+                            encoding[b, tokenIdx, i * 2] = NumOps.FromDouble(Math.Sin(x * freqsX[i]));
+                            encoding[b, tokenIdx, i * 2 + 1] = NumOps.FromDouble(Math.Cos(y * freqsY[i]));
                         }
 
-                        // Add level embedding
-                        encoding[b, tokenIdx, 0] = NumOps.Add(encoding[b, tokenIdx, 0], NumOps.FromDouble(level * 0.1));
+                        // Add level embedding to first dimension
+                        encoding[b, tokenIdx, 0] = NumOps.Add(encoding[b, tokenIdx, 0], NumOps.FromDouble(levelEmbedValue));
                     }
                 }
             }
@@ -375,6 +343,8 @@ internal class DINOEncoderLayer<T>
     private readonly MultiHeadSelfAttention<T> _selfAttn;
     private readonly Dense<T> _ffn1;
     private readonly Dense<T> _ffn2;
+    private readonly LayerNorm<T> _norm1;
+    private readonly LayerNorm<T> _norm2;
     private readonly int _hiddenDim;
 
     public DINOEncoderLayer(int hiddenDim, int numHeads, int numLevels)
@@ -385,6 +355,8 @@ internal class DINOEncoderLayer<T>
         _selfAttn = new MultiHeadSelfAttention<T>(hiddenDim, numHeads);
         _ffn1 = new Dense<T>(hiddenDim, hiddenDim * 4);
         _ffn2 = new Dense<T>(hiddenDim * 4, hiddenDim);
+        _norm1 = new LayerNorm<T>(hiddenDim);
+        _norm2 = new LayerNorm<T>(hiddenDim);
     }
 
     public Tensor<T> Forward(Tensor<T> x, int[][] spatialShapes, int[] levelStarts)
@@ -392,12 +364,12 @@ internal class DINOEncoderLayer<T>
         // Self-attention (simplified - would use deformable attention in full implementation)
         var attnOut = _selfAttn.Forward(x);
         var x1 = AddTensors(x, attnOut);
-        x1 = LayerNorm(x1);
+        x1 = _norm1.Forward(x1);
 
         // FFN
         var ffnOut = ApplyFFN(x1);
         var output = AddTensors(x1, ffnOut);
-        output = LayerNorm(output);
+        output = _norm2.Forward(output);
 
         return output;
     }
@@ -406,7 +378,9 @@ internal class DINOEncoderLayer<T>
     {
         return _selfAttn.GetParameterCount() +
                _ffn1.GetParameterCount() +
-               _ffn2.GetParameterCount();
+               _ffn2.GetParameterCount() +
+               _norm1.GetParameterCount() +
+               _norm2.GetParameterCount();
     }
 
     private Tensor<T> ApplyFFN(Tensor<T> x)
@@ -453,46 +427,6 @@ internal class DINOEncoderLayer<T>
         {
             result[i] = _numOps.Add(a[i], b[i]);
         }
-        return result;
-    }
-
-    private Tensor<T> LayerNorm(Tensor<T> x)
-    {
-        int batch = x.Shape[0];
-        int seqLen = x.Shape[1];
-        int hiddenDim = x.Shape[2];
-
-        var result = new Tensor<T>(x.Shape);
-        double eps = 1e-6;
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                double mean = 0;
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    mean += _numOps.ToDouble(x[b, s, d]);
-                }
-                mean /= hiddenDim;
-
-                double variance = 0;
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    double diff = _numOps.ToDouble(x[b, s, d]) - mean;
-                    variance += diff * diff;
-                }
-                variance /= hiddenDim;
-
-                double std = Math.Sqrt(variance + eps);
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    double val = (_numOps.ToDouble(x[b, s, d]) - mean) / std;
-                    result[b, s, d] = _numOps.FromDouble(val);
-                }
-            }
-        }
-
         return result;
     }
 
