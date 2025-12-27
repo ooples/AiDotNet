@@ -1070,9 +1070,9 @@ public class InterpolationIntegrationTests
             // Should not throw
             var below = interp.Interpolate(0.0);
             var above = interp.Interpolate(6.0);
-            Assert.False(double.IsNaN(below) && double.IsInfinity(below),
+            Assert.False(double.IsNaN(below) || double.IsInfinity(below),
                 $"{interp.GetType().Name} returned invalid value for extrapolation below");
-            Assert.False(double.IsNaN(above) && double.IsInfinity(above),
+            Assert.False(double.IsNaN(above) || double.IsInfinity(above),
                 $"{interp.GetType().Name} returned invalid value for extrapolation above");
         }
     }

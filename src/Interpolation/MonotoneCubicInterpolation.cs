@@ -164,16 +164,10 @@ public class MonotoneCubicInterpolation<T> : IInterpolation<T>
         {
             // Check if adjacent secants have opposite signs (local extremum)
             T product = _numOps.Multiply(delta[i - 1], delta[i]);
-            if (_numOps.LessThanOrEquals(product, _numOps.Zero))
-            {
-                // Local extremum - set slope to zero for monotonicity
-                _m[i] = _numOps.Zero;
-            }
-            else
-            {
-                // Use arithmetic mean of adjacent secants as initial slope
-                _m[i] = _numOps.Divide(_numOps.Add(delta[i - 1], delta[i]), _numOps.FromDouble(2));
-            }
+            // Local extremum gets zero slope for monotonicity; otherwise use arithmetic mean of adjacent secants
+            _m[i] = _numOps.LessThanOrEquals(product, _numOps.Zero)
+                ? _numOps.Zero
+                : _numOps.Divide(_numOps.Add(delta[i - 1], delta[i]), _numOps.FromDouble(2));
         }
 
         // Step 2: Apply Fritsch-Carlson monotonicity constraint
