@@ -63,7 +63,7 @@ public class SimCLR<T> : SSLMethodBase<T>
         INeuralNetwork<T> encoder,
         IProjectorHead<T> projector,
         SSLConfig? config = null)
-        : base(encoder, projector, config ?? SSLConfig.ForSimCLR())
+        : base(encoder, projector, config ?? new SSLConfig { Method = SSLMethodType.SimCLR })
     {
         var temperature = _config.Temperature ?? 0.1;
         _loss = new NTXentLoss<T>(temperature);

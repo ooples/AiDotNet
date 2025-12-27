@@ -251,7 +251,7 @@ public class MAEReconstructionLoss<T>
     public static Tensor<T> CreateRandomMask(
         int batchSize, int numPatches, double maskRatio = 0.75, int? seed = null)
     {
-        var rng = seed.HasValue ? new Random(seed.Value) : RandomHelper.Shared;
+        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.Shared;
         var mask = new T[batchSize * numPatches];
         var numMasked = (int)(numPatches * maskRatio);
 

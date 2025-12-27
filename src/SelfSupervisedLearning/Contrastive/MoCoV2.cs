@@ -55,11 +55,12 @@ public class MoCoV2<T> : MoCo<T>
 
     private static SSLConfig CreateMoCoV2Config()
     {
-        var config = SSLConfig.ForMoCo();
-        config.MoCo ??= new MoCoConfig();
-        config.MoCo.UseMLPProjector = true;
-        config.UseCosineDecay = true;
-        return config;
+        return new SSLConfig
+        {
+            Method = SSLMethodType.MoCoV2,
+            UseCosineDecay = true,
+            MoCo = new MoCoConfig { UseMLPProjector = true }
+        };
     }
 
     /// <summary>

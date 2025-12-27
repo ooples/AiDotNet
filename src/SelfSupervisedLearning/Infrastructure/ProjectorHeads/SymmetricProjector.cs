@@ -100,7 +100,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         _predictorHiddenDim = predictorHiddenDim;
         _hasPredictor = predictorHiddenDim > 0;
 
-        var rng = seed.HasValue ? new Random(seed.Value) : RandomHelper.Shared;
+        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.Shared;
 
         // Initialize projector
         _projWeight1 = InitializeWeight(inputDim, hiddenDim, rng);

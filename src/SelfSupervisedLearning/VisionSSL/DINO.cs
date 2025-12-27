@@ -64,7 +64,7 @@ public class DINO<T> : TeacherStudentSSL<T>
         int outputDim = 65536,
         SSLConfig? config = null)
         : base(studentEncoder, teacherEncoder, studentProjector, teacherProjector,
-               outputDim, config ?? SSLConfig.ForDINO())
+               outputDim, config ?? new SSLConfig { Method = SSLMethodType.DINO })
     {
         _outputDim = outputDim;
 

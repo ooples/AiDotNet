@@ -80,7 +80,7 @@ public class iBOT<T> : TeacherStudentSSL<T>
         double maskRatio = 0.4,
         SSLConfig? config = null)
         : base(studentEncoder, teacherEncoder, studentProjector, teacherProjector,
-               outputDim, config ?? SSLConfig.ForDINO())
+               outputDim, config ?? new SSLConfig { Method = SSLMethodType.DINO })
     {
         _outputDim = outputDim;
         _mimWeight = mimWeight;

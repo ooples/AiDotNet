@@ -78,7 +78,7 @@ public class MoCo<T> : SSLMethodBase<T>
         IProjectorHead<T>? momentumProjector = null,
         int embeddingDim = 128,
         SSLConfig? config = null)
-        : base(encoder, projector, config ?? SSLConfig.ForMoCo())
+        : base(encoder, projector, config ?? new SSLConfig { Method = SSLMethodType.MoCoV2 })
     {
         _momentumEncoder = momentumEncoder ?? throw new ArgumentNullException(nameof(momentumEncoder));
         _momentumProjector = momentumProjector;

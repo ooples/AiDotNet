@@ -73,7 +73,7 @@ public class BarlowTwins<T> : SSLMethodBase<T>
         INeuralNetwork<T> encoder,
         IProjectorHead<T> projector,
         SSLConfig? config = null)
-        : base(encoder, projector, config ?? SSLConfig.ForBarlowTwins())
+        : base(encoder, projector, config ?? new SSLConfig { Method = SSLMethodType.BarlowTwins })
     {
         var btConfig = _config.BarlowTwins ?? new BarlowTwinsConfig();
         var lambda = btConfig.Lambda ?? 0.0051; // Default from paper
@@ -176,8 +176,11 @@ public class BarlowTwins<T> : SSLMethodBase<T>
         var projector = new MLPProjector<T>(
             encoderOutputDim, hiddenDim, projectionDim, useBatchNormOnOutput: true);
 
-        var config = SSLConfig.ForBarlowTwins();
-        config.BarlowTwins = new BarlowTwinsConfig { Lambda = lambda };
+        var config = new SSLConfig
+        {
+            Method = SSLMethodType.BarlowTwins,
+            BarlowTwins = new BarlowTwinsConfig { Lambda = lambda }
+        };
 
         return new BarlowTwins<T>(encoder, projector, config);
     }

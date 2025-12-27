@@ -82,7 +82,7 @@ public class MAE<T> : SSLMethodBase<T>
         int imageSize = 224,
         double maskRatio = 0.75,
         SSLConfig? config = null)
-        : base(encoder, null, config ?? SSLConfig.ForMAE())
+        : base(encoder, null, config ?? new SSLConfig { Method = SSLMethodType.MAE })
     {
         _decoder = decoder;
         _patchSize = patchSize;

@@ -74,7 +74,7 @@ public class BYOL<T> : SSLMethodBase<T>
         SymmetricProjector<T> onlineProjector,
         SymmetricProjector<T> targetProjector,
         SSLConfig? config = null)
-        : base(encoder, onlineProjector, config ?? SSLConfig.ForBYOL())
+        : base(encoder, onlineProjector, config ?? new SSLConfig { Method = SSLMethodType.BYOL })
     {
         _targetEncoder = targetEncoder ?? throw new ArgumentNullException(nameof(targetEncoder));
         _onlineProjector = onlineProjector ?? throw new ArgumentNullException(nameof(onlineProjector));
