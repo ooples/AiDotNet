@@ -79,18 +79,17 @@ public class BohmanWindow<T> : IWindowFunction<T>
     public Vector<T> Create(int windowSize)
     {
         Vector<T> window = new Vector<T>(windowSize);
-        T N = _numOps.FromDouble(windowSize - 1);
         for (int n = 0; n < windowSize; n++)
         {
-            T x = _numOps.Divide(_numOps.FromDouble(2 * n - windowSize + 1), N);
-            T absX = _numOps.Abs(x);
-            T term1 = _numOps.Subtract(_numOps.One, absX);
-            T term2 = _numOps.Multiply(_numOps.FromDouble(Math.PI), absX);
-            T cosTerm = MathHelper.Cos(term2);
-            window[n] = _numOps.Multiply(
-                _numOps.Subtract(_numOps.One, cosTerm),
-                _numOps.Add(_numOps.FromDouble(0.84), _numOps.Multiply(_numOps.FromDouble(0.16), cosTerm))
-            );
+            // Bohman formula: w(n) = (1 - |x|) * cos(π|x|) + (1/π) * sin(π|x|)
+            // where x = 2n/(N-1) - 1, so |x| ranges from 0 at center to 1 at edges
+            double x = (2.0 * n / (windowSize - 1)) - 1.0;
+            double absX = Math.Abs(x);
+            double piAbsX = Math.PI * absX;
+
+            // w(n) = (1 - |x|) * cos(π|x|) + (1/π) * sin(π|x|)
+            double value = (1.0 - absX) * Math.Cos(piAbsX) + (1.0 / Math.PI) * Math.Sin(piAbsX);
+            window[n] = _numOps.FromDouble(value);
         }
 
         return window;

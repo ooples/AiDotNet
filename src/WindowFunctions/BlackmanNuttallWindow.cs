@@ -77,12 +77,13 @@ public class BlackmanNuttallWindow<T> : IWindowFunction<T>
         Vector<T> window = new Vector<T>(windowSize);
         for (int n = 0; n < windowSize; n++)
         {
-            T nT = _numOps.FromDouble(n);
-            T term1 = _numOps.Multiply(_numOps.FromDouble(0.3635819), _numOps.One);
-            T term2 = _numOps.Multiply(_numOps.FromDouble(0.4891775), MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(2 * Math.PI * n), _numOps.Divide(_numOps.One, _numOps.FromDouble(windowSize - 1)))));
-            T term3 = _numOps.Multiply(_numOps.FromDouble(0.1365995), MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(4 * Math.PI * n), _numOps.Divide(_numOps.One, _numOps.FromDouble(windowSize - 1)))));
-            T term4 = _numOps.Multiply(_numOps.FromDouble(0.0106411), MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(6 * Math.PI * n), _numOps.Divide(_numOps.One, _numOps.FromDouble(windowSize - 1)))));
-            window[n] = _numOps.Subtract(_numOps.Subtract(_numOps.Add(term1, term2), term3), term4);
+            // Blackman-Nuttall formula: w(n) = a0 - a1*cos(2πn/(N-1)) + a2*cos(4πn/(N-1)) - a3*cos(6πn/(N-1))
+            T term1 = _numOps.FromDouble(0.3635819);
+            T term2 = _numOps.Multiply(_numOps.FromDouble(0.4891775), MathHelper.Cos(_numOps.FromDouble(2 * Math.PI * n / (windowSize - 1))));
+            T term3 = _numOps.Multiply(_numOps.FromDouble(0.1365995), MathHelper.Cos(_numOps.FromDouble(4 * Math.PI * n / (windowSize - 1))));
+            T term4 = _numOps.Multiply(_numOps.FromDouble(0.0106411), MathHelper.Cos(_numOps.FromDouble(6 * Math.PI * n / (windowSize - 1))));
+            // Formula: term1 - term2 + term3 - term4
+            window[n] = _numOps.Subtract(_numOps.Add(_numOps.Subtract(term1, term2), term3), term4);
         }
 
         return window;
