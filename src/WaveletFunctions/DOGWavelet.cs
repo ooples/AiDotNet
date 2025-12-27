@@ -121,7 +121,7 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
         // Compute the appropriate Hermite polynomial term for the nth derivative of Gaussian
         // Order 1: ψ(x) = -x · e^(-x²/2)
         // Order 2: ψ(x) = (x² - 1) · e^(-x²/2)  (Mexican Hat/Ricker wavelet)
-        // Order 3: ψ(x) = (x³ - 3x) · e^(-x²/2)
+        // Order 3: ψ(x) = -(x³ - 3x) · e^(-x²/2) = (3x - x³) · e^(-x²/2)
         // Order 4: ψ(x) = (x⁴ - 6x² + 3) · e^(-x²/2)
         T polynomial_term;
         switch (_order)
@@ -133,7 +133,8 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
                 polynomial_term = NumOps.Subtract(x2, NumOps.One);
                 break;
             case 3:
-                polynomial_term = NumOps.Subtract(NumOps.Multiply(x, x2), NumOps.Multiply(NumOps.FromDouble(3), x));
+                // Negate for 3rd derivative: -(x³ - 3x)
+                polynomial_term = NumOps.Negate(NumOps.Subtract(NumOps.Multiply(x, x2), NumOps.Multiply(NumOps.FromDouble(3), x)));
                 break;
             case 4:
                 T x4 = NumOps.Multiply(x2, x2);

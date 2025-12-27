@@ -1399,7 +1399,6 @@ public class WaveletFunctionsIntegrationTests
 
         // Act
         var atZero = wavelet.Calculate(0.0);
-        var atSqrt2 = wavelet.Calculate(Math.Sqrt(2)); // Zero crossing at x² = 1, so x = ±1
 
         // Assert - DOG order 2 should be negative at center (x² - 1 = -1 at x=0)
         Assert.True(atZero < 0, $"DOG order 2 should be negative at center, got {atZero}");

@@ -737,8 +737,8 @@ namespace AiDotNet.WaveletFunctions
                     return normalizedIndex;
 
                 case BoundaryHandlingMethod.ZeroPadding:
-                    // For zero padding, clamp to valid range (boundary values get repeated)
-                    // This prevents index out of range errors
+                    // Note: Despite the name, this method clamps indices to valid range
+                    // (boundary values get repeated). This prevents index out of range errors.
                     if (index < 0)
                         return 0;
                     if (index >= length)
