@@ -1,7 +1,5 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
-using AiDotNet.Tensors.Helpers;
-using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Serving.Models;
@@ -10,13 +8,11 @@ public class ServableClipModel<T> : IServableMultimodalModel<T>
 {
     private readonly IMultimodalEmbedding<T> _clipModel;
     private readonly string _modelName;
-    private readonly INumericOperations<T> _numOps;
 
     public ServableClipModel(IMultimodalEmbedding<T> clipModel, string modelName)
     {
         _clipModel = clipModel ?? throw new ArgumentNullException(nameof(clipModel));
         _modelName = modelName ?? throw new ArgumentNullException(nameof(modelName));
-        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     public string ModelName => _modelName;
@@ -51,10 +47,10 @@ public class ServableClipModel<T> : IServableMultimodalModel<T>
 
     public Vector<T> EncodeText(string text) => _clipModel.GetTextEmbedding(text);
     public Matrix<T> EncodeTextBatch(IEnumerable<string> texts) => ConvertEmbeddingsToMatrix(_clipModel.GetTextEmbeddings(texts).ToList());
-    public Vector<T> EncodeImage(double[] imageData) => _clipModel.GetImageEmbedding(ConvertDoubleArrayToImageTensor(imageData));
-    public Matrix<T> EncodeImageBatch(IEnumerable<double[]> imageDataBatch) => ConvertEmbeddingsToMatrix(_clipModel.GetImageEmbeddings(imageDataBatch.Select(ConvertDoubleArrayToImageTensor)).ToList());
+    public Vector<T> EncodeImage(Vector<T> imageData) => _clipModel.GetImageEmbedding(ConvertToImageTensor(imageData));
+    public Matrix<T> EncodeImageBatch(IEnumerable<Vector<T>> imageDataBatch) => ConvertEmbeddingsToMatrix(_clipModel.GetImageEmbeddings(imageDataBatch.Select(ConvertToImageTensor)).ToList());
     public T ComputeSimilarity(Vector<T> textEmbedding, Vector<T> imageEmbedding) => _clipModel.ComputeSimilarity(textEmbedding, imageEmbedding);
-    public Dictionary<string, T> ZeroShotClassify(double[] imageData, IEnumerable<string> classLabels) => _clipModel.ZeroShotClassify(ConvertDoubleArrayToImageTensor(imageData), classLabels);
+    public Dictionary<string, T> ZeroShotClassify(Vector<T> imageData, IEnumerable<string> classLabels) => _clipModel.ZeroShotClassify(ConvertToImageTensor(imageData), classLabels);
 
     private Tensor<T> ConvertToImageTensor(Vector<T> input)
     {
@@ -67,16 +63,6 @@ public class ServableClipModel<T> : IServableMultimodalModel<T>
         return tensor;
     }
 
-    private Tensor<T> ConvertDoubleArrayToImageTensor(double[] imageData)
-    {
-        int imageSize = _clipModel.ImageSize;
-        int channels = 3;
-        int expectedSize = channels * imageSize * imageSize;
-        if (imageData.Length != expectedSize) throw new ArgumentException("Image data size mismatch", nameof(imageData));
-        var tensor = new Tensor<T>(new[] { channels, imageSize, imageSize });
-        for (int i = 0; i < imageData.Length; i++) tensor[i] = _numOps.FromDouble(imageData[i]);
-        return tensor;
-    }
 
     private Matrix<T> ConvertEmbeddingsToMatrix(List<Vector<T>> embeddings)
     {
