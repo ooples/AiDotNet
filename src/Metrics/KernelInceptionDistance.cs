@@ -1,6 +1,7 @@
 using System;
 using AiDotNet.Engines;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.NeuralNetworks;
 
 namespace AiDotNet.Metrics;
@@ -142,7 +143,7 @@ public class KernelInceptionDistance<T>
         }
 
         var kidScores = new double[actualNumSubsets];
-        var random = new Random(42); // Fixed seed for reproducibility
+        var random = RandomHelper.CreateSeededRandom(42); // Fixed seed for reproducibility
 
         for (int i = 0; i < actualNumSubsets; i++)
         {
