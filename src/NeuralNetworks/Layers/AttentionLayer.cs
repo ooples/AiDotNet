@@ -123,6 +123,11 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private bool _inputWas2D = false;
 
     /// <summary>
+    /// Stores the original input shape for restoring higher-rank tensor output.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// The cached attention mask from the last forward pass.
     /// </summary>
     private Tensor<T>? _lastMask;
@@ -343,9 +348,11 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new ArgumentNullException(nameof(input), "Input tensor cannot be null.");
         }
 
-        // Handle both 2D [Batch, InputSize] and 3D [Batch, Seq, InputSize] input
-        _inputWas2D = input.Shape.Length == 2;
+        // Handle any rank >= 2: last 2 dims are [Seq, InputSize], earlier dims are batch-like
+        int rank = input.Shape.Length;
+        _inputWas2D = rank == 2;
         Tensor<T> input3D;
+        _originalInputShape = input.Shape;
 
         if (_inputWas2D)
         {
@@ -360,30 +367,32 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             int batchSize2D = input.Shape[0];
             input3D = input.Reshape(batchSize2D, 1, _inputSize);
         }
-        else if (input.Shape.Length == 3)
+        else if (rank == 3)
         {
-            // 3D input: validate shape
-            if (input.Shape[0] <= 0 || input.Shape[1] <= 0)
-            {
-                throw new ArgumentException(
-                    $"AttentionLayer requires positive batch size and sequence length. " +
-                    $"Got shape [{input.Shape[0]}, {input.Shape[1]}, {input.Shape[2]}].",
-                    nameof(input));
-            }
+            // 3D input: standard attention format [Batch, Seq, InputSize]
             if (input.Shape[2] != _inputSize)
             {
                 throw new ArgumentException(
                     $"AttentionLayer input size mismatch. Expected InputSize={_inputSize}, " +
-                    $"but got {input.Shape[2]} in shape [{input.Shape[0]}, {input.Shape[1]}, {input.Shape[2]}].",
+                    $"but got {input.Shape[2]} in shape [{string.Join(", ", input.Shape)}].",
                     nameof(input));
             }
             input3D = input;
         }
         else
         {
-            throw new ArgumentException(
-                $"AttentionLayer requires a 2D or 3D tensor. Got tensor with rank {input.Shape.Length}.",
-                nameof(input));
+            // Higher rank: flatten leading dimensions into batch
+            if (input.Shape[rank - 1] != _inputSize)
+            {
+                throw new ArgumentException(
+                    $"AttentionLayer input size mismatch. Expected InputSize={_inputSize}, " +
+                    $"but got {input.Shape[rank - 1]} in shape [{string.Join(", ", input.Shape)}].",
+                    nameof(input));
+            }
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= input.Shape[d];
+            input3D = input.Reshape(flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]);
         }
 
         _lastInput = input;
@@ -441,10 +450,20 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var projectedFlat = Engine.TensorMatMul(attnFlat, woTransposed);
         var output = projectedFlat.Reshape(batchSize, seqLen, _inputSize);
 
-        // If input was 2D, reshape output back to 2D [Batch, InputSize]
+        // Restore original tensor shape
         if (_inputWas2D)
         {
             output = output.Reshape(batchSize, _inputSize);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length > 3)
+        {
+            // Restore original batch dimensions for higher-rank input
+            var outputShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 2; d++)
+                outputShape[d] = _originalInputShape[d];
+            outputShape[_originalInputShape.Length - 2] = seqLen;
+            outputShape[_originalInputShape.Length - 1] = _inputSize;
+            output = output.Reshape(outputShape);
         }
 
         return output;
