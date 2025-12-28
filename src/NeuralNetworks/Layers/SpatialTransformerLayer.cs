@@ -546,7 +546,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastInput = processInput;
 
         // Localization network using Engine operations
-        var flattenedInput = input.Reshape([batchSize, _inputHeight * _inputWidth]);
+        var flattenedInput = processInput.Reshape([batchSize, _inputHeight * _inputWidth]);
         _lastFlattenedInput = flattenedInput;
 
         // First layer: localization1 = flattenedInput @ _localizationWeights1 + _localizationBias1
@@ -572,9 +572,28 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Grid generator + sampler via engine ops
         var grid = Engine.AffineGrid(theta, _outputHeight, _outputWidth);
-        var output = Engine.GridSample(input, grid);
+        var output = Engine.GridSample(processInput, grid);
 
         _lastOutput = output;
+
+        // Restore output shape to match original input rank
+        if (_originalInputShape != null && _originalInputShape.Length != 2)
+        {
+            if (_originalInputShape.Length == 1)
+            {
+                return _lastOutput.Reshape([_lastOutput.Shape[1]]);
+            }
+            else
+            {
+                // Restore higher-rank: reconstruct leading dims
+                var outShape = new int[_originalInputShape.Length];
+                for (int d = 0; d < _originalInputShape.Length - 1; d++)
+                    outShape[d] = _originalInputShape[d];
+                outShape[_originalInputShape.Length - 1] = _lastOutput.Shape[1];
+                return _lastOutput.Reshape(outShape);
+            }
+        }
+
         return _lastOutput;
     }
 
@@ -762,7 +781,15 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             }
         }
 
-        return inputNode.Gradient ?? throw new InvalidOperationException("Spatial transformer backward failed.");
+        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Spatial transformer backward failed.");
+
+        // Restore gradient to original input shape
+        if (_originalInputShape != null && _originalInputShape.Length != 2)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     /// <summary>
@@ -894,7 +921,15 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Return input gradient
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+
+        // Restore gradient to original input shape
+        if (_originalInputShape != null && _originalInputShape.Length != 2)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     // Removed BackwardSampler (unused)

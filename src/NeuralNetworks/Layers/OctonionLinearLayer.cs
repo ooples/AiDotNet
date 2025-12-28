@@ -90,8 +90,9 @@ public class OctonionLinearLayer<T> : LayerBase<T>
 
     /// <summary>
     /// Gets whether this layer supports JIT compilation.
+    /// Returns true only if the activation function also supports JIT compilation.
     /// </summary>
-    public override bool SupportsJitCompilation => true;
+    public override bool SupportsJitCompilation => CanActivationBeJitted();
 
     /// <summary>
     /// Initializes a new instance of the OctonionLinearLayer.
@@ -532,17 +533,12 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         var outputNode = TensorOperations<T>.OctonionMatMul(inputNode, weightsNode, biasesNode);
 
         // Apply activation function if needed
+        // Note: Octonion activation is applied element-wise to all 8 components
         if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
         {
-            // For JIT, we apply element-wise activation
-            // Note: Octonion activation is applied element-wise to all 8 components
-            if (ScalarActivation is ReLUActivation<T>)
-                outputNode = TensorOperations<T>.ReLU(outputNode);
-            else if (ScalarActivation is SigmoidActivation<T>)
-                outputNode = TensorOperations<T>.Sigmoid(outputNode);
-            else if (ScalarActivation is TanhActivation<T>)
-                outputNode = TensorOperations<T>.Tanh(outputNode);
-            // Add more activation types as needed
+            // Use the activation's ApplyToGraph for proper computation graph integration
+            // CanActivationBeJitted() ensures this is only called when activation supports JIT
+            outputNode = ScalarActivation.ApplyToGraph(outputNode);
         }
 
         return outputNode;

@@ -208,9 +208,31 @@ public class SplitLayer<T> : LayerBase<T>
         }
 
         _lastInput = processInput;
-        int inputSize = input.Shape[1];
+        int inputSize = processInput.Shape[1];
         int splitSize = inputSize / _numSplits;
-        return Engine.Reshape(input, new[] { batchSize, _numSplits, splitSize });
+        var output = Engine.Reshape(processInput, new[] { batchSize, _numSplits, splitSize });
+
+        // Restore output shape to match original input rank
+        if (_originalInputShape != null && _originalInputShape.Length != 2)
+        {
+            if (_originalInputShape.Length == 1)
+            {
+                // 1D input: output shape becomes [numSplits, splitSize]
+                return output.Reshape([_numSplits, splitSize]);
+            }
+            else
+            {
+                // Higher-rank: reconstruct leading dims with split dimensions
+                var outShape = new int[_originalInputShape.Length + 1];
+                for (int d = 0; d < _originalInputShape.Length - 1; d++)
+                    outShape[d] = _originalInputShape[d];
+                outShape[_originalInputShape.Length - 1] = _numSplits;
+                outShape[_originalInputShape.Length] = splitSize;
+                return output.Reshape(outShape);
+            }
+        }
+
+        return output;
     }
 
     /// <summary>
@@ -254,7 +276,15 @@ public class SplitLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         int batchSize = _lastInput.Shape[0];
         int inputSize = _lastInput.Shape[1];
-        return Engine.Reshape(outputGradient, new[] { batchSize, inputSize });
+        var inputGradient = Engine.Reshape(outputGradient, new[] { batchSize, inputSize });
+
+        // Restore gradient to original input shape
+        if (_originalInputShape != null && _originalInputShape.Length != 2)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     /// <summary>
@@ -331,7 +361,15 @@ public class SplitLayer<T> : LayerBase<T>
         }
 
         // Extract input gradient
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+
+        // Restore gradient to original input shape
+        if (_originalInputShape != null && _originalInputShape.Length != 2)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     /// <summary>
