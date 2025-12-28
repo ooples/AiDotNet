@@ -243,6 +243,15 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Validate input rank: only 2D [seq, embed] and 3D [batch, seq, embed] are supported
+        if (input.Shape.Length < 2 || input.Shape.Length > 3)
+        {
+            throw new ArgumentException(
+                $"PositionalEncodingLayer expects 2D [seq, embed] or 3D [batch, seq, embed] input, " +
+                $"but received {input.Shape.Length}D tensor with shape [{string.Join(", ", input.Shape)}]. " +
+                $"For higher-rank tensors, reshape to 3D by flattening batch dimensions first.");
+        }
+
         // Handle both 2D [seq, embed] and 3D [batch, seq, embed] input
         bool is3D = input.Shape.Length == 3;
         int seqLength = is3D ? input.Shape[1] : input.Shape[0];
@@ -265,24 +274,12 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
 
         if (is3D)
         {
-            // For 3D input [batch, seq, embed], broadcast encodings across batch dimension
-            int batchSize = input.Shape[0];
+            // For 3D input [batch, seq, embed], use broadcasting: [1, seq, embed] -> [batch, seq, embed]
+            // Reshape sliced encodings to [1, seq, embed] for broadcasting
+            var reshapedEncodings = slicedEncodings.Reshape(1, seqLength, embeddingSize);
 
-            // Expand sliced encodings to [batch, seq, embed] by repeating for each batch
-            var broadcastedEncodings = new Tensor<T>([batchSize, seqLength, embeddingSize]);
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int s = 0; s < seqLength; s++)
-                {
-                    for (int e = 0; e < embeddingSize; e++)
-                    {
-                        broadcastedEncodings[b, s, e] = slicedEncodings[s, e];
-                    }
-                }
-            }
-
-            // Use GPU-accelerated addition
-            return Engine.TensorAdd(input, broadcastedEncodings);
+            // Use GPU-accelerated broadcast addition (automatically broadcasts [1, seq, embed] to [batch, seq, embed])
+            return Engine.TensorBroadcastAdd(input, reshapedEncodings);
         }
         else
         {
@@ -349,28 +346,13 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         bool is3D = outputGradient.Shape.Length == 3;
         var sequenceLength = is3D ? outputGradient.Shape[1] : outputGradient.Shape[0];
         var slicedEncodings = encodings.Slice(0, 0, sequenceLength, embeddingSize);
-        
-        Tensor<T> encodingsForGraph;
-        if (is3D)
-        {
-            // Broadcast encodings to match 3D shape
-            int batchSize = outputGradient.Shape[0];
-            encodingsForGraph = new Tensor<T>([batchSize, sequenceLength, embeddingSize]);
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int s = 0; s < sequenceLength; s++)
-                {
-                    for (int e = 0; e < embeddingSize; e++)
-                    {
-                        encodingsForGraph[b, s, e] = slicedEncodings[s, e];
-                    }
-                }
-            }
-        }
-        else
-        {
-            encodingsForGraph = slicedEncodings;
-        }
+
+        // For autodiff graph, we need encodings to match gradient shape
+        // Reshape to [1, seq, embed] and use BroadcastAdd with zeros to expand to [batch, seq, embed]
+        Tensor<T> encodingsForGraph = is3D
+            ? Tensor<T>.CreateDefault(outputGradient.Shape, NumOps.Zero).BroadcastAdd(
+                slicedEncodings.Reshape(1, sequenceLength, embeddingSize))
+            : slicedEncodings;
         var encodingsNode = Autodiff.TensorOperations<T>.Constant(encodingsForGraph, "positional_encodings");
 
         // Forward: output = input + positional_encodings

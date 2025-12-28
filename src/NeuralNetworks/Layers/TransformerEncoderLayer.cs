@@ -208,7 +208,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// making final decisions about what features to extract from each position.
     /// </para>
     /// </remarks>
-    private FeedForwardLayer<T> _feedForward1;
+    private readonly FeedForwardLayer<T> _feedForward1;
 
     /// <summary>
     /// The second (projection) layer of the feed-forward network.
@@ -217,7 +217,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Projects the expanded representation back to the original embedding size.
     /// A proper transformer FFN has two layers: expansion and projection.
     /// </remarks>
-    private FeedForwardLayer<T> _feedForward2;
+    private readonly FeedForwardLayer<T> _feedForward2;
 
     /// <summary>
     /// The layer normalization applied after the feed-forward network.
@@ -364,17 +364,9 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         // Handle both 2D [seq, embed] and 3D [batch, seq, embed] input
         _inputWas2D = input.Shape.Length == 2;
-        Tensor<T> input3D;
-
-        if (_inputWas2D)
-        {
-            // 2D input: [seq, embed] -> [1, seq, embed]
-            input3D = input.Reshape(1, input.Shape[0], input.Shape[1]);
-        }
-        else
-        {
-            input3D = input;
-        }
+        Tensor<T> input3D = _inputWas2D
+            ? input.Reshape(1, input.Shape[0], input.Shape[1])
+            : input;
 
         var attention = _selfAttention.Forward(input3D);
         // Residual connection: input + attention
@@ -446,8 +438,23 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
+        // If forward received 2D input, the output gradient will also be 2D
+        // We need to reshape it to 3D to match internal processing shapes
+        Tensor<T> grad3D;
+        bool gradWas2D = outputGradient.Shape.Length == 2;
+
+        if (gradWas2D)
+        {
+            // 2D gradient: [seq, embed] -> [1, seq, embed]
+            grad3D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1]);
+        }
+        else
+        {
+            grad3D = outputGradient;
+        }
+
         // Backward pass through the second normalization layer
-        var dNorm2 = _norm2.Backward(outputGradient);
+        var dNorm2 = _norm2.Backward(grad3D);
 
         // Split the gradient for the residual connection (copy gradient to both paths)
         var dFeedForward = dNorm2;
@@ -470,6 +477,12 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var dSelfAttentionInput = _selfAttention.Backward(dAttention);
         // Add gradients at the join point: dInput = dNorm1 + dSelfAttentionInput
         dInput = Engine.TensorAdd(dInput, dSelfAttentionInput);
+
+        // If input was originally 2D, reshape gradient back to 2D
+        if (gradWas2D)
+        {
+            dInput = dInput.Reshape(dInput.Shape[1], dInput.Shape[2]);
+        }
 
         return dInput;
     }

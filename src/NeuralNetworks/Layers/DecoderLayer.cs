@@ -212,18 +212,26 @@ public class DecoderLayer<T> : LayerBase<T>
     {
         _lastInput = input;
         _lastEncoderOutput = encoderOutput;
-        
-        // For 3D input, create appropriate mask shape
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape[1];
-        Tensor<T> mask = attentionMask ?? Tensor<T>.CreateDefault([batchSize, seqLen, seqLen], NumOps.Zero);
 
-        // Self-attention (now with optional mask)
-        var selfAttentionOutput = _selfAttention.Forward(input, mask);
+        // Get dimensions from input and encoder output
+        int batchSize = input.Shape[0];
+        int decoderSeqLen = input.Shape[1];
+        int encoderSeqLen = encoderOutput.Shape[1];
+
+        // Self-attention mask: [batchSize, decoder_seqLen, decoder_seqLen]
+        // Each decoder position can attend to all decoder positions (or causal subset)
+        Tensor<T> selfAttnMask = attentionMask ?? Tensor<T>.CreateDefault([batchSize, decoderSeqLen, decoderSeqLen], NumOps.Zero);
+
+        // Cross-attention mask: [batchSize, decoder_seqLen, encoder_seqLen]
+        // Each decoder position attends to encoder positions
+        Tensor<T> crossAttnMask = Tensor<T>.CreateDefault([batchSize, decoderSeqLen, encoderSeqLen], NumOps.Zero);
+
+        // Self-attention (decoder attending to itself)
+        var selfAttentionOutput = _selfAttention.Forward(input, selfAttnMask);
         var normalized1 = _norm1.Forward(input.Add(selfAttentionOutput));
 
-        // Cross-attention (now with optional mask)
-        var crossAttentionOutput = _crossAttention.Forward(normalized1, encoderOutput, mask);
+        // Cross-attention (decoder attending to encoder output)
+        var crossAttentionOutput = _crossAttention.Forward(normalized1, encoderOutput, crossAttnMask);
         var normalized2 = _norm2.Forward(normalized1.Add(crossAttentionOutput));
 
         // Standard transformer FFN: Linear(input -> ff) + activation + Linear(ff -> input)
@@ -338,10 +346,25 @@ public class DecoderLayer<T> : LayerBase<T>
     /// </remarks>
     private (Tensor<T> inputGradient, Tensor<T> encoderOutputGradient) BackwardInternal(Tensor<T> outputGradient)
     {
+        // If forward received 2D input, the output gradient will also be 2D
+        // We need to reshape it to 3D to match internal processing shapes
+        Tensor<T> grad3D;
+        bool gradWas2D = outputGradient.Shape.Length == 2;
+
+        if (gradWas2D)
+        {
+            // 2D gradient: [seq, embed] -> [1, seq, embed]
+            grad3D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1]);
+        }
+        else
+        {
+            grad3D = outputGradient;
+        }
+
         // Backward through FFN (reverse order: projection then expansion)
-        var dFF2 = _feedForward2.Backward(outputGradient);
+        var dFF2 = _feedForward2.Backward(grad3D);
         var dNormalized2 = _feedForward1.Backward(dFF2);
-        dNormalized2 = dNormalized2.Add(outputGradient);
+        dNormalized2 = dNormalized2.Add(grad3D);
         var dNorm2 = _norm2.Backward(dNormalized2);
 
         var dCrossAttention = _crossAttention.Backward(dNorm2);
@@ -353,6 +376,13 @@ public class DecoderLayer<T> : LayerBase<T>
 
         // Calculate gradient with respect to encoder output
         var dEncoderOutput = _crossAttention.Backward(dNorm2);
+
+        // If input was originally 2D, reshape gradients back to 2D
+        if (gradWas2D)
+        {
+            dInput = dInput.Reshape(dInput.Shape[1], dInput.Shape[2]);
+            dEncoderOutput = dEncoderOutput.Reshape(dEncoderOutput.Shape[1], dEncoderOutput.Shape[2]);
+        }
 
         return (dInput, dEncoderOutput);
     }

@@ -1719,39 +1719,71 @@ public class CpuEngine : IEngine
     {
         if (a == null) throw new ArgumentNullException(nameof(a));
         if (b == null) throw new ArgumentNullException(nameof(b));
-        if (a.Rank != 3 || b.Rank != 3)
+
+        // Industry-standard BatchMatMul supports any-rank tensors (2D, 3D, 4D, 5D, ...)
+        // For ND tensors where N >= 2:
+        // - First N-2 dimensions are batch dimensions (must match)
+        // - Last 2 dimensions are matrix dimensions: [..., M, K] @ [..., K, N] = [..., M, N]
+        if (a.Rank < 2 || b.Rank < 2)
         {
             throw new ArgumentException(
-                $"BatchMatMul requires 3D tensors. Got ranks {a.Rank} and {b.Rank}.");
+                $"BatchMatMul requires tensors with at least 2 dimensions. Got ranks {a.Rank} and {b.Rank}.");
         }
 
-        int batchSize = a.Shape[0];
-        int m = a.Shape[1];
-        int k = a.Shape[2];
-        int k2 = b.Shape[1];
-        int n = b.Shape[2];
-
-        if (b.Shape[0] != batchSize)
+        if (a.Rank != b.Rank)
         {
             throw new ArgumentException(
-                $"Batch sizes must match. Got {batchSize} and {b.Shape[0]}.");
+                $"BatchMatMul requires tensors with matching ranks. Got ranks {a.Rank} and {b.Rank}.");
         }
+
+        int rank = a.Rank;
+        int m = a.Shape[rank - 2];  // Second-to-last dimension
+        int k = a.Shape[rank - 1];  // Last dimension of a
+        int k2 = b.Shape[rank - 2]; // Second-to-last dimension of b
+        int n = b.Shape[rank - 1];  // Last dimension of b
+
+        // Verify inner dimensions match for matrix multiplication
         if (k != k2)
         {
             throw new ArgumentException(
                 $"Matrix dimensions incompatible for multiplication. " +
-                $"First tensor has shape [{batchSize}, {m}, {k}], " +
-                $"second has shape [{b.Shape[0]}, {k2}, {n}]. " +
-                $"Inner dimensions must match ({k} != {k2}).");
+                $"First tensor's last dimension is {k}, " +
+                $"second tensor's second-to-last dimension is {k2}. " +
+                $"Inner dimensions must match.");
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(new[] { batchSize, m, n });
-
-        // Process each batch
-        for (int batch = 0; batch < batchSize; batch++)
+        // Verify batch dimensions match
+        for (int i = 0; i < rank - 2; i++)
         {
-            // Standard matrix multiplication for this batch: C[batch] = A[batch] @ B[batch]
+            if (a.Shape[i] != b.Shape[i])
+            {
+                throw new ArgumentException(
+                    $"Batch dimensions must match. Got {a.Shape[i]} vs {b.Shape[i]} at dimension {i}.");
+            }
+        }
+
+        // Calculate total batch size (product of all batch dimensions)
+        int batchSize = 1;
+        for (int i = 0; i < rank - 2; i++)
+        {
+            batchSize *= a.Shape[i];
+        }
+
+        // Build output shape: [...batch dims..., m, n]
+        var outputShape = new int[rank];
+        for (int i = 0; i < rank - 2; i++)
+        {
+            outputShape[i] = a.Shape[i];
+        }
+        outputShape[rank - 2] = m;
+        outputShape[rank - 1] = n;
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(outputShape);
+
+        // Handle 2D case (no batch dimensions)
+        if (rank == 2)
+        {
             for (int i = 0; i < m; i++)
             {
                 for (int j = 0; j < n; j++)
@@ -1759,16 +1791,46 @@ public class CpuEngine : IEngine
                     T sum = numOps.Zero;
                     for (int p = 0; p < k; p++)
                     {
-                        sum = numOps.Add(sum, numOps.Multiply(
-                            a[batch, i, p],
-                            b[batch, p, j]));
+                        sum = numOps.Add(sum, numOps.Multiply(a[i, p], b[p, j]));
                     }
-                    result[batch, i, j] = sum;
+                    result[i, j] = sum;
                 }
             }
+            return result;
         }
 
-        return result;
+        // Handle ND case with batch dimensions (N >= 3)
+        var aData = a.ToArray();
+        var bData = b.ToArray();
+        var resultData = result.ToArray();
+
+        int matrixSizeA = m * k;
+        int matrixSizeB = k * n;
+        int matrixSizeResult = m * n;
+
+        Parallel.For(0, batchSize, batch =>
+        {
+            int aOffset = batch * matrixSizeA;
+            int bOffset = batch * matrixSizeB;
+            int resultOffset = batch * matrixSizeResult;
+
+            for (int i = 0; i < m; i++)
+            {
+                for (int j = 0; j < n; j++)
+                {
+                    T sum = numOps.Zero;
+                    for (int p = 0; p < k; p++)
+                    {
+                        T aVal = aData[aOffset + i * k + p];
+                        T bVal = bData[bOffset + p * n + j];
+                        sum = numOps.Add(sum, numOps.Multiply(aVal, bVal));
+                    }
+                    resultData[resultOffset + i * n + j] = sum;
+                }
+            }
+        });
+
+        return new Tensor<T>(outputShape, new Vector<T>(resultData));
     }
 
     /// <inheritdoc/>
