@@ -244,7 +244,17 @@ public class BattleLemarieWavelet<T> : WaveletFunctionBase<T>
         Complex<T> result = new Complex<T>(NumOps.One, NumOps.Zero);
         for (int i = 0; i < order; i++)
         {
-            T sinc = NumOps.Divide(MathHelper.Sin(NumOps.Divide(omega, NumOps.FromDouble(2))), NumOps.Divide(omega, NumOps.FromDouble(2)));
+            T halfOmega = NumOps.Divide(omega, NumOps.FromDouble(2));
+            T sinc;
+            // Handle the sinc function at omega=0 where sin(x)/x = 1
+            if (Math.Abs(NumOps.ToDouble(halfOmega)) < 1e-10)
+            {
+                sinc = NumOps.One;
+            }
+            else
+            {
+                sinc = NumOps.Divide(MathHelper.Sin(halfOmega), halfOmega);
+            }
             result = complexOps.Multiply(result, new Complex<T>(sinc, NumOps.Zero));
         }
 
