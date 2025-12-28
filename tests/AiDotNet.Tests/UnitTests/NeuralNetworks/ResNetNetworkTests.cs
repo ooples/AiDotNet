@@ -608,10 +608,10 @@ public class ResNetNetworkTests
     }
 
     [Fact]
-    public void AdaptiveAvgPoolingLayer_GlobalPool_CreatesValidLayer()
+    public void AdaptiveAveragePoolingLayer_GlobalPool_CreatesValidLayer()
     {
         // Arrange & Act
-        var layer = AiDotNet.NeuralNetworks.Layers.AdaptiveAvgPoolingLayer<float>.GlobalPool(
+        var layer = AiDotNet.NeuralNetworks.Layers.AdaptiveAveragePoolingLayer<float>.GlobalPool(
             inputChannels: 512,
             inputHeight: 7,
             inputWidth: 7);
@@ -623,10 +623,10 @@ public class ResNetNetworkTests
     }
 
     [Fact]
-    public void AdaptiveAvgPoolingLayer_CustomOutput_CreatesValidLayer()
+    public void AdaptiveAveragePoolingLayer_CustomOutput_CreatesValidLayer()
     {
         // Arrange & Act
-        var layer = new AiDotNet.NeuralNetworks.Layers.AdaptiveAvgPoolingLayer<float>(
+        var layer = new AiDotNet.NeuralNetworks.Layers.AdaptiveAveragePoolingLayer<float>(
             inputChannels: 256,
             inputHeight: 14,
             inputWidth: 14,

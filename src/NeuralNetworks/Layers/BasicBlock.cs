@@ -99,7 +99,7 @@ public class BasicBlock<T> : LayerBase<T>
             kernelSize: 3,
             stride: stride,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         int outHeight = inputHeight / stride;
         int outWidth = inputWidth / stride;
@@ -115,7 +115,7 @@ public class BasicBlock<T> : LayerBase<T>
             kernelSize: 3,
             stride: 1,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         _bn2 = new BatchNormalizationLayer<T>(outChannels);
 
@@ -138,7 +138,7 @@ public class BasicBlock<T> : LayerBase<T>
                 kernelSize: 1,
                 stride: stride,
                 padding: 0,
-                activation: new IdentityActivation<T>());
+                activationFunction: new IdentityActivation<T>());
 
             _downsampleBn = new BatchNormalizationLayer<T>(outChannels);
         }

@@ -182,7 +182,7 @@ public class VAEResBlock<T> : LayerBase<T>
             inputWidth: spatialSize,
             stride: 1,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         _conv2 = new ConvolutionalLayer<T>(
             inputDepth: outChannels,
@@ -192,7 +192,7 @@ public class VAEResBlock<T> : LayerBase<T>
             inputWidth: spatialSize,
             stride: 1,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         // Skip connection: 1x1 conv if channels differ
         if (inChannels != outChannels)
@@ -205,7 +205,7 @@ public class VAEResBlock<T> : LayerBase<T>
                 inputWidth: spatialSize,
                 stride: 1,
                 padding: 0,
-                activation: new IdentityActivation<T>());
+                activationFunction: new IdentityActivation<T>());
         }
     }
 

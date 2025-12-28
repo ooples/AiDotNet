@@ -231,28 +231,17 @@ public enum NeuralNetworkTaskType
     DimensionalityReduction,
 
     /// <summary>
-    /// Generative task (e.g., GANs, VAEs)
+    /// Generative task (e.g., GANs, VAEs, text generation)
     /// </summary>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Generative tasks create new data that resembles existing data. The neural network learns
     /// the patterns and structure of the training data, then generates new examples that look like they could
     /// have been part of the original dataset. Examples include creating realistic images of faces that don't
-    /// exist, generating music, or synthesizing speech.
+    /// exist, generating music, synthesizing speech, or generating text.
     /// </para>
     /// </remarks>
     Generative,
-
-    /// <summary>
-    /// Alias for <see cref="Generative"/>. Use this for text/content generation tasks.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Generation is an alias for Generative tasks. Use either name based on your preference.
-    /// This includes tasks like text generation, image generation, music generation, etc.
-    /// </para>
-    /// </remarks>
-    Generation = Generative,
 
     /// <summary>
     /// Speech recognition task

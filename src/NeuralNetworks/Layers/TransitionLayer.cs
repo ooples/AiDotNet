@@ -91,7 +91,7 @@ public class TransitionLayer<T> : LayerBase<T>
             inputWidth: inputWidth,
             stride: 1,
             padding: 0,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         // After 1x1 conv, dimensions are same
         // Then 2x2 avg pool with stride 2 halves dimensions

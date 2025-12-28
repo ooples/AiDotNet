@@ -37,7 +37,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// For example, a stride of 2 means we move the window 2 pixels at a time,
     /// which reduces the output size to half of the input size (assuming pool size is also 2).
     /// </remarks>
-    public int Strides { get; private set; }
+    public int Stride { get; private set; }
 
     /// <summary>
     /// Indicates whether this layer supports training operations.
@@ -63,7 +63,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// <returns>An array containing the stride for height and width dimensions.</returns>
     public int[] GetStride()
     {
-        return new int[] { Strides, Strides };
+        return new int[] { Stride, Stride };
     }
 
     public override bool SupportsTraining => true;
@@ -92,16 +92,16 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputShape">The shape of the input data (channels, height, width).</param>
     /// <param name="poolSize">The size of the pooling window.</param>
-    /// <param name="strides">The step size when moving the pooling window.</param>
+    /// <param name="stride">The step size when moving the pooling window.</param>
     /// <remarks>
     /// <b>For Beginners:</b> This constructor sets up the max pooling layer with your chosen settings.
     /// It calculates what the output shape will be based on your input shape, pool size, and strides.
     /// </remarks>
-    public MaxPoolingLayer(int[] inputShape, int poolSize, int strides)
-        : base(inputShape, CalculateOutputShape(inputShape, poolSize, strides))
+    public MaxPoolingLayer(int[] inputShape, int poolSize, int stride)
+        : base(inputShape, CalculateOutputShape(inputShape, poolSize, stride))
     {
         PoolSize = poolSize;
-        Strides = strides;
+        Stride = stride;
     }
 
     /// <summary>
@@ -109,17 +109,17 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputShape">The shape of the input data.</param>
     /// <param name="poolSize">The size of the pooling window.</param>
-    /// <param name="strides">The step size when moving the pooling window.</param>
+    /// <param name="stride">The step size when moving the pooling window.</param>
     /// <returns>The calculated output shape.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> This method figures out how big the output will be after max pooling.
     /// The formula used is a standard way to calculate how many complete windows fit into the input,
     /// taking into account the stride (step size).
     /// </remarks>
-    private static int[] CalculateOutputShape(int[] inputShape, int poolSize, int strides)
+    private static int[] CalculateOutputShape(int[] inputShape, int poolSize, int stride)
     {
-        int outputHeight = (inputShape[1] - poolSize) / strides + 1;
-        int outputWidth = (inputShape[2] - poolSize) / strides + 1;
+        int outputHeight = (inputShape[1] - poolSize) / stride + 1;
+        int outputWidth = (inputShape[2] - poolSize) / stride + 1;
 
         return [inputShape[0], outputHeight, outputWidth];
     }
@@ -163,7 +163,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         }
 
         var poolSizeArr = new[] { PoolSize, PoolSize };
-        var strideArr = new[] { Strides, Strides };
+        var strideArr = new[] { Stride, Stride };
 
         // Use Engine operation (expects 4D); final output shape will match the original input (3D or 4D)
         var output4D = Engine.MaxPool2DWithIndices(input4D, poolSizeArr, strideArr, out _maxIndices);
@@ -230,7 +230,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         }
 
         var poolSizeArr = new int[] { PoolSize, PoolSize };
-        var strideArr = new int[] { Strides, Strides };
+        var strideArr = new int[] { Stride, Stride };
 
         // Use Engine operation in 4D; reshape so the returned gradient matches the original input dimensions
         var inputGradient4D = Engine.MaxPool2DBackward(gradient4D, _maxIndices, inputShape4D, poolSizeArr, strideArr);
@@ -282,8 +282,8 @@ public class MaxPoolingLayer<T> : LayerBase<T>
 
         // Forward pass using autodiff MaxPool2D operation
         var poolSize = new int[] { PoolSize, PoolSize };
-        var strides = new int[] { Strides, Strides };
-        var outputNode = Autodiff.TensorOperations<T>.MaxPool2D(inputNode, poolSize, strides);
+        var strideArr = new int[] { Stride, Stride };
+        var outputNode = Autodiff.TensorOperations<T>.MaxPool2D(inputNode, poolSize, strideArr);
 
         // Set output gradient
         outputNode.Gradient = gradient4D;
@@ -347,7 +347,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     {
         base.Serialize(writer);
         writer.Write(PoolSize);
-        writer.Write(Strides);
+        writer.Write(Stride);
     }
 
     /// <summary>
@@ -363,7 +363,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     {
         base.Deserialize(reader);
         PoolSize = reader.ReadInt32();
-        Strides = reader.ReadInt32();
+        Stride = reader.ReadInt32();
     }
 
     /// <summary>
@@ -478,7 +478,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     {
         var metadata = base.GetMetadata();
         metadata["PoolSize"] = PoolSize.ToString();
-        metadata["Strides"] = Strides.ToString();
+        metadata["Stride"] = Stride.ToString();
         return metadata;
     }
 }

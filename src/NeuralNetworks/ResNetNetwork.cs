@@ -224,7 +224,7 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
             kernelSize: 7,
             stride: 2,
             padding: 3,
-            activation: new ActivationFunctions.IdentityActivation<T>()));
+            activationFunction: new ActivationFunctions.IdentityActivation<T>()));
 
         currentHeight /= 2;
         currentWidth /= 2;
@@ -242,7 +242,7 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
         layers.Add(new MaxPoolingLayer<T>(
             inputShape: [currentChannels, currentHeight, currentWidth],
             poolSize: 3,
-            strides: 2));
+            stride: 2));
 
         currentHeight = (currentHeight - 1) / 2 + 1; // Ceiling division for pool output
         currentWidth = (currentWidth - 1) / 2 + 1;

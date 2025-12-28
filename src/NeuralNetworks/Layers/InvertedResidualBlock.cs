@@ -109,7 +109,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>
         int stride = 1,
         bool useSE = false,
         int seRatio = 4,
-        IActivationFunction<T>? activation = null)
+        IActivationFunction<T>? activationFunction = null)
         : base(
             inputShape: [inChannels, inputHeight, inputWidth],
             outputShape: [outChannels, (inputHeight + stride - 1) / stride, (inputWidth + stride - 1) / stride])
@@ -120,7 +120,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>
         Stride = stride;
 
         int hiddenDim = inChannels * expansionRatio;
-        _activation = activation ?? new ReLU6Activation<T>();
+        _activation = activationFunction ?? new ReLU6Activation<T>();
         _hasExpansion = expansionRatio != 1;
         _useSE = useSE;
 
@@ -141,7 +141,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>
                 inputWidth: currentWidth,
                 stride: 1,
                 padding: 0,
-                activation: new IdentityActivation<T>());
+                activationFunction: new IdentityActivation<T>());
 
             _expandBn = new BatchNormalizationLayer<T>(hiddenDim);
         }
@@ -162,7 +162,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>
             inputWidth: currentWidth,
             stride: stride,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         _dwBn = new BatchNormalizationLayer<T>(dwInputChannels);
 
@@ -185,7 +185,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>
             inputWidth: dwOutputWidth,
             stride: 1,
             padding: 0,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         _projectBn = new BatchNormalizationLayer<T>(outChannels);
     }

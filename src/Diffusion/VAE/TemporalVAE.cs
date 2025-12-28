@@ -245,7 +245,7 @@ public class TemporalVAE<T> : VAEModelBase<T>
             inputWidth: 64,
             stride: 1,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         // Build encoder
         var inChannels = _baseChannels;
@@ -281,7 +281,7 @@ public class TemporalVAE<T> : VAEModelBase<T>
             inputWidth: 8,
             stride: 1,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         _logVarConv = new ConvolutionalLayer<T>(
             inputDepth: lastChannels,
@@ -291,7 +291,7 @@ public class TemporalVAE<T> : VAEModelBase<T>
             inputWidth: 8,
             stride: 1,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         // Post-quant convolution
         _postQuantConv = new ConvolutionalLayer<T>(
@@ -302,7 +302,7 @@ public class TemporalVAE<T> : VAEModelBase<T>
             inputWidth: 8,
             stride: 1,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         // Build decoder
         inChannels = lastChannels;
@@ -337,7 +337,7 @@ public class TemporalVAE<T> : VAEModelBase<T>
             inputWidth: 64,
             stride: 1,
             padding: 1,
-            activation: new TanhActivation<T>());
+            activationFunction: new TanhActivation<T>());
     }
 
     /// <inheritdoc />
@@ -756,7 +756,7 @@ public class TemporalVAE<T> : VAEModelBase<T>
             inputWidth: 32,
             stride: 1,
             padding: 1,
-            activation: new SiLUActivation<T>());
+            activationFunction: new SiLUActivation<T>());
 
         if (inChannels == outChannels)
         {
@@ -764,7 +764,7 @@ public class TemporalVAE<T> : VAEModelBase<T>
             return new ResidualLayer<T>(
                 inputShape: new[] { 1, inChannels, 32, 32 },
                 innerLayer: conv,
-                activation: new SiLUActivation<T>());
+                activationFunction: new SiLUActivation<T>());
         }
 
         return conv;
@@ -783,7 +783,7 @@ public class TemporalVAE<T> : VAEModelBase<T>
             inputWidth: 32,
             stride: 1,
             padding: 1,
-            activation: new SiLUActivation<T>());
+            activationFunction: new SiLUActivation<T>());
     }
 
     private ILayer<T> CreateDownsample(int channels)
@@ -796,7 +796,7 @@ public class TemporalVAE<T> : VAEModelBase<T>
             inputWidth: 32,
             stride: 2,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
     }
 
     private ILayer<T> CreateUpsample(int channels)

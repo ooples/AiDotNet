@@ -314,13 +314,13 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// and a scalar activation function.
     /// </summary>
     /// <param name="inputDepth">The number of channels in the input data.</param>
-    /// <param name="outputDepth">The number of filters (output channels) to create.</param>
-    /// <param name="kernelSize">The size of each filter kernel (width and height).</param>
     /// <param name="inputHeight">The height of the input data.</param>
     /// <param name="inputWidth">The width of the input data.</param>
+    /// <param name="outputDepth">The number of filters (output channels) to create.</param>
+    /// <param name="kernelSize">The size of each filter kernel (width and height).</param>
     /// <param name="stride">The step size for moving the kernel. Defaults to 1.</param>
     /// <param name="padding">The amount of zero-padding to add around the input. Defaults to 0.</param>
-    /// <param name="activation">The activation function to apply. Defaults to ReLU if not specified.</param>
+    /// <param name="activationFunction">The activation function to apply. Defaults to ReLU if not specified.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a convolutional layer with the specified configuration. The input shape is determined
@@ -329,24 +329,24 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// random values.
     /// </para>
     /// <para><b>For Beginners:</b> This setup method creates a new convolutional layer with specific settings.
-    /// 
+    ///
     /// When creating the layer, you specify:
     /// - Input details: How many channels and the dimensions of your data
     /// - How many patterns to look for (outputDepth)
     /// - How big each pattern detector is (kernelSize)
     /// - How to move the detector across the data (stride)
     /// - Whether to add an extra border (padding)
-    /// - What mathematical function to apply to the results (activation)
-    /// 
+    /// - What mathematical function to apply to the results (activationFunction)
+    ///
     /// The layer then creates all the necessary pattern detectors with random starting values
     /// that will be improved during training.
     /// </para>
     /// </remarks>
-    public ConvolutionalLayer(int inputDepth, int outputDepth, int kernelSize, int inputHeight, int inputWidth, int stride = 1, int padding = 0,
-                              IActivationFunction<T>? activation = null)
+    public ConvolutionalLayer(int inputDepth, int inputHeight, int inputWidth, int outputDepth, int kernelSize, int stride = 1, int padding = 0,
+                              IActivationFunction<T>? activationFunction = null)
         : base(CalculateInputShape(inputDepth, inputHeight, inputWidth),
                CalculateOutputShape(outputDepth, CalculateOutputDimension(inputHeight, kernelSize, stride, padding),
-                   CalculateOutputDimension(inputWidth, kernelSize, stride, padding)), activation ?? new ReLUActivation<T>())
+                   CalculateOutputDimension(inputWidth, kernelSize, stride, padding)), activationFunction ?? new ReLUActivation<T>())
     {
         InputDepth = inputDepth;
         OutputDepth = outputDepth;
@@ -368,13 +368,13 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// and a vector activation function.
     /// </summary>
     /// <param name="inputDepth">The number of channels in the input data.</param>
-    /// <param name="outputDepth">The number of filters (output channels) to create.</param>
-    /// <param name="kernelSize">The size of each filter kernel (width and height).</param>
     /// <param name="inputHeight">The height of the input data.</param>
     /// <param name="inputWidth">The width of the input data.</param>
+    /// <param name="outputDepth">The number of filters (output channels) to create.</param>
+    /// <param name="kernelSize">The size of each filter kernel (width and height).</param>
     /// <param name="stride">The step size for moving the kernel. Defaults to 1.</param>
     /// <param name="padding">The amount of zero-padding to add around the input. Defaults to 0.</param>
-    /// <param name="vectorActivation">The vector activation function to apply (required to disambiguate from IActivationFunction overload).</param>
+    /// <param name="vectorActivationFunction">The vector activation function to apply (required to disambiguate from IActivationFunction overload).</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a convolutional layer with the specified configuration and a vector activation function,
@@ -393,11 +393,11 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// needs to be applied to groups of outputs rather than individual values.
     /// </para>
     /// </remarks>
-    public ConvolutionalLayer(int inputDepth, int outputDepth, int kernelSize, int inputHeight, int inputWidth, int stride, int padding,
-                              IVectorActivationFunction<T> vectorActivation)
+    public ConvolutionalLayer(int inputDepth, int inputHeight, int inputWidth, int outputDepth, int kernelSize, int stride, int padding,
+                              IVectorActivationFunction<T> vectorActivationFunction)
         : base(CalculateInputShape(inputDepth, inputHeight, inputWidth),
                CalculateOutputShape(outputDepth, CalculateOutputDimension(inputHeight, kernelSize, stride, padding),
-                   CalculateOutputDimension(inputWidth, kernelSize, stride, padding)), vectorActivation)
+                   CalculateOutputDimension(inputWidth, kernelSize, stride, padding)), vectorActivationFunction)
     {
         InputDepth = inputDepth;
         OutputDepth = outputDepth;
@@ -422,7 +422,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// <param name="numberOfFilters">The number of filters (output channels) to create.</param>
     /// <param name="stride">The step size for moving the kernel. Defaults to 1.</param>
     /// <param name="padding">The amount of zero-padding to add around the input. Defaults to 0.</param>
-    /// <param name="activation">The activation function to apply. Defaults to ReLU if not specified.</param>
+    /// <param name="activationFunction">The activation function to apply. Defaults to ReLU if not specified.</param>
     /// <returns>A new instance of the <see cref="ConvolutionalLayer{T}"/> class.</returns>
     /// <exception cref="ArgumentException">Thrown when the input shape does not have exactly 3 dimensions.</exception>
     /// <remarks>
@@ -446,7 +446,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public static ConvolutionalLayer<T> Configure(int[] inputShape, int kernelSize, int numberOfFilters, int stride = 1, int padding = 0,
-        IActivationFunction<T>? activation = null)
+        IActivationFunction<T>? activationFunction = null)
     {
         if (inputShape.Length != 3)
         {
@@ -459,13 +459,13 @@ public class ConvolutionalLayer<T> : LayerBase<T>
 
         return new ConvolutionalLayer<T>(
             inputDepth: inputDepth,
-            outputDepth: numberOfFilters,
-            kernelSize: kernelSize,
             inputHeight: inputHeight,
             inputWidth: inputWidth,
+            outputDepth: numberOfFilters,
+            kernelSize: kernelSize,
             stride: stride,
             padding: padding,
-            activation: activation
+            activationFunction: activationFunction
         );
     }
 
@@ -477,7 +477,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// <param name="numberOfFilters">The number of filters (output channels) to create.</param>
     /// <param name="stride">The step size for moving the kernel. Defaults to 1.</param>
     /// <param name="padding">The amount of zero-padding to add around the input. Defaults to 0.</param>
-    /// <param name="vectorActivation">The vector activation function to apply. Defaults to ReLU if not specified.</param>
+    /// <param name="vectorActivationFunction">The vector activation function to apply. Defaults to ReLU if not specified.</param>
     /// <returns>A new instance of the <see cref="ConvolutionalLayer{T}"/> class with a vector activation function.</returns>
     /// <exception cref="ArgumentException">Thrown when the input shape does not have exactly 3 dimensions.</exception>
     /// <remarks>
@@ -498,7 +498,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public static ConvolutionalLayer<T> Configure(int[] inputShape, int kernelSize, int numberOfFilters, int stride = 1, int padding = 0,
-        IVectorActivationFunction<T>? vectorActivation = null)
+        IVectorActivationFunction<T>? vectorActivationFunction = null)
     {
         if (inputShape.Length != 3)
         {
@@ -509,28 +509,28 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         int inputHeight = inputShape[1];
         int inputWidth = inputShape[2];
 
-        // Use the appropriate constructor based on whether vectorActivation is provided
-        if (vectorActivation is not null)
+        // Use the appropriate constructor based on whether vectorActivationFunction is provided
+        if (vectorActivationFunction is not null)
         {
             return new ConvolutionalLayer<T>(
                 inputDepth: inputDepth,
-                outputDepth: numberOfFilters,
-                kernelSize: kernelSize,
                 inputHeight: inputHeight,
                 inputWidth: inputWidth,
+                outputDepth: numberOfFilters,
+                kernelSize: kernelSize,
                 stride: stride,
                 padding: padding,
-                vectorActivation: vectorActivation
+                vectorActivationFunction: vectorActivationFunction
             );
         }
         else
         {
             return new ConvolutionalLayer<T>(
                 inputDepth: inputDepth,
-                outputDepth: numberOfFilters,
-                kernelSize: kernelSize,
                 inputHeight: inputHeight,
                 inputWidth: inputWidth,
+                outputDepth: numberOfFilters,
+                kernelSize: kernelSize,
                 stride: stride,
                 padding: padding
             );
