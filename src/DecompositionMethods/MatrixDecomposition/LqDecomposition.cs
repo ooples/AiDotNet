@@ -134,15 +134,17 @@ public class LqDecomposition<T> : MatrixDecompositionBase<T>
         var (Q_qr, R) = ComputeQrHouseholder(At);
 
         // L = R^T (transpose of upper triangular R gives lower triangular L)
-        // We need L to be m x min(m,n) for proper dimensions
+        // For full LQ decomposition, L is m x n (with zeros past column min(m,n))
+        // For wide matrices (m < n), the rightmost (n-m) columns of L are zeros
         var L = new Matrix<T>(m, n);
         int minDim = Math.Min(m, n);
         for (int i = 0; i < m; i++)
         {
-            for (int j = 0; j < n; j++)
+            for (int j = 0; j < minDim; j++)
             {
-                // R is min(n,m) x m (from QR of n x m matrix A^T)
-                // R^T is m x min(n,m)
+                // R is n x m (from QR of n x m matrix A^T)
+                // We extract R^T by swapping indices: L[i,j] = R[j,i]
+                // Only copy the lower triangular portion (j <= i for lower triangular)
                 if (j < R.Rows && i < R.Columns)
                 {
                     L[i, j] = R[j, i];
@@ -348,10 +350,47 @@ public class LqDecomposition<T> : MatrixDecompositionBase<T>
             }
         }
 
-        // Fill remaining Q columns for square matrix (Gram-Schmidt of remaining orthogonal vectors)
+        // Fill remaining Q columns to complete the orthogonal matrix
+        // Each new column must be orthogonalized against all previous columns
         for (int j = minDim; j < m; j++)
         {
-            Q[j, j] = NumOps.One;
+            // Start with the j-th standard basis vector e_j
+            var v = new Vector<T>(m);
+            v[j] = NumOps.One;
+
+            // Orthogonalize against all previous Q columns
+            for (int k = 0; k < j; k++)
+            {
+                // Get Q column k
+                var qk = new Vector<T>(m);
+                for (int i = 0; i < m; i++)
+                {
+                    qk[i] = Q[i, k];
+                }
+
+                // Project v onto qk and subtract: v = v - (v·qk) * qk
+                T dot = v.DotProduct(qk);
+                for (int i = 0; i < m; i++)
+                {
+                    v[i] = NumOps.Subtract(v[i], NumOps.Multiply(dot, qk[i]));
+                }
+            }
+
+            // Normalize the result
+            T norm = NumOps.Sqrt(v.DotProduct(v));
+            if (!NumOps.Equals(norm, NumOps.Zero))
+            {
+                for (int i = 0; i < m; i++)
+                {
+                    Q[i, j] = NumOps.Divide(v[i], norm);
+                }
+            }
+            else
+            {
+                // Fallback: if orthogonalization yields zero vector, use identity
+                // This shouldn't happen with proper Gram-Schmidt but prevents NaN
+                Q[j, j] = NumOps.One;
+            }
         }
 
         return (Q, R);

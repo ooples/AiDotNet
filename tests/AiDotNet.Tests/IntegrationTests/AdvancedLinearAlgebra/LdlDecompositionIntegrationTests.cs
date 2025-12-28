@@ -222,10 +222,10 @@ public class LdlDecompositionIntegrationTests
         // Act
         var ldl = new LdlDecomposition<double>(A);
 
-        // Assert - D should have all positive values for positive definite
+        // Assert - D should have all strictly positive values for positive definite matrix
         for (int i = 0; i < ldl.D.Length; i++)
         {
-            Assert.True(ldl.D[i] > -Tolerance,
+            Assert.True(ldl.D[i] > 0,
                 $"D[{i}] = {ldl.D[i]}, should be positive for SPD matrix");
         }
     }

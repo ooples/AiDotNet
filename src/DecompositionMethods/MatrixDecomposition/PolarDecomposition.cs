@@ -231,24 +231,25 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
 
         for (int iter = 0; iter < maxIterations; iter++)
         {
-            // Correct Halley iteration: X_{k+1} = X_k * (3*X_k^T*X_k + I)^{-1} * (X_k^T*X_k + 3*I)
+            // Correct Halley iteration: X_{k+1} = X_k * (X_k^T*X_k + 3*I) * (3*X_k^T*X_k + I)^{-1}
+            // Note: Order matters! It's X * numerator * (denominator)^{-1}
             Matrix<T> XtX = X.Transpose().Multiply(X);
 
-            // term1 = 3*X^T*X + I (denominator)
-            Matrix<T> term1 = XtX.Multiply(NumOps.FromDouble(3.0)).Add(I);
+            // numerator = X^T*X + 3*I
+            Matrix<T> numerator = XtX.Add(I.Multiply(NumOps.FromDouble(3.0)));
 
-            // term2 = X^T*X + 3*I (numerator)
-            Matrix<T> term2 = XtX.Add(I.Multiply(NumOps.FromDouble(3.0)));
+            // denominator = 3*X^T*X + I
+            Matrix<T> denominator = XtX.Multiply(NumOps.FromDouble(3.0)).Add(I);
 
             // Check invertibility with regularization if needed
-            if (!MatrixHelper<T>.IsInvertible(term1))
+            if (!MatrixHelper<T>.IsInvertible(denominator))
             {
                 // Add small regularization for numerical stability
-                term1 = term1.Add(I.Multiply(NumOps.FromDouble(1e-10)));
+                denominator = denominator.Add(I.Multiply(NumOps.FromDouble(1e-10)));
             }
 
-            // X_{k+1} = X * term1^{-1} * term2
-            Matrix<T> nextX = X.Multiply(term1.Inverse()).Multiply(term2);
+            // X_{k+1} = X * numerator * denominator^{-1}
+            Matrix<T> nextX = X.Multiply(numerator).Multiply(denominator.Inverse());
 
             T error = nextX.Subtract(X).FrobeniusNorm();
 

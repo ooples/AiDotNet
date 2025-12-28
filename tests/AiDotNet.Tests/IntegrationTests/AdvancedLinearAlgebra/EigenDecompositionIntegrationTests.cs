@@ -222,20 +222,21 @@ public class EigenDecompositionIntegrationTests
         var eigen = new EigenDecomposition<double>(D);
 
         // Assert - Eigenvalues should be 4, 3, 2, 1 (order may vary)
-        var expected = new HashSet<double> { 4.0, 3.0, 2.0, 1.0 };
-        var found = new HashSet<double>();
+        // Use a list to ensure one-to-one matching (each expected value matched only once)
+        var remainingExpected = new List<double> { 4.0, 3.0, 2.0, 1.0 };
 
         for (int i = 0; i < eigen.EigenValues.Length; i++)
         {
             double val = eigen.EigenValues[i];
-            // Find closest expected value
-            double closest = expected.OrderBy(x => Math.Abs(x - val)).First();
+            // Find closest remaining expected value
+            double closest = remainingExpected.OrderBy(x => Math.Abs(x - val)).First();
             Assert.True(Math.Abs(val - closest) < Tolerance,
-                $"Diagonal matrix eigenvalue {i} = {val}, expected one of {string.Join(", ", expected)}");
-            found.Add(closest);
+                $"Diagonal matrix eigenvalue {i} = {val}, expected closest remaining value {closest}");
+            // Remove matched value to ensure one-to-one matching
+            remainingExpected.Remove(closest);
         }
 
-        Assert.Equal(4, found.Count);
+        Assert.Empty(remainingExpected);
     }
 
     [Fact]

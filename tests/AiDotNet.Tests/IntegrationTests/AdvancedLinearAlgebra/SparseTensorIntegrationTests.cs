@@ -107,6 +107,15 @@ public class SparseTensorIntegrationTests
         // Convert back to COO to verify data integrity
         var cooAgain = csr.ToCoo();
         Assert.Equal(5, cooAgain.NonZeroCount);
+
+        // Verify values are preserved (order might differ due to format conversion)
+        var originalValues = values.OrderBy(v => v).ToArray();
+        var roundTripValues = cooAgain.Values.OrderBy(v => v).ToArray();
+        for (int i = 0; i < originalValues.Length; i++)
+        {
+            Assert.True(Math.Abs(originalValues[i] - roundTripValues[i]) < Tolerance,
+                $"Value mismatch at index {i}: expected {originalValues[i]}, got {roundTripValues[i]}");
+        }
     }
 
     [Fact]
@@ -124,6 +133,15 @@ public class SparseTensorIntegrationTests
         // Assert
         Assert.Equal(SparseStorageFormat.Coo, coo.Format);
         Assert.Equal(5, coo.NonZeroCount);
+
+        // Verify values are preserved (order might differ due to format conversion)
+        var originalValues = values.OrderBy(v => v).ToArray();
+        var resultValues = coo.Values.OrderBy(v => v).ToArray();
+        for (int i = 0; i < originalValues.Length; i++)
+        {
+            Assert.True(Math.Abs(originalValues[i] - resultValues[i]) < Tolerance,
+                $"Value mismatch at index {i}: expected {originalValues[i]}, got {resultValues[i]}");
+        }
     }
 
     #endregion
@@ -166,6 +184,15 @@ public class SparseTensorIntegrationTests
         // Assert
         Assert.Equal(SparseStorageFormat.Csc, csc.Format);
         Assert.Equal(5, csc.NonZeroCount);
+
+        // Verify values are preserved (order might differ due to format conversion)
+        var originalValues = values.OrderBy(v => v).ToArray();
+        var resultValues = csc.Values.OrderBy(v => v).ToArray();
+        for (int i = 0; i < originalValues.Length; i++)
+        {
+            Assert.True(Math.Abs(originalValues[i] - resultValues[i]) < Tolerance,
+                $"Value mismatch at index {i}: expected {originalValues[i]}, got {resultValues[i]}");
+        }
     }
 
     #endregion
@@ -214,6 +241,15 @@ public class SparseTensorIntegrationTests
 
         // Assert
         Assert.Equal(original.NonZeroCount, roundTrip.NonZeroCount);
+
+        // Verify values are preserved (order might differ)
+        var originalValues = original.Values.OrderBy(v => v).ToArray();
+        var roundTripValues = roundTrip.Values.OrderBy(v => v).ToArray();
+        for (int i = 0; i < originalValues.Length; i++)
+        {
+            Assert.True(Math.Abs(originalValues[i] - roundTripValues[i]) < Tolerance,
+                $"Value mismatch at index {i}: expected {originalValues[i]}, got {roundTripValues[i]}");
+        }
     }
 
     [Fact]

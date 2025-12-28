@@ -311,9 +311,9 @@ public class QrDecompositionIntegrationTests
     #region Numerical Stability Tests
 
     [Fact]
-    public void QrDecomposition_Householder_MoreStableThanClassicalGramSchmidt()
+    public void QrDecomposition_Householder_AccurateOnIllConditionedMatrix()
     {
-        // Arrange - Create a matrix that can cause numerical issues
+        // Arrange - Create a Hilbert-like matrix that can cause numerical issues
         int n = 5;
         var A = new Matrix<double>(n, n);
         for (int i = 0; i < n; i++)

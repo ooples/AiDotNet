@@ -276,11 +276,11 @@ public class QrDecomposition<T> : MatrixDecompositionBase<T>
         Matrix<T> R = new(n, n);
 
         // Clone the matrix since Modified Gram-Schmidt modifies columns in place
-        Matrix<T> A = matrix.Clone();
+        Matrix<T> workMatrix = matrix.Clone();
 
         for (int k = 0; k < n; k++)
         {
-            Vector<T> v = Engine.GetColumn(A, k);
+            Vector<T> v = Engine.GetColumn(workMatrix, k);
             R[k, k] = v.Norm();
             // VECTORIZED: Normalize using Engine division
             var normalized = (Vector<T>)Engine.Divide(v, R[k, k]);
@@ -289,10 +289,10 @@ public class QrDecomposition<T> : MatrixDecompositionBase<T>
             for (int j = k + 1; j < n; j++)
             {
                 var qCol = Engine.GetColumn(Q, k);
-                var matCol = Engine.GetColumn(A, j);
+                var matCol = Engine.GetColumn(workMatrix, j);
                 R[k, j] = qCol.DotProduct(matCol);
                 var subtracted = matCol.Subtract(qCol.Multiply(R[k, j]));
-                Engine.SetColumn(A, j, subtracted);
+                Engine.SetColumn(workMatrix, j, subtracted);
             }
         }
 
