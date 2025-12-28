@@ -164,10 +164,10 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
         // Diagonalization
         DiagonalizeGolubReinsch(A, U, VT);
 
-        // Extract singular values
+        // Extract singular values (must be non-negative by definition)
         for (int i = 0; i < l; i++)
         {
-            S[i] = A[i, i];
+            S[i] = NumOps.Abs(A[i, i]);
         }
 
         // Sort singular values in descending order
@@ -720,10 +720,10 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
             }
         }
 
-        // Diagonalization
+        // Extract singular values (must be non-negative by definition)
         for (int i = 0; i < l; i++)
         {
-            S[i] = A[i, i];
+            S[i] = NumOps.Abs(A[i, i]);
         }
 
         // Sort singular values in descending order
@@ -962,10 +962,10 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
     }
 
     /// <summary>
-    /// Extracts the diagonal elements from a matrix.
+    /// Extracts the diagonal elements from a matrix as singular values.
     /// </summary>
     /// <param name="matrix">The input matrix</param>
-    /// <returns>A vector containing the diagonal elements</returns>
+    /// <returns>A vector containing the absolute values of diagonal elements (singular values must be non-negative)</returns>
     private Vector<T> ComputeDiagonalElements(Matrix<T> matrix)
     {
         int minDim = Math.Min(matrix.Rows, matrix.Columns);
@@ -973,7 +973,8 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
 
         for (int i = 0; i < minDim; i++)
         {
-            diagonal[i] = matrix[i, i];
+            // Singular values must be non-negative by definition
+            diagonal[i] = NumOps.Abs(matrix[i, i]);
         }
 
         return diagonal;
