@@ -1127,6 +1127,33 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     }
 
     /// <summary>
+    /// Divides each element of this tensor by a scalar value.
+    /// </summary>
+    /// <param name="scalar">The scalar value to divide by.</param>
+    /// <returns>A new tensor with each element divided by the scalar.</returns>
+    /// <remarks>
+    /// <para><b>Performance:</b> Uses SIMD-accelerated operations.</para>
+    /// </remarks>
+    public Tensor<T> Divide(T scalar)
+    {
+        var result = new Tensor<T>(Shape);
+        _numOps.DivideScalar(_data.AsSpan(), scalar, result._data.AsWritableSpan());
+        return result;
+    }
+
+    /// <summary>
+    /// Divides each element of this tensor by a scalar value in-place.
+    /// </summary>
+    /// <param name="scalar">The scalar value to divide by.</param>
+    /// <remarks>
+    /// <para><b>Performance:</b> Zero-allocation SIMD-accelerated division.</para>
+    /// </remarks>
+    public void DivideInPlace(T scalar)
+    {
+        _numOps.DivideScalar(_data.AsSpan(), scalar, _data.AsWritableSpan());
+    }
+
+    /// <summary>
     /// Multiplies a 3D tensor with a matrix along the last dimension.
     /// </summary>
     /// <param name="matrix">The matrix to multiply with the tensor.</param>

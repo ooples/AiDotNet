@@ -342,13 +342,17 @@ public abstract class MatrixBase<T>
     /// <exception cref="IndexOutOfRangeException">Thrown when the row index is out of range.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method extracts a single row from the matrix and returns it as a vector.
-    /// For example, if you have a 3ÃƒÂ¯Ã‚Â¿Ã‚Â½4 matrix and call GetRow(1), you'll get a vector with 4 elements containing
+    /// For example, if you have a 3x4 matrix and call GetRow(1), you'll get a vector with 4 elements containing
     /// all values from the second row (remember that indices start at 0).</para>
+    /// <para><b>Performance:</b> Uses SIMD-accelerated Copy operation since rows are contiguous in memory.</para>
     /// </remarks>
     public virtual Vector<T> GetRow(int row)
     {
         ValidateIndices(row, 0);
-        return new Vector<T>([.. Enumerable.Range(0, _cols).Select(col => this[row, col])]);
+        var result = new Vector<T>(_cols);
+        var sourceRow = new ReadOnlySpan<T>(_data, row * _cols, _cols);
+        _numOps.Copy(sourceRow, result.AsWritableSpan());
+        return result;
     }
 
     /// <summary>
@@ -359,13 +363,19 @@ public abstract class MatrixBase<T>
     /// <exception cref="IndexOutOfRangeException">Thrown when the column index is out of range.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method extracts a single column from the matrix and returns it as a vector.
-    /// For example, if you have a 3ÃƒÂ¯Ã‚Â¿Ã‚Â½4 matrix and call GetColumn(2), you'll get a vector with 3 elements containing
+    /// For example, if you have a 3x4 matrix and call GetColumn(2), you'll get a vector with 3 elements containing
     /// all values from the third column (remember that indices start at 0).</para>
     /// </remarks>
     public virtual Vector<T> GetColumn(int col)
     {
         ValidateIndices(0, col);
-        return new Vector<T>([.. Enumerable.Range(0, _rows).Select(row => this[row, col])]);
+        var result = new Vector<T>(_rows);
+        var destSpan = result.AsWritableSpan();
+        for (int i = 0; i < _rows; i++)
+        {
+            destSpan[i] = _data[i * _cols + col];
+        }
+        return result;
     }
 
     /// <summary>

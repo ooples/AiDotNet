@@ -297,7 +297,12 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// </remarks>
     public new Vector<TResult> Transform<TResult>(Func<T, TResult> function)
     {
-        return new Vector<TResult>(base.Transform(function).ToArray());
+        var resultArray = new TResult[Length];
+        for (int i = 0; i < Length; i++)
+        {
+            resultArray[i] = function(_data[i]);
+        }
+        return new Vector<TResult>(resultArray);
     }
 
     /// <summary>
@@ -313,7 +318,12 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// </remarks>
     public new Vector<TResult> Transform<TResult>(Func<T, int, TResult> function)
     {
-        return new Vector<TResult>(base.Transform(function).ToArray());
+        var resultArray = new TResult[Length];
+        for (int i = 0; i < Length; i++)
+        {
+            resultArray[i] = function(_data[i], i);
+        }
+        return new Vector<TResult>(resultArray);
     }
 
     /// <summary>
@@ -324,10 +334,13 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> This creates a vector filled with ones.
     /// It's commonly used in various mathematical operations and algorithms.</para>
+    /// <para><b>Performance:</b> Uses SIMD-accelerated Fill operation.</para>
     /// </remarks>
     public override VectorBase<T> Ones(int size)
     {
-        return new Vector<T>(Enumerable.Repeat(_numOps.One, size));
+        var result = new Vector<T>(size);
+        _numOps.Fill(result.AsWritableSpan(), _numOps.One);
+        return result;
     }
 
     /// <summary>

@@ -682,14 +682,42 @@ public abstract class VectorBase<T>
     /// For example, if you divide [2,4,6] by 2, you get [1,2,3]. Division is often used in
     /// normalization, where you might divide by the sum or maximum value to scale your data
     /// to a specific range.</para>
+    /// <para><b>Performance:</b> Uses SIMD-accelerated operations (5-15x faster with AVX2).</para>
     /// </remarks>
     public virtual VectorBase<T> Divide(T scalar)
     {
         var result = CreateInstance(Length);
-        // Use vectorized scalar division for SIMD acceleration (5-15x faster with AVX2)
         _numOps.DivideScalar(new ReadOnlySpan<T>(_data), scalar, result.AsWritableSpan());
-
         return result;
+    }
+
+    /// <summary>
+    /// Divides each element of this vector by a scalar value in-place.
+    /// </summary>
+    /// <param name="scalar">The scalar value to divide by.</param>
+    /// <remarks>
+    /// <para><b>Performance:</b> Zero-allocation SIMD-accelerated division.</para>
+    /// </remarks>
+    public virtual void DivideInPlace(T scalar)
+    {
+        _numOps.DivideScalar(new ReadOnlySpan<T>(_data), scalar, new Span<T>(_data));
+    }
+
+    /// <summary>
+    /// Divides each element of this vector by a scalar value, storing the result in the destination span.
+    /// </summary>
+    /// <param name="scalar">The scalar value to divide by.</param>
+    /// <param name="destination">The span to store the result in.</param>
+    /// <exception cref="ArgumentException">Thrown when destination is too small.</exception>
+    /// <remarks>
+    /// <para><b>Performance:</b> Zero-allocation SIMD-accelerated division.</para>
+    /// </remarks>
+    public virtual void Divide(T scalar, Span<T> destination)
+    {
+        if (destination.Length < Length)
+            throw new ArgumentException("Destination span is too small", nameof(destination));
+
+        _numOps.DivideScalar(new ReadOnlySpan<T>(_data), scalar, destination);
     }
 
     /// <summary>
