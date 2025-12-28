@@ -119,13 +119,13 @@ public class AdvancedAlgebraLayerTests
     }
 
     [Fact]
-    public void OctonionLinearLayer_SupportsJitCompilation_IsFalse()
+    public void OctonionLinearLayer_SupportsJitCompilation_IsTrue()
     {
         // Arrange
         var layer = new OctonionLinearLayer<double>(4, 2);
 
-        // Assert - OctonionMatMul JIT support requires TensorOperations.OctonionMatMul (not yet in this branch)
-        Assert.False(layer.SupportsJitCompilation);
+        // Assert - OctonionMatMul is fully integrated in JIT compiler
+        Assert.True(layer.SupportsJitCompilation);
     }
 
     #endregion
@@ -330,13 +330,13 @@ public class AdvancedAlgebraLayerTests
     }
 
     [Fact]
-    public void SparseLinearLayer_SupportsJitCompilation_IsFalse()
+    public void SparseLinearLayer_SupportsJitCompilation_IsTrue()
     {
         // Arrange
         var layer = new SparseLinearLayer<double>(100, 50);
 
-        // Assert - SparseLinearLayer JIT compilation is not yet implemented
-        Assert.False(layer.SupportsJitCompilation);
+        // Assert - SparseLinearLayer converts to dense and uses MatMul/Add which are JIT-supported
+        Assert.True(layer.SupportsJitCompilation);
     }
 
     #endregion
@@ -546,13 +546,13 @@ public class AdvancedAlgebraLayerTests
     }
 
     [Fact]
-    public void InstanceNormalizationLayer_SupportsJitCompilation_IsFalse()
+    public void InstanceNormalizationLayer_SupportsJitCompilation_IsTrue()
     {
         // Arrange
         var layer = new InstanceNormalizationLayer<double>(64);
 
-        // Assert - InstanceNorm JIT compilation is not yet implemented
-        Assert.False(layer.SupportsJitCompilation);
+        // Assert - InstanceNorm uses GroupNorm with numGroups=numChannels, which is JIT-supported
+        Assert.True(layer.SupportsJitCompilation);
     }
 
     [Fact]

@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -41,6 +43,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
     private Tensor<T>? _lastVariance;
     private Tensor<T>? _gammaGradient;
     private Tensor<T>? _betaGradient;
+    private int[] _originalInputShape = [];
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -122,20 +125,71 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor with shape [batch, channels, ...spatial].</param>
     /// <returns>Normalized output tensor with the same shape as input.</returns>
+    /// <remarks>
+    /// Supports any-rank tensors:
+    /// - 2D [batch, channels] - normalizes each channel
+    /// - 3D [batch, channels, length] - normalizes over length dimension
+    /// - 4D [batch, channels, height, width] - normalizes over spatial dimensions
+    /// - 5D [batch, channels, D, H, W] - normalizes over all spatial dimensions
+    /// - ND - generalizes to any number of dimensions
+    /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
 
-        var shape = input.Shape;
-        int channels = shape.Length > 1 ? shape[1] : 1;
+        // Instance Norm expects input [batch, channels, ...spatial]
+        // We flatten to 4D and use GroupNorm with numGroups = numChannels
+        Tensor<T> flattenedInput;
+        int channels;
+
+        if (input.Rank == 2)
+        {
+            // 2D [batch, channels] -> [batch, channels, 1, 1]
+            channels = input.Shape[1];
+            flattenedInput = input.Reshape(new int[] { input.Shape[0], channels, 1, 1 });
+        }
+        else if (input.Rank == 3)
+        {
+            // 3D [batch, channels, length] -> [batch, channels, length, 1]
+            channels = input.Shape[1];
+            flattenedInput = input.Reshape(new int[] { input.Shape[0], channels, input.Shape[2], 1 });
+        }
+        else if (input.Rank == 4)
+        {
+            // 4D [batch, channels, height, width] -> use directly
+            channels = input.Shape[1];
+            flattenedInput = input;
+        }
+        else if (input.Rank == 5)
+        {
+            // 5D [batch, channels, D, H, W] -> flatten spatial dims
+            channels = input.Shape[1];
+            int spatialDim = input.Shape[2] * input.Shape[3] * input.Shape[4];
+            flattenedInput = input.Reshape(new int[] { input.Shape[0], channels, spatialDim, 1 });
+        }
+        else
+        {
+            // ND -> flatten all but batch and channel dimensions
+            int batch = input.Shape[0];
+            channels = input.Shape[1];
+            int spatialDim = 1;
+            for (int i = 2; i < input.Rank; i++)
+            {
+                spatialDim *= input.Shape[i];
+            }
+            flattenedInput = input.Reshape(new int[] { batch, channels, spatialDim, 1 });
+        }
 
         if (channels != _numChannels)
             throw new ArgumentException($"Input has {channels} channels but layer expects {_numChannels} channels.");
 
+        _lastInput = flattenedInput;
+
         // Instance Normalization is Group Normalization with numGroups = numChannels
         // This means each channel is normalized independently
         var output = Engine.GroupNorm(
-            input,
+            flattenedInput,
             _numChannels, // numGroups = numChannels for instance norm
             _gamma,
             _beta,
@@ -146,7 +200,8 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
         _lastMean = mean;
         _lastVariance = variance;
 
-        return output;
+        // Reshape output back to original shape
+        return output.Reshape(_originalInputShape);
     }
 
     /// <summary>
@@ -159,9 +214,45 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastMean == null || _lastVariance == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Flatten gradient to 4D for processing (matching forward pass)
+        Tensor<T> flattenedGradient;
+        int channels;
+
+        if (outputGradient.Rank == 2)
+        {
+            channels = outputGradient.Shape[1];
+            flattenedGradient = outputGradient.Reshape(new int[] { outputGradient.Shape[0], channels, 1, 1 });
+        }
+        else if (outputGradient.Rank == 3)
+        {
+            channels = outputGradient.Shape[1];
+            flattenedGradient = outputGradient.Reshape(new int[] { outputGradient.Shape[0], channels, outputGradient.Shape[2], 1 });
+        }
+        else if (outputGradient.Rank == 4)
+        {
+            flattenedGradient = outputGradient;
+        }
+        else if (outputGradient.Rank == 5)
+        {
+            channels = outputGradient.Shape[1];
+            int spatialDim = outputGradient.Shape[2] * outputGradient.Shape[3] * outputGradient.Shape[4];
+            flattenedGradient = outputGradient.Reshape(new int[] { outputGradient.Shape[0], channels, spatialDim, 1 });
+        }
+        else
+        {
+            int batch = outputGradient.Shape[0];
+            channels = outputGradient.Shape[1];
+            int spatialDim = 1;
+            for (int i = 2; i < outputGradient.Rank; i++)
+            {
+                spatialDim *= outputGradient.Shape[i];
+            }
+            flattenedGradient = outputGradient.Reshape(new int[] { batch, channels, spatialDim, 1 });
+        }
+
         // Use Engine for GPU/CPU accelerated backward pass
         var inputGradient = Engine.GroupNormBackward(
-            outputGradient,
+            flattenedGradient,
             _lastInput,
             _numChannels, // numGroups = numChannels for instance norm
             _gamma,
@@ -174,7 +265,8 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
         _gammaGradient = gradGamma;
         _betaGradient = gradBeta;
 
-        return inputGradient;
+        // Reshape gradient back to original input shape
+        return inputGradient.Reshape(_originalInputShape);
     }
 
     /// <summary>
@@ -250,20 +342,48 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets a value indicating whether this layer supports JIT compilation.
     /// </summary>
-    public override bool SupportsJitCompilation => false;
+    /// <remarks>
+    /// Instance normalization supports JIT compilation by leveraging GroupNorm with numGroups = numChannels.
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Exports the computation graph for JIT compilation.
     /// </summary>
     /// <param name="inputNodes">List to populate with input computation nodes.</param>
     /// <returns>The output computation node representing the InstanceNormalization operation.</returns>
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph representing the Instance Normalization layer.
+    /// Instance normalization is implemented as GroupNorm with numGroups = numChannels,
+    /// meaning each channel is normalized independently across spatial dimensions.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
-        if (inputNodes == null)
+        if (inputNodes is null)
             throw new ArgumentNullException(nameof(inputNodes));
 
-        throw new NotSupportedException(
-            "InstanceNormalization JIT compilation is not yet implemented. " +
-            "Use the layer in interpreted mode by setting SupportsJitCompilation = false.");
+        if (InputShape is null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create symbolic input node with batch dimension
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Create gamma and beta parameter nodes
+        var gammaNode = TensorOperations<T>.Constant(_gamma, "gamma");
+        var betaNode = TensorOperations<T>.Constant(_beta, "beta");
+
+        // Apply GroupNorm operation with numGroups = numChannels (instance norm)
+        var outputNode = TensorOperations<T>.GroupNorm(
+            inputNode,
+            _numChannels, // numGroups = numChannels for instance norm
+            gammaNode,
+            betaNode,
+            NumOps.ToDouble(_epsilon));
+
+        return outputNode;
     }
 }
