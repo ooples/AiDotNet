@@ -232,24 +232,80 @@ Please provide a partial answer. If you need more information, indicate what is 
 
     private double CalculateConfidence(string generatedText, List<Document<T>> retrievedDocs)
     {
-        // Simplified confidence: based on text length and document coverage
-        // In production, this would use token-level confidence from the LLM
+        // Multi-factor confidence calculation
+        // In production, this would use token-level confidence from the LLM (logprobs)
 
         if (string.IsNullOrWhiteSpace(generatedText))
             return 0.0;
 
-        // Check for uncertainty indicators
-        var uncertaintyPhrases = new[] { "not sure", "don't know", "need more", "unclear", "missing", "uncertain" };
-        var hasUncertainty = uncertaintyPhrases.Any(phrase =>
-            generatedText.ToLower().Contains(phrase));
+        var lowerText = generatedText.ToLowerInvariant();
 
-        if (hasUncertainty)
-            return 0.3; // Low confidence
+        // Uncertainty indicators (negative signals)
+        var uncertaintyPhrases = new[]
+        {
+            "not sure", "don't know", "i'm not certain", "need more information",
+            "unclear", "missing", "uncertain", "cannot determine", "insufficient",
+            "would need", "it's difficult to say", "without more context",
+            "i don't have enough", "unable to", "not enough information"
+        };
 
-        // Check length (longer answers are usually more complete)
-        var lengthScore = Math.Min(1.0, generatedText.Length / 500.0);
+        // Confidence indicators (positive signals)
+        var confidencePhrases = new[]
+        {
+            "based on the context", "according to", "the documents show",
+            "clearly", "specifically", "in summary", "therefore", "thus",
+            "this means", "the answer is", "it is", "we can see that",
+            "the evidence suggests", "as stated"
+        };
 
-        // Check document relevance
+        // Count occurrences of uncertainty vs confidence phrases
+        var uncertaintyCount = uncertaintyPhrases.Count(phrase => lowerText.Contains(phrase));
+        var confidenceCount = confidencePhrases.Count(phrase => lowerText.Contains(phrase));
+
+        // Calculate phrase-based score (weighted toward uncertainty detection)
+        double phraseScore;
+        if (uncertaintyCount > 0 && confidenceCount == 0)
+        {
+            // Only uncertainty phrases found
+            phraseScore = Math.Max(0.1, 0.4 - (uncertaintyCount * 0.1));
+        }
+        else if (uncertaintyCount > confidenceCount)
+        {
+            // More uncertainty than confidence
+            phraseScore = 0.3 + (confidenceCount * 0.05);
+        }
+        else if (confidenceCount > 0)
+        {
+            // More or equal confidence phrases
+            phraseScore = Math.Min(0.9, 0.5 + (confidenceCount * 0.1));
+        }
+        else
+        {
+            // Neutral - no strong indicators either way
+            phraseScore = 0.5;
+        }
+
+        // Length score (normalized, with minimum threshold for meaningful content)
+        // Short answers (<100 chars) get penalized, long answers (>300 chars) get full credit
+        double lengthScore;
+        if (generatedText.Length < 50)
+        {
+            lengthScore = 0.2;
+        }
+        else if (generatedText.Length < 100)
+        {
+            lengthScore = 0.4;
+        }
+        else if (generatedText.Length < 200)
+        {
+            lengthScore = 0.6;
+        }
+        else
+        {
+            lengthScore = Math.Min(1.0, 0.7 + (generatedText.Length / 1000.0));
+        }
+
+        // Document relevance score
         var relevanceScores = retrievedDocs
             .Where(d => d.HasRelevanceScore)
             .Select(d => Convert.ToDouble(d.RelevanceScore))
@@ -257,7 +313,38 @@ Please provide a partial answer. If you need more information, indicate what is 
 
         var avgRelevance = relevanceScores.Any() ? relevanceScores.Average() : 0.5;
 
-        return (lengthScore + avgRelevance) / 2.0;
+        // Context coverage score - check if generated text references document content
+        double coverageScore = 0.5;
+        if (retrievedDocs.Count > 0)
+        {
+            var docKeywords = retrievedDocs
+                .SelectMany(d => d.Content.Split(new[] { ' ', '.', ',', '!', '?' }, StringSplitOptions.RemoveEmptyEntries))
+                .Where(w => w.Length > 4) // Only meaningful words
+                .Select(w => w.ToLowerInvariant())
+                .Distinct()
+                .ToList();
+
+            var generatedWords = generatedText.Split(new[] { ' ', '.', ',', '!', '?' }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(w => w.Length > 4)
+                .Select(w => w.ToLowerInvariant())
+                .Distinct()
+                .ToList();
+
+            if (docKeywords.Count > 0 && generatedWords.Count > 0)
+            {
+                var overlap = generatedWords.Count(w => docKeywords.Contains(w));
+                coverageScore = Math.Min(1.0, (double)overlap / Math.Min(generatedWords.Count, 20));
+            }
+        }
+
+        // Weighted combination of all factors
+        // Phrase score is most important (40%), then relevance (25%), coverage (20%), length (15%)
+        var finalScore = (phraseScore * 0.40) +
+                        (avgRelevance * 0.25) +
+                        (coverageScore * 0.20) +
+                        (lengthScore * 0.15);
+
+        return Math.Max(0.0, Math.Min(1.0, finalScore));
     }
 
     private string ExtractMissingInformation(string generatedText)

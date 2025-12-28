@@ -159,12 +159,12 @@ public abstract class ChunkingStrategyBase : IChunkingStrategy
 
             chunks.Add((chunk, position, endPosition));
 
+            // If this chunk already reached the end of text, stop
+            if (endPosition >= textLength)
+                break;
+
             // Move to next chunk position with overlap
             position += _chunkSize - _chunkOverlap;
-
-            // If next position would go past the end and we've already captured the last chunk, stop
-            if (position >= textLength && chunks.Count > 0 && chunks[chunks.Count - 1].Item3 == textLength)
-                break;
         }
 
         return chunks;

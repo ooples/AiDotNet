@@ -895,4 +895,6 @@ public class UInt64Operations : INumericOperations<ulong>
             destination[i] = (ulong)Math.Cos(x[i]);
     }
 
+    public void MultiplyAdd(ReadOnlySpan<ulong> x, ReadOnlySpan<ulong> y, ulong scalar, Span<ulong> destination)
+        => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
 }

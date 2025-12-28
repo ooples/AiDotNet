@@ -165,28 +165,14 @@ public class RecursiveCharacterChunkingStrategy : ChunkingStrategyBase
                 if (split.Length > ChunkSize)
                 {
                     var subChunks = SplitTextRecursively(split, nextSeparators);
+                    // SubChunks are already appropriately sized from recursive splitting,
+                    // add them directly to finalChunks instead of re-merging
                     foreach (var subChunk in subChunks)
                     {
-                        if (currentChunk.Length + subChunk.Length > ChunkSize && currentChunk.Length > 0)
+                        if (!string.IsNullOrWhiteSpace(subChunk))
                         {
-                            finalChunks.Add(currentChunk.ToString().Trim());
-                            currentChunk.Clear();
-
-                            // Add overlap
-                            if (finalChunks.Count > 0 && ChunkOverlap > 0)
-                            {
-                                var lastChunk = finalChunks[finalChunks.Count - 1];
-                                var overlapStart = Math.Max(0, lastChunk.Length - ChunkOverlap);
-                                var overlap = lastChunk.Substring(overlapStart);
-                                currentChunk.Append(overlap);
-                            }
+                            finalChunks.Add(subChunk.Trim());
                         }
-
-                        if (currentChunk.Length > 0)
-                        {
-                            currentChunk.Append(separator);
-                        }
-                        currentChunk.Append(subChunk);
                     }
                 }
                 else

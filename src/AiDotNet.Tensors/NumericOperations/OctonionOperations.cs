@@ -413,5 +413,8 @@ public class OctonionOperations<T> : INumericOperations<Octonion<T>>
     public void Cos(ReadOnlySpan<Octonion<T>> x, Span<Octonion<T>> destination)
         => VectorizedOperationsFallback.Cos(this, x, destination);
 
+    public void MultiplyAdd(ReadOnlySpan<Octonion<T>> x, ReadOnlySpan<Octonion<T>> y, Octonion<T> scalar, Span<Octonion<T>> destination)
+        => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
+
     #endregion
 }

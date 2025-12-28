@@ -801,4 +801,6 @@ public class ByteOperations : INumericOperations<byte>
         throw new NotSupportedException(
             "Cos is not supported for byte type. Math.Cos returns values in [-1,1] which cannot be meaningfully represented as bytes (0-255).");
 
+    public void MultiplyAdd(ReadOnlySpan<byte> x, ReadOnlySpan<byte> y, byte scalar, Span<byte> destination)
+        => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
 }

@@ -193,17 +193,37 @@ public class EnsembleFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// </remarks>
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
+        double totalWeight = 0.0;
         var weightedConfidences = _detectors.Select((d, i) =>
         {
             var result = d.DetectFit(evaluationData);
             var weight = i < _options.DetectorWeights.Count ? _options.DetectorWeights[i] : 1.0;
+            totalWeight += weight;
             return NumOps.Multiply(result.ConfidenceLevel ?? NumOps.Zero, NumOps.FromDouble(weight));
         }).ToList();
 
-        var totalWeight = NumOps.FromDouble(_options.DetectorWeights.Sum());
-        var sumConfidence = weightedConfidences.Aggregate(NumOps.Zero, NumOps.Add);
+        // Guard against division by zero if no detectors or all weights are zero
+        if (totalWeight <= 0.0)
+        {
+            return NumOps.FromDouble(0.5); // Return neutral confidence
+        }
 
-        return NumOps.Divide(sumConfidence, totalWeight);
+        var sumConfidence = weightedConfidences.Aggregate(NumOps.Zero, NumOps.Add);
+        var avgConfidence = NumOps.Divide(sumConfidence, NumOps.FromDouble(totalWeight));
+
+        // Clamp confidence to [0, 1] range
+        var zero = NumOps.Zero;
+        var one = NumOps.One;
+        if (NumOps.LessThan(avgConfidence, zero))
+        {
+            return zero;
+        }
+        if (NumOps.GreaterThan(avgConfidence, one))
+        {
+            return one;
+        }
+
+        return avgConfidence;
     }
 
     /// <summary>
