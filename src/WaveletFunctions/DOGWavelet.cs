@@ -205,6 +205,81 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
     }
 
     /// <summary>
+    /// Reconstructs the original signal from approximation and detail coefficients.
+    /// </summary>
+    /// <param name="approximation">The approximation coefficients from decomposition.</param>
+    /// <param name="detail">The detail coefficients from decomposition.</param>
+    /// <returns>The reconstructed signal.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method reverses the decomposition process to get back the original signal.
+    ///
+    /// The reconstruction process for DOG wavelets:
+    /// 1. Upsample the approximation and detail coefficients by inserting zeros
+    /// 2. Convolve with the time-reversed scaling and wavelet filters
+    /// 3. Add the results together
+    ///
+    /// This is the inverse of the Decompose method, so:
+    /// Reconstruct(Decompose(signal)) should equal the original signal.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
+    {
+        var waveletCoeffs = GetWaveletCoefficients();
+        var scalingCoeffs = GetScalingCoefficients();
+
+        // Upsample by 2
+        var upsampledApprox = Upsample(approximation, 2);
+        var upsampledDetail = Upsample(detail, 2);
+
+        // Convolve with time-reversed filters
+        var reconLow = ConvolveReversed(upsampledApprox, scalingCoeffs);
+        var reconHigh = ConvolveReversed(upsampledDetail, waveletCoeffs);
+
+        // Add the results - ensure same length
+        int outputLength = Math.Min(reconLow.Length, reconHigh.Length);
+        var reconstructed = new Vector<T>(outputLength);
+        for (int i = 0; i < outputLength; i++)
+        {
+            reconstructed[i] = NumOps.Add(reconLow[i], reconHigh[i]);
+        }
+
+        return reconstructed;
+    }
+
+    /// <summary>
+    /// Upsamples a signal by inserting zeros.
+    /// </summary>
+    private Vector<T> Upsample(Vector<T> input, int factor)
+    {
+        var result = new T[input.Length * factor];
+        for (int i = 0; i < result.Length; i++)
+        {
+            result[i] = NumOps.Zero;
+        }
+        for (int i = 0; i < input.Length; i++)
+        {
+            result[i * factor] = input[i];
+        }
+        return new Vector<T>(result);
+    }
+
+    /// <summary>
+    /// Convolves with a time-reversed filter.
+    /// </summary>
+    private Vector<T> ConvolveReversed(Vector<T> input, Vector<T> filter)
+    {
+        int filterLen = filter.Length;
+        var reversed = new T[filterLen];
+        for (int i = 0; i < filterLen; i++)
+        {
+            reversed[i] = filter[filterLen - 1 - i];
+        }
+        return Convolve(input, new Vector<T>(reversed));
+    }
+
+    /// <summary>
     /// Gets the scaling function coefficients for the DOG wavelet.
     /// </summary>
     /// <returns>A vector of scaling function coefficients.</returns>
@@ -213,7 +288,7 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
     /// <b>For Beginners:</b>
     /// The scaling coefficients are the filter weights used to extract the low-frequency
     /// components (approximation) from a signal.
-    /// 
+    ///
     /// For DOG wavelets, these coefficients are derived from the Gaussian function:
     /// 
     /// g(x) = e^(-x²)

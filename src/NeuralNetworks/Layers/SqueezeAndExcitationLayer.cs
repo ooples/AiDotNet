@@ -1,3 +1,6 @@
+using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -26,7 +29,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IChainableComputationGraph<T>
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -1340,12 +1343,18 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
+        return BuildComputationGraph(inputNode, "");
+    }
+
+    /// <inheritdoc />
+    public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
+    {
         // Squeeze: Global Average Pooling across spatial dimensions
         var squeezed = TensorOperations<T>.ReduceMean(inputNode, axes: new[] { 1, 2 }, keepDims: false);
 
         // Excitation: First fully connected layer (weights and biases are already Tensor<T>)
-        var weights1Node = TensorOperations<T>.Constant(_weights1, "se_weights1");
-        var bias1Node = TensorOperations<T>.Constant(_bias1, "se_bias1");
+        var weights1Node = TensorOperations<T>.Constant(_weights1, $"{namePrefix}se_weights1");
+        var bias1Node = TensorOperations<T>.Constant(_bias1, $"{namePrefix}se_bias1");
 
         var fc1Output = TensorOperations<T>.MatrixMultiply(squeezed, weights1Node);
         fc1Output = TensorOperations<T>.Add(fc1Output, bias1Node);
@@ -1361,8 +1370,8 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Excitation: Second fully connected layer (weights and biases are already Tensor<T>)
-        var weights2Node = TensorOperations<T>.Constant(_weights2, "se_weights2");
-        var bias2Node = TensorOperations<T>.Constant(_bias2, "se_bias2");
+        var weights2Node = TensorOperations<T>.Constant(_weights2, $"{namePrefix}se_weights2");
+        var bias2Node = TensorOperations<T>.Constant(_bias2, $"{namePrefix}se_bias2");
 
         var fc2Output = TensorOperations<T>.MatrixMultiply(fc1Output, weights2Node);
         fc2Output = TensorOperations<T>.Add(fc2Output, bias2Node);

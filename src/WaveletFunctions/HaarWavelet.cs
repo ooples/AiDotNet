@@ -126,6 +126,43 @@ public class HaarWavelet<T> : WaveletFunctionBase<T>
     }
 
     /// <summary>
+    /// Reconstructs the original signal from approximation and detail coefficients.
+    /// </summary>
+    /// <param name="approximation">The approximation coefficients from decomposition.</param>
+    /// <param name="detail">The detail coefficients from decomposition.</param>
+    /// <returns>The reconstructed signal.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method reverses the decomposition process to get back the original signal.
+    ///
+    /// For the Haar wavelet, reconstruction is the inverse of decomposition:
+    /// - For each pair of coefficients (approx[i], detail[i]):
+    ///   - reconstructed[2*i] = (approx[i] + detail[i]) / sqrt(2)
+    ///   - reconstructed[2*i+1] = (approx[i] - detail[i]) / sqrt(2)
+    ///
+    /// This is the inverse of the Decompose method, so:
+    /// Reconstruct(Decompose(signal)) should equal the original signal.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
+    {
+        int outputLength = approximation.Length * 2;
+        var reconstructed = new Vector<T>(outputLength);
+        T scale = NumOps.FromDouble(1.0 / Math.Sqrt(2));
+
+        for (int i = 0; i < approximation.Length; i++)
+        {
+            T sum = NumOps.Add(approximation[i], detail[i]);
+            T diff = NumOps.Subtract(approximation[i], detail[i]);
+            reconstructed[2 * i] = NumOps.Multiply(scale, sum);
+            reconstructed[2 * i + 1] = NumOps.Multiply(scale, diff);
+        }
+
+        return reconstructed;
+    }
+
+    /// <summary>
     /// Gets the scaling coefficients used in the Haar wavelet transform.
     /// </summary>
     /// <returns>A vector containing the scaling coefficients [1/v2, 1/v2].</returns>

@@ -13,6 +13,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// to capture various relationships in the data simultaneously. This is similar to how you might ask
 /// several friends for advice on a decision - each person might notice different important factors.
 /// </para>
+/// <para>
+/// <b>Thread Safety:</b> This layer is not thread-safe. Each layer instance maintains internal state
+/// during forward and backward passes. If you need concurrent execution, use separate layer instances
+/// per thread or synchronize access to shared instances.
+/// </para>
 /// </remarks>
 public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
@@ -268,9 +273,9 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <param name="sequenceLength">The length of the input sequence.</param>
     /// <param name="embeddingDimension">The dimension of each element in the sequence.</param>
     /// <param name="headCount">The number of attention heads to use.</param>
-    /// <param name="vectorActivationFunction">The vector activation function to apply (defaults to identity function if null).</param>
-    public MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IVectorActivationFunction<T>? vectorActivationFunction = null)
-        : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], vectorActivationFunction ?? new IdentityActivation<T>())
+    /// <param name="vectorActivationFunction">The vector activation function to apply (required to disambiguate from IActivationFunction overload).</param>
+    public MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IVectorActivationFunction<T> vectorActivationFunction)
+        : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], vectorActivationFunction)
     {
         // Initialize auxiliary loss fields first so compiler knows they're set
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
@@ -556,8 +561,60 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         throw new ArgumentException("MultiHeadAttentionLayer supports 1, 2, or 3 inputs.");
     }
 
+    private int[] _originalQueryShape = [];
+    private int[] _originalKeyShape = [];
+    private int[] _originalValueShape = [];
+
     private Tensor<T> ForwardInternal(Tensor<T> query, Tensor<T> key, Tensor<T> value)
     {
+        // Industry standard: Support any-rank tensors (like PyTorch's MultiheadAttention)
+        // Last two dimensions are [sequence, embedding_dim]
+        // All preceding dimensions are treated as batch dimensions
+        // Examples:
+        //   2D [seq, dim] -> batch=1, seq, dim
+        //   3D [batch, seq, dim] -> batch, seq, dim
+        //   4D [batch1, batch2, seq, dim] -> batch1*batch2, seq, dim
+        //   5D [b1, b2, b3, seq, dim] -> b1*b2*b3, seq, dim
+
+        _originalQueryShape = query.Shape;
+        _originalKeyShape = key.Shape;
+        _originalValueShape = value.Shape;
+
+        // Validate minimum rank
+        if (query.Rank < 2)
+        {
+            throw new ArgumentException(
+                $"MultiHeadAttentionLayer expects at least 2D input [seq, dim], " +
+                $"but received {query.Rank}D tensor with shape [{string.Join(", ", query.Shape)}].");
+        }
+
+        // Flatten all batch dimensions to get 3D [batch, seq, dim]
+        int seqLenQ = query.Shape[^2];
+        int dimQ = query.Shape[^1];
+        int batchQ = 1;
+        for (int i = 0; i < query.Rank - 2; i++)
+            batchQ *= query.Shape[i];
+        if (query.Rank == 2) batchQ = 1; // 2D case: [seq, dim] -> [1, seq, dim]
+
+        int seqLenK = key.Shape[^2];
+        int dimK = key.Shape[^1];
+        int batchK = 1;
+        for (int i = 0; i < key.Rank - 2; i++)
+            batchK *= key.Shape[i];
+        if (key.Rank == 2) batchK = 1;
+
+        int seqLenV = value.Shape[^2];
+        int dimV = value.Shape[^1];
+        int batchV = 1;
+        for (int i = 0; i < value.Rank - 2; i++)
+            batchV *= value.Shape[i];
+        if (value.Rank == 2) batchV = 1;
+
+        // Reshape to 3D for processing
+        query = query.Reshape(batchQ, seqLenQ, dimQ);
+        key = key.Reshape(batchK, seqLenK, dimK);
+        value = value.Reshape(batchV, seqLenV, dimV);
+
         _lastInput = query;
         _lastQueryInput = query;
         _lastKeyInput = key;
@@ -626,7 +683,17 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var output = Engine.TensorBroadcastAdd(output_reshaped, biasBroadcast);
         _lastOutput = ApplyActivation(output);
 
-        return _lastOutput;
+        // Reshape output back to original batch dimensions
+        // Output is currently [flatBatch, seq, dim], need to reshape to [origBatch..., seq, dim]
+        int[] outputShape = new int[_originalQueryShape.Length];
+        for (int i = 0; i < _originalQueryShape.Length - 2; i++)
+        {
+            outputShape[i] = _originalQueryShape[i];
+        }
+        outputShape[^2] = seqLengthQ;
+        outputShape[^1] = embeddingDimension;
+
+        return _lastOutput.Reshape(outputShape);
     }
 
     /// <summary>
@@ -650,9 +717,22 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        return UseAutodiff
+        // Flatten any-rank gradient to 3D for processing (like forward pass)
+        int seqLen = outputGradient.Shape[^2];
+        int dim = outputGradient.Shape[^1];
+        int batch = 1;
+        for (int i = 0; i < outputGradient.Rank - 2; i++)
+            batch *= outputGradient.Shape[i];
+        if (outputGradient.Rank == 2) batch = 1;
+
+        outputGradient = outputGradient.Reshape(batch, seqLen, dim);
+
+        var result = UseAutodiff
             ? BackwardViaAutodiff(outputGradient)
             : BackwardManual(outputGradient);
+
+        // Reshape gradient back to original input shape
+        return result.Reshape(_originalQueryShape);
     }
 
     /// <summary>

@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -164,15 +166,48 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         _betaGradient = null;
     }
 
-    public override bool SupportsJitCompilation => false;
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    public override bool SupportsJitCompilation => true;
 
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    /// <summary>
+    /// Exports the computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the GroupNormalization operation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph representing the GroupNormalization layer.
+    /// The graph divides channels into groups and normalizes within each group,
+    /// then applies learned scale (gamma) and shift (beta) parameters per channel.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
-        if (inputNodes == null)
+        if (inputNodes is null)
             throw new ArgumentNullException(nameof(inputNodes));
 
-        throw new NotSupportedException(
-            "GroupNormalization JIT compilation is not yet implemented. " +
-            "Use the layer in interpreted mode by setting SupportsJitCompilation = false.");
+        if (InputShape is null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create symbolic input node with batch dimension
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Create gamma and beta parameter nodes
+        var gammaNode = TensorOperations<T>.Constant(_gamma, "gamma");
+        var betaNode = TensorOperations<T>.Constant(_beta, "beta");
+
+        // Apply GroupNorm operation
+        var outputNode = TensorOperations<T>.GroupNorm(
+            inputNode,
+            _numGroups,
+            gammaNode,
+            betaNode,
+            NumOps.ToDouble(_epsilon));
+
+        return outputNode;
     }
 }

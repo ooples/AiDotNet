@@ -13,19 +13,24 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// Dense layers are capable of learning complex patterns by adjusting these weights during training.
 /// </para>
 /// <para><b>For Beginners:</b> A dense layer is like a voting system where every input gets to vote on every output.
-/// 
+///
 /// Think of it like this:
 /// - Each input sends information to every output
 /// - Each connection has a different "importance" (weight)
 /// - The layer learns which connections should be strong and which should be weak
-/// 
+///
 /// For example, in an image recognition task:
 /// - One input might detect a curved edge
 /// - Another might detect a straight line
 /// - The dense layer combines these features to recognize higher-level patterns
-/// 
+///
 /// Dense layers are the building blocks of many neural networks because they can learn
 /// almost any relationship between inputs and outputs, given enough neurons and training data.
+/// </para>
+/// <para>
+/// <b>Thread Safety:</b> This layer is not thread-safe. Each layer instance maintains internal state
+/// during forward and backward passes. If you need concurrent execution, use separate layer instances
+/// per thread or synchronize access to shared instances.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -322,7 +327,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     /// <param name="inputSize">The number of input neurons.</param>
     /// <param name="outputSize">The number of output neurons.</param>
-    /// <param name="vectorActivation">The vector activation function to apply. Defaults to ReLU if not specified.</param>
+    /// <param name="vectorActivation">The vector activation function to apply (required to disambiguate from IActivationFunction overload).</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a dense layer with the specified number of input and output neurons
@@ -341,9 +346,13 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// flexibility if you need special activation functions that work on the entire
     /// output vector at once.
     /// </para>
+    /// <para>
+    /// <b>Note:</b> If your activation function implements both IActivationFunction and IVectorActivationFunction,
+    /// use <see cref="WithActivation"/> or <see cref="WithVectorActivation"/> factory methods to avoid ambiguity.
+    /// </para>
     /// </remarks>
-    public DenseLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? vectorActivation = null)
-        : base([inputSize], [outputSize], vectorActivation ?? new ReLUActivation<T>())
+    public DenseLayer(int inputSize, int outputSize, IVectorActivationFunction<T> vectorActivation)
+        : base([inputSize], [outputSize], vectorActivation)
     {
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         L1Strength = NumOps.FromDouble(0.01);
@@ -597,6 +606,11 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
+    /// The original shape of the input tensor, used to restore shape after forward pass.
+    /// </summary>
+    private int[] _originalInputShape = [];
+
+    /// <summary>
     /// Processes the input data through the dense layer.
     /// </summary>
     /// <param name="input">The input tensor to process.</param>
@@ -607,53 +621,75 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// adds the biases, and applies the activation function. The result is a tensor where each element
     /// represents the activation of an output neuron.
     /// </para>
+    /// <para>
+    /// <b>Industry Standard:</b> Like PyTorch's nn.Linear, this layer supports any-rank input tensors.
+    /// The transformation is applied to the last dimension, preserving all batch/sequence dimensions.
+    /// For example, input [..., inputSize] produces output [..., outputSize].
+    /// </para>
     /// <para><b>For Beginners:</b> This method transforms input data into output data.
-    /// 
+    ///
     /// During the forward pass:
     /// - The input values are multiplied by their corresponding weights
     /// - All weighted inputs for each output neuron are added together
     /// - The bias is added to each sum
     /// - The activation function is applied to each result
-    /// 
+    ///
     /// For example, if your inputs represent image features, the outputs might represent
     /// the probability of the image belonging to different categories.
-    /// 
+    ///
     /// This is where the actual "thinking" happens in the neural network.
     /// </para>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
+        _originalInputShape = input.Shape;
 
-        // Handle both 1D and 2D inputs
+        // Industry standard: Support any-rank input tensors [..., inputSize]
+        // Transformation is applied to the last dimension
+        // Output shape: [..., outputSize]
+
+        int inputSize = input.Shape[^1]; // Last dimension
+        if (inputSize != InputShape[0])
+        {
+            throw new ArgumentException(
+                $"DenseLayer expects last dimension to be {InputShape[0]}, but got {inputSize}",
+                nameof(input));
+        }
+
         Tensor<T> flattenedInput;
-        bool inputWas1D = false;
+
         if (input.Rank == 1)
         {
-            // 1D input: reshape to (1, features) for single sample
-            inputWas1D = true;
-            flattenedInput = input.Reshape(1, input.Shape[0]);
+            // 1D input [features]: reshape to [1, features]
+            flattenedInput = input.Reshape(1, inputSize);
         }
         else if (input.Rank == 2)
         {
-            // 2D input: already in (batch, features) format
-            int batchSize = input.Shape[0];
-            flattenedInput = input.Reshape(batchSize, input.Shape[1]);
+            // 2D input [batch, features]: use directly
+            flattenedInput = input;
         }
         else
         {
-            throw new ArgumentException($"DenseLayer expects 1D or 2D input, but got {input.Rank}D input", nameof(input));
+            // ND input [..., features]: flatten batch dimensions
+            // E.g., [batch, seq, features] -> [batch*seq, features]
+            int batchDim = 1;
+            for (int i = 0; i < input.Rank - 1; i++)
+            {
+                batchDim *= input.Shape[i];
+            }
+            flattenedInput = input.Reshape(batchDim, inputSize);
         }
 
         // Forward: output = input @ weights.T + biases
-        // input: [batch, inputSize]
+        // input: [batchDim, inputSize]
         // weights: [outputSize, inputSize]
         // weights.T: [inputSize, outputSize]
-        // result: [batch, outputSize]
+        // result: [batchDim, outputSize]
         var weightsTransposed = Engine.TensorTranspose(_weights);
         var matmul = Engine.TensorMatMul(flattenedInput, weightsTransposed);
 
-        // Add biases with broadcasting support ([batch, outputSize] + [outputSize])
+        // Add biases with broadcasting support ([batchDim, outputSize] + [outputSize])
         var output = Engine.TensorBroadcastAdd(matmul, _biases);
 
         // Cache pre-activation output for proper gradient computation in backward pass
@@ -661,11 +697,25 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         Tensor<T> result = ApplyActivation(output);
 
-        // If input was 1D, squeeze output back to 1D
-        if (inputWas1D && result.Rank == 2 && result.Shape[0] == 1)
+        // Reshape back to original shape with outputSize as last dimension
+        // E.g., [batch*seq, outputSize] -> [batch, seq, outputSize]
+        if (input.Rank == 1)
         {
-            result = result.Reshape(result.Shape[1]);
+            // 1D input: return 1D output [outputSize]
+            result = result.Reshape(OutputShape[0]);
         }
+        else if (input.Rank > 2)
+        {
+            // ND input: restore original batch dimensions with new last dim
+            var outputShape = new int[input.Rank];
+            for (int i = 0; i < input.Rank - 1; i++)
+            {
+                outputShape[i] = _originalInputShape[i];
+            }
+            outputShape[^1] = OutputShape[0];
+            result = result.Reshape(outputShape);
+        }
+        // 2D input: result is already [batch, outputSize]
 
         return result;
     }
@@ -729,43 +779,62 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             activationGradient = outputGradient; // Identity
         }
 
-        // Handle both 1D and 2D inputs for gradient computation
+        // Handle any-rank input: flatten to 2D for gradient computation
+        int inputSize = _lastInput.Shape[^1];
+        int batchDim;
+
         Tensor<T> flattenedInput;
-        int batchSize;
         if (_lastInput.Rank == 1)
         {
-            // 1D input: reshape to (1, features) for matrix operations
-            batchSize = 1;
-            flattenedInput = _lastInput.Reshape(1, _lastInput.Shape[0]);
+            batchDim = 1;
+            flattenedInput = _lastInput.Reshape(1, inputSize);
+        }
+        else if (_lastInput.Rank == 2)
+        {
+            batchDim = _lastInput.Shape[0];
+            flattenedInput = _lastInput;
         }
         else
         {
-            // 2D input: use as-is
-            batchSize = _lastInput.Shape[0];
-            flattenedInput = _lastInput.Reshape(batchSize, _lastInput.Shape[1]);
+            // ND input: flatten batch dimensions
+            batchDim = 1;
+            for (int i = 0; i < _lastInput.Rank - 1; i++)
+            {
+                batchDim *= _lastInput.Shape[i];
+            }
+            flattenedInput = _lastInput.Reshape(batchDim, inputSize);
         }
 
-        // Ensure activation gradient is 2D [batchSize, outputSize] for tensor operations
-        var flattenedGradient = activationGradient.Rank == 2
-            ? activationGradient
-            : activationGradient.Reshape(batchSize, OutputShape[0]);
+        // Flatten gradient to 2D [batchDim, outputSize] for tensor operations
+        Tensor<T> flattenedGradient;
+        if (activationGradient.Rank == 1)
+        {
+            flattenedGradient = activationGradient.Reshape(1, OutputShape[0]);
+        }
+        else if (activationGradient.Rank == 2)
+        {
+            flattenedGradient = activationGradient;
+        }
+        else
+        {
+            flattenedGradient = activationGradient.Reshape(batchDim, OutputShape[0]);
+        }
 
         // 2. Compute Weight Gradients: dW = (dL/dz)^T @ input
-        // [batch, output]^T @ [batch, input] -> [output, batch] @ [batch, input] -> [output, input]
+        // [batchDim, output]^T @ [batchDim, input] -> [output, batchDim] @ [batchDim, input] -> [output, input]
         var gradientTransposed = Engine.TensorTranspose(flattenedGradient);
         _weightsGradient = Engine.TensorMatMul(gradientTransposed, flattenedInput);
 
         // 3. Compute Bias Gradients: dB = sum(dL/dz, axis=0)
         // Sum gradients across the batch dimension
-        // Using Engine.Sum if available, otherwise Tensor.Sum
         _biasesGradient = flattenedGradient.Sum([0]);
 
         // 4. Compute Input Gradient: dX = dL/dz @ W
-        // [batch, output] @ [output, input] -> [batch, input]
-        // W is [output, input]. 
+        // [batchDim, output] @ [output, input] -> [batchDim, input]
         var inputGradient = Engine.TensorMatMul(flattenedGradient, _weights);
 
-        return inputGradient.Reshape(_lastInput.Shape);
+        // Reshape back to original input shape
+        return inputGradient.Reshape(_originalInputShape);
     }
 
     /// <summary>
@@ -787,14 +856,28 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Validate tensor ranks before accessing Shape indices
-        if (_lastInput.Rank < 2)
-            throw new ArgumentException($"Expected _lastInput to have at least 2 dimensions, but got {_lastInput.Rank}D tensor.", nameof(outputGradient));
-        if (outputGradient.Rank < 2)
-            throw new ArgumentException($"Expected outputGradient to have at least 2 dimensions, but got {outputGradient.Rank}D tensor.", nameof(outputGradient));
+        // Handle any-rank input: flatten to 2D for gradient computation
+        int inputSize = _lastInput.Shape[^1];
+        int batchDim;
 
-        int batchSize = _lastInput.Shape[0];
-        var flattenedInput = _lastInput.Reshape(batchSize, _lastInput.Shape[1]);
+        if (_lastInput.Rank == 1)
+        {
+            batchDim = 1;
+        }
+        else if (_lastInput.Rank == 2)
+        {
+            batchDim = _lastInput.Shape[0];
+        }
+        else
+        {
+            batchDim = 1;
+            for (int i = 0; i < _lastInput.Rank - 1; i++)
+            {
+                batchDim *= _lastInput.Shape[i];
+            }
+        }
+
+        var flattenedInput = _lastInput.Reshape(batchDim, inputSize);
 
         // Create computation nodes directly from tensors
         var input = Autodiff.TensorOperations<T>.Variable(flattenedInput, "input", requiresGradient: true);
@@ -815,8 +898,20 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var activated = ApplyActivationAutodiff(output);
 
         // Manually propagate gradients using the output gradient we received
-        // Set the gradient at the output and call backward functions manually
-        var flattenedOutputGradient = outputGradient.Reshape(batchSize, outputGradient.Shape[1]);
+        // Flatten gradient to 2D for computation
+        Tensor<T> flattenedOutputGradient;
+        if (outputGradient.Rank == 1)
+        {
+            flattenedOutputGradient = outputGradient.Reshape(1, OutputShape[0]);
+        }
+        else if (outputGradient.Rank == 2)
+        {
+            flattenedOutputGradient = outputGradient;
+        }
+        else
+        {
+            flattenedOutputGradient = outputGradient.Reshape(batchDim, OutputShape[0]);
+        }
         activated.Gradient = flattenedOutputGradient;
 
         // Inline topological sort for backward pass
@@ -870,7 +965,8 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _weightsGradient = weights.Gradient;
         _biasesGradient = biases.Gradient;
 
-        return input.Gradient.Reshape(_lastInput.Shape);
+        // Reshape back to original input shape
+        return input.Gradient.Reshape(_originalInputShape);
     }
 
     /// <summary>
@@ -1088,7 +1184,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         DenseLayer<T> copy;
 
-        if (UsingVectorActivation)
+        if (UsingVectorActivation && VectorActivation is not null)
         {
             copy = new DenseLayer<T>(InputShape[0], OutputShape[0], VectorActivation);
         }

@@ -49,7 +49,7 @@ public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOut
     /// Retrieves cached optimization step data using the specified key.
     /// </summary>
     /// <param name="key">The unique identifier for the optimization step data.</param>
-    /// <returns>The cached optimization step data if found; otherwise, a new empty instance.</returns>
+    /// <returns>The cached optimization step data if found; otherwise, null.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method looks up previously saved information about a specific training step.
@@ -58,13 +58,15 @@ public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOut
     /// For example, the key might represent a specific parameter in your model or a particular
     /// point in the training process.
     /// 
-    /// If the information exists in the cache, the method returns it. If not, it returns a new empty
-    /// container that can be filled with fresh information.
+    /// If the information exists in the cache, the method returns it. If not, it returns null
+    /// indicating the data needs to be computed.
     /// </para>
     /// </remarks>
     public OptimizationStepData<T, TInput, TOutput>? GetCachedStepData(string key)
     {
-        return _cache.TryGetValue(key, out var model) ? model : new();
+        if (key == null) throw new ArgumentNullException(nameof(key), "Cache key cannot be null.");
+
+        return _cache.TryGetValue(key, out var model) ? model : null;
     }
 
     /// <summary>
@@ -86,6 +88,9 @@ public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOut
     /// </remarks>
     public void CacheStepData(string key, OptimizationStepData<T, TInput, TOutput> stepData)
     {
+        if (key == null) throw new ArgumentNullException(nameof(key), "Cache key cannot be null.");
+        if (stepData == null) throw new ArgumentNullException(nameof(stepData), "Step data cannot be null.");
+
         _cache[key] = stepData;
     }
 

@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -40,11 +41,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class TransitionLayer<T> : LayerBase<T>
+public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 {
     private readonly BatchNormalizationLayer<T> _bn;
     private readonly ConvolutionalLayer<T> _conv;
-    private readonly AvgPoolingLayer<T> _pool;
+    private readonly AveragePoolingLayer<T> _pool;
     private readonly IActivationFunction<T> _relu;
 
     private Tensor<T>? _lastInput;
@@ -91,11 +92,11 @@ public class TransitionLayer<T> : LayerBase<T>
             inputWidth: inputWidth,
             stride: 1,
             padding: 0,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         // After 1x1 conv, dimensions are same
         // Then 2x2 avg pool with stride 2 halves dimensions
-        _pool = new AvgPoolingLayer<T>(
+        _pool = new AveragePoolingLayer<T>(
             inputShape: [OutputChannels, inputHeight, inputWidth],
             poolSize: 2,
             strides: 2);
@@ -116,8 +117,8 @@ public class TransitionLayer<T> : LayerBase<T>
         _convOut = _conv.Forward(_reluOut);
 
         // Handle batched input (4D) - use Engine.AvgPool2D directly
-        // AvgPoolingLayer expects 3D input, so we handle 4D separately
-        // [B, C, H, W] uses Engine directly, [C, H, W] uses the AvgPoolingLayer
+        // AveragePoolingLayer expects 3D input, so we handle 4D separately
+        // [B, C, H, W] uses Engine directly, [C, H, W] uses the AveragePoolingLayer
         return _convOut.Shape.Length == 4
             ? Engine.AvgPool2D(_convOut, poolSize: 2, stride: 2, padding: 0)
             : _pool.Forward(_convOut);
@@ -276,13 +277,68 @@ public class TransitionLayer<T> : LayerBase<T>
         _pool.ResetState();
     }
 
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
+    /// <summary>
+    /// Gets whether this layer supports JIT compilation.
+    /// </summary>
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            return _bn.SupportsJitCompilation &&
+                   _conv.SupportsJitCompilation &&
+                   _pool.SupportsJitCompilation;
+        }
+    }
 
     /// <inheritdoc />
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
-        throw new NotSupportedException(
-            "TransitionLayer does not support JIT compilation. Use the standard Forward/Backward API instead.");
+        if (inputNodes is null)
+        {
+            throw new ArgumentNullException(nameof(inputNodes));
+        }
+
+        if (InputShape is null || InputShape.Length == 0)
+        {
+            throw new InvalidOperationException("Layer input shape not configured.");
+        }
+
+        // Create symbolic input node with batch dimension
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        return BuildComputationGraph(inputNode, "");
+    }
+
+    /// <inheritdoc />
+    public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
+    {
+        // BN
+        var bnNode = TensorOperations<T>.BatchNorm(
+            inputNode,
+            gamma: TensorOperations<T>.Constant(_bn.GetGamma(), $"{namePrefix}bn_gamma"),
+            beta: TensorOperations<T>.Constant(_bn.GetBeta(), $"{namePrefix}bn_beta"),
+            runningMean: _bn.GetRunningMean(),
+            runningVar: _bn.GetRunningVariance(),
+            training: false,
+            epsilon: NumOps.ToDouble(_bn.GetEpsilon()));
+
+        // ReLU
+        var reluNode = TensorOperations<T>.ReLU(bnNode);
+
+        // Conv 1x1
+        var convBiases = _conv.GetBiases();
+        var convNode = TensorOperations<T>.Conv2D(
+            reluNode,
+            TensorOperations<T>.Constant(_conv.GetFilters(), $"{namePrefix}conv_kernel"),
+            convBiases is not null ? TensorOperations<T>.Constant(convBiases, $"{namePrefix}conv_bias") : null,
+            stride: new int[] { _conv.Stride, _conv.Stride },
+            padding: new int[] { _conv.Padding, _conv.Padding });
+
+        // Average Pooling 2x2, stride 2
+        var poolNode = TensorOperations<T>.AvgPool2D(convNode, new int[] { 2, 2 }, new int[] { 2, 2 });
+
+        return poolNode;
     }
 }

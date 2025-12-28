@@ -221,6 +221,69 @@ public class SymletWavelet<T> : WaveletFunctionBase<T>
     }
 
     /// <summary>
+    /// Reconstructs the original signal from approximation and detail coefficients.
+    /// </summary>
+    /// <param name="approximation">The approximation coefficients from decomposition.</param>
+    /// <param name="detail">The detail coefficients from decomposition.</param>
+    /// <returns>The reconstructed signal.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method reverses the decomposition process to get back the original signal.
+    ///
+    /// The reconstruction process for Symlet wavelets:
+    /// 1. Upsample the approximation and detail coefficients by inserting zeros
+    /// 2. Convolve with the reconstruction low-pass and high-pass filters
+    /// 3. Add the results together
+    ///
+    /// For orthogonal wavelets like Symlets, perfect reconstruction is guaranteed when:
+    /// - The filters satisfy the orthogonality conditions
+    /// - The signal length is compatible with the filter length
+    ///
+    /// This is the inverse of the Decompose method, so:
+    /// Reconstruct(Decompose(signal)) should equal the original signal.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
+    {
+        int outputLength = approximation.Length * 2;
+        var reconstructed = new Vector<T>(outputLength);
+        int filterLength = _lowRecon.Length;
+
+        for (int i = 0; i < outputLength; i++)
+        {
+            T sum = NumOps.Zero;
+
+            for (int j = 0; j < filterLength; j++)
+            {
+                int k = i - j;
+                if (k >= 0 && k % 2 == 0)
+                {
+                    int coeffIndex = k / 2;
+                    if (coeffIndex < approximation.Length)
+                    {
+                        sum = NumOps.Add(sum, NumOps.Multiply(_lowRecon[j], approximation[coeffIndex]));
+                        sum = NumOps.Add(sum, NumOps.Multiply(_highRecon[j], detail[coeffIndex]));
+                    }
+                }
+            }
+
+            reconstructed[i] = sum;
+        }
+
+        // Handle circular boundary - cap loop to avoid accessing beyond array bounds
+        int maxBoundaryIndex = Math.Min(filterLength - 1, outputLength);
+        for (int i = 0; i < maxBoundaryIndex; i++)
+        {
+            int wrapIndex = (outputLength + i - filterLength + 1) % outputLength;
+            if (wrapIndex < 0) wrapIndex += outputLength;
+            reconstructed[wrapIndex] = NumOps.Add(reconstructed[wrapIndex], reconstructed[i]);
+        }
+
+        return reconstructed;
+    }
+
+    /// <summary>
     /// Gets the scaling function coefficients for the Symlet wavelet.
     /// </summary>
     /// <returns>A vector of scaling function coefficients.</returns>

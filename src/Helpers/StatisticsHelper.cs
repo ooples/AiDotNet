@@ -1640,6 +1640,14 @@ public static class StatisticsHelper<T>
         T residualSumSquares = actualValues.Zip(predictedValues, (a, p) => _numOps.Square(_numOps.Subtract(a, p)))
                                            .Aggregate(_numOps.Zero, _numOps.Add);
 
+        // Handle edge case where all actual values are constant (variance = 0)
+        if (_numOps.Equals(totalSumSquares, _numOps.Zero))
+        {
+            // If predictions also match (residuals = 0), return 1.0 (perfect prediction)
+            // If predictions don't match, return 0.0 (model explains nothing)
+            return _numOps.Equals(residualSumSquares, _numOps.Zero) ? _numOps.One : _numOps.Zero;
+        }
+
         return _numOps.Subtract(_numOps.One, _numOps.Divide(residualSumSquares, totalSumSquares));
     }
 
@@ -1748,30 +1756,33 @@ public static class StatisticsHelper<T>
     /// </remarks>
     private static T Erf(T x)
     {
-        T t = _numOps.Divide(_numOps.One, _numOps.Add(_numOps.One, _numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Abs(x))));
+        // Abramowitz & Stegun approximation 7.1.26
+        // Uses the complementary error function: erfc(x) = 1 - erf(x)
+        T absX = _numOps.Abs(x);
+        T t = _numOps.Divide(_numOps.One, _numOps.Add(_numOps.One, _numOps.Multiply(_numOps.FromDouble(0.3275911), absX)));
 
-        T result = _numOps.Subtract(_numOps.One, _numOps.Multiply(t, _numOps.Exp(_numOps.Negate(_numOps.Square(x)))));
-        result = _numOps.Multiply(result, _numOps.Exp(_numOps.Negate(_numOps.Add(
-            _numOps.FromDouble(1.26551223),
+        // Polynomial coefficients for the approximation
+        T poly = _numOps.Add(
+            _numOps.FromDouble(0.254829592),
             _numOps.Multiply(t, _numOps.Add(
-                _numOps.FromDouble(1.00002368),
+                _numOps.FromDouble(-0.284496736),
                 _numOps.Multiply(t, _numOps.Add(
-                    _numOps.FromDouble(0.37409196),
+                    _numOps.FromDouble(1.421413741),
                     _numOps.Multiply(t, _numOps.Add(
-                        _numOps.FromDouble(0.09678418),
-                        _numOps.Multiply(t, _numOps.Add(
-                            _numOps.FromDouble(-0.18628806),
-                            _numOps.Multiply(t, _numOps.Add(
-                                _numOps.FromDouble(0.27886807),
-                                _numOps.Multiply(t, _numOps.FromDouble(-1.13520398))
-                            ))
-                        ))
+                        _numOps.FromDouble(-1.453152027),
+                        _numOps.Multiply(t, _numOps.FromDouble(1.061405429))
                     ))
                 ))
             ))
-        ))));
+        );
 
-        return _numOps.GreaterThan(x, _numOps.Zero) ? result : _numOps.Negate(result);
+        // erfc(x) = t * poly * exp(-x²)
+        T erfc = _numOps.Multiply(_numOps.Multiply(t, poly), _numOps.Exp(_numOps.Negate(_numOps.Square(absX))));
+
+        // erf(x) = 1 - erfc(x) for x >= 0, erf(x) = erfc(-x) - 1 for x < 0
+        T erfPositive = _numOps.Subtract(_numOps.One, erfc);
+
+        return _numOps.LessThan(x, _numOps.Zero) ? _numOps.Negate(erfPositive) : erfPositive;
     }
 
     /// <summary>
@@ -2484,15 +2495,18 @@ public static class StatisticsHelper<T>
         var sortedShapes = estimates.Select(e => e.Shape).OrderBy(s => s).ToList();
         var sortedScales = estimates.Select(e => e.Scale).OrderBy(s => s).ToList();
 
-        T halfConfidenceLevel = _numOps.Divide(confidenceLevel, _numOps.FromDouble(2));
-        T oneMinusHalfConfidenceLevel = _numOps.Subtract(_numOps.One, halfConfidenceLevel);
-        T onePlusHalfConfidenceLevel = _numOps.Add(_numOps.One, halfConfidenceLevel);
+        // For a confidence interval, we need the alpha/2 and 1 - alpha/2 percentiles
+        // where alpha = 1 - confidenceLevel
+        // e.g., for 95% confidence: alpha = 0.05, so we want 2.5th and 97.5th percentiles
+        T alpha = _numOps.Subtract(_numOps.One, confidenceLevel);
+        T halfAlpha = _numOps.Divide(alpha, _numOps.FromDouble(2));
+        T oneMinusHalfAlpha = _numOps.Subtract(_numOps.One, halfAlpha);
 
-        T lowerIndexT = _numOps.Multiply(_numOps.FromDouble(bootstrapSamples), oneMinusHalfConfidenceLevel);
-        int lowerIndex = Convert.ToInt32(_numOps.Round(lowerIndexT));
+        T lowerIndexT = _numOps.Multiply(_numOps.FromDouble(bootstrapSamples - 1), halfAlpha);
+        int lowerIndex = Math.Max(0, Convert.ToInt32(_numOps.Floor(lowerIndexT)));
 
-        T upperIndexT = _numOps.Multiply(_numOps.FromDouble(bootstrapSamples), onePlusHalfConfidenceLevel);
-        int upperIndex = Convert.ToInt32(_numOps.Round(upperIndexT));
+        T upperIndexT = _numOps.Multiply(_numOps.FromDouble(bootstrapSamples - 1), oneMinusHalfAlpha);
+        int upperIndex = Math.Min(bootstrapSamples - 1, Convert.ToInt32(_numOps.Ceiling(upperIndexT)));
 
         return (_numOps.Multiply(sortedShapes[lowerIndex], sortedScales[lowerIndex]),
                 _numOps.Multiply(sortedShapes[upperIndex], sortedScales[upperIndex]));
@@ -3278,7 +3292,8 @@ public static class StatisticsHelper<T>
     {
         int n = sortedData.Length;
         T position = _numOps.Multiply(_numOps.FromDouble(n - 1), quantile);
-        int index = Convert.ToInt32(_numOps.Round(position));
+        // Use Floor to match NumPy's linear interpolation (method='linear')
+        int index = Convert.ToInt32(_numOps.Floor(position));
         T fraction = _numOps.Subtract(position, _numOps.FromDouble(index));
 
         if (index + 1 < n)
@@ -3703,19 +3718,20 @@ public static class StatisticsHelper<T>
     /// <returns>The mean bias error.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> The mean bias error (MBE) measures the average direction of errors in your 
-    /// predictions. It's calculated by taking the average of the differences between actual and predicted 
-    /// values (actual - predicted). A positive MBE indicates that your model tends to underestimate values 
-    /// (predictions are too low on average), while a negative MBE indicates that your model tends to 
-    /// overestimate values (predictions are too high on average). An MBE close to zero suggests that your 
-    /// model's errors are balanced in both directions. This metric is useful for detecting systematic bias 
-    /// in your predictions, but it can mask the magnitude of errors since positive and negative errors 
+    /// <b>For Beginners:</b> The mean bias error (MBE) measures the average direction of errors in your
+    /// predictions. It's calculated by taking the average of the differences between predicted and actual
+    /// values (predicted - actual). A positive MBE indicates that your model tends to overestimate values
+    /// (predictions are too high on average), while a negative MBE indicates that your model tends to
+    /// underestimate values (predictions are too low on average). An MBE close to zero suggests that your
+    /// model's errors are balanced in both directions. This metric is useful for detecting systematic bias
+    /// in your predictions, but it can mask the magnitude of errors since positive and negative errors
     /// can cancel each other out.
     /// </para>
     /// </remarks>
     public static T CalculateMeanBiasError(Vector<T> actual, Vector<T> predicted)
     {
-        return _numOps.Divide(actual.Subtract(predicted).Aggregate(_numOps.Zero, _numOps.Add), _numOps.FromDouble(actual.Length));
+        // MBE = mean(predicted - actual): positive = overprediction, negative = underprediction
+        return _numOps.Divide(predicted.Subtract(actual).Aggregate(_numOps.Zero, _numOps.Add), _numOps.FromDouble(actual.Length));
     }
 
     /// <summary>
@@ -3791,6 +3807,16 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T CalculateDurbinWatsonStatistic(List<T> residualList)
     {
+        if (residualList == null)
+        {
+            throw new ArgumentNullException(nameof(residualList), "Residual list cannot be null.");
+        }
+
+        if (residualList.Count < 2)
+        {
+            throw new ArgumentException("Durbin-Watson statistic requires at least 2 residuals.", nameof(residualList));
+        }
+
         T sumSquaredDifferences = _numOps.Zero;
         T sumSquaredErrors = _numOps.Zero;
 
@@ -3800,6 +3826,15 @@ public static class StatisticsHelper<T>
             sumSquaredErrors = _numOps.Add(sumSquaredErrors, _numOps.Square(residualList[i]));
         }
         sumSquaredErrors = _numOps.Add(sumSquaredErrors, _numOps.Square(residualList[0]));
+
+        // Check for zero residuals (perfect fit) - DW is undefined
+        if (_numOps.Equals(sumSquaredErrors, _numOps.Zero))
+        {
+            throw new ArgumentException(
+                "Durbin-Watson statistic is undefined when all residuals are zero (perfect fit). " +
+                "This typically indicates the model perfectly predicts all observations, which is unusual in practice.",
+                nameof(residualList));
+        }
 
         return _numOps.Divide(sumSquaredDifferences, sumSquaredErrors);
     }
@@ -4273,12 +4308,15 @@ public static class StatisticsHelper<T>
     {
         var vifValues = new List<T>();
 
+        // The correct formula for VIF from a correlation matrix is:
+        // VIF_i = (R^-1)_ii where R^-1 is the inverse of the correlation matrix
+        // This gives the diagonal elements of the inverse correlation matrix
+        var inverseCorrelationMatrix = correlationMatrix.Inverse();
+
         for (int i = 0; i < correlationMatrix.Rows; i++)
         {
-            var subMatrix = correlationMatrix.RemoveRow(i).RemoveColumn(i);
-            var inverseSubMatrix = subMatrix.Inverse();
-            var rSquared = _numOps.Subtract(_numOps.One, _numOps.Divide(_numOps.One, inverseSubMatrix[0, 0]));
-            var vif = _numOps.Divide(_numOps.One, _numOps.Subtract(_numOps.One, rSquared));
+            // VIF is the diagonal element of the inverse correlation matrix
+            var vif = inverseCorrelationMatrix[i, i];
             vifValues.Add(vif);
 
             // Check if VIF exceeds the maximum allowed value
@@ -6826,8 +6864,7 @@ public static class StatisticsHelper<T>
             T relevance = idealOrder[i].Actual;
             T position = _numOps.FromDouble(i + 1);
             T logDenominator = _numOps.Log(_numOps.Add(position, _numOps.One));
-            T log2Denominator = _numOps.Divide(logDenominator, _numOps.Log(_numOps.FromDouble(2)));
-            idcg = _numOps.Add(idcg, _numOps.Divide(relevance, log2Denominator));
+            idcg = _numOps.Add(idcg, _numOps.Divide(relevance, logDenominator));
         }
 
         return _numOps.Divide(dcg, idcg);
@@ -7115,10 +7152,48 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static Vector<T> CalculateAutoCorrelationFunction(Vector<T> series, int maxLag)
     {
+        if (series == null)
+        {
+            throw new ArgumentNullException(nameof(series), "Time series cannot be null.");
+        }
+
         var n = series.Length;
+
+        if (n < 2)
+        {
+            throw new ArgumentException("Time series must have at least 2 observations for autocorrelation.", nameof(series));
+        }
+
+        if (maxLag < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxLag), "Maximum lag must be non-negative.");
+        }
+
+        if (maxLag >= n)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxLag), 
+                $"Maximum lag ({maxLag}) must be less than series length ({n}).");
+        }
+
         var acf = new T[maxLag + 1];
         var mean = CalculateMean(series);
-        var variance = CalculateVariance(series);
+
+        // Calculate the total sum of squared deviations (denominator for normalization)
+        var totalSumSquares = _numOps.Zero;
+        for (int i = 0; i < n; i++)
+        {
+            var deviation = _numOps.Subtract(series[i], mean);
+            totalSumSquares = _numOps.Add(totalSumSquares, _numOps.Multiply(deviation, deviation));
+        }
+
+        // Check for constant series (zero variance) - ACF is undefined
+        if (_numOps.Equals(totalSumSquares, _numOps.Zero))
+        {
+            throw new ArgumentException(
+                "Autocorrelation is undefined for a constant series (zero variance). " +
+                "All values in the series are identical.",
+                nameof(series));
+        }
 
         for (int lag = 0; lag <= maxLag; lag++)
         {
@@ -7129,7 +7204,7 @@ public static class StatisticsHelper<T>
                     _numOps.Subtract(series[i], mean),
                     _numOps.Subtract(series[i + lag], mean)));
             }
-            acf[lag] = _numOps.Divide(sum, _numOps.Multiply(_numOps.FromDouble(n - lag), variance));
+            acf[lag] = _numOps.Divide(sum, totalSumSquares);
         }
 
         return new Vector<T>(acf);
@@ -7157,30 +7232,40 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static Vector<T> CalculatePartialAutoCorrelationFunction(Vector<T> series, int maxLag)
     {
+        if (series == null)
+        {
+            throw new ArgumentNullException(nameof(series), "Time series cannot be null.");
+        }
+
+        var n = series.Length;
+
+        if (n < 2)
+        {
+            throw new ArgumentException("Time series must have at least 2 observations for partial autocorrelation.", nameof(series));
+        }
+
+        if (maxLag < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxLag), "Maximum lag must be non-negative.");
+        }
+
+        if (maxLag >= n)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxLag), 
+                $"Maximum lag ({maxLag}) must be less than series length ({n}).");
+        }
+
         var pacf = new T[maxLag + 1];
         pacf[0] = _numOps.One;
+
+        // Compute ACF on the full series once (correct Durbin-Levinson approach)
+        var acf = CalculateAutoCorrelationFunction(series, maxLag);
 
         var phi = new T[maxLag + 1, maxLag + 1];
 
         for (int k = 1; k <= maxLag; k++)
         {
-            var temp = new T[k];
-            for (int j = 0; j < k; j++)
-            {
-                temp[j] = series[j];
-            }
-
-            var acf = CalculateAutoCorrelationFunction(new Vector<T>(temp), k);
-
-            phi[k, k] = _numOps.Zero;
-            if (k > 1)
-            {
-                for (int j = 1; j < k; j++)
-                {
-                    phi[k, j] = _numOps.Subtract(phi[k - 1, j], _numOps.Multiply(phi[k, k], phi[k - 1, k - j]));
-                }
-            }
-
+            // Durbin-Levinson recursion
             var numerator = acf[k];
             for (int j = 1; j < k; j++)
             {
@@ -7195,6 +7280,15 @@ public static class StatisticsHelper<T>
 
             phi[k, k] = _numOps.Divide(numerator, denominator);
             pacf[k] = phi[k, k];
+
+            // Update phi coefficients for next iteration
+            if (k < maxLag)
+            {
+                for (int j = 1; j < k; j++)
+                {
+                    phi[k, j] = _numOps.Subtract(phi[k - 1, j], _numOps.Multiply(phi[k, k], phi[k - 1, k - j]));
+                }
+            }
         }
 
         return new Vector<T>(pacf);

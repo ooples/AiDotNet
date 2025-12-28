@@ -137,7 +137,7 @@ public class GaussianWavelet<T> : WaveletFunctionBase<T>
         var detail = new Vector<T>(size);
         for (int i = 0; i < size; i++)
         {
-            T x = NumOps.FromDouble(i - size / 2);
+            T x = NumOps.FromDouble(i - size / 2.0);
             T waveletValue = Calculate(x);
             T derivativeValue = CalculateDerivative(x);
             approximation[i] = NumOps.Multiply(waveletValue, input[i]);
@@ -174,7 +174,7 @@ public class GaussianWavelet<T> : WaveletFunctionBase<T>
         var coefficients = new Vector<T>(size);
         for (int i = 0; i < size; i++)
         {
-            T x = NumOps.FromDouble(i - size / 2);
+            T x = NumOps.FromDouble(i - size / 2.0);
             coefficients[i] = Calculate(x);
         }
 
@@ -209,7 +209,7 @@ public class GaussianWavelet<T> : WaveletFunctionBase<T>
         var coefficients = new Vector<T>(size);
         for (int i = 0; i < size; i++)
         {
-            T x = NumOps.FromDouble(i - size / 2);
+            T x = NumOps.FromDouble(i - size / 2.0);
             coefficients[i] = CalculateDerivative(x);
         }
 
@@ -246,5 +246,58 @@ public class GaussianWavelet<T> : WaveletFunctionBase<T>
         T factor = NumOps.Divide(x, NumOps.Multiply(_sigma, _sigma));
 
         return NumOps.Multiply(NumOps.Negate(factor), gaussianValue);
+    }
+
+    /// <summary>
+    /// Reconstructs the original signal from approximation and detail coefficients.
+    /// </summary>
+    /// <param name="approximation">The approximation coefficients from decomposition.</param>
+    /// <param name="detail">The detail coefficients from decomposition.</param>
+    /// <returns>The reconstructed signal.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method reverses the decomposition process to get back the original signal.
+    ///
+    /// For Gaussian wavelets, decomposition multiplies the input by wavelet values,
+    /// so reconstruction uses a weighted combination of the coefficients based on
+    /// the original wavelet and derivative values at each position.
+    ///
+    /// This is the inverse of the Decompose method, so:
+    /// Reconstruct(Decompose(signal)) should approximate the original signal.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
+    {
+        int size = approximation.Length;
+        var reconstructed = new Vector<T>(size);
+
+        for (int i = 0; i < size; i++)
+        {
+            T x = NumOps.FromDouble(i - size / 2.0);
+            T waveletValue = Calculate(x);
+            T derivativeValue = CalculateDerivative(x);
+
+            // Use weighted least-squares approach to recover original
+            T waveletSq = NumOps.Square(waveletValue);
+            T derivativeSq = NumOps.Square(derivativeValue);
+            T denominator = NumOps.Add(waveletSq, derivativeSq);
+
+            if (NumOps.GreaterThan(NumOps.Abs(denominator), NumOps.FromDouble(1e-10)))
+            {
+                T numerator = NumOps.Add(
+                    NumOps.Multiply(approximation[i], waveletValue),
+                    NumOps.Multiply(detail[i], derivativeValue)
+                );
+                reconstructed[i] = NumOps.Divide(numerator, denominator);
+            }
+            else
+            {
+                // When both wavelet and derivative are near zero, use sum of coefficients
+                reconstructed[i] = NumOps.Add(approximation[i], detail[i]);
+            }
+        }
+
+        return reconstructed;
     }
 }
