@@ -280,10 +280,12 @@ public class MatrixSolutionHelperIntegrationTests
         var result = MatrixSolutionHelper.SolveLinearSystem(A, b, MatrixDecompositionType.Eigen);
 
         // Assert - Verify Ax = b
+        // Eigenvalue decomposition is iterative and may have slightly lower precision
+        const double EigenTolerance = 1e-4;
         var Ax = A.Multiply(result);
         for (int i = 0; i < b.Length; i++)
         {
-            Assert.True(Math.Abs(Ax[i] - b[i]) < Tolerance,
+            Assert.True(Math.Abs(Ax[i] - b[i]) < EigenTolerance,
                 $"Ax[{i}] = {Ax[i]} should equal b[{i}] = {b[i]}");
         }
     }

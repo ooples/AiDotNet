@@ -389,11 +389,11 @@ public class MathHelperIntegrationTests
     }
 
     [Fact]
-    public void Sinc_Pi_ReturnsZero()
+    public void Sinc_One_ReturnsZero()
     {
-        // sinc(π) = sin(π)/π = 0
-        double result = MathHelper.Sinc(Math.PI);
-        Assert.True(Math.Abs(result) < 0.01);
+        // Normalized sinc: sinc(1) = sin(π*1)/(π*1) = sin(π)/π = 0
+        double result = MathHelper.Sinc(1.0);
+        Assert.True(Math.Abs(result) < Tolerance);
     }
 
     #endregion
