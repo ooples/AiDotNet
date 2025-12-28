@@ -101,10 +101,30 @@ public class AveragePoolingLayer<T> : LayerBase<T>
     /// </remarks>
     private static int[] CalculateOutputShape(int[] inputShape, int poolSize, int strides)
     {
-        int outputHeight = (inputShape[1] - poolSize) / strides + 1;
-        int outputWidth = (inputShape[2] - poolSize) / strides + 1;
+        // Industry-standard: support tensors of any rank
+        // The last two dimensions are always height and width for pooling
+        // Supports: 2D [H, W], 3D [C, H, W], 4D [B, C, H, W], etc.
+        if (inputShape.Length < 2)
+        {
+            throw new ArgumentException("Input shape must have at least 2 dimensions for pooling.");
+        }
 
-        return new int[] { inputShape[0], outputHeight, outputWidth };
+        int heightIdx = inputShape.Length - 2;
+        int widthIdx = inputShape.Length - 1;
+
+        int outputHeight = (inputShape[heightIdx] - poolSize) / strides + 1;
+        int outputWidth = (inputShape[widthIdx] - poolSize) / strides + 1;
+
+        // Create output shape preserving all leading dimensions
+        var outputShape = new int[inputShape.Length];
+        for (int i = 0; i < inputShape.Length - 2; i++)
+        {
+            outputShape[i] = inputShape[i];
+        }
+        outputShape[heightIdx] = outputHeight;
+        outputShape[widthIdx] = outputWidth;
+
+        return outputShape;
     }
 
     /// <summary>
