@@ -130,6 +130,11 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// Stores the output tensor from the last forward pass for use in the backward pass.
     /// </summary>
     private Tensor<T>? _lastOutput;
@@ -544,9 +549,34 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
             throw new InvalidOperationException("Adjacency matrix must be set using the SetAdjacencyMatrix method before calling Forward.");
         }
 
-        _lastInput = input;
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
 
-        int batchSize = input.Shape[0];
+        // Handle any-rank tensor: collapse leading dims for rank > 3
+        Tensor<T> processInput;
+        int batchSize;
+
+        if (rank == 2)
+        {
+            batchSize = 1;
+            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
+        }
+        else if (rank == 3)
+        {
+            batchSize = input.Shape[0];
+            processInput = input;
+        }
+        else
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            processInput = input.Reshape([flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
+        }
+
+        _lastInput = processInput;
         int numNodes = input.Shape[1];
         int outputFeatures = _weights.Shape[1];
 

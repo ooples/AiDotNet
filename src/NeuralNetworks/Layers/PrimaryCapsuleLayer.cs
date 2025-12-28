@@ -76,6 +76,11 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// The output tensor from the most recent forward pass.
     /// </summary>
     /// <remarks>
@@ -316,8 +321,41 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-        int batchSize = input.Shape[0];
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: collapse leading dims for rank > 3
+        Tensor<T> processInput;
+        int batchSize;
+
+        if (rank == 2)
+        {
+            // 2D: add batch dim
+            batchSize = 1;
+            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
+        }
+        else if (rank == 3)
+        {
+            // Standard 3D
+            batchSize = input.Shape[0];
+            processInput = input;
+        }
+        else if (rank > 3)
+        {
+            // Higher-rank: collapse leading dims into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            processInput = input.Reshape([flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
+        }
+        else
+        {
+            throw new ArgumentException($"Layer requires at least 2D input, got {rank}D");
+        }
+
+        _lastInput = processInput;
         int inputHeight = input.Shape[1];
         int inputWidth = input.Shape[2];
 

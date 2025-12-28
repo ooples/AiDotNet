@@ -119,6 +119,11 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// Cached values for backward pass.
     /// </summary>
     private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
     private Tensor<T>? _lastOutput;
     private Tensor<T>? _lastIncoming;
     private Tensor<T>? _lastOutgoing;
@@ -323,8 +328,34 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 "Adjacency matrix must be set using SetAdjacencyMatrix before calling Forward.");
         }
 
-        _lastInput = input;
-        int batchSize = input.Shape[0];
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: collapse leading dims for rank > 3
+        Tensor<T> processInput;
+        int batchSize;
+
+        if (rank == 2)
+        {
+            batchSize = 1;
+            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
+        }
+        else if (rank == 3)
+        {
+            batchSize = input.Shape[0];
+            processInput = input;
+        }
+        else
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            processInput = input.Reshape([flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
+        }
+
+        _lastInput = processInput;
         int numNodes = input.Shape[1];
         int inputFeatures = input.Shape[2];
 

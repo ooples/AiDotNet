@@ -81,6 +81,11 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// The output tensor from the last forward pass, saved for backpropagation.
     /// </summary>
     /// <remarks>
@@ -335,8 +340,37 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-        int batchSize = input.Shape[0];
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: collapse to 2D for processing
+        Tensor<T> processInput;
+        int batchSize;
+
+        if (rank == 1)
+        {
+            // 1D: add batch dim
+            batchSize = 1;
+            processInput = input.Reshape([1, input.Shape[0]]);
+        }
+        else if (rank == 2)
+        {
+            // Standard 2D
+            batchSize = input.Shape[0];
+            processInput = input;
+        }
+        else
+        {
+            // Higher-rank: collapse leading dims into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 1; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            processInput = input.Reshape([flatBatch, input.Shape[rank - 1]]);
+        }
+
+        _lastInput = processInput;
 
         // Compute predictions u_hat_ij = W_ij * u_i using elementwise multiply + reduce-sum
         // This approach keeps all dimensions aligned and avoids BatchMatMul shape issues
