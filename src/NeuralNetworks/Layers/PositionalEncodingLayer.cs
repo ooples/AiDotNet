@@ -243,19 +243,18 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Validate input rank: only 2D [seq, embed] and 3D [batch, seq, embed] are supported
-        if (input.Shape.Length < 2 || input.Shape.Length > 3)
+        // Validate input rank: requires at least 2D [..., seq, embed]
+        if (input.Shape.Length < 2)
         {
             throw new ArgumentException(
-                $"PositionalEncodingLayer expects 2D [seq, embed] or 3D [batch, seq, embed] input, " +
-                $"but received {input.Shape.Length}D tensor with shape [{string.Join(", ", input.Shape)}]. " +
-                $"For higher-rank tensors, reshape to 3D by flattening batch dimensions first.");
+                $"PositionalEncodingLayer expects at least 2D input [..., seq, embed], " +
+                $"but received {input.Shape.Length}D tensor with shape [{string.Join(", ", input.Shape)}].");
         }
 
-        // Handle both 2D [seq, embed] and 3D [batch, seq, embed] input
-        bool is3D = input.Shape.Length == 3;
-        int seqLength = is3D ? input.Shape[1] : input.Shape[0];
-        int inputEmbedDim = is3D ? input.Shape[2] : input.Shape[1];
+        // Handle any rank >= 2: last dim is embed, second-to-last is sequence
+        int rank = input.Shape.Length;
+        int seqLength = input.Shape[rank - 2];
+        int inputEmbedDim = input.Shape[rank - 1];
 
         if (seqLength > maxSequenceLength)
         {
@@ -272,19 +271,23 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         // Slice encodings to match input sequence length: [seq, embed]
         var slicedEncodings = encodings.Slice(0, 0, seqLength, embeddingSize);
 
-        if (is3D)
-        {
-            // For 3D input [batch, seq, embed], use broadcasting: [1, seq, embed] -> [batch, seq, embed]
-            // Reshape sliced encodings to [1, seq, embed] for broadcasting
-            var reshapedEncodings = slicedEncodings.Reshape(1, seqLength, embeddingSize);
-
-            // Use GPU-accelerated broadcast addition (automatically broadcasts [1, seq, embed] to [batch, seq, embed])
-            return Engine.TensorBroadcastAdd(input, reshapedEncodings);
-        }
-        else
+        if (rank == 2)
         {
             // For 2D input [seq, embed], add directly
             return Engine.TensorAdd(input, slicedEncodings);
+        }
+        else
+        {
+            // For higher-rank input [..., seq, embed], broadcast encoding across leading dimensions
+            // Create broadcast shape: [1, 1, ..., 1, seq, embed] with (rank-2) leading 1s
+            var broadcastShape = new int[rank];
+            for (int d = 0; d < rank - 2; d++)
+                broadcastShape[d] = 1;
+            broadcastShape[rank - 2] = seqLength;
+            broadcastShape[rank - 1] = embeddingSize;
+
+            var reshapedEncodings = slicedEncodings.Reshape(broadcastShape);
+            return Engine.TensorBroadcastAdd(input, reshapedEncodings);
         }
     }
 
@@ -342,17 +345,30 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         // Create computation nodes
         var inputNode = Autodiff.TensorOperations<T>.Variable(inputTensor, "input", requiresGradient: true);
 
-        // Handle both 2D [seq, embed] and 3D [batch, seq, embed] gradients
-        bool is3D = outputGradient.Shape.Length == 3;
-        var sequenceLength = is3D ? outputGradient.Shape[1] : outputGradient.Shape[0];
+        // Handle any rank >= 2: [..., seq, embed]
+        int rank = outputGradient.Shape.Length;
+        var sequenceLength = outputGradient.Shape[rank - 2];
         var slicedEncodings = encodings.Slice(0, 0, sequenceLength, embeddingSize);
 
         // For autodiff graph, we need encodings to match gradient shape
-        // Reshape to [1, seq, embed] and use BroadcastAdd with zeros to expand to [batch, seq, embed]
-        Tensor<T> encodingsForGraph = is3D
-            ? Tensor<T>.CreateDefault(outputGradient.Shape, NumOps.Zero).BroadcastAdd(
-                slicedEncodings.Reshape(1, sequenceLength, embeddingSize))
-            : slicedEncodings;
+        // Broadcast encodings to match the input shape
+        Tensor<T> encodingsForGraph;
+        if (rank == 2)
+        {
+            encodingsForGraph = slicedEncodings;
+        }
+        else
+        {
+            // Create broadcast shape: [1, 1, ..., 1, seq, embed] with (rank-2) leading 1s
+            var broadcastShape = new int[rank];
+            for (int d = 0; d < rank - 2; d++)
+                broadcastShape[d] = 1;
+            broadcastShape[rank - 2] = sequenceLength;
+            broadcastShape[rank - 1] = embeddingSize;
+
+            encodingsForGraph = Tensor<T>.CreateDefault(outputGradient.Shape, NumOps.Zero).BroadcastAdd(
+                slicedEncodings.Reshape(broadcastShape));
+        }
         var encodingsNode = Autodiff.TensorOperations<T>.Constant(encodingsForGraph, "positional_encodings");
 
         // Forward: output = input + positional_encodings
