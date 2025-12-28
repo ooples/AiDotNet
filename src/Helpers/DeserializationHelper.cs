@@ -264,7 +264,7 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(ConvolutionalLayer<>))
         {
-            // ConvolutionalLayer(int inputDepth, int outputDepth, int kernelSize, int inputHeight, int inputWidth, int stride, int padding, IActivationFunction<T>?)
+            // ConvolutionalLayer(int inputDepth, int inputHeight, int inputWidth, int outputDepth, int kernelSize, int stride, int padding, IActivationFunction<T>?)
             int kernelSize = TryGetInt(additionalParams, "FilterSize") ?? 3;
             int stride = TryGetInt(additionalParams, "Stride") ?? 1;
             int padding = TryGetInt(additionalParams, "Padding") ?? 0;
@@ -281,7 +281,7 @@ public static class DeserializationHelper
             {
                 throw new InvalidOperationException($"Cannot find ConvolutionalLayer constructor.");
             }
-            instance = ctor.Invoke(new object?[] { inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, stride, padding, null });
+            instance = ctor.Invoke(new object?[] { inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding, null });
         }
         else if (genericDef == typeof(PoolingLayer<>))
         {
