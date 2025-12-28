@@ -2485,18 +2485,11 @@ public static class MatrixExtensions
     {
         // QR algorithm for finding eigenvalues of a symmetric matrix
         var rows = matrix.Rows;
+        var ops = MathHelper.GetNumericOperations<T>();
         var a = new Matrix<T>(rows, rows);
 
-        // Copy the matrix data manually
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < rows; j++)
-            {
-                a[i, j] = matrix[i, j];
-            }
-        }
-
-        var ops = MathHelper.GetNumericOperations<T>();
+        // Copy the matrix data using SIMD
+        ops.Copy(matrix.AsSpan(), a.AsWritableSpan());
         var eigenvalues = new Vector<T>(rows);
 
         for (int k = rows - 1; k > 0; k--)
@@ -2904,13 +2897,15 @@ public static class MatrixExtensions
     /// </remarks>
     public static Matrix<T> Extract<T>(this Matrix<T> matrix, int rows, int columns)
     {
+        var numOps = MathHelper.GetNumericOperations<T>();
         var result = Matrix<T>.CreateMatrix<T>(rows, columns);
+
+        // Use SIMD Copy per row for better performance
         for (int i = 0; i < rows; i++)
         {
-            for (int j = 0; j < columns; j++)
-            {
-                result[i, j] = matrix[i, j];
-            }
+            var sourceRow = matrix.GetRowReadOnlySpan(i).Slice(0, columns);
+            var destRow = result.GetRowSpan(i);
+            numOps.Copy(sourceRow, destRow);
         }
 
         return result;
@@ -3174,15 +3169,9 @@ public static class MatrixExtensions
         var normSquared = NumOps.Multiply(frobNorm, frobNorm);
         var alpha = NumOps.Divide(NumOps.One, normSquared);
 
-        // Manually create scaled matrix to ensure type is Matrix<T>
+        // Create scaled matrix using SIMD: X = alpha * A^T
         var X = new Matrix<T>(n, n);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                X[i, j] = NumOps.Multiply(At[i, j], alpha);
-            }
-        }
+        NumOps.MultiplyScalar(At.AsSpan(), alpha, X.AsWritableSpan());
 
         var I = Matrix<T>.CreateIdentity(n);
 
@@ -3360,9 +3349,7 @@ public static class MatrixExtensions
 
         // Create a copy to perform Gaussian elimination without modifying original
         var work = new Matrix<T>(rows, columns);
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < columns; j++)
-                work[i, j] = matrix[i, j];
+        ops.Copy(matrix.AsSpan(), work.AsWritableSpan());
 
         int rank = 0;
         int pivotRow = 0;
@@ -3627,7 +3614,11 @@ public static class MatrixExtensions
     /// </remarks>
     public static T[] GetRow<T>(this Matrix<T> matrix, int rowIndex)
     {
-        return [.. Enumerable.Range(0, matrix.Columns).Select(x => matrix[rowIndex, x])];
+        var result = new T[matrix.Columns];
+        var numOps = MathHelper.GetNumericOperations<T>();
+        numOps.Copy(matrix.GetRowReadOnlySpan(rowIndex), new Span<T>(result));
+
+        return result;
     }
 
     /// <summary>
