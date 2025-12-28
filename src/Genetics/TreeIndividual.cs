@@ -367,6 +367,8 @@ public class TreeIndividual : IEvolvable<NodeGene, double>
 
     public IEvolvable<NodeGene, double> Clone()
     {
-        return new TreeIndividual(_rootNode.Clone());
+        var clone = new TreeIndividual(_rootNode.Clone());
+        clone._fitness = _fitness;
+        return clone;
     }
 }
