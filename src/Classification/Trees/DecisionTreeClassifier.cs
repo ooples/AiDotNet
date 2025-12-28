@@ -672,6 +672,189 @@ public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBa
         metadata.AdditionalInfo["NodeCount"] = NodeCount;
         return metadata;
     }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        var modelData = new Dictionary<string, object>
+        {
+            { "NumClasses", NumClasses },
+            { "NumFeatures", NumFeatures },
+            { "TaskType", (int)TaskType },
+            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
+            { "RegularizationOptions", Regularization.GetOptions() }
+        };
+
+        // Serialize FeatureImportances
+        if (FeatureImportances is not null)
+        {
+            var featureImportancesArray = new double[FeatureImportances.Length];
+            for (int i = 0; i < FeatureImportances.Length; i++)
+            {
+                featureImportancesArray[i] = NumOps.ToDouble(FeatureImportances[i]);
+            }
+            modelData["FeatureImportances"] = featureImportancesArray;
+        }
+
+        // Serialize tree structure
+        if (_root is not null)
+        {
+            modelData["Tree"] = SerializeNode(_root);
+        }
+
+        var modelMetadata = GetModelMetadata();
+        modelMetadata.ModelData = System.Text.Encoding.UTF8.GetBytes(
+            Newtonsoft.Json.JsonConvert.SerializeObject(modelData));
+
+        return System.Text.Encoding.UTF8.GetBytes(
+            Newtonsoft.Json.JsonConvert.SerializeObject(modelMetadata));
+    }
+
+    /// <summary>
+    /// Serializes a decision node to a dictionary for JSON serialization.
+    /// </summary>
+    private Dictionary<string, object> SerializeNode(DecisionNode<T> node)
+    {
+        var nodeData = new Dictionary<string, object>
+        {
+            { "IsLeaf", node.IsLeaf },
+            { "FeatureIndex", node.FeatureIndex },
+            { "Threshold", NumOps.ToDouble(node.Threshold) },
+            { "PredictedClass", node.PredictedClass },
+            { "NumSamples", node.NumSamples }
+        };
+
+        if (node.ClassProbabilities is not null)
+        {
+            var probsArray = new double[node.ClassProbabilities.Length];
+            for (int i = 0; i < node.ClassProbabilities.Length; i++)
+            {
+                probsArray[i] = NumOps.ToDouble(node.ClassProbabilities[i]);
+            }
+            nodeData["ClassProbabilities"] = probsArray;
+        }
+
+        if (node.Left is not null)
+        {
+            nodeData["Left"] = SerializeNode(node.Left);
+        }
+
+        if (node.Right is not null)
+        {
+            nodeData["Right"] = SerializeNode(node.Right);
+        }
+
+        return nodeData;
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = System.Text.Encoding.UTF8.GetString(modelData);
+        var modelMetadata = Newtonsoft.Json.JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+
+        if (modelMetadata == null || modelMetadata.ModelData == null)
+        {
+            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+        }
+
+        var modelDataString = System.Text.Encoding.UTF8.GetString(modelMetadata.ModelData);
+        var modelDataObj = Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(modelDataString);
+
+        if (modelDataObj == null)
+        {
+            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+        }
+
+        // Deserialize base properties
+        NumClasses = modelDataObj["NumClasses"]?.ToObject<int>() ?? 0;
+        NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
+
+        var classLabelsToken = modelDataObj["ClassLabels"];
+        if (classLabelsToken is not null)
+        {
+            var classLabelsAsDoubles = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (classLabelsAsDoubles.Length > 0)
+            {
+                ClassLabels = new Vector<T>(classLabelsAsDoubles.Length);
+                for (int i = 0; i < classLabelsAsDoubles.Length; i++)
+                {
+                    ClassLabels[i] = NumOps.FromDouble(classLabelsAsDoubles[i]);
+                }
+            }
+        }
+
+        // Deserialize FeatureImportances
+        var featureImportancesToken = modelDataObj["FeatureImportances"];
+        if (featureImportancesToken is not null)
+        {
+            var featureImportancesArray = featureImportancesToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (featureImportancesArray.Length > 0)
+            {
+                FeatureImportances = new Vector<T>(featureImportancesArray.Length);
+                for (int i = 0; i < featureImportancesArray.Length; i++)
+                {
+                    FeatureImportances[i] = NumOps.FromDouble(featureImportancesArray[i]);
+                }
+            }
+        }
+
+        // Deserialize tree structure
+        var treeToken = modelDataObj["Tree"];
+        if (treeToken is not null)
+        {
+            _root = DeserializeNode(treeToken as Newtonsoft.Json.Linq.JObject);
+        }
+    }
+
+    /// <summary>
+    /// Deserializes a decision node from a JSON object.
+    /// </summary>
+    private DecisionNode<T>? DeserializeNode(Newtonsoft.Json.Linq.JObject? nodeData)
+    {
+        if (nodeData == null)
+        {
+            return null;
+        }
+
+        var node = new DecisionNode<T>
+        {
+            IsLeaf = nodeData["IsLeaf"]?.ToObject<bool>() ?? false,
+            FeatureIndex = nodeData["FeatureIndex"]?.ToObject<int>() ?? 0,
+            Threshold = NumOps.FromDouble(nodeData["Threshold"]?.ToObject<double>() ?? 0.0),
+            PredictedClass = nodeData["PredictedClass"]?.ToObject<int>() ?? 0,
+            NumSamples = nodeData["NumSamples"]?.ToObject<int>() ?? 0
+        };
+
+        var probsToken = nodeData["ClassProbabilities"];
+        if (probsToken is not null)
+        {
+            var probsArray = probsToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (probsArray.Length > 0)
+            {
+                node.ClassProbabilities = new Vector<T>(probsArray.Length);
+                for (int i = 0; i < probsArray.Length; i++)
+                {
+                    node.ClassProbabilities[i] = NumOps.FromDouble(probsArray[i]);
+                }
+            }
+        }
+
+        var leftToken = nodeData["Left"];
+        if (leftToken is not null && leftToken.Type == Newtonsoft.Json.Linq.JTokenType.Object)
+        {
+            node.Left = DeserializeNode(leftToken as Newtonsoft.Json.Linq.JObject);
+        }
+
+        var rightToken = nodeData["Right"];
+        if (rightToken is not null && rightToken.Type == Newtonsoft.Json.Linq.JTokenType.Object)
+        {
+            node.Right = DeserializeNode(rightToken as Newtonsoft.Json.Linq.JObject);
+        }
+
+        return node;
+    }
 }
 
 /// <summary>
