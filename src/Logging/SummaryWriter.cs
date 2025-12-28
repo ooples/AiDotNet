@@ -197,11 +197,7 @@ public class SummaryWriter : IDisposable
                         val = imageData[row, col, ch];
 
                     // Clamp and convert to [0, 255]
-#if NET5_0_OR_GREATER
-                    pixels[idx++] = (byte)Math.Clamp(val * 255, 0, 255);
-#else
                     pixels[idx++] = (byte)MathPolyfill.Clamp(val * 255, 0, 255);
-#endif
                 }
             }
         }
@@ -276,11 +272,7 @@ public class SummaryWriter : IDisposable
                         float val = images[i, ch, row, col];
                         if (normalize)
                         {
-#if NET5_0_OR_GREATER
-                            val = Math.Clamp(val, 0, 1);
-#else
                             val = MathPolyfill.Clamp(val, 0, 1);
-#endif
                         }
                         grid[ch, startY + row, startX + col] = val;
                     }

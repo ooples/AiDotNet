@@ -2,6 +2,7 @@ using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
 using AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN;
+using AiDotNet.Enums;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 

@@ -2339,6 +2339,78 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     }
 
     /// <summary>
+    /// Multiplies this tensor by another tensor with NumPy-style broadcasting.
+    /// </summary>
+    /// <param name="other">The tensor to multiply by.</param>
+    /// <returns>A new tensor containing the element-wise product with broadcasting.</returns>
+    /// <remarks>
+    /// <para>
+    /// Broadcasting allows tensors of different shapes to be multiplied together by automatically
+    /// expanding the smaller tensor. For example, [B,H,W,C] * [B,1,1,C] broadcasts the [B,1,1,C]
+    /// tensor across the spatial dimensions.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> BroadcastMultiply(Tensor<T> other)
+    {
+        // Check if shapes are already identical - use fast path (element-wise multiply)
+        if (Shape.SequenceEqual(other.Shape))
+        {
+            // Element-wise multiplication, not matrix multiplication
+            var fastResult = new Tensor<T>(Shape);
+            for (int i = 0; i < Length; i++)
+            {
+                fastResult.Data[i] = _numOps.Multiply(this.Data[i], other.Data[i]);
+            }
+            return fastResult;
+        }
+
+        // Get broadcast shape
+        int[] broadcastShape = GetBroadcastShape(this.Shape, other.Shape);
+        var result = new Tensor<T>(broadcastShape);
+
+        // Pad shapes to same rank for easier indexing
+        int maxRank = broadcastShape.Length;
+        int[] thisShape = new int[maxRank];
+        int[] otherShape = new int[maxRank];
+
+        // Right-align shapes (prepend 1s)
+        int thisOffset = maxRank - this.Rank;
+        int otherOffset = maxRank - other.Rank;
+
+        for (int i = 0; i < maxRank; i++)
+        {
+            thisShape[i] = i < thisOffset ? 1 : this.Shape[i - thisOffset];
+            otherShape[i] = i < otherOffset ? 1 : other.Shape[i - otherOffset];
+        }
+
+        // Iterate over the result tensor
+        int[] thisIndices = new int[this.Rank];
+        int[] otherIndices = new int[other.Rank];
+
+        foreach (var index in result.GetIndices())
+        {
+            // Map result index to this tensor's index (accounting for broadcasting)
+            for (int i = 0; i < this.Rank; i++)
+            {
+                int broadcastIdx = i + thisOffset;
+                thisIndices[i] = thisShape[broadcastIdx] == 1 ? 0 : index[broadcastIdx];
+            }
+
+            // Map result index to other tensor's index (accounting for broadcasting)
+            for (int i = 0; i < other.Rank; i++)
+            {
+                int broadcastIdx = i + otherOffset;
+                otherIndices[i] = otherShape[broadcastIdx] == 1 ? 0 : index[broadcastIdx];
+            }
+
+            // Perform multiplication
+            result[index] = _numOps.Multiply(this[thisIndices], other[otherIndices]);
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Multiplies this tensor by another tensor.
     /// </summary>
     /// <param name="other">The tensor to multiply by.</param>

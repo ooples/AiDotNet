@@ -1,6 +1,7 @@
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
+using AiDotNet.Enums;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;

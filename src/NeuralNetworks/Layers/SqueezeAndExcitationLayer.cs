@@ -689,7 +689,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Reshape excitation to [B, 1, 1, C] for broadcasting
         var excitationReshaped = excitation.Reshape(batchSize, 1, 1, _channels);
 
-        var output = Engine.TensorMultiply(input, excitationReshaped);
+        var output = Engine.TensorBroadcastMultiply(input, excitationReshaped);
 
         _lastOutput = output;
         return output;
