@@ -883,10 +883,15 @@ public class GeneTypesIntegrationTests
 
         // Act
         individual.SetObjectiveValues(objectiveValues);
-        var retrieved = individual.GetObjectiveValues();
+        var retrieved = individual.GetObjectiveValues().ToList();
 
-        // Assert
+        // Assert - Verify the values were correctly stored and retrieved
         Assert.NotNull(retrieved);
+        Assert.Equal(objectiveValues.Count, retrieved.Count);
+        for (int i = 0; i < objectiveValues.Count; i++)
+        {
+            Assert.Equal(objectiveValues[i], retrieved[i], Tolerance);
+        }
     }
 
     [Fact]
@@ -913,18 +918,18 @@ public class GeneTypesIntegrationTests
         var individual1 = new MultiObjectiveRealIndividual(5, -1.0, 1.0, rand);
         var individual2 = new MultiObjectiveRealIndividual(5, -1.0, 1.0, rand);
 
-        // Note: Dominates returns true if 'this' is better (lower values for minimization)
-        // Individual 1 has lower values (better) in all objectives
-        var objectives1 = new List<double> { 0.3, 0.4 };
-        var objectives2 = new List<double> { 0.6, 0.7 };
+        // Set objective values - individual1 has lower (better) values in all objectives
+        // Dominates returns true if 'this' is better (lower values for minimization)
+        individual1.SetObjectiveValues([0.3, 0.4]);
+        individual2.SetObjectiveValues([0.6, 0.7]);
 
-        // Use reflection or direct field access since SetObjectiveValues has a bug
-        // (it doesn't copy the values properly)
-        // For now, test with the built-in Dominates method behavior
+        // Act
+        bool individual1DominatesIndividual2 = individual1.Dominates(individual2);
+        bool individual2DominatesIndividual1 = individual2.Dominates(individual1);
 
-        // Act & Assert - At minimum, verify the method exists and doesn't throw
-        Assert.NotNull(individual1);
-        Assert.NotNull(individual2);
+        // Assert - Individual 1 should dominate Individual 2
+        Assert.True(individual1DominatesIndividual2, "Individual with lower objective values should dominate");
+        Assert.False(individual2DominatesIndividual1, "Individual with higher objective values should not dominate");
     }
 
     [Fact]

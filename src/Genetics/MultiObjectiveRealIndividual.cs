@@ -80,7 +80,15 @@ public class MultiObjectiveRealIndividual : RealValuedIndividual, IMultiObjectiv
     /// <returns>A clone of this individual with all properties preserved.</returns>
     public new MultiObjectiveRealIndividual Clone()
     {
-        var clone = new MultiObjectiveRealIndividual(GetGenes());
+        // Deep clone genes to avoid shared mutable state between individuals
+        var originalGenes = GetGenes();
+        var clonedGenes = new List<RealGene>(originalGenes.Count);
+        foreach (var gene in originalGenes)
+        {
+            clonedGenes.Add(gene.Clone());
+        }
+
+        var clone = new MultiObjectiveRealIndividual(clonedGenes);
         clone.SetFitness(GetFitness());
         clone._objectiveValues = [.. _objectiveValues];
         clone._rank = _rank;
