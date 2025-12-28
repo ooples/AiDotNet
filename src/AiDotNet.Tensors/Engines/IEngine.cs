@@ -3229,21 +3229,24 @@ public interface IEngine
     #region Spatial Operations
 
     /// <summary>
-    /// Performs nearest-neighbor upsampling on a 4D tensor.
+    /// Performs nearest-neighbor upsampling on a tensor of any rank (at least 2D).
+    /// The last two dimensions are treated as height and width for upsampling.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
-    /// <param name="input">The input tensor with shape [batch, channels, height, width].</param>
+    /// <param name="input">The input tensor with at least 2 dimensions, where the last two are height and width.
+    /// Supports: 2D [H, W], 3D [C, H, W], 4D [B, C, H, W], 5D+.</param>
     /// <param name="scaleH">The height scaling factor.</param>
     /// <param name="scaleW">The width scaling factor.</param>
-    /// <returns>The upsampled tensor.</returns>
+    /// <returns>The upsampled tensor with scaled height and width dimensions.</returns>
     Tensor<T> Upsample<T>(Tensor<T> input, int scaleH, int scaleW);
 
     /// <summary>
-    /// Computes the backward pass for upsampling.
+    /// Computes the backward pass for upsampling on a tensor of any rank (at least 2D).
+    /// The last two dimensions are treated as height and width.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
     /// <param name="gradOutput">The gradient from the next layer.</param>
-    /// <param name="inputShape">The original input shape.</param>
+    /// <param name="inputShape">The original input shape (any rank, at least 2D).</param>
     /// <param name="scaleH">The height scaling factor used in forward pass.</param>
     /// <param name="scaleW">The width scaling factor used in forward pass.</param>
     /// <returns>The gradient with respect to the input.</returns>

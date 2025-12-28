@@ -121,6 +121,11 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// Cached values for backward pass.
     /// </summary>
     private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
     private Tensor<T>? _lastOutput;
     private Tensor<T>? _lastIncoming;
     private Tensor<T>? _lastOutgoing;
@@ -325,15 +330,41 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 "Adjacency matrix must be set using SetAdjacencyMatrix before calling Forward.");
         }
 
-        _lastInput = input;
-        int batchSize = input.Shape[0];
-        int numNodes = input.Shape[1];
-        int inputFeatures = input.Shape[2];
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: collapse leading dims for rank > 3
+        Tensor<T> processInput;
+        int batchSize;
+
+        if (rank == 2)
+        {
+            batchSize = 1;
+            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
+        }
+        else if (rank == 3)
+        {
+            batchSize = input.Shape[0];
+            processInput = input;
+        }
+        else
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            processInput = input.Reshape([flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
+        }
+
+        _lastInput = processInput;
+        int numNodes = processInput.Shape[1];
+        int inputFeatures = processInput.Shape[2];
 
         // Step 1: Aggregate incoming edges (nodes that point TO this node)
         // A[i,j] = 1 means edge from j to i (j→i)
         // For incoming: multiply A @ X @ W_in
-        var xwIn = BatchedMatMul3Dx2D(input, _incomingWeights, batchSize, numNodes, inputFeatures, _outputFeatures);
+        var xwIn = BatchedMatMul3Dx2D(processInput, _incomingWeights, batchSize, numNodes, inputFeatures, _outputFeatures);
         _lastIncoming = Engine.BatchMatMul(_adjacencyMatrix, xwIn);
         var biasIn = BroadcastBias(_incomingBias, batchSize, numNodes);
         _lastIncoming = Engine.TensorAdd(_lastIncoming, biasIn);
@@ -341,13 +372,13 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Step 2: Aggregate outgoing edges (nodes that this node points TO)
         // For outgoing: multiply A^T @ X @ W_out
         var adjTransposed = Engine.TensorTranspose(_adjacencyMatrix);
-        var xwOut = BatchedMatMul3Dx2D(input, _outgoingWeights, batchSize, numNodes, inputFeatures, _outputFeatures);
+        var xwOut = BatchedMatMul3Dx2D(processInput, _outgoingWeights, batchSize, numNodes, inputFeatures, _outputFeatures);
         _lastOutgoing = Engine.BatchMatMul(adjTransposed, xwOut);
         var biasOut = BroadcastBias(_outgoingBias, batchSize, numNodes);
         _lastOutgoing = Engine.TensorAdd(_lastOutgoing, biasOut);
 
         // Step 3: Transform self features: X @ W_self + b_self
-        _lastSelf = BatchedMatMul3Dx2D(input, _selfWeights, batchSize, numNodes, inputFeatures, _outputFeatures);
+        _lastSelf = BatchedMatMul3Dx2D(processInput, _selfWeights, batchSize, numNodes, inputFeatures, _outputFeatures);
         var biasSelf = BroadcastBias(_selfBias, batchSize, numNodes);
         _lastSelf = Engine.TensorAdd(_lastSelf, biasSelf);
 

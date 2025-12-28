@@ -86,6 +86,11 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// Stores the pre-activation output from the last forward pass for use in the backward pass.
     /// </summary>
     private Tensor<T>? _lastPreActivation;
@@ -474,13 +479,51 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-        int batchSize = input.Shape[0];
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Normalize to 4D NHWC [batch, height, width, channels] for processing
+        Tensor<T> processInput;
+
+        if (rank < 4)
+        {
+            // For lower-rank inputs, add leading dimensions
+            // 3D [H, W, C] -> [1, H, W, C]
+            // 2D [W, C] -> [1, 1, W, C]
+            // 1D [C] -> [1, 1, 1, C]
+            var shape4D = new int[4];
+            int offset = 4 - rank;
+            for (int i = 0; i < offset; i++)
+                shape4D[i] = 1;
+            for (int i = 0; i < rank; i++)
+                shape4D[offset + i] = input.Shape[i];
+            processInput = input.Reshape(shape4D);
+        }
+        else if (rank == 4)
+        {
+            // Standard 4D NHWC
+            processInput = input;
+        }
+        else
+        {
+            // Higher-rank: collapse leading dimensions into batch
+            // e.g., 5D [B1, B2, H, W, C] -> [B1*B2, H, W, C]
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 3; d++)
+                flatBatch *= input.Shape[d];
+            int height = input.Shape[rank - 3];
+            int width = input.Shape[rank - 2];
+            int channels = input.Shape[rank - 1];
+            processInput = input.Reshape([flatBatch, height, width, channels]);
+        }
+
+        _lastInput = processInput;
 
         // === GPU-Accelerated LocallyConnectedConv2D ===
         // The layer uses NHWC format but Engine expects NCHW, so we transpose
         // Input NHWC [batch, height, width, channels] -> NCHW [batch, channels, height, width]
-        var inputNCHW = input.Transpose([0, 3, 1, 2]);
+        var inputNCHW = processInput.Transpose([0, 3, 1, 2]);
 
         // Weights need to be permuted from [oh, ow, oc, kh, kw, ic] to [oh, ow, oc, ic, kh, kw]
         var weightsPermuted = _weights.Transpose([0, 1, 2, 5, 3, 4]);
@@ -496,6 +539,39 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         // Cache pre-activation and apply activation function
         _lastPreActivation = preActivation;
         _lastOutput = ApplyActivation(preActivation);
+
+        // Restore output shape to match original input rank
+        if (_originalInputShape != null && _originalInputShape.Length != 4)
+        {
+            // Get output spatial dimensions from the 4D output
+            int outHeight = _lastOutput.Shape[1];
+            int outWidth = _lastOutput.Shape[2];
+            int outChannels = _lastOutput.Shape[3];
+
+            if (_originalInputShape.Length < 4)
+            {
+                // Restore lower-rank shape: remove leading 1s
+                // 3D output [H', W', C'], 2D output [W', C'], 1D output [C']
+                var outShape = new int[_originalInputShape.Length];
+                int offset = 4 - _originalInputShape.Length;
+                if (_originalInputShape.Length >= 3) outShape[_originalInputShape.Length - 3] = outHeight;
+                if (_originalInputShape.Length >= 2) outShape[_originalInputShape.Length - 2] = outWidth;
+                outShape[_originalInputShape.Length - 1] = outChannels;
+                return _lastOutput.Reshape(outShape);
+            }
+            else
+            {
+                // Restore higher-rank shape: expand batch dimension back
+                var outShape = new int[_originalInputShape.Length];
+                for (int d = 0; d < _originalInputShape.Length - 3; d++)
+                    outShape[d] = _originalInputShape[d];
+                outShape[_originalInputShape.Length - 3] = outHeight;
+                outShape[_originalInputShape.Length - 2] = outWidth;
+                outShape[_originalInputShape.Length - 1] = outChannels;
+                return _lastOutput.Reshape(outShape);
+            }
+        }
+
         return _lastOutput;
     }
 
@@ -583,6 +659,12 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
 
         // Transpose input gradient back from NCHW to NHWC
         var inputGradient = inputGradNCHW.Transpose([0, 2, 3, 1]);
+
+        // Restore gradient shape to match original input shape
+        if (_originalInputShape != null && _originalInputShape.Length != 4)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
 
         return inputGradient;
     }
@@ -693,7 +775,15 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
 
         // Convert input gradient from NCHW back to NHWC
         var inputGradientNCHW = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-        return inputGradientNCHW.Transpose([0, 2, 3, 1]);
+        var inputGradient = inputGradientNCHW.Transpose([0, 2, 3, 1]);
+
+        // Restore gradient shape to match original input shape
+        if (_originalInputShape != null && _originalInputShape.Length != 4)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     /// <summary>

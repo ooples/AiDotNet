@@ -81,6 +81,11 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// The output tensor from the last forward pass, saved for backpropagation.
     /// </summary>
     /// <remarks>
@@ -335,8 +340,37 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-        int batchSize = input.Shape[0];
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: collapse to 2D for processing
+        Tensor<T> processInput;
+        int batchSize;
+
+        if (rank == 1)
+        {
+            // 1D: add batch dim
+            batchSize = 1;
+            processInput = input.Reshape([1, input.Shape[0]]);
+        }
+        else if (rank == 2)
+        {
+            // Standard 2D
+            batchSize = input.Shape[0];
+            processInput = input;
+        }
+        else
+        {
+            // Higher-rank: collapse leading dims into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 1; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            processInput = input.Reshape([flatBatch, input.Shape[rank - 1]]);
+        }
+
+        _lastInput = processInput;
 
         // Compute predictions u_hat_ij = W_ij * u_i using elementwise multiply + reduce-sum
         // This approach keeps all dimensions aligned and avoids BatchMatMul shape issues
@@ -383,6 +417,31 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
 
         _lastOutput = output;
         _lastCouplings = couplings;
+
+        // Restore output to match input rank pattern for any-rank tensor support
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            if (_originalInputShape.Length == 1)
+            {
+                // Was 1D, return [numClasses * outputCapsuleDimension]
+                return output.Reshape([_numClasses * _outputCapsuleDimension]);
+            }
+            else if (_originalInputShape.Length == 2)
+            {
+                // Was 2D [batch, features], return [batch, numClasses * outputCapsuleDimension]
+                int origBatch = _originalInputShape[0];
+                return output.Reshape([origBatch, _numClasses * _outputCapsuleDimension]);
+            }
+            else
+            {
+                // Higher-rank: restore leading dimensions
+                var newShape = new int[_originalInputShape.Length];
+                for (int d = 0; d < _originalInputShape.Length - 1; d++)
+                    newShape[d] = _originalInputShape[d];
+                newShape[_originalInputShape.Length - 1] = _numClasses * _outputCapsuleDimension;
+                return output.Reshape(newShape);
+            }
+        }
 
         return output;
     }
@@ -508,6 +567,12 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
             }
         }
 
+        // Restore gradient to original input shape for any-rank support
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
         return inputGradient;
     }
 
@@ -606,7 +671,15 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         // 6. Store Gradients
         _weightsGradient = weightsNode.Gradient;
 
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+
+        // Restore gradient to original input shape for any-rank support
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
 

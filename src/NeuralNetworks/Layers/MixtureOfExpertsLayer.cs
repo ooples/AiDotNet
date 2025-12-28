@@ -235,6 +235,11 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private int[,]? _lastTopKIndices;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// Indicates whether to compute and use the auxiliary load balancing loss.
     /// </summary>
     /// <remarks>
@@ -484,19 +489,43 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Validate input tensor is 2D (batch_size x features)
-        if (input.Shape.Length != 2)
-            throw new ArgumentException(
-                $"Input tensor must be 2D (batch_size x features). Got {input.Shape.Length}D tensor with shape [{string.Join(", ", input.Shape)}].",
-                nameof(input));
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: collapse to 2D for processing
+        Tensor<T> input2D;
+        int batchSize;
+
+        if (rank == 1)
+        {
+            // 1D: [features] -> add batch dim
+            batchSize = 1;
+            int featureSize = input.Shape[0];
+            input2D = input.Reshape(new[] { 1, featureSize });
+        }
+        else if (rank == 2)
+        {
+            // Standard 2D: [batch, features]
+            batchSize = input.Shape[0];
+            input2D = input;
+        }
+        else
+        {
+            // Higher-rank: collapse all leading dims into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 1; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            int featureSize = input.Shape[rank - 1];
+            input2D = input.Reshape(new[] { flatBatch, featureSize });
+        }
 
         // Cache input for backward pass
-        _lastInput = input;
-
-        int batchSize = input.Shape[0];
+        _lastInput = input2D;
 
         // Step 1: Compute routing scores
-        var routingLogits = _router.Forward(input);
+        var routingLogits = _router.Forward(input2D);
         _lastRoutingLogits = routingLogits;
 
         // Step 2: Apply softmax to get routing probabilities
@@ -535,7 +564,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
                 if (isActive)
                 {
-                    _lastExpertOutputs.Add(_experts[i].Forward(input));
+                    _lastExpertOutputs.Add(_experts[i].Forward(input2D));
                 }
                 else
                 {
@@ -549,7 +578,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Dense: All experts process all inputs
             for (int i = 0; i < _experts.Count; i++)
             {
-                _lastExpertOutputs.Add(_experts[i].Forward(input));
+                _lastExpertOutputs.Add(_experts[i].Forward(input2D));
             }
         }
 
@@ -557,7 +586,26 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var combinedOutput = CombineExpertOutputs(_lastExpertOutputs, routingWeights);
 
         // Step 6: Apply activation function
-        return ApplyActivation(combinedOutput);
+        var output = ApplyActivation(combinedOutput);
+
+        // Restore original batch dimensions for any-rank support
+        if (_originalInputShape != null && _originalInputShape.Length > 2)
+        {
+            // Output shape: [...leadingDims, outputFeatures]
+            int outputFeatures = output.Shape[1];
+            int[] newShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 1; d++)
+                newShape[d] = _originalInputShape[d];
+            newShape[_originalInputShape.Length - 1] = outputFeatures;
+            output = output.Reshape(newShape);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 1)
+        {
+            // 1D input -> 1D output (remove batch dim)
+            output = output.Reshape(new[] { output.Shape[1] });
+        }
+
+        return output;
     }
 
     /// <summary>

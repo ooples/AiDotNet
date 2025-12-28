@@ -62,6 +62,11 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
 
     // Cached values for backward pass
     private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
     private Tensor<T>? _lastOutput;
     private Tensor<T>? _lastTransformed;
     private Tensor<T>? _lastAggregated;
@@ -202,14 +207,52 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
                 "Adjacency matrix must be set using SetAdjacencyMatrix before calling Forward.");
         }
 
-        _lastInput = input;
-        int batchSize = input.Shape[0];
-        int numNodes = input.Shape[1];
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // PNA is a graph layer: normalize to 3D [batch, nodes, features]
+        Tensor<T> processInput;
+        int batchSize;
+
+        if (rank == 1)
+        {
+            // 1D [features] -> [1, 1, features]
+            batchSize = 1;
+            processInput = input.Reshape([1, 1, input.Shape[0]]);
+        }
+        else if (rank == 2)
+        {
+            // 2D [nodes, features] -> [1, nodes, features]
+            batchSize = 1;
+            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
+        }
+        else if (rank == 3)
+        {
+            // Standard 3D [batch, nodes, features]
+            batchSize = input.Shape[0];
+            processInput = input;
+        }
+        else
+        {
+            // Higher-rank: collapse leading dims into batch
+            // e.g., 4D [B1, B2, nodes, features] -> [B1*B2, nodes, features]
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            int numNodes = input.Shape[rank - 2];
+            int features = input.Shape[rank - 1];
+            processInput = input.Reshape([flatBatch, numNodes, features]);
+        }
+
+        _lastInput = processInput;
+        int processNumNodes = processInput.Shape[1];
 
         // Step 1: Pre-transform input features: transformed = input @ preTransformWeights + preTransformBias
         // Uses Engine.TensorMatMul for batched matrix multiplication
-        var transformed = Engine.TensorMatMul(input, _preTransformWeights);
-        var preBiasBroadcast = BroadcastBias(_preTransformBias, batchSize, numNodes);
+        var transformed = Engine.TensorMatMul(processInput, _preTransformWeights);
+        var preBiasBroadcast = BroadcastBias(_preTransformBias, batchSize, processNumNodes);
         _lastTransformed = Engine.TensorAdd(transformed, preBiasBroadcast);
 
         // Step 2: Compute degrees for each node using adjacency matrix row sums
@@ -226,7 +269,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
 
         foreach (var aggregator in _aggregators)
         {
-            var aggregated = ComputeVectorizedAggregation(_lastTransformed, aggregator, safeDegrees, numNodes);
+            var aggregated = ComputeVectorizedAggregation(_lastTransformed, aggregator, safeDegrees, processNumNodes);
 
             foreach (var scaler in _scalers)
             {
@@ -240,7 +283,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
 
         // Step 4: Post-aggregation MLP - Layer 1 with ReLU
         var hidden = Engine.TensorMatMul(_lastAggregated, _postAggregationWeights1);
-        var bias1Broadcast = BroadcastBias(_postAggregationBias1, batchSize, numNodes);
+        var bias1Broadcast = BroadcastBias(_postAggregationBias1, batchSize, processNumNodes);
         _lastMlpHiddenPreRelu = Engine.TensorAdd(hidden, bias1Broadcast);
 
         // ReLU activation using Engine operations
@@ -250,17 +293,43 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
 
         // Step 5: Post-aggregation MLP - Layer 2
         var mlpOutput = Engine.TensorMatMul(_lastMlpHidden, _postAggregationWeights2);
-        var bias2Broadcast = BroadcastBias(_postAggregationBias2, batchSize, numNodes);
+        var bias2Broadcast = BroadcastBias(_postAggregationBias2, batchSize, processNumNodes);
         _lastMlpOutput = Engine.TensorAdd(mlpOutput, bias2Broadcast);
 
         // Step 6: Self-loop transformation and final bias
-        var selfContribution = Engine.TensorMatMul(input, _selfWeights);
-        var biasBroadcast = BroadcastBias(_bias, batchSize, numNodes);
+        var selfContribution = Engine.TensorMatMul(processInput, _selfWeights);
+        var biasBroadcast = BroadcastBias(_bias, batchSize, processNumNodes);
 
         var preActivation = Engine.TensorAdd(_lastMlpOutput, selfContribution);
         preActivation = Engine.TensorAdd(preActivation, biasBroadcast);
 
         _lastOutput = ApplyActivation(preActivation);
+
+        // Restore output shape to match original input rank
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            if (_originalInputShape.Length == 2)
+            {
+                // 2D input [nodes, features] -> 2D output [nodes, outputFeatures]
+                return _lastOutput.Reshape([processNumNodes, _outputFeatures]);
+            }
+            else if (_originalInputShape.Length == 1)
+            {
+                // 1D input -> 1D output
+                return _lastOutput.Reshape([_outputFeatures]);
+            }
+            else
+            {
+                // Higher-rank: restore leading dimensions
+                var outShape = new int[_originalInputShape.Length];
+                for (int d = 0; d < _originalInputShape.Length - 2; d++)
+                    outShape[d] = _originalInputShape[d];
+                outShape[_originalInputShape.Length - 2] = processNumNodes;
+                outShape[_originalInputShape.Length - 1] = _outputFeatures;
+                return _lastOutput.Reshape(outShape);
+            }
+        }
+
         return _lastOutput;
     }
 
@@ -580,7 +649,15 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var preInputGrad = Engine.TensorMatMul(transformedGrad, preWeightsT);
 
         // Combine input gradients
-        return Engine.TensorAdd(selfInputGrad, preInputGrad);
+        var inputGradient = Engine.TensorAdd(selfInputGrad, preInputGrad);
+
+        // Restore gradient to original input shape
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     /// <summary>
@@ -830,6 +907,13 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
 
         // Extract input gradient
         var inputGradient = inputNode.Gradient ?? new Tensor<T>(_lastInput.Shape);
+
+        // Restore gradient to original input shape
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
         return inputGradient;
     }
 

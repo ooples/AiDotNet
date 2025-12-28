@@ -22782,22 +22782,42 @@ public class GpuEngine : IEngine, IDisposable
     {
         if (input == null) throw new ArgumentNullException(nameof(input));
         var shape = input.Shape;
-        if (shape.Length != 4)
-            throw new ArgumentException("Upsample expects 4D tensor [batch, channels, height, width]");
+        if (shape.Length < 2)
+            throw new ArgumentException("Upsample requires tensor with at least 2 dimensions for height and width.");
 
-        int batch = shape[0];
-        int channels = shape[1];
-        int height = shape[2];
-        int width = shape[3];
-        int outputSize = batch * channels * (height * scaleH) * (width * scaleW);
+        // Industry-standard: last two dimensions are height and width
+        int heightIdx = shape.Length - 2;
+        int widthIdx = shape.Length - 1;
+        int height = shape[heightIdx];
+        int width = shape[widthIdx];
+
+        // Flatten all leading dimensions into batch*channels for GPU kernel
+        int flatBatch = 1;
+        for (int i = 0; i < shape.Length - 2; i++)
+        {
+            flatBatch *= shape[i];
+        }
+
+        int newHeight = height * scaleH;
+        int newWidth = width * scaleW;
+        int outputSize = flatBatch * newHeight * newWidth;
+
+        // Create output shape preserving all leading dimensions
+        var outputShape = new int[shape.Length];
+        for (int i = 0; i < shape.Length - 2; i++)
+        {
+            outputShape[i] = shape[i];
+        }
+        outputShape[heightIdx] = newHeight;
+        outputShape[widthIdx] = newWidth;
 
         // GPU upsample for supported types and large enough tensors
         if (outputSize >= _thresholds.MatrixMultiply && SupportsGpu && _gpuHealthy)
         {
             if (typeof(T) == typeof(float))
-                return (Tensor<T>)(object)UpsampleGpuFloat((Tensor<float>)(object)input, scaleH, scaleW);
+                return (Tensor<T>)(object)UpsampleGpuFloatAnyRank((Tensor<float>)(object)input, scaleH, scaleW, outputShape);
             if (typeof(T) == typeof(double))
-                return (Tensor<T>)(object)UpsampleGpuDouble((Tensor<double>)(object)input, scaleH, scaleW);
+                return (Tensor<T>)(object)UpsampleGpuDoubleAnyRank((Tensor<double>)(object)input, scaleH, scaleW, outputShape);
         }
         return _cpuFallback.Upsample(input, scaleH, scaleW);
     }
@@ -22888,25 +22908,151 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+    /// <summary>
+    /// GPU-accelerated upsample for any-rank tensors (float).
+    /// Flattens leading dimensions to use optimized 4D GPU kernel.
+    /// </summary>
+    private Tensor<float> UpsampleGpuFloatAnyRank(Tensor<float> input, int scaleH, int scaleW, int[] outputShape)
+    {
+        var shape = input.Shape;
+        int heightIdx = shape.Length - 2;
+        int height = shape[heightIdx];
+        int width = shape[shape.Length - 1];
+
+        // Flatten all leading dimensions into a single batch dimension
+        int flatBatch = 1;
+        for (int i = 0; i < shape.Length - 2; i++)
+        {
+            flatBatch *= shape[i];
+        }
+
+        int newHeight = height * scaleH;
+        int newWidth = width * scaleW;
+        int outputSize = flatBatch * newHeight * newWidth;
+
+        var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputSize);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input.ToArray());
+
+            lock (_gpuLock)
+            {
+                // Use GPU kernel with flatBatch as batch, 1 as channels (flattened into batch)
+                (_upsampleKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    outputSize, gpuInput.View.BaseView, gpuOutput.View.BaseView,
+                    flatBatch, 1, height, width, scaleH, scaleW);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            var resultData = new float[outputSize];
+            gpuOutput.View.BaseView.CopyToCPU(resultData);
+            return new Tensor<float>(outputShape, new Vector<float>(resultData));
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.Upsample(input, scaleH, scaleW);
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuInput);
+            _memoryPoolFloat.Return(gpuOutput);
+        }
+    }
+
+    /// <summary>
+    /// GPU-accelerated upsample for any-rank tensors (double).
+    /// Flattens leading dimensions to use optimized 4D GPU kernel.
+    /// </summary>
+    private Tensor<double> UpsampleGpuDoubleAnyRank(Tensor<double> input, int scaleH, int scaleW, int[] outputShape)
+    {
+        var shape = input.Shape;
+        int heightIdx = shape.Length - 2;
+        int height = shape[heightIdx];
+        int width = shape[shape.Length - 1];
+
+        // Flatten all leading dimensions into a single batch dimension
+        int flatBatch = 1;
+        for (int i = 0; i < shape.Length - 2; i++)
+        {
+            flatBatch *= shape[i];
+        }
+
+        int newHeight = height * scaleH;
+        int newWidth = width * scaleW;
+        int outputSize = flatBatch * newHeight * newWidth;
+
+        var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputSize);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input.ToArray());
+
+            lock (_gpuLock)
+            {
+                // Use GPU kernel with flatBatch as batch, 1 as channels (flattened into batch)
+                (_upsampleKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    outputSize, gpuInput.View.BaseView, gpuOutput.View.BaseView,
+                    flatBatch, 1, height, width, scaleH, scaleW);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            var resultData = new double[outputSize];
+            gpuOutput.View.BaseView.CopyToCPU(resultData);
+            return new Tensor<double>(outputShape, new Vector<double>(resultData));
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.Upsample(input, scaleH, scaleW);
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuInput);
+            _memoryPoolDouble.Return(gpuOutput);
+        }
+    }
+
     /// <inheritdoc/>
     public Tensor<T> UpsampleBackward<T>(Tensor<T> gradOutput, int[] inputShape, int scaleH, int scaleW)
     {
         if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
         if (inputShape == null) throw new ArgumentNullException(nameof(inputShape));
-        if (inputShape.Length != 4)
-            throw new ArgumentException("UpsampleBackward expects 4D input shape [batch, channels, height, width]");
+        if (inputShape.Length < 2)
+            throw new ArgumentException("UpsampleBackward requires inputShape with at least 2 dimensions for height and width.");
 
-        int inputSize = inputShape[0] * inputShape[1] * inputShape[2] * inputShape[3];
+        // Industry-standard: last two dimensions are height and width
+        int heightIdx = inputShape.Length - 2;
+        int widthIdx = inputShape.Length - 1;
+        int height = inputShape[heightIdx];
+        int width = inputShape[widthIdx];
 
-        if (inputSize < _thresholds.MatrixMultiply || !SupportsGpu || !_gpuHealthy)
+        // Flatten all leading dimensions into a single batch dimension
+        int flatBatch = 1;
+        int totalInput = 1;
+        for (int i = 0; i < inputShape.Length; i++)
+        {
+            totalInput *= inputShape[i];
+            if (i < inputShape.Length - 2)
+            {
+                flatBatch *= inputShape[i];
+            }
+        }
+
+        if (totalInput < _thresholds.MatrixMultiply || !SupportsGpu || !_gpuHealthy)
         {
             return _cpuFallback.UpsampleBackward(gradOutput, inputShape, scaleH, scaleW);
         }
 
         if (typeof(T) == typeof(float))
-            return (Tensor<T>)(object)UpsampleBackwardGpuFloat((Tensor<float>)(object)gradOutput, inputShape, scaleH, scaleW);
+            return (Tensor<T>)(object)UpsampleBackwardGpuFloatAnyRank((Tensor<float>)(object)gradOutput, inputShape, scaleH, scaleW);
         if (typeof(T) == typeof(double))
-            return (Tensor<T>)(object)UpsampleBackwardGpuDouble((Tensor<double>)(object)gradOutput, inputShape, scaleH, scaleW);
+            return (Tensor<T>)(object)UpsampleBackwardGpuDoubleAnyRank((Tensor<double>)(object)gradOutput, inputShape, scaleH, scaleW);
 
         return _cpuFallback.UpsampleBackward(gradOutput, inputShape, scaleH, scaleW);
     }
@@ -22982,6 +23128,116 @@ public class GpuEngine : IEngine, IDisposable
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU UpsampleBackward (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.UpsampleBackward(gradOutput, inputShape, scaleH, scaleW);
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuGradOutput);
+            _memoryPoolDouble.Return(gpuGradInput);
+        }
+    }
+
+    /// <summary>
+    /// GPU-accelerated upsample backward for any-rank tensors (float).
+    /// Flattens leading dimensions to use optimized 4D GPU kernel.
+    /// </summary>
+    private Tensor<float> UpsampleBackwardGpuFloatAnyRank(Tensor<float> gradOutput, int[] inputShape, int scaleH, int scaleW)
+    {
+        int heightIdx = inputShape.Length - 2;
+        int height = inputShape[heightIdx];
+        int width = inputShape[inputShape.Length - 1];
+
+        // Flatten all leading dimensions into a single batch dimension
+        int flatBatch = 1;
+        int totalInput = 1;
+        for (int i = 0; i < inputShape.Length; i++)
+        {
+            totalInput *= inputShape[i];
+            if (i < inputShape.Length - 2)
+            {
+                flatBatch *= inputShape[i];
+            }
+        }
+
+        var result = new Tensor<float>(inputShape);
+
+        var gpuGradOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradOutput.Length);
+        var gpuGradInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(totalInput);
+
+        try
+        {
+            gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+
+            lock (_gpuLock)
+            {
+                // Use GPU kernel with flatBatch as batch, 1 as channels (flattened into batch)
+                (_upsampleBackwardKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    totalInput, gpuGradOutput.View, gpuGradInput.View, flatBatch, 1, height, width, scaleH, scaleW);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU UpsampleBackward (float, any-rank) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.UpsampleBackward(gradOutput, inputShape, scaleH, scaleW);
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuGradOutput);
+            _memoryPoolFloat.Return(gpuGradInput);
+        }
+    }
+
+    /// <summary>
+    /// GPU-accelerated upsample backward for any-rank tensors (double).
+    /// Flattens leading dimensions to use optimized 4D GPU kernel.
+    /// </summary>
+    private Tensor<double> UpsampleBackwardGpuDoubleAnyRank(Tensor<double> gradOutput, int[] inputShape, int scaleH, int scaleW)
+    {
+        int heightIdx = inputShape.Length - 2;
+        int height = inputShape[heightIdx];
+        int width = inputShape[inputShape.Length - 1];
+
+        // Flatten all leading dimensions into a single batch dimension
+        int flatBatch = 1;
+        int totalInput = 1;
+        for (int i = 0; i < inputShape.Length; i++)
+        {
+            totalInput *= inputShape[i];
+            if (i < inputShape.Length - 2)
+            {
+                flatBatch *= inputShape[i];
+            }
+        }
+
+        var result = new Tensor<double>(inputShape);
+
+        var gpuGradOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradOutput.Length);
+        var gpuGradInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(totalInput);
+
+        try
+        {
+            gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+
+            lock (_gpuLock)
+            {
+                // Use GPU kernel with flatBatch as batch, 1 as channels (flattened into batch)
+                (_upsampleBackwardKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    totalInput, gpuGradOutput.View, gpuGradInput.View, flatBatch, 1, height, width, scaleH, scaleW);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU UpsampleBackward (double, any-rank) failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.UpsampleBackward(gradOutput, inputShape, scaleH, scaleW);
         }
         finally

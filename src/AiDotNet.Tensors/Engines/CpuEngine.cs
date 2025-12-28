@@ -8026,74 +8026,101 @@ public class CpuEngine : IEngine
     public Tensor<T> Upsample<T>(Tensor<T> input, int scaleH, int scaleW)
     {
         var shape = input.Shape;
-        if (shape.Length != 4)
-            throw new ArgumentException("Upsample expects 4D tensor [batch, channels, height, width]");
+        if (shape.Length < 2)
+            throw new ArgumentException("Upsample requires tensor with at least 2 dimensions for height and width.");
 
-        int batch = shape[0];
-        int channels = shape[1];
-        int height = shape[2];
-        int width = shape[3];
+        // Industry-standard: last two dimensions are height and width
+        int heightIdx = shape.Length - 2;
+        int widthIdx = shape.Length - 1;
+        int height = shape[heightIdx];
+        int width = shape[widthIdx];
+
+        // Flatten all leading dimensions into a single "batch" dimension
+        int flatBatch = 1;
+        for (int i = 0; i < shape.Length - 2; i++)
+        {
+            flatBatch *= shape[i];
+        }
 
         int newHeight = height * scaleH;
         int newWidth = width * scaleW;
 
         var inputData = input.ToArray();
-        var outputData = new T[batch * channels * newHeight * newWidth];
+        var outputData = new T[flatBatch * newHeight * newWidth];
 
-        Parallel.For(0, batch * channels, bc =>
+        Parallel.For(0, flatBatch, fb =>
         {
-            int b = bc / channels;
-            int c = bc % channels;
-
             for (int oh = 0; oh < newHeight; oh++)
             {
                 int ih = oh / scaleH;
                 for (int ow = 0; ow < newWidth; ow++)
                 {
                     int iw = ow / scaleW;
-                    int inputIdx = ((b * channels + c) * height + ih) * width + iw;
-                    int outputIdx = ((b * channels + c) * newHeight + oh) * newWidth + ow;
+                    int inputIdx = (fb * height + ih) * width + iw;
+                    int outputIdx = (fb * newHeight + oh) * newWidth + ow;
                     outputData[outputIdx] = inputData[inputIdx];
                 }
             }
         });
 
-        return new Tensor<T>([batch, channels, newHeight, newWidth], new Vector<T>(outputData));
+        // Create output shape preserving all leading dimensions
+        var outputShape = new int[shape.Length];
+        for (int i = 0; i < shape.Length - 2; i++)
+        {
+            outputShape[i] = shape[i];
+        }
+        outputShape[heightIdx] = newHeight;
+        outputShape[widthIdx] = newWidth;
+
+        return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
 
     /// <inheritdoc/>
     public Tensor<T> UpsampleBackward<T>(Tensor<T> gradOutput, int[] inputShape, int scaleH, int scaleW)
     {
+        if (inputShape.Length < 2)
+            throw new ArgumentException("UpsampleBackward requires inputShape with at least 2 dimensions for height and width.");
+
         var numOps = MathHelper.GetNumericOperations<T>();
 
-        int batch = inputShape[0];
-        int channels = inputShape[1];
-        int height = inputShape[2];
-        int width = inputShape[3];
+        // Industry-standard: last two dimensions are height and width
+        int heightIdx = inputShape.Length - 2;
+        int widthIdx = inputShape.Length - 1;
+        int height = inputShape[heightIdx];
+        int width = inputShape[widthIdx];
+
+        // Flatten all leading dimensions into a single "batch" dimension
+        int flatBatch = 1;
+        int totalInput = 1;
+        for (int i = 0; i < inputShape.Length; i++)
+        {
+            totalInput *= inputShape[i];
+            if (i < inputShape.Length - 2)
+            {
+                flatBatch *= inputShape[i];
+            }
+        }
 
         int newHeight = height * scaleH;
         int newWidth = width * scaleW;
 
         var gradOutputData = gradOutput.ToArray();
-        var gradInputData = new T[batch * channels * height * width];
+        var gradInputData = new T[totalInput];
 
         for (int i = 0; i < gradInputData.Length; i++)
             gradInputData[i] = numOps.Zero;
 
-        Parallel.For(0, batch * channels, bc =>
+        Parallel.For(0, flatBatch, fb =>
         {
-            int b = bc / channels;
-            int c = bc % channels;
-
             for (int oh = 0; oh < newHeight; oh++)
             {
                 int ih = oh / scaleH;
                 for (int ow = 0; ow < newWidth; ow++)
                 {
                     int iw = ow / scaleW;
-                    int gradOutputIdx = ((b * channels + c) * newHeight + oh) * newWidth + ow;
-                    int gradInputIdx = ((b * channels + c) * height + ih) * width + iw;
-                    // No lock needed - each (batch, channel) partition owns disjoint gradInput slices
+                    int gradOutputIdx = (fb * newHeight + oh) * newWidth + ow;
+                    int gradInputIdx = (fb * height + ih) * width + iw;
+                    // No lock needed - each flatBatch partition owns disjoint gradInput slices
                     gradInputData[gradInputIdx] = numOps.Add(gradInputData[gradInputIdx], gradOutputData[gradOutputIdx]);
                 }
             }
