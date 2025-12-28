@@ -3151,15 +3151,9 @@ public static class MatrixExtensions
 
         // For value types like double, default(T?) gives 0, not null
         // So we need to check if tolerance equals zero to use our default
-        T tol;
-        if (tolerance == null || NumOps.Equals(tolerance, NumOps.Zero))
-        {
-            tol = NumOps.FromDouble(1e-10);
-        }
-        else
-        {
-            tol = tolerance;
-        }
+        T tol = (tolerance == null || NumOps.Equals(tolerance, NumOps.Zero))
+            ? NumOps.FromDouble(1e-10)
+            : tolerance;
 
         // Newton-Schulz iteration: X_{k+1} = X_k (2I - A X_k)
         // For convergence, we need spectral radius of (I - A X_0) < 1
