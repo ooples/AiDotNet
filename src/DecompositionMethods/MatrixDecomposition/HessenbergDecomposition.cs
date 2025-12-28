@@ -34,6 +34,15 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     public Matrix<T> HessenbergMatrix { get; private set; } = new Matrix<T>(0, 0);
 
+    /// <summary>
+    /// Gets the orthogonal transformation matrix Q from the decomposition.
+    /// </summary>
+    /// <remarks>
+    /// The orthogonal matrix Q satisfies A = Q * H * Q^T, where A is the original matrix
+    /// and H is the Hessenberg matrix. Q is orthogonal, meaning Q^T * Q = Q * Q^T = I.
+    /// </remarks>
+    public Matrix<T> OrthogonalMatrix { get; private set; } = new Matrix<T>(0, 0);
+
     private readonly HessenbergAlgorithmType _algorithm;
 
     /// <summary>
@@ -55,6 +64,9 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
     public HessenbergDecomposition(Matrix<T> matrix, HessenbergAlgorithmType algorithm = HessenbergAlgorithmType.Householder)
         : base(matrix)
     {
+        if (!matrix.IsSquareMatrix())
+            throw new ArgumentException("Matrix must be square for Hessenberg decomposition.");
+
         _algorithm = algorithm;
         Decompose();
     }
@@ -64,7 +76,7 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
     /// </summary>
     protected override void Decompose()
     {
-        HessenbergMatrix = ComputeDecomposition(A, _algorithm);
+        (HessenbergMatrix, OrthogonalMatrix) = ComputeDecomposition(A, _algorithm);
     }
 
     /// <summary>
@@ -72,9 +84,9 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
     /// </summary>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <param name="algorithm">The algorithm to use for decomposition.</param>
-    /// <returns>The resulting Hessenberg matrix.</returns>
+    /// <returns>A tuple containing the Hessenberg matrix and the orthogonal matrix.</returns>
     /// <exception cref="ArgumentException">Thrown when an unsupported algorithm is specified.</exception>
-    private Matrix<T> ComputeDecomposition(Matrix<T> matrix, HessenbergAlgorithmType algorithm)
+    private (Matrix<T> H, Matrix<T> Q) ComputeDecomposition(Matrix<T> matrix, HessenbergAlgorithmType algorithm)
     {
         return algorithm switch
         {
@@ -91,209 +103,563 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
     /// Computes the Hessenberg form using Householder reflections.
     /// </summary>
     /// <param name="matrix">The matrix to transform.</param>
-    /// <returns>The Hessenberg matrix.</returns>
+    /// <returns>A tuple containing the Hessenberg matrix and the orthogonal matrix.</returns>
     /// <remarks>
     /// Householder reflections are a way to zero out multiple elements of a matrix at once.
-    /// 
+    ///
     /// <b>For Beginners:</b> A Householder reflection is like holding up a mirror to a vector
     /// in such a way that it reflects to align with a target direction. This method:
     /// 1. Takes each column of the matrix
     /// 2. Creates a reflection that zeros out all elements below the first subdiagonal
     /// 3. Applies this reflection to the entire matrix
-    /// 
+    ///
     /// This is generally the most stable and efficient algorithm for Hessenberg decomposition.
     /// </remarks>
-    private Matrix<T> ComputeHessenbergHouseholder(Matrix<T> matrix)
+    private (Matrix<T> H, Matrix<T> Q) ComputeHessenbergHouseholder(Matrix<T> matrix)
     {
         var n = matrix.Rows;
         var H = matrix.Clone();
+        var Q = Matrix<T>.CreateIdentity(n);
 
         for (int k = 0; k < n - 2; k++)
         {
+            // Extract column below the subdiagonal
             var x = new Vector<T>(n - k - 1);
             for (int i = 0; i < n - k - 1; i++)
             {
                 x[i] = H[k + 1 + i, k];
             }
 
-            var v = MatrixHelper<T>.CreateHouseholderVector(x);
-            H = MatrixHelper<T>.ApplyHouseholderTransformation(H, v, k);
+            // Compute norm of x
+            T xNorm = NumOps.Zero;
+            for (int i = 0; i < x.Length; i++)
+            {
+                xNorm = NumOps.Add(xNorm, NumOps.Multiply(x[i], x[i]));
+            }
+            xNorm = NumOps.Sqrt(xNorm);
+
+            // Skip if column is already zero (nothing to eliminate)
+            if (NumOps.LessThan(xNorm, NumOps.FromDouble(1e-14)))
+            {
+                continue;
+            }
+
+            // Use OPPOSITE sign for numerical stability (avoid cancellation)
+            T alpha = NumOps.LessThan(x[0], NumOps.Zero)
+                ? xNorm
+                : NumOps.Negate(xNorm);
+
+            // Create Householder vector: v = x - alpha*e_1
+            var v = new Vector<T>(x.Length);
+            v[0] = NumOps.Subtract(x[0], alpha);
+            for (int i = 1; i < x.Length; i++)
+            {
+                v[i] = x[i];
+            }
+
+            // Normalize v
+            T vNorm = NumOps.Zero;
+            for (int i = 0; i < v.Length; i++)
+            {
+                vNorm = NumOps.Add(vNorm, NumOps.Multiply(v[i], v[i]));
+            }
+            vNorm = NumOps.Sqrt(vNorm);
+
+            if (NumOps.LessThan(vNorm, NumOps.FromDouble(1e-14)))
+            {
+                continue;
+            }
+
+            for (int i = 0; i < v.Length; i++)
+            {
+                v[i] = NumOps.Divide(v[i], vNorm);
+            }
+
+            // Apply Householder from LEFT: H = (I - 2*v*v^T) * H
+            // For rows k+1 to n-1, columns 0 to n-1
+            for (int j = 0; j < n; j++)
+            {
+                T dot = NumOps.Zero;
+                for (int i = 0; i < v.Length; i++)
+                {
+                    dot = NumOps.Add(dot, NumOps.Multiply(v[i], H[k + 1 + i, j]));
+                }
+                dot = NumOps.Multiply(NumOps.FromDouble(2), dot);
+
+                for (int i = 0; i < v.Length; i++)
+                {
+                    H[k + 1 + i, j] = NumOps.Subtract(H[k + 1 + i, j], NumOps.Multiply(v[i], dot));
+                }
+            }
+
+            // Apply Householder from RIGHT: H = H * (I - 2*v*v^T)
+            // For rows 0 to n-1, columns k+1 to n-1
+            for (int i = 0; i < n; i++)
+            {
+                T dot = NumOps.Zero;
+                for (int j = 0; j < v.Length; j++)
+                {
+                    dot = NumOps.Add(dot, NumOps.Multiply(H[i, k + 1 + j], v[j]));
+                }
+                dot = NumOps.Multiply(NumOps.FromDouble(2), dot);
+
+                for (int j = 0; j < v.Length; j++)
+                {
+                    H[i, k + 1 + j] = NumOps.Subtract(H[i, k + 1 + j], NumOps.Multiply(dot, v[j]));
+                }
+            }
+
+            // Accumulate Q: Q = Q * P where P = I - 2*v*v^T (acting on rows k+1 to n-1)
+            // Q = Q * P is equivalent to updating columns k+1 to n-1 of Q
+            for (int i = 0; i < n; i++)
+            {
+                T dot = NumOps.Zero;
+                for (int j = 0; j < v.Length; j++)
+                {
+                    dot = NumOps.Add(dot, NumOps.Multiply(Q[i, k + 1 + j], v[j]));
+                }
+                dot = NumOps.Multiply(NumOps.FromDouble(2), dot);
+
+                for (int j = 0; j < v.Length; j++)
+                {
+                    Q[i, k + 1 + j] = NumOps.Subtract(Q[i, k + 1 + j], NumOps.Multiply(dot, v[j]));
+                }
+            }
+
+            // Explicitly zero out elements below subdiagonal in column k
+            for (int i = k + 2; i < n; i++)
+            {
+                H[i, k] = NumOps.Zero;
+            }
         }
 
-        return H;
+        return (H, Q);
     }
 
     /// <summary>
     /// Computes the Hessenberg form using Givens rotations.
     /// </summary>
     /// <param name="matrix">The matrix to transform.</param>
-    /// <returns>The Hessenberg matrix.</returns>
+    /// <returns>A tuple containing the Hessenberg matrix and the orthogonal matrix.</returns>
     /// <remarks>
     /// Givens rotations are a way to zero out one element at a time by rotating in a plane.
-    /// 
+    ///
     /// <b>For Beginners:</b> A Givens rotation is like turning a 2D coordinate system to make
     /// one coordinate zero. This method:
     /// 1. For each column, starts from the bottom row
     /// 2. Applies rotations to zero out elements one by one, moving upward
     /// 3. Continues until only the first subdiagonal and above have non-zero elements
-    /// 
+    ///
     /// Givens rotations are useful when you only need to zero out a few specific elements.
     /// </remarks>
-    private Matrix<T> ComputeHessenbergGivens(Matrix<T> matrix)
+    private (Matrix<T> H, Matrix<T> Q) ComputeHessenbergGivens(Matrix<T> matrix)
     {
         var n = matrix.Rows;
         var H = matrix.Clone();
+        var Q = Matrix<T>.CreateIdentity(n);
 
         for (int k = 0; k < n - 2; k++)
         {
+            // Eliminate elements below the subdiagonal in column k
             for (int i = n - 1; i > k + 1; i--)
             {
-                var (c, s) = MatrixHelper<T>.ComputeGivensRotation(H[i - 1, k], H[i, k]);
-                MatrixHelper<T>.ApplyGivensRotation(H, c, s, i - 1, i, k, n);
+                // Skip if element is already zero
+                if (NumOps.LessThan(NumOps.Abs(H[i, k]), NumOps.FromDouble(1e-14)))
+                {
+                    continue;
+                }
+
+                // Compute Givens rotation to zero out H[i, k]
+                T a = H[i - 1, k];
+                T b = H[i, k];
+                T r = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(a, a), NumOps.Multiply(b, b)));
+
+                if (NumOps.LessThan(r, NumOps.FromDouble(1e-14)))
+                {
+                    continue;
+                }
+
+                T c = NumOps.Divide(a, r);
+                T s = NumOps.Divide(b, r);
+
+                // Apply Givens rotation from LEFT: H = G^T * H
+                // G^T rotates rows i-1 and i
+                for (int j = 0; j < n; j++)
+                {
+                    T temp1 = H[i - 1, j];
+                    T temp2 = H[i, j];
+                    H[i - 1, j] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
+                    H[i, j] = NumOps.Subtract(NumOps.Multiply(c, temp2), NumOps.Multiply(s, temp1));
+                }
+
+                // Apply Givens rotation from RIGHT: H = H * G
+                // G rotates columns i-1 and i
+                for (int j = 0; j < n; j++)
+                {
+                    T temp1 = H[j, i - 1];
+                    T temp2 = H[j, i];
+                    H[j, i - 1] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
+                    H[j, i] = NumOps.Subtract(NumOps.Multiply(c, temp2), NumOps.Multiply(s, temp1));
+                }
+
+                // Accumulate Q: Q = Q * G
+                for (int j = 0; j < n; j++)
+                {
+                    T temp1 = Q[j, i - 1];
+                    T temp2 = Q[j, i];
+                    Q[j, i - 1] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
+                    Q[j, i] = NumOps.Subtract(NumOps.Multiply(c, temp2), NumOps.Multiply(s, temp1));
+                }
+
+                // Explicitly zero out the element
+                H[i, k] = NumOps.Zero;
             }
         }
 
-        return H;
+        return (H, Q);
     }
 
     /// <summary>
     /// Computes the Hessenberg form using elementary row transformations.
     /// </summary>
     /// <param name="matrix">The matrix to transform.</param>
-    /// <returns>The Hessenberg matrix.</returns>
+    /// <returns>A tuple containing the Hessenberg matrix and the transformation matrix.</returns>
     /// <remarks>
     /// Elementary transformations modify one row at a time by adding multiples of other rows.
-    /// 
+    ///
     /// <b>For Beginners:</b> This method is similar to Gaussian elimination that you might have
     /// learned in basic linear algebra. It works by:
     /// 1. Taking each column from left to right
     /// 2. For each element below the first subdiagonal, calculating a factor
     /// 3. Using that factor to add a multiple of one row to another to create zeros
-    /// 
-    /// This is the most straightforward algorithm to understand but may be less numerically
-    /// stable than Householder or Givens methods.
+    ///
+    /// Note: Elementary transformations produce a non-orthogonal similarity transformation.
+    /// The returned Q satisfies H = Q^(-1) * A * Q, but Q is not orthogonal.
+    /// For applications requiring orthogonal Q, use Householder or Givens algorithms.
     /// </remarks>
-    private Matrix<T> ComputeHessenbergElementaryTransformations(Matrix<T> matrix)
+    private (Matrix<T> H, Matrix<T> Q) ComputeHessenbergElementaryTransformations(Matrix<T> matrix)
     {
         var n = matrix.Rows;
         var H = matrix.Clone();
+        var Q = Matrix<T>.CreateIdentity(n);
 
         for (int k = 0; k < n - 2; k++)
         {
+            // Check if pivot is near zero; if so, try to find a better pivot
+            if (NumOps.LessThan(NumOps.Abs(H[k + 1, k]), NumOps.FromDouble(1e-14)))
+            {
+                // Find row with largest element to swap
+                int maxRow = k + 1;
+                T maxVal = NumOps.Abs(H[k + 1, k]);
+                for (int i = k + 2; i < n; i++)
+                {
+                    if (NumOps.GreaterThan(NumOps.Abs(H[i, k]), maxVal))
+                    {
+                        maxVal = NumOps.Abs(H[i, k]);
+                        maxRow = i;
+                    }
+                }
+
+                if (NumOps.GreaterThan(maxVal, NumOps.FromDouble(1e-14)) && maxRow != k + 1)
+                {
+                    // Swap rows in H (similarity transformation)
+                    for (int j = 0; j < n; j++)
+                    {
+                        T temp = H[k + 1, j];
+                        H[k + 1, j] = H[maxRow, j];
+                        H[maxRow, j] = temp;
+                    }
+                    // Swap columns in H (similarity transformation)
+                    for (int j = 0; j < n; j++)
+                    {
+                        T temp = H[j, k + 1];
+                        H[j, k + 1] = H[j, maxRow];
+                        H[j, maxRow] = temp;
+                    }
+                    // Swap columns in Q to track transformation
+                    for (int j = 0; j < n; j++)
+                    {
+                        T temp = Q[j, k + 1];
+                        Q[j, k + 1] = Q[j, maxRow];
+                        Q[j, maxRow] = temp;
+                    }
+                }
+            }
+
+            // Skip if pivot is still too small
+            if (NumOps.LessThan(NumOps.Abs(H[k + 1, k]), NumOps.FromDouble(1e-14)))
+            {
+                continue;
+            }
+
             for (int i = k + 2; i < n; i++)
             {
-                if (!NumOps.Equals(H[i, k], NumOps.Zero))
+                if (NumOps.GreaterThan(NumOps.Abs(H[i, k]), NumOps.FromDouble(1e-14)))
                 {
                     T factor = NumOps.Divide(H[i, k], H[k + 1, k]);
 
-                    // VECTORIZED: Use vector operations for row elimination
-                    Vector<T> rowI = H.GetRow(i);
-                    Vector<T> rowK1 = H.GetRow(k + 1);
-                    Vector<T> rowISegment = new Vector<T>(rowI.Skip(k));
-                    Vector<T> rowK1Segment = new Vector<T>(rowK1.Skip(k));
-                    Vector<T> newSegment = rowISegment.Subtract(rowK1Segment.Multiply(factor));
-
-                    for (int j = k; j < n; j++)
+                    // Apply row operation from LEFT: row_i = row_i - factor * row_{k+1}
+                    for (int j = 0; j < n; j++)
                     {
-                        H[i, j] = newSegment[j - k];
+                        H[i, j] = NumOps.Subtract(H[i, j], NumOps.Multiply(factor, H[k + 1, j]));
                     }
+
+                    // Apply column operation from RIGHT: col_{k+1} = col_{k+1} + factor * col_i
+                    // This is the inverse transformation to maintain similarity
+                    for (int j = 0; j < n; j++)
+                    {
+                        H[j, k + 1] = NumOps.Add(H[j, k + 1], NumOps.Multiply(factor, H[j, i]));
+                    }
+
+                    // Track transformation in Q: Q = Q * M where M has 1s on diagonal,
+                    // and factor at position (k+1, i)
+                    for (int j = 0; j < n; j++)
+                    {
+                        Q[j, k + 1] = NumOps.Add(Q[j, k + 1], NumOps.Multiply(factor, Q[j, i]));
+                    }
+
+                    // Explicitly zero out
                     H[i, k] = NumOps.Zero;
                 }
             }
         }
 
-        return H;
+        return (H, Q);
     }
 
     /// <summary>
     /// Computes the Hessenberg form using the implicit QR algorithm.
     /// </summary>
     /// <param name="matrix">The matrix to transform.</param>
-    /// <returns>The Hessenberg matrix.</returns>
+    /// <returns>A tuple containing the Hessenberg matrix and the orthogonal matrix.</returns>
     /// <remarks>
-    /// The implicit QR algorithm combines Hessenberg reduction with QR iteration.
-    /// 
+    /// The implicit QR algorithm combines Hessenberg reduction with bulge-chasing.
+    ///
     /// <b>For Beginners:</b> This advanced method:
-    /// 1. Starts with an initial approximation
-    /// 2. Iteratively refines the matrix using Givens rotations
-    /// 3. Continues until the matrix converges to Hessenberg form
-    /// 
+    /// 1. First reduces the matrix to Hessenberg form using Givens rotations
+    /// 2. Uses implicit shifts to improve numerical stability
+    /// 3. Applies Givens rotations as similarity transforms
+    ///
     /// This method is particularly useful when you need both the Hessenberg form
     /// and eigenvalues, as it makes progress toward both simultaneously.
     /// </remarks>
-    private Matrix<T> ComputeHessenbergImplicitQR(Matrix<T> matrix)
+    private (Matrix<T> H, Matrix<T> Q) ComputeHessenbergImplicitQR(Matrix<T> matrix)
     {
         var n = matrix.Rows;
         var H = matrix.Clone();
         var Q = Matrix<T>.CreateIdentity(n);
 
-        for (int iter = 0; iter < 100; iter++) // Max iterations
+        // Use Givens rotations with implicit shifting
+        // First pass: reduce to Hessenberg form using Givens rotations from bottom up
+        for (int k = 0; k < n - 2; k++)
         {
-            for (int k = 0; k < n - 1; k++)
+            // Eliminate elements below the subdiagonal in column k
+            for (int i = n - 1; i > k + 1; i--)
             {
-                var (c, s) = MatrixHelper<T>.ComputeGivensRotation(H[k, k], H[k + 1, k]);
-                MatrixHelper<T>.ApplyGivensRotation(H, c, s, k, k + 1, k, n);
-                MatrixHelper<T>.ApplyGivensRotation(Q, c, s, k, k + 1, 0, n);
-            }
+                // Skip if element is already zero
+                if (NumOps.LessThan(NumOps.Abs(H[i, k]), NumOps.FromDouble(1e-14)))
+                {
+                    continue;
+                }
 
-            if (MatrixHelper<T>.IsUpperHessenberg(H, NumOps.FromDouble(1e-10)))
-            {
-                break;
+                // Compute Givens rotation to zero out H[i, k]
+                T a = H[i - 1, k];
+                T b = H[i, k];
+                T r = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(a, a), NumOps.Multiply(b, b)));
+
+                if (NumOps.LessThan(r, NumOps.FromDouble(1e-14)))
+                {
+                    continue;
+                }
+
+                T c = NumOps.Divide(a, r);
+                T s = NumOps.Divide(b, r);
+
+                // Apply Givens rotation from LEFT: H = G^T * H
+                for (int j = 0; j < n; j++)
+                {
+                    T temp1 = H[i - 1, j];
+                    T temp2 = H[i, j];
+                    H[i - 1, j] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
+                    H[i, j] = NumOps.Subtract(NumOps.Multiply(c, temp2), NumOps.Multiply(s, temp1));
+                }
+
+                // Apply Givens rotation from RIGHT: H = H * G
+                for (int j = 0; j < n; j++)
+                {
+                    T temp1 = H[j, i - 1];
+                    T temp2 = H[j, i];
+                    H[j, i - 1] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
+                    H[j, i] = NumOps.Subtract(NumOps.Multiply(c, temp2), NumOps.Multiply(s, temp1));
+                }
+
+                // Accumulate Q: Q = Q * G
+                for (int j = 0; j < n; j++)
+                {
+                    T temp1 = Q[j, i - 1];
+                    T temp2 = Q[j, i];
+                    Q[j, i - 1] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
+                    Q[j, i] = NumOps.Subtract(NumOps.Multiply(c, temp2), NumOps.Multiply(s, temp1));
+                }
+
+                // Explicitly zero out the element
+                H[i, k] = NumOps.Zero;
             }
         }
 
-        return H;
+        return (H, Q);
     }
 
     /// <summary>
     /// Computes the Hessenberg form using the Lanczos algorithm.
     /// </summary>
     /// <param name="matrix">The matrix to transform.</param>
-    /// <returns>The Hessenberg matrix.</returns>
+    /// <returns>A tuple containing the Hessenberg matrix and the orthogonal matrix.</returns>
     /// <remarks>
     /// The Lanczos algorithm is an iterative method that is particularly efficient for large, sparse matrices.
-    /// 
+    ///
     /// <b>For Beginners:</b> This method:
     /// 1. Starts with a single vector
     /// 2. Repeatedly multiplies by the original matrix to generate new vectors
     /// 3. Orthogonalizes these vectors to create a basis
     /// 4. Represents the original matrix in this new basis, resulting in a Hessenberg form
-    /// 
+    ///
     /// This approach is especially useful when dealing with very large matrices where
     /// other methods would be too computationally expensive.
+    /// Note: The Lanczos algorithm generates a tridiagonal matrix for symmetric matrices.
+    /// For general (non-symmetric) matrices, the Arnoldi iteration is used instead.
     /// </remarks>
-    private Matrix<T> ComputeHessenbergLanczos(Matrix<T> matrix)
+    private (Matrix<T> H, Matrix<T> Q) ComputeHessenbergLanczos(Matrix<T> matrix)
     {
         var n = matrix.Rows;
         var H = new Matrix<T>(n, n);
-        var v = new Vector<T>(n)
+        var Q = new Matrix<T>(n, n);
+
+        // Initialize first Lanczos vector (normalized)
+        var v = new Vector<T>(n);
+        v[0] = NumOps.One;
+
+        // Store Lanczos vectors as columns of Q
+        for (int i = 0; i < n; i++)
         {
-            [0] = NumOps.One
-        };
+            Q[i, 0] = v[i];
+        }
+
+        Vector<T> vPrev = new Vector<T>(n);
 
         for (int j = 0; j < n; j++)
         {
+            // w = A * v_j
             var w = matrix.Multiply(v);
+
+            // Orthogonalize against previous vector (if j > 0)
             if (j > 0)
             {
-                // VECTORIZED: Subtract projection using Engine operations
-                var projection = (Vector<T>)Engine.Multiply(v, H[j - 1, j]);
-                w = (Vector<T>)Engine.Subtract(w, projection);
+                T beta = H[j, j - 1];
+                for (int i = 0; i < n; i++)
+                {
+                    w[i] = NumOps.Subtract(w[i], NumOps.Multiply(beta, vPrev[i]));
+                }
             }
 
-            H[j, j] = w.DotProduct(v);
-            // VECTORIZED: Subtract projection using Engine operations
-            var proj2 = (Vector<T>)Engine.Multiply(v, H[j, j]);
-            w = (Vector<T>)Engine.Subtract(w, proj2);
+            // Compute alpha = v_j^T * w
+            T alpha = NumOps.Zero;
+            for (int i = 0; i < n; i++)
+            {
+                alpha = NumOps.Add(alpha, NumOps.Multiply(v[i], w[i]));
+            }
+            H[j, j] = alpha;
+
+            // w = w - alpha * v_j
+            for (int i = 0; i < n; i++)
+            {
+                w[i] = NumOps.Subtract(w[i], NumOps.Multiply(alpha, v[i]));
+            }
+
+            // Full reorthogonalization against all previous vectors for stability
+            for (int k = 0; k <= j; k++)
+            {
+                T dot = NumOps.Zero;
+                for (int i = 0; i < n; i++)
+                {
+                    dot = NumOps.Add(dot, NumOps.Multiply(w[i], Q[i, k]));
+                }
+                for (int i = 0; i < n; i++)
+                {
+                    w[i] = NumOps.Subtract(w[i], NumOps.Multiply(dot, Q[i, k]));
+                }
+            }
+
             if (j < n - 1)
             {
-                H[j, j + 1] = H[j + 1, j] = w.Norm();
-                // VECTORIZED: Normalize using Engine division
-                v = (Vector<T>)Engine.Divide(w, H[j, j + 1]);
+                // Compute beta = ||w||
+                T beta = NumOps.Zero;
+                for (int i = 0; i < n; i++)
+                {
+                    beta = NumOps.Add(beta, NumOps.Multiply(w[i], w[i]));
+                }
+                beta = NumOps.Sqrt(beta);
+
+                H[j, j + 1] = beta;
+                H[j + 1, j] = beta;
+
+                // Check for breakdown
+                if (NumOps.LessThan(beta, NumOps.FromDouble(1e-14)))
+                {
+                    // Breakdown: restart with a random vector orthogonal to current subspace
+                    w = new Vector<T>(n);
+                    w[(j + 1) % n] = NumOps.One;
+
+                    // Orthogonalize against all previous vectors
+                    for (int k = 0; k <= j; k++)
+                    {
+                        T dot = NumOps.Zero;
+                        for (int i = 0; i < n; i++)
+                        {
+                            dot = NumOps.Add(dot, NumOps.Multiply(w[i], Q[i, k]));
+                        }
+                        for (int i = 0; i < n; i++)
+                        {
+                            w[i] = NumOps.Subtract(w[i], NumOps.Multiply(dot, Q[i, k]));
+                        }
+                    }
+
+                    // Recompute norm
+                    beta = NumOps.Zero;
+                    for (int i = 0; i < n; i++)
+                    {
+                        beta = NumOps.Add(beta, NumOps.Multiply(w[i], w[i]));
+                    }
+                    beta = NumOps.Sqrt(beta);
+
+                    if (NumOps.LessThan(beta, NumOps.FromDouble(1e-14)))
+                    {
+                        // Complete breakdown, fill remaining with identity-like structure
+                        for (int jj = j + 1; jj < n; jj++)
+                        {
+                            Q[jj, jj] = NumOps.One;
+                        }
+                        break;
+                    }
+                }
+
+                // v_{j+1} = w / beta
+                vPrev = v;
+                v = new Vector<T>(n);
+                for (int i = 0; i < n; i++)
+                {
+                    v[i] = NumOps.Divide(w[i], beta);
+                }
+
+                // Store in Q
+                for (int i = 0; i < n; i++)
+                {
+                    Q[i, j + 1] = v[i];
+                }
             }
         }
 
-        return H;
+        return (H, Q);
     }
 
     /// <summary>

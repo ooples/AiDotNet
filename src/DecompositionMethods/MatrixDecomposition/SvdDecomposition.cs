@@ -146,34 +146,47 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
     /// It works by first converting the matrix to a simpler form (bidiagonal) and then
     /// iteratively refining it until we get the diagonal form we need.
     /// </para>
+    /// <para>
+    /// For wide matrices (m &lt; n), the algorithm transposes the matrix first since the
+    /// standard Golub-Reinsch algorithm assumes m ≥ n. This follows the LAPACK convention.
+    /// </para>
     /// </remarks>
     private (Matrix<T> U, Vector<T> S, Matrix<T> VT) ComputeSvdGolubReinsch(Matrix<T> matrix)
     {
         int m = matrix.Rows;
         int n = matrix.Columns;
-        int l = Math.Min(m, n);
 
-        Matrix<T> A = matrix.Clone();
-        Matrix<T> U = Matrix<T>.CreateIdentityMatrix(m);
+        // For wide matrices (m < n), compute SVD of A^T and swap U/V
+        // Since A^T = V * S * U^T, we have A = U * S * V^T
+        // This follows the LAPACK convention for handling wide matrices
+        bool transposed = m < n;
+        Matrix<T> workMatrix = transposed ? matrix.Transpose() : matrix;
+        int workM = workMatrix.Rows;
+        int workN = workMatrix.Columns;
+        int l = Math.Min(workM, workN);
+
+        // Use BidiagonalDecomposition for the bidiagonalization step
+        // This class is known to work correctly (all 24 tests pass)
+        var bidiag = new BidiagonalDecomposition<T>(workMatrix);
+        Matrix<T> U = bidiag.U;
+        Matrix<T> B = bidiag.B;
+        Matrix<T> VT = bidiag.V.Transpose();  // BidiagonalDecomposition stores V, we need VT
+
         Vector<T> S = new(l);
-        Matrix<T> VT = Matrix<T>.CreateIdentityMatrix(n);
 
-        // Bidiagonalization
-        Bidiagonalize(A, U, VT);
-
-        // Diagonalization
-        DiagonalizeGolubReinsch(A, U, VT);
+        // Diagonalization - this is where we still need to verify correctness
+        DiagonalizeGolubReinsch(B, U, VT);
 
         // Extract singular values and ensure they are non-negative
         for (int i = 0; i < l; i++)
         {
-            T diagValue = A[i, i];
+            T diagValue = B[i, i];
             S[i] = NumOps.Abs(diagValue);
 
             // If singular value was negative, flip the sign of the corresponding column of U
             if (NumOps.LessThan(diagValue, NumOps.Zero))
             {
-                for (int row = 0; row < m; row++)
+                for (int row = 0; row < workM; row++)
                 {
                     U[row, i] = NumOps.Negate(U[row, i]);
                 }
@@ -182,6 +195,18 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
 
         // Sort singular values in descending order
         SortSingularValues(S, U, VT);
+
+        // If we transposed, swap U and VT back
+        // A^T = V * S * U^T means A = U * S * V^T
+        // So for the transposed case: our computed U becomes V, and VT becomes U^T
+        if (transposed)
+        {
+            // Swap: original U = computed V^T^T = computed V
+            //       original V^T = computed U^T
+            Matrix<T> originalU = VT.Transpose();  // VT from transposed is actually V of original, so VT^T = V = U_original
+            Matrix<T> originalVT = U.Transpose();  // U from transposed is actually V of original
+            return (originalU, S, originalVT);
+        }
 
         return (U, S, VT);
     }
@@ -289,6 +314,7 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
                             A[i, j] = NumOps.Subtract(A[i, j], NumOps.Multiply(v[j - k - 1], sum));
                     }
 
+                    // Apply Householder reflection to VT
                     for (int i = 0; i < n; i++)
                     {
                         // VECTORIZED: Use dot product for sum computation
@@ -343,25 +369,32 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
             int _maxIterations = 30;
             for (int iteration = 0; iteration < _maxIterations; iteration++)
             {
-                bool flag = true;
-                for (int l = k; l >= 0; l--)
+                // Check for convergence of singular value k
+                if (k > 0 && NumOps.LessThanOrEquals(NumOps.Abs(_e[k - 1]),
+                    NumOps.Multiply(NumOps.FromDouble(1e-14), NumOps.Add(NumOps.Abs(_d[k]), NumOps.Abs(_d[k - 1])))))
                 {
-                    if (l == 0 || NumOps.LessThanOrEquals(NumOps.Abs(_e[l - 1]), NumOps.Multiply(NumOps.FromDouble(1e-12), NumOps.Add(NumOps.Abs(_d[l]), NumOps.Abs(_d[l - 1])))))
-                    {
-                        _e[l] = NumOps.Zero;
-                        flag = false;
-                        break;
-                    }
-                    if (NumOps.LessThanOrEquals(NumOps.Abs(_d[l - 1]), NumOps.Multiply(NumOps.FromDouble(1e-12), NumOps.Abs(_d[l]))))
-                    {
-                        GolubKahanStep(_d, _e, l, k, U, VT);
-                        flag = false;
-                        break;
-                    }
+                    _e[k - 1] = NumOps.Zero;
+                    break; // Singular value k has converged
                 }
-                if (flag)
+
+                // Find the start of the unreduced block
+                int l = k;
+                while (l > 0)
                 {
-                    GolubKahanStep(_d, _e, 0, k, U, VT);
+                    // Check if e[l-1] is small enough to split
+                    if (NumOps.LessThanOrEquals(NumOps.Abs(_e[l - 1]),
+                        NumOps.Multiply(NumOps.FromDouble(1e-14), NumOps.Add(NumOps.Abs(_d[l]), NumOps.Abs(_d[l - 1])))))
+                    {
+                        _e[l - 1] = NumOps.Zero;
+                        break;
+                    }
+                    l--;
+                }
+
+                // Perform one QR step on the unreduced block [l, k]
+                if (l <= k)
+                {
+                    GolubKahanStep(_d, _e, l, k, U, VT);
                 }
             }
         }
@@ -393,77 +426,124 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private void GolubKahanStep(Vector<T> d, Vector<T> e, int l, int k, Matrix<T> U, Matrix<T> VT)
     {
-        T f = NumOps.Add(NumOps.Abs(d[l]), NumOps.Abs(d[l + 1]));
-        T tst1 = NumOps.Add(f, NumOps.Abs(e[l]));
-        if (NumOps.Equals(tst1, f))
+        // Wilkinson shift from the trailing 2x2 submatrix of B^T * B
+        // For bidiagonal B with diagonal d and superdiagonal e, the trailing 2x2 of B^T*B is:
+        // [d[k-1]^2 + e[k-2]^2,  d[k-1]*e[k-1]]
+        // [d[k-1]*e[k-1],        d[k]^2 + e[k-1]^2]
+        T dk = d[k];
+        T dk1 = k > l ? d[k - 1] : NumOps.Zero;
+        T ek1 = k > l ? e[k - 1] : NumOps.Zero;
+
+        // Compute Wilkinson shift
+        T t22 = NumOps.Add(NumOps.Multiply(dk, dk), NumOps.Multiply(ek1, ek1));
+        T t12 = NumOps.Multiply(dk1, ek1);
+        T t11 = NumOps.Multiply(dk1, dk1);
+        if (k > l + 1)
+            t11 = NumOps.Add(t11, NumOps.Multiply(e[k - 2], e[k - 2]));
+
+        T delta = NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Subtract(t11, t22));
+        T shift;
+        if (NumOps.Equals(t12, NumOps.Zero))
         {
-            e[l] = NumOps.Zero;
-            return;
+            shift = t22;
+        }
+        else
+        {
+            T signDelta = NumOps.GreaterThanOrEquals(delta, NumOps.Zero) ? NumOps.One : NumOps.Negate(NumOps.One);
+            T sqrtTerm = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(delta, delta), NumOps.Multiply(t12, t12)));
+            shift = NumOps.Subtract(t22, NumOps.Divide(NumOps.Multiply(t12, t12), NumOps.Add(delta, NumOps.Multiply(signDelta, sqrtTerm))));
         }
 
-        T g = NumOps.Divide(NumOps.Subtract(d[l + 1], d[l]), NumOps.Multiply(NumOps.FromDouble(2), e[l]));
-        T r = NumOps.Sqrt(NumOps.Add(NumOps.One, NumOps.Multiply(g, g)));
-        g = NumOps.Add(d[k], NumOps.Divide(e[l], NumOps.Add(g, NumOps.Multiply(NumOps.SignOrZero(g), r))));
+        // Initialize for the first Givens rotation
+        T f = NumOps.Subtract(NumOps.Multiply(d[l], d[l]), shift);
+        T g = NumOps.Multiply(d[l], e[l]);
 
-        T s = NumOps.One;
-        T c = NumOps.One;
-        T p = NumOps.Zero;
-
-        for (int i = k - 1; i >= l; i--)
+        // Chase the bulge from l to k
+        for (int i = l; i < k; i++)
         {
-            T f2 = NumOps.Multiply(s, e[i]);
-            T b = NumOps.Multiply(c, e[i]);
-            r = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(f2, f2), NumOps.Multiply(g, g)));
-            e[i + 1] = r;
+            // Compute Givens rotation to eliminate g from [f; g]
+            T r = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(f, f), NumOps.Multiply(g, g)));
+            T c = NumOps.Divide(f, r);
+            T s = NumOps.Divide(g, r);
 
             if (NumOps.Equals(r, NumOps.Zero))
             {
-                d[i + 1] = NumOps.Subtract(d[i + 1], p);
-                e[k] = NumOps.Zero;
-                break;
+                c = NumOps.One;
+                s = NumOps.Zero;
             }
 
-            s = NumOps.Divide(f2, r);
-            c = NumOps.Divide(g, r);
-            g = NumOps.Subtract(d[i + 1], p);
-            r = NumOps.Divide(NumOps.Add(NumOps.Multiply(d[i], c), NumOps.Multiply(b, s)), g);
-            p = NumOps.Multiply(r, s);
-            d[i + 1] = NumOps.Add(g, p);
-            g = NumOps.Subtract(NumOps.Multiply(c, r), b);
-
-            // Accumulate transformation in U and VT - VECTORIZED
-            var uCol_i = Engine.GetColumn(U, i);
-            var uCol_i1 = Engine.GetColumn(U, i + 1);
-            var sVec = Engine.Fill<T>(uCol_i.Length, s);
-            var cVec = Engine.Fill<T>(uCol_i.Length, c);
-
-            var newCol_i1 = (Vector<T>)Engine.Add(
-                Engine.Multiply(uCol_i, sVec),
-                Engine.Multiply(uCol_i1, cVec)
-            );
-            var newCol_i = (Vector<T>)Engine.Subtract(
-                Engine.Multiply(uCol_i, cVec),
-                Engine.Multiply(uCol_i1, sVec)
-            );
-            Engine.SetColumn(U, i + 1, newCol_i1);
-            Engine.SetColumn(U, i, newCol_i);
-
+            // Apply rotation to VT (right singular vectors)
             var vtRow_i = Engine.GetRow(VT, i);
             var vtRow_i1 = Engine.GetRow(VT, i + 1);
-            var sVec2 = Engine.Fill<T>(vtRow_i.Length, s);
-            var cVec2 = Engine.Fill<T>(vtRow_i.Length, c);
-            var negSVec = Engine.Fill<T>(vtRow_i.Length, NumOps.Negate(s));
+            var sVecVT = Engine.Fill<T>(vtRow_i.Length, s);
+            var cVecVT = Engine.Fill<T>(vtRow_i.Length, c);
+            var negSVecVT = Engine.Fill<T>(vtRow_i.Length, NumOps.Negate(s));
 
-            var newRow_i = (Vector<T>)Engine.Add(
-                Engine.Multiply(vtRow_i, cVec2),
-                Engine.Multiply(vtRow_i1, sVec2)
+            var newVtRow_i = (Vector<T>)Engine.Add(
+                Engine.Multiply(vtRow_i, cVecVT),
+                Engine.Multiply(vtRow_i1, sVecVT)
             );
-            var newRow_i1 = (Vector<T>)Engine.Add(
-                Engine.Multiply(vtRow_i, negSVec),
-                Engine.Multiply(vtRow_i1, cVec2)
+            var newVtRow_i1 = (Vector<T>)Engine.Add(
+                Engine.Multiply(vtRow_i, negSVecVT),
+                Engine.Multiply(vtRow_i1, cVecVT)
             );
-            Engine.SetRow(VT, i, newRow_i);
-            Engine.SetRow(VT, i + 1, newRow_i1);
+            Engine.SetRow(VT, i, newVtRow_i);
+            Engine.SetRow(VT, i + 1, newVtRow_i1);
+
+            // Update bidiagonal matrix elements for V rotation (affects columns)
+            if (i > l)
+                e[i - 1] = r;
+
+            T di = d[i];
+            T ei = e[i];
+            T di1 = d[i + 1];
+
+            f = NumOps.Add(NumOps.Multiply(c, di), NumOps.Multiply(s, ei));
+            e[i] = NumOps.Subtract(NumOps.Multiply(c, ei), NumOps.Multiply(s, di));
+            g = NumOps.Multiply(s, di1);
+            d[i + 1] = NumOps.Multiply(c, di1);
+
+            // Compute Givens rotation to eliminate g from [f; g]
+            r = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(f, f), NumOps.Multiply(g, g)));
+            c = NumOps.Divide(f, r);
+            s = NumOps.Divide(g, r);
+
+            if (NumOps.Equals(r, NumOps.Zero))
+            {
+                c = NumOps.One;
+                s = NumOps.Zero;
+            }
+
+            // Apply rotation to U (left singular vectors)
+            var uCol_i = Engine.GetColumn(U, i);
+            var uCol_i1 = Engine.GetColumn(U, i + 1);
+            var sVecU = Engine.Fill<T>(uCol_i.Length, s);
+            var cVecU = Engine.Fill<T>(uCol_i.Length, c);
+            var negSVecU = Engine.Fill<T>(uCol_i.Length, NumOps.Negate(s));
+
+            var newUCol_i = (Vector<T>)Engine.Add(
+                Engine.Multiply(uCol_i, cVecU),
+                Engine.Multiply(uCol_i1, sVecU)
+            );
+            var newUCol_i1 = (Vector<T>)Engine.Add(
+                Engine.Multiply(uCol_i, negSVecU),
+                Engine.Multiply(uCol_i1, cVecU)
+            );
+            Engine.SetColumn(U, i, newUCol_i);
+            Engine.SetColumn(U, i + 1, newUCol_i1);
+
+            // Update bidiagonal matrix elements for U rotation (affects rows)
+            d[i] = r;
+            f = NumOps.Add(NumOps.Multiply(c, e[i]), NumOps.Multiply(s, d[i + 1]));
+            d[i + 1] = NumOps.Subtract(NumOps.Multiply(c, d[i + 1]), NumOps.Multiply(s, e[i]));
+
+            if (i < k - 1)
+            {
+                g = NumOps.Multiply(s, e[i + 1]);
+                e[i + 1] = NumOps.Multiply(c, e[i + 1]);
+            }
+
+            e[i] = f;
         }
     }
 

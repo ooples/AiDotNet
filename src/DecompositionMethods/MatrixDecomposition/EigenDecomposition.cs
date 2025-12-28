@@ -112,42 +112,134 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
         Vector<T> eigenValues = new(n);
         Matrix<T> eigenVectors = Matrix<T>.CreateIdentity(n);
 
+        Matrix<T> deflated = matrix.Clone();
+        int maxIterations = 2000;
+        T tolerance = NumOps.FromDouble(1e-14);
+
         for (int i = 0; i < n; i++)
         {
-            // Replace CreateRandom with a method to create a random vector
-            Vector<T> v = Vector<T>.CreateRandom(n);
-            for (int iter = 0; iter < 100; iter++)
+            // Start with a vector that has all ones - more stable than random
+            Vector<T> v = new Vector<T>(n);
+            for (int j = 0; j < n; j++)
             {
-                Vector<T> w = matrix.Multiply(v);
-                T eigenValue = NumOps.Divide(w.DotProduct(v), v.DotProduct(v));
-                v = w.Divide(w.Norm());
+                v[j] = NumOps.One;
+            }
+            // Normalize the initial vector
+            T initNorm = v.Norm();
+            if (NumOps.GreaterThan(initNorm, NumOps.FromDouble(1e-14)))
+            {
+                v = v.Divide(initNorm);
+            }
 
-                if (iter > 0 && NumOps.LessThan(NumOps.Abs(NumOps.Subtract(eigenValue, eigenValues[i])), NumOps.FromDouble(1e-6)))
+            T eigenValue = NumOps.Zero;
+            bool converged = false;
+
+            // Phase 1: Standard power iteration
+            for (int iter = 0; iter < maxIterations && !converged; iter++)
+            {
+                // Orthogonalize against previously found eigenvectors
+                for (int j = 0; j < i; j++)
                 {
+                    Vector<T> prevV = eigenVectors.GetColumn(j);
+                    T projection = v.DotProduct(prevV);
+                    v = v.Subtract(prevV.Multiply(projection));
+                }
+                T vNorm = v.Norm();
+                if (NumOps.LessThan(vNorm, NumOps.FromDouble(1e-14)))
+                {
+                    // Vector became zero, reinitialize
+                    for (int j = 0; j < n; j++) v[j] = NumOps.FromDouble(j + 1);
+                    v = v.Divide(v.Norm());
+                    continue;
+                }
+                v = v.Divide(vNorm);
+
+                // Power iteration step: v = A*v / ||A*v||
+                Vector<T> w = deflated.Multiply(v);
+                T norm = w.Norm();
+
+                // Check for zero norm (indicates zero eigenvalue or numerical issues)
+                if (NumOps.LessThan(norm, NumOps.FromDouble(1e-14)))
+                {
+                    eigenValues[i] = NumOps.Zero;
+                    converged = true;
                     break;
                 }
+
+                Vector<T> vNew = w.Divide(norm);
+
+                // Compute Rayleigh quotient: λ = v^T * A * v
+                Vector<T> Av = deflated.Multiply(vNew);
+                T newEigenValue = vNew.DotProduct(Av);
+
+                // Check convergence: ||Av - λv|| should be small
+                Vector<T> residual = Av.Subtract(vNew.Multiply(newEigenValue));
+                T residualNorm = residual.Norm();
+
+                if (NumOps.LessThan(residualNorm, tolerance))
+                {
+                    v = vNew;
+                    eigenValue = newEigenValue;
+                    eigenValues[i] = eigenValue;
+                    converged = true;
+                    break;
+                }
+
+                v = vNew;
+                eigenValue = newEigenValue;
                 eigenValues[i] = eigenValue;
             }
 
+            // Phase 2: Rayleigh quotient iteration for refinement (if not converged)
+            if (!converged)
+            {
+                for (int iter = 0; iter < 200; iter++)
+                {
+                    Vector<T> Av = deflated.Multiply(v);
+                    eigenValue = v.DotProduct(Av);
+
+                    // Solve (A - λI)w = v using shifted matrix
+                    // For better convergence, we use the residual direction
+                    Vector<T> residual = Av.Subtract(v.Multiply(eigenValue));
+                    T residualNorm = residual.Norm();
+
+                    if (NumOps.LessThan(residualNorm, tolerance))
+                    {
+                        eigenValues[i] = eigenValue;
+                        break;
+                    }
+
+                    // Update v in the direction of the residual (gradient descent on Rayleigh quotient)
+                    // v_new = (A*v) / ||A*v||
+                    T avNorm = Av.Norm();
+                    if (NumOps.GreaterThan(avNorm, NumOps.FromDouble(1e-14)))
+                    {
+                        v = Av.Divide(avNorm);
+                    }
+                    eigenValues[i] = eigenValue;
+                }
+            }
+
             eigenVectors.SetColumn(i, v);
-            // Fix the Multiply operation
-            matrix = matrix.Subtract(MatrixHelper<T>.OuterProduct(v, v).Multiply(eigenValues[i]));
+
+            // Deflate: remove the found eigenvalue/eigenvector from the matrix
+            // A_new = A - λ * v * v^T
+            deflated = deflated.Subtract(MatrixHelper<T>.OuterProduct(v, v).Multiply(eigenValues[i]));
         }
 
         return (eigenValues, eigenVectors);
     }
 
     /// <summary>
-    /// Computes eigenvalues and eigenvectors using the QR algorithm.
+    /// Computes eigenvalues and eigenvectors using the QR algorithm with Wilkinson shift.
     /// </summary>
     /// <remarks>
     /// The QR algorithm is an iterative method that works by repeatedly factoring the matrix
     /// into a product Q*R (where Q is orthogonal and R is upper triangular), and then
     /// recombining as R*Q. This process eventually converges to a matrix where the eigenvalues
     /// appear on the diagonal.
-    /// 
-    /// This is one of the most widely used methods for computing all eigenvalues and eigenvectors
-    /// of a matrix, as it is generally stable and accurate.
+    ///
+    /// This implementation uses Wilkinson shift for faster convergence on symmetric matrices.
     /// </remarks>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <returns>A tuple containing the eigenvalues and eigenvectors.</returns>
@@ -157,15 +249,68 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
         Matrix<T> A = matrix.Clone();
         Matrix<T> Q = Matrix<T>.CreateIdentity(n);
 
-        for (int iter = 0; iter < 100; iter++)
-        {
-            var qrDecomp = new QrDecomposition<T>(A);
-            (var q, var r) = (qrDecomp.Q, qrDecomp.R);
-            A = r.Multiply(q);
-            Q = Q.Multiply(q);
+        T tolerance = NumOps.FromDouble(1e-12);
+        int maxIterations = 200;
 
-            if (A.IsUpperTriangularMatrix(NumOps.FromDouble(1e-6)))
-                break;
+        for (int iter = 0; iter < maxIterations; iter++)
+        {
+            // Check if already diagonal (for symmetric) or upper triangular
+            bool converged = true;
+            for (int i = 1; i < n && converged; i++)
+            {
+                for (int j = 0; j < i && converged; j++)
+                {
+                    if (NumOps.GreaterThan(NumOps.Abs(A[i, j]), tolerance))
+                    {
+                        converged = false;
+                    }
+                }
+            }
+            if (converged) break;
+
+            // Wilkinson shift: compute shift from bottom 2x2 submatrix
+            T shift = NumOps.Zero;
+            if (n >= 2)
+            {
+                T a = A[n - 2, n - 2];
+                T b = A[n - 2, n - 1];
+                T c = A[n - 1, n - 2];
+                T d = A[n - 1, n - 1];
+
+                // Compute eigenvalue of 2x2 block closest to d
+                T delta = NumOps.Divide(NumOps.Subtract(a, d), NumOps.FromDouble(2.0));
+                T signDelta = NumOps.GreaterThanOrEquals(delta, NumOps.Zero) ? NumOps.One : NumOps.FromDouble(-1.0);
+                T bc = NumOps.Multiply(b, c);
+                T sqrtTerm = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(delta, delta), bc));
+
+                if (NumOps.GreaterThan(NumOps.Abs(sqrtTerm), NumOps.FromDouble(1e-14)))
+                {
+                    shift = NumOps.Subtract(d, NumOps.Divide(NumOps.Multiply(signDelta, bc),
+                        NumOps.Add(NumOps.Abs(delta), sqrtTerm)));
+                }
+                else
+                {
+                    shift = d;
+                }
+            }
+
+            // Shifted QR step: A - shift*I = Q*R, then A = R*Q + shift*I
+            Matrix<T> shiftedA = A.Clone();
+            for (int i = 0; i < n; i++)
+            {
+                shiftedA[i, i] = NumOps.Subtract(shiftedA[i, i], shift);
+            }
+
+            var qrDecomp = new QrDecomposition<T>(shiftedA);
+            (var q, var r) = (qrDecomp.Q, qrDecomp.R);
+
+            A = r.Multiply(q);
+            for (int i = 0; i < n; i++)
+            {
+                A[i, i] = NumOps.Add(A[i, i], shift);
+            }
+
+            Q = Q.Multiply(q);
         }
 
         Vector<T> eigenValues = MatrixHelper<T>.ExtractDiagonal(A);

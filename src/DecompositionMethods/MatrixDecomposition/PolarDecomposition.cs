@@ -127,7 +127,10 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
         var svd = new SvdDecomposition<T>(A);
 
         // VECTORIZED: Uses matrix multiplication and transpose operations which are already vectorized
-        U = svd.U.Multiply(svd.Vt.Transpose());
+        // Polar decomposition from SVD: A = U_svd * Σ * V^T
+        // U_polar = U_svd * V^T, P = V * Σ * V^T
+        // Since svd.Vt = V^T, we have: U_polar = svd.U * svd.Vt
+        U = svd.U.Multiply(svd.Vt);
         var sigma = Matrix<T>.CreateDiagonal(svd.S);
         P = svd.Vt.Transpose().Multiply(sigma).Multiply(svd.Vt);
     }
@@ -338,31 +341,41 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private void DecomposeScalingAndSquaring()
     {
-        Matrix<T> X = A.Clone();
-        T norm = MatrixHelper<T>.SpectralNorm(X);
-        int scalingFactor = (int)Math.Ceiling(MathHelper.Log2(Convert.ToDouble(norm)));
+        // Standard Newton iteration for polar decomposition: X_{k+1} = (1/2)(X_k + X_k^{-T})
+        // This converges to the orthogonal factor U when starting from X_0 = A (scaled)
+        // Reference: Higham, "Computing the polar decomposition—with applications"
 
-        if (scalingFactor > 0)
+        Matrix<T> X = A.Clone();
+
+        // Scale the matrix to improve convergence
+        // Use Frobenius norm scaling: X = A / ||A||_F
+        T frobNorm = X.FrobeniusNorm();
+        if (NumOps.GreaterThan(frobNorm, NumOps.FromDouble(1e-14)))
         {
-            X = X.Multiply(NumOps.FromDouble(Math.Pow(2, -scalingFactor)));
+            X = X.Multiply(NumOps.Divide(NumOps.One, frobNorm));
         }
 
-        Matrix<T> Y = Matrix<T>.CreateIdentity(A.Rows);
         T tolerance = NumOps.FromDouble(1e-12);
-        int maxIterations = 20;
+        int maxIterations = 50;
 
         for (int i = 0; i < maxIterations; i++)
         {
-            if (!MatrixHelper<T>.IsInvertible(Y))
+            // Newton iteration: X_{k+1} = (1/2)(X_k + X_k^{-T})
+            if (!MatrixHelper<T>.IsInvertible(X))
             {
-                throw new InvalidOperationException("Matrix became singular during Scaling and Squaring iteration.");
+                // Fall back to SVD-based method for singular matrices
+                DecomposeSVD();
+                return;
             }
 
-            Matrix<T> Z = X.Subtract(Y.Inverse());
-            Y = Y.Add(Y.Multiply(Z).Multiply(NumOps.FromDouble(0.5)));
-            X = X.Subtract(Z.Multiply(X).Multiply(NumOps.FromDouble(0.5)));
+            Matrix<T> Xinv = X.Inverse();
+            Matrix<T> XinvT = Xinv.Transpose();
+            Matrix<T> Xnew = X.Add(XinvT).Multiply(NumOps.FromDouble(0.5));
 
-            T error = Z.FrobeniusNorm();
+            // Check convergence
+            T error = X.Subtract(Xnew).FrobeniusNorm();
+
+            X = Xnew;
 
             if (NumOps.LessThan(error, tolerance))
             {
@@ -372,20 +385,20 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
             // Check for divergence
             if (NumOps.GreaterThan(error, NumOps.FromDouble(1e6)))
             {
-                throw new InvalidOperationException("Scaling and Squaring iteration diverged.");
+                // Fall back to SVD-based method
+                DecomposeSVD();
+                return;
             }
         }
 
-        for (int i = 0; i < scalingFactor; i++)
-        {
-            Y = Y.Multiply(Y);
-        }
+        // X has converged to an orthogonal matrix (the unitary factor)
+        U = X;
 
-        U = Y;
-        P = Y.Transpose().Multiply(A);
+        // P = U^T * A (the positive semi-definite factor)
+        P = U.Transpose().Multiply(A);
 
-        // Ensure orthogonality of U
-        U = MatrixHelper<T>.OrthogonalizeColumns(U);
+        // Ensure P is symmetric by averaging: P = (P + P^T) / 2
+        P = P.Add(P.Transpose()).Multiply(NumOps.FromDouble(0.5));
     }
 
     /// <summary>
