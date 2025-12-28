@@ -300,7 +300,10 @@ namespace AiDotNet.Tensors.Engines
         {
             try
             {
-                using var context = Context.Create(builder => builder.Default().EnableAlgorithms());
+                // Don't use EnableAlgorithms() during detection - it can hide devices
+                // on some systems. EnableAlgorithms() is enabled during actual accelerator
+                // creation in GpuEngine where it's needed for algorithm operations.
+                using var context = Context.Create(builder => builder.Default());
                 var device = context.GetPreferredDevice(preferCPU: false);
 
                 if (device.AcceleratorType != AcceleratorType.CPU)
