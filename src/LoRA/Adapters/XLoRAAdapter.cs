@@ -208,7 +208,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Create gating network: input -> numberOfExperts (with softmax activation)
         // The gating network is a simple dense layer that maps input to expert weights
-        _gatingNetwork = new DenseLayer<T>(inputSize, numberOfExperts, (IVectorActivationFunction<T>?)new SoftmaxActivation<T>());
+        _gatingNetwork = new DenseLayer<T>(inputSize, numberOfExperts, (IVectorActivationFunction<T>)new SoftmaxActivation<T>());
 
         // Update parameter vector to include all experts and gating network
         Parameters = new Vector<T>(ParameterCount);

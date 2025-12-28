@@ -1157,6 +1157,19 @@ public static class LayerHelper<T>
             }
         }
 
+        // For classification tasks, add global pooling to reduce 3D [batch, seq, dim] to 2D [batch, dim]
+        // This is required because transformer encoder outputs are 3D, but classification heads expect 2D
+        if (taskType == NeuralNetworkTaskType.BinaryClassification ||
+            taskType == NeuralNetworkTaskType.MultiClassClassification ||
+            taskType == NeuralNetworkTaskType.MultiLabelClassification ||
+            taskType == NeuralNetworkTaskType.SequenceClassification ||
+            taskType == NeuralNetworkTaskType.ImageClassification)
+        {
+            // Global average pooling over sequence dimension
+            // Input: [batch, seq, dim] -> Output: [batch, dim]
+            yield return new GlobalPoolingLayer<T>([maxSequenceLength, modelDimension], PoolingType.Average, (IActivationFunction<T>?)null);
+        }
+
         // Add the final projection layer
         yield return new DenseLayer<T>(modelDimension, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
 
@@ -3959,7 +3972,7 @@ public static class LayerHelper<T>
             activationFunction: new ReLUActivation<T>());
 
         // Global average pooling
-        yield return new AdaptiveAvgPoolingLayer<T>(currentChannels, currentHeight, currentWidth, 1, 1);
+        yield return new AdaptiveAveragePoolingLayer<T>(currentChannels, currentHeight, currentWidth, 1, 1);
 
         // Flatten
         yield return new FlattenLayer<T>([currentChannels, 1, 1]);
@@ -4088,7 +4101,7 @@ public static class LayerHelper<T>
             activationFunction: new SwishActivation<T>());
 
         // Global average pooling
-        yield return new AdaptiveAvgPoolingLayer<T>(headChannels, currentHeight, currentWidth, 1, 1);
+        yield return new AdaptiveAveragePoolingLayer<T>(headChannels, currentHeight, currentWidth, 1, 1);
 
         // Flatten
         yield return new FlattenLayer<T>([headChannels, 1, 1]);
@@ -4218,7 +4231,7 @@ public static class LayerHelper<T>
             activationFunction: new ReLU6Activation<T>());
 
         // Global average pooling
-        yield return new AdaptiveAvgPoolingLayer<T>(finalConvChannels, currentHeight, currentWidth, 1, 1);
+        yield return new AdaptiveAveragePoolingLayer<T>(finalConvChannels, currentHeight, currentWidth, 1, 1);
 
         // Flatten
         yield return new FlattenLayer<T>([finalConvChannels, 1, 1]);
@@ -4318,7 +4331,7 @@ public static class LayerHelper<T>
             activationFunction: new HardSwishActivation<T>());
 
         // Global average pooling
-        yield return new AdaptiveAvgPoolingLayer<T>(penultimateChannels, currentHeight, currentWidth, 1, 1);
+        yield return new AdaptiveAveragePoolingLayer<T>(penultimateChannels, currentHeight, currentWidth, 1, 1);
 
         // Final classification layers
         int finalChannels = isLarge ? 1280 : 1024;

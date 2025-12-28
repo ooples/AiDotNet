@@ -377,10 +377,10 @@ public static class DeserializationHelper
             }
             instance = ctor.Invoke(new object[] { inputChannels, inputHeight, inputWidth, compressionFactor });
         }
-        else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.AdaptiveAvgPoolingLayer<>) ||
-                 (openGenericType.FullName != null && openGenericType.FullName.Contains("NeuralNetworks.Layers.AdaptiveAvgPoolingLayer")))
+        else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.AdaptiveAveragePoolingLayer<>) ||
+                 (openGenericType.FullName != null && openGenericType.FullName.Contains("NeuralNetworks.Layers.AdaptiveAveragePoolingLayer")))
         {
-            // AdaptiveAvgPoolingLayer(int inputChannels, int inputHeight, int inputWidth, int outputHeight = 1, int outputWidth = 1)
+            // AdaptiveAveragePoolingLayer(int inputChannels, int inputHeight, int inputWidth, int outputHeight = 1, int outputWidth = 1)
             int inputChannels = inputShape.Length > 1 ? inputShape[1] : inputShape[0];
             int inputHeight = inputShape.Length > 2 ? inputShape[2] : 1;
             int inputWidth = inputShape.Length > 3 ? inputShape[3] : 1;
@@ -390,7 +390,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int) });
             if (ctor is null)
             {
-                throw new InvalidOperationException($"Cannot find AdaptiveAvgPoolingLayer constructor.");
+                throw new InvalidOperationException($"Cannot find AdaptiveAveragePoolingLayer constructor.");
             }
             instance = ctor.Invoke(new object[] { inputChannels, inputHeight, inputWidth, outputHeight, outputWidth });
         }

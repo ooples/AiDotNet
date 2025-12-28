@@ -374,7 +374,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// <param name="inputWidth">The width of the input data.</param>
     /// <param name="stride">The step size for moving the kernel. Defaults to 1.</param>
     /// <param name="padding">The amount of zero-padding to add around the input. Defaults to 0.</param>
-    /// <param name="vectorActivation">The vector activation function to apply. Defaults to ReLU if not specified.</param>
+    /// <param name="vectorActivation">The vector activation function to apply (required to disambiguate from IActivationFunction overload).</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a convolutional layer with the specified configuration and a vector activation function,
@@ -393,11 +393,11 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// needs to be applied to groups of outputs rather than individual values.
     /// </para>
     /// </remarks>
-    public ConvolutionalLayer(int inputDepth, int outputDepth, int kernelSize, int inputHeight, int inputWidth, int stride = 1, int padding = 0,
-                              IVectorActivationFunction<T>? vectorActivation = null)
+    public ConvolutionalLayer(int inputDepth, int outputDepth, int kernelSize, int inputHeight, int inputWidth, int stride, int padding,
+                              IVectorActivationFunction<T> vectorActivation)
         : base(CalculateInputShape(inputDepth, inputHeight, inputWidth),
                CalculateOutputShape(outputDepth, CalculateOutputDimension(inputHeight, kernelSize, stride, padding),
-                   CalculateOutputDimension(inputWidth, kernelSize, stride, padding)), vectorActivation ?? new ReLUActivation<T>())
+                   CalculateOutputDimension(inputWidth, kernelSize, stride, padding)), vectorActivation)
     {
         InputDepth = inputDepth;
         OutputDepth = outputDepth;
@@ -509,16 +509,32 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         int inputHeight = inputShape[1];
         int inputWidth = inputShape[2];
 
-        return new ConvolutionalLayer<T>(
-            inputDepth: inputDepth,
-            outputDepth: numberOfFilters,
-            kernelSize: kernelSize,
-            inputHeight: inputHeight,
-            inputWidth: inputWidth,
-            stride: stride,
-            padding: padding,
-            vectorActivation: vectorActivation
-        );
+        // Use the appropriate constructor based on whether vectorActivation is provided
+        if (vectorActivation is not null)
+        {
+            return new ConvolutionalLayer<T>(
+                inputDepth: inputDepth,
+                outputDepth: numberOfFilters,
+                kernelSize: kernelSize,
+                inputHeight: inputHeight,
+                inputWidth: inputWidth,
+                stride: stride,
+                padding: padding,
+                vectorActivation: vectorActivation
+            );
+        }
+        else
+        {
+            return new ConvolutionalLayer<T>(
+                inputDepth: inputDepth,
+                outputDepth: numberOfFilters,
+                kernelSize: kernelSize,
+                inputHeight: inputHeight,
+                inputWidth: inputWidth,
+                stride: stride,
+                padding: padding
+            );
+        }
     }
 
     /// <summary>

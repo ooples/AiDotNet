@@ -268,9 +268,9 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <param name="sequenceLength">The length of the input sequence.</param>
     /// <param name="embeddingDimension">The dimension of each element in the sequence.</param>
     /// <param name="headCount">The number of attention heads to use.</param>
-    /// <param name="vectorActivationFunction">The vector activation function to apply (defaults to identity function if null).</param>
-    public MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IVectorActivationFunction<T>? vectorActivationFunction = null)
-        : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], vectorActivationFunction ?? new IdentityActivation<T>())
+    /// <param name="vectorActivationFunction">The vector activation function to apply (required to disambiguate from IActivationFunction overload).</param>
+    public MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IVectorActivationFunction<T> vectorActivationFunction)
+        : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], vectorActivationFunction)
     {
         // Initialize auxiliary loss fields first so compiler knows they're set
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
@@ -556,25 +556,59 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         throw new ArgumentException("MultiHeadAttentionLayer supports 1, 2, or 3 inputs.");
     }
 
-    private bool _inputWas2D;
+    private int[] _originalQueryShape = [];
+    private int[] _originalKeyShape = [];
+    private int[] _originalValueShape = [];
 
     private Tensor<T> ForwardInternal(Tensor<T> query, Tensor<T> key, Tensor<T> value)
     {
-        // Handle both 2D [seq, dim] and 3D [batch, seq, dim] input (industry standard)
-        _inputWas2D = query.Shape.Length == 2;
-        if (_inputWas2D)
-        {
-            // Reshape 2D [seq, dim] to 3D [1, seq, dim]
-            query = query.Reshape(1, query.Shape[0], query.Shape[1]);
-            key = key.Reshape(1, key.Shape[0], key.Shape[1]);
-            value = value.Reshape(1, value.Shape[0], value.Shape[1]);
-        }
-        else if (query.Shape.Length != 3)
+        // Industry standard: Support any-rank tensors (like PyTorch's MultiheadAttention)
+        // Last two dimensions are [sequence, embedding_dim]
+        // All preceding dimensions are treated as batch dimensions
+        // Examples:
+        //   2D [seq, dim] -> batch=1, seq, dim
+        //   3D [batch, seq, dim] -> batch, seq, dim
+        //   4D [batch1, batch2, seq, dim] -> batch1*batch2, seq, dim
+        //   5D [b1, b2, b3, seq, dim] -> b1*b2*b3, seq, dim
+
+        _originalQueryShape = query.Shape;
+        _originalKeyShape = key.Shape;
+        _originalValueShape = value.Shape;
+
+        // Validate minimum rank
+        if (query.Rank < 2)
         {
             throw new ArgumentException(
-                $"MultiHeadAttentionLayer expects 2D [seq, dim] or 3D [batch, seq, dim] input, " +
-                $"but received {query.Shape.Length}D tensor with shape [{string.Join(", ", query.Shape)}].");
+                $"MultiHeadAttentionLayer expects at least 2D input [seq, dim], " +
+                $"but received {query.Rank}D tensor with shape [{string.Join(", ", query.Shape)}].");
         }
+
+        // Flatten all batch dimensions to get 3D [batch, seq, dim]
+        int seqLenQ = query.Shape[^2];
+        int dimQ = query.Shape[^1];
+        int batchQ = 1;
+        for (int i = 0; i < query.Rank - 2; i++)
+            batchQ *= query.Shape[i];
+        if (query.Rank == 2) batchQ = 1; // 2D case: [seq, dim] -> [1, seq, dim]
+
+        int seqLenK = key.Shape[^2];
+        int dimK = key.Shape[^1];
+        int batchK = 1;
+        for (int i = 0; i < key.Rank - 2; i++)
+            batchK *= key.Shape[i];
+        if (key.Rank == 2) batchK = 1;
+
+        int seqLenV = value.Shape[^2];
+        int dimV = value.Shape[^1];
+        int batchV = 1;
+        for (int i = 0; i < value.Rank - 2; i++)
+            batchV *= value.Shape[i];
+        if (value.Rank == 2) batchV = 1;
+
+        // Reshape to 3D for processing
+        query = query.Reshape(batchQ, seqLenQ, dimQ);
+        key = key.Reshape(batchK, seqLenK, dimK);
+        value = value.Reshape(batchV, seqLenV, dimV);
 
         _lastInput = query;
         _lastQueryInput = query;
@@ -644,13 +678,17 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var output = Engine.TensorBroadcastAdd(output_reshaped, biasBroadcast);
         _lastOutput = ApplyActivation(output);
 
-        // If input was 2D, reshape output back to 2D [seq, dim]
-        if (_inputWas2D)
+        // Reshape output back to original batch dimensions
+        // Output is currently [flatBatch, seq, dim], need to reshape to [origBatch..., seq, dim]
+        int[] outputShape = new int[_originalQueryShape.Length];
+        for (int i = 0; i < _originalQueryShape.Length - 2; i++)
         {
-            return _lastOutput.Reshape(_lastOutput.Shape[1], _lastOutput.Shape[2]);
+            outputShape[i] = _originalQueryShape[i];
         }
+        outputShape[^2] = seqLengthQ;
+        outputShape[^1] = embeddingDimension;
 
-        return _lastOutput;
+        return _lastOutput.Reshape(outputShape);
     }
 
     /// <summary>
@@ -674,23 +712,22 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        // If input was 2D, reshape gradient to 3D for processing
-        if (_inputWas2D && outputGradient.Shape.Length == 2)
-        {
-            outputGradient = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1]);
-        }
+        // Flatten any-rank gradient to 3D for processing (like forward pass)
+        int seqLen = outputGradient.Shape[^2];
+        int dim = outputGradient.Shape[^1];
+        int batch = 1;
+        for (int i = 0; i < outputGradient.Rank - 2; i++)
+            batch *= outputGradient.Shape[i];
+        if (outputGradient.Rank == 2) batch = 1;
+
+        outputGradient = outputGradient.Reshape(batch, seqLen, dim);
 
         var result = UseAutodiff
             ? BackwardViaAutodiff(outputGradient)
             : BackwardManual(outputGradient);
 
-        // If input was 2D, reshape gradient back to 2D
-        if (_inputWas2D && result.Shape.Length == 3 && result.Shape[0] == 1)
-        {
-            result = result.Reshape(result.Shape[1], result.Shape[2]);
-        }
-
-        return result;
+        // Reshape gradient back to original input shape
+        return result.Reshape(_originalQueryShape);
     }
 
     /// <summary>

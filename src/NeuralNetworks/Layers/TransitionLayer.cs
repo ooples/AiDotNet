@@ -44,7 +44,7 @@ public class TransitionLayer<T> : LayerBase<T>
 {
     private readonly BatchNormalizationLayer<T> _bn;
     private readonly ConvolutionalLayer<T> _conv;
-    private readonly AvgPoolingLayer<T> _pool;
+    private readonly AveragePoolingLayer<T> _pool;
     private readonly IActivationFunction<T> _relu;
 
     private Tensor<T>? _lastInput;
@@ -95,7 +95,7 @@ public class TransitionLayer<T> : LayerBase<T>
 
         // After 1x1 conv, dimensions are same
         // Then 2x2 avg pool with stride 2 halves dimensions
-        _pool = new AvgPoolingLayer<T>(
+        _pool = new AveragePoolingLayer<T>(
             inputShape: [OutputChannels, inputHeight, inputWidth],
             poolSize: 2,
             strides: 2);
@@ -116,8 +116,8 @@ public class TransitionLayer<T> : LayerBase<T>
         _convOut = _conv.Forward(_reluOut);
 
         // Handle batched input (4D) - use Engine.AvgPool2D directly
-        // AvgPoolingLayer expects 3D input, so we handle 4D separately
-        // [B, C, H, W] uses Engine directly, [C, H, W] uses the AvgPoolingLayer
+        // AveragePoolingLayer expects 3D input, so we handle 4D separately
+        // [B, C, H, W] uses Engine directly, [C, H, W] uses the AveragePoolingLayer
         return _convOut.Shape.Length == 4
             ? Engine.AvgPool2D(_convOut, poolSize: 2, stride: 2, padding: 0)
             : _pool.Forward(_convOut);

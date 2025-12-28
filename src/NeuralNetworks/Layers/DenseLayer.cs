@@ -322,7 +322,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     /// <param name="inputSize">The number of input neurons.</param>
     /// <param name="outputSize">The number of output neurons.</param>
-    /// <param name="vectorActivation">The vector activation function to apply. Defaults to ReLU if not specified.</param>
+    /// <param name="vectorActivation">The vector activation function to apply (required to disambiguate from IActivationFunction overload).</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a dense layer with the specified number of input and output neurons
@@ -341,9 +341,13 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// flexibility if you need special activation functions that work on the entire
     /// output vector at once.
     /// </para>
+    /// <para>
+    /// <b>Note:</b> If your activation function implements both IActivationFunction and IVectorActivationFunction,
+    /// use <see cref="WithActivation"/> or <see cref="WithVectorActivation"/> factory methods to avoid ambiguity.
+    /// </para>
     /// </remarks>
-    public DenseLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? vectorActivation = null)
-        : base([inputSize], [outputSize], vectorActivation ?? new ReLUActivation<T>())
+    public DenseLayer(int inputSize, int outputSize, IVectorActivationFunction<T> vectorActivation)
+        : base([inputSize], [outputSize], vectorActivation)
     {
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         L1Strength = NumOps.FromDouble(0.01);
@@ -1178,7 +1182,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         DenseLayer<T> copy;
 
-        if (UsingVectorActivation)
+        if (UsingVectorActivation && VectorActivation is not null)
         {
             copy = new DenseLayer<T>(InputShape[0], OutputShape[0], VectorActivation);
         }
