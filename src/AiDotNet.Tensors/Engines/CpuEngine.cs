@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.Operators;
 using TensorPrimitives = System.Numerics.Tensors.TensorPrimitives;
 
@@ -1863,6 +1864,16 @@ public class CpuEngine : IEngine
 
         // Use optimized Tensor.BroadcastAdd which handles broadcasting logic
         return a.BroadcastAdd(b);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorBroadcastMultiply<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+
+        // Use optimized Tensor.BroadcastMultiply which handles broadcasting logic
+        return a.BroadcastMultiply(b);
     }
 
     /// <inheritdoc/>
@@ -6656,6 +6667,13 @@ public class CpuEngine : IEngine
         var numOps = MathHelper.GetNumericOperations<T>();
         T eps = numOps.FromDouble(epsilon);
 
+        // Handle both 2D [batch, features] and 4D [batch, channels, height, width] tensors
+        if (input.Shape.Length == 4)
+        {
+            return BatchNorm4D(input, gamma, beta, eps, numOps, out mean, out variance);
+        }
+
+        // 2D case: [batch, features]
         int batch = input.Shape[0];
         int features = input.Shape[1];
 
@@ -6707,6 +6725,88 @@ public class CpuEngine : IEngine
         return new Tensor<T>(input.Shape, new Vector<T>(outputData));
     }
 
+
+    /// <summary>
+    /// Batch normalization for 4D tensors [batch, channels, height, width].
+    /// Normalizes per channel across batch, height, and width dimensions.
+    /// </summary>
+    private Tensor<T> BatchNorm4D<T>(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, T eps, INumericOperations<T> numOps, out Tensor<T> mean, out Tensor<T> variance)
+    {
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+        int spatialSize = height * width;
+        int elementsPerChannel = batch * spatialSize;
+
+        var inputData = input.ToArray();
+        var gammaData = gamma.ToArray();
+        var betaData = beta.ToArray();
+
+        var meanData = new T[channels];
+        var varData = new T[channels];
+        var outputData = new T[inputData.Length];
+
+        // Compute mean per channel (across batch, height, width)
+        Parallel.For(0, channels, c =>
+        {
+            T sum = numOps.Zero;
+            for (int n = 0; n < batch; n++)
+            {
+                int batchOffset = n * channels * spatialSize;
+                int channelOffset = c * spatialSize;
+                for (int s = 0; s < spatialSize; s++)
+                {
+                    sum = numOps.Add(sum, inputData[batchOffset + channelOffset + s]);
+                }
+            }
+            meanData[c] = numOps.Divide(sum, numOps.FromDouble(elementsPerChannel));
+        });
+
+        // Compute variance per channel
+        Parallel.For(0, channels, c =>
+        {
+            T sumSq = numOps.Zero;
+            T channelMean = meanData[c];
+            for (int n = 0; n < batch; n++)
+            {
+                int batchOffset = n * channels * spatialSize;
+                int channelOffset = c * spatialSize;
+                for (int s = 0; s < spatialSize; s++)
+                {
+                    T diff = numOps.Subtract(inputData[batchOffset + channelOffset + s], channelMean);
+                    sumSq = numOps.Add(sumSq, numOps.Multiply(diff, diff));
+                }
+            }
+            varData[c] = numOps.Divide(sumSq, numOps.FromDouble(elementsPerChannel));
+        });
+
+        // Normalize and scale
+        Parallel.For(0, channels, c =>
+        {
+            T channelMean = meanData[c];
+            T invStd = numOps.Divide(numOps.One, numOps.Sqrt(numOps.Add(varData[c], eps)));
+            T gammaC = gammaData[c];
+            T betaC = betaData[c];
+
+            for (int n = 0; n < batch; n++)
+            {
+                int batchOffset = n * channels * spatialSize;
+                int channelOffset = c * spatialSize;
+                for (int s = 0; s < spatialSize; s++)
+                {
+                    int idx = batchOffset + channelOffset + s;
+                    T normalized = numOps.Multiply(numOps.Subtract(inputData[idx], channelMean), invStd);
+                    outputData[idx] = numOps.Add(numOps.Multiply(gammaC, normalized), betaC);
+                }
+            }
+        });
+
+        mean = new Tensor<T>([channels], new Vector<T>(meanData));
+        variance = new Tensor<T>([channels], new Vector<T>(varData));
+        return new Tensor<T>(input.Shape, new Vector<T>(outputData));
+    }
+
     /// <inheritdoc/>
     public Tensor<T> BatchNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta)
     {
@@ -6716,6 +6816,13 @@ public class CpuEngine : IEngine
         var numOps = MathHelper.GetNumericOperations<T>();
         T eps = numOps.FromDouble(epsilon);
 
+        // Handle both 2D [batch, features] and 4D [batch, channels, height, width] tensors
+        if (input.Shape.Length == 4)
+        {
+            return BatchNormBackward4D(gradOutput, input, gamma, mean, variance, eps, numOps, out gradGamma, out gradBeta);
+        }
+
+        // 2D case: [batch, features]
         int batch = input.Shape[0];
         int features = input.Shape[1];
         T batchT = numOps.FromDouble(batch);
@@ -6786,6 +6893,103 @@ public class CpuEngine : IEngine
 
         gradGamma = new Tensor<T>([features], new Vector<T>(gradGammaData));
         gradBeta = new Tensor<T>([features], new Vector<T>(gradBetaData));
+        return new Tensor<T>(input.Shape, new Vector<T>(gradInputData));
+    }
+
+
+    /// <summary>
+    /// Backward pass for 4D batch normalization [batch, channels, height, width].
+    /// </summary>
+    private Tensor<T> BatchNormBackward4D<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> mean, Tensor<T> variance, T eps, INumericOperations<T> numOps, out Tensor<T> gradGamma, out Tensor<T> gradBeta)
+    {
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+        int spatialSize = height * width;
+        int elementsPerChannel = batch * spatialSize;
+        T elementsT = numOps.FromDouble(elementsPerChannel);
+
+        var gradOutputData = gradOutput.ToArray();
+        var inputData = input.ToArray();
+        var gammaData = gamma.ToArray();
+        var meanData = mean.ToArray();
+        var varData = variance.ToArray();
+
+        var gradGammaData = new T[channels];
+        var gradBetaData = new T[channels];
+        var gradInputData = new T[inputData.Length];
+
+        // Compute gradGamma and gradBeta per channel
+        Parallel.For(0, channels, c =>
+        {
+            T gGamma = numOps.Zero;
+            T gBeta = numOps.Zero;
+            T invStd = numOps.Divide(numOps.One, numOps.Sqrt(numOps.Add(varData[c], eps)));
+            T channelMean = meanData[c];
+
+            for (int n = 0; n < batch; n++)
+            {
+                int batchOffset = n * channels * spatialSize;
+                int channelOffset = c * spatialSize;
+                for (int s = 0; s < spatialSize; s++)
+                {
+                    int idx = batchOffset + channelOffset + s;
+                    T normalized = numOps.Multiply(numOps.Subtract(inputData[idx], channelMean), invStd);
+                    gGamma = numOps.Add(gGamma, numOps.Multiply(gradOutputData[idx], normalized));
+                    gBeta = numOps.Add(gBeta, gradOutputData[idx]);
+                }
+            }
+
+            gradGammaData[c] = gGamma;
+            gradBetaData[c] = gBeta;
+        });
+
+        // Compute gradInput
+        Parallel.For(0, channels, c =>
+        {
+            T invStd = numOps.Divide(numOps.One, numOps.Sqrt(numOps.Add(varData[c], eps)));
+            T gammaC = gammaData[c];
+            T channelMean = meanData[c];
+            T sumGrad = numOps.Zero;
+            T sumGradX = numOps.Zero;
+
+            // Accumulate sums over batch and spatial dimensions
+            for (int n = 0; n < batch; n++)
+            {
+                int batchOffset = n * channels * spatialSize;
+                int channelOffset = c * spatialSize;
+                for (int s = 0; s < spatialSize; s++)
+                {
+                    int idx = batchOffset + channelOffset + s;
+                    sumGrad = numOps.Add(sumGrad, gradOutputData[idx]);
+                    sumGradX = numOps.Add(sumGradX, numOps.Multiply(gradOutputData[idx], numOps.Subtract(inputData[idx], channelMean)));
+                }
+            }
+
+            // Apply gamma scaling to accumulated sums
+            T gammaSumGrad = numOps.Multiply(gammaC, sumGrad);
+            T gammaSumGradX = numOps.Multiply(gammaC, sumGradX);
+
+            for (int n = 0; n < batch; n++)
+            {
+                int batchOffset = n * channels * spatialSize;
+                int channelOffset = c * spatialSize;
+                for (int s = 0; s < spatialSize; s++)
+                {
+                    int idx = batchOffset + channelOffset + s;
+                    T normalized = numOps.Multiply(numOps.Subtract(inputData[idx], channelMean), invStd);
+                    T gradNorm = numOps.Multiply(gammaC, gradOutputData[idx]);
+                    T term1 = numOps.Multiply(elementsT, gradNorm);
+                    T term2 = gammaSumGrad;
+                    T term3 = numOps.Multiply(normalized, numOps.Multiply(invStd, gammaSumGradX));
+                    gradInputData[idx] = numOps.Multiply(numOps.Divide(invStd, elementsT), numOps.Subtract(numOps.Subtract(term1, term2), term3));
+                }
+            }
+        });
+
+        gradGamma = new Tensor<T>([channels], new Vector<T>(gradGammaData));
+        gradBeta = new Tensor<T>([channels], new Vector<T>(gradBetaData));
         return new Tensor<T>(input.Shape, new Vector<T>(gradInputData));
     }
 

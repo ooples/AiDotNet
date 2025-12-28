@@ -83,6 +83,11 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Tracks whether a batch dimension was added during the forward pass.
+    /// </summary>
+    private bool _addedBatchDimension;
+
+    /// <summary>
     /// Creates a new max pooling layer with the specified parameters.
     /// </summary>
     /// <param name="inputShape">The shape of the input data (channels, height, width).</param>
@@ -137,21 +142,34 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        if (input.Shape.Length != 3)
-            throw new ArgumentException("Input tensor must have 3 dimensions (channels, height, width)");
+        // Support both 3D [C, H, W] and 4D [B, C, H, W] input
+        if (input.Shape.Length != 3 && input.Shape.Length != 4)
+            throw new ArgumentException("Input tensor must have 3 dimensions (channels, height, width) or 4 dimensions (batch, channels, height, width)");
 
         _lastInput = input;
 
-        // Reshape to 4D [1, C, H, W]
-        var input4D = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2]);
+        Tensor<T> input4D;
+        if (input.Shape.Length == 3)
+        {
+            // Add batch dimension: [C, H, W] -> [1, C, H, W]
+            _addedBatchDimension = true;
+            input4D = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2]);
+        }
+        else
+        {
+            // Already 4D: [B, C, H, W]
+            _addedBatchDimension = false;
+            input4D = input;
+        }
+
         var poolSizeArr = new[] { PoolSize, PoolSize };
         var strideArr = new[] { Strides, Strides };
 
-        // Use Engine operation
+        // Use Engine operation (expects 4D); final output shape will match the original input (3D or 4D)
         var output4D = Engine.MaxPool2DWithIndices(input4D, poolSizeArr, strideArr, out _maxIndices);
 
-        // Reshape output to 3D
-        return output4D.Reshape(OutputShape);
+        // Return with matching dimensions (3D if batch was added, 4D otherwise)
+        return _addedBatchDimension ? output4D.Reshape(OutputShape) : output4D;
     }
 
     /// <summary>
@@ -188,23 +206,39 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        if (outputGradient.Shape.Length != 3)
-            throw new ArgumentException("Output gradient tensor must have 3 dimensions (channels, height, width)");
+        // Support both 3D and 4D gradients (matching forward pass)
+        if (outputGradient.Shape.Length != 3 && outputGradient.Shape.Length != 4)
+            throw new ArgumentException("Output gradient tensor must have 3 or 4 dimensions");
 
         if (_maxIndices == null)
             throw new InvalidOperationException("Max indices not available for backward pass.");
 
-        // Reshape to 4D
-        var gradient4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
+        Tensor<T> gradient4D;
+        int[] inputShape4D;
 
-        var inputShape4D = new int[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2] };
+        if (outputGradient.Shape.Length == 3)
+        {
+            // Reshape to 4D: [C, H, W] -> [1, C, H, W]
+            gradient4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
+            inputShape4D = new int[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2] };
+        }
+        else
+        {
+            // Already 4D
+            gradient4D = outputGradient;
+            inputShape4D = _lastInput.Shape;
+        }
+
         var poolSizeArr = new int[] { PoolSize, PoolSize };
         var strideArr = new int[] { Strides, Strides };
 
-        // Use Engine operation
+        // Use Engine operation in 4D; reshape so the returned gradient matches the original input dimensions
         var inputGradient4D = Engine.MaxPool2DBackward(gradient4D, _maxIndices, inputShape4D, poolSizeArr, strideArr);
 
-        return inputGradient4D.Reshape(_lastInput.Shape);
+        // Return with matching dimensions
+        return _addedBatchDimension 
+            ? inputGradient4D.Reshape(_lastInput.Shape) 
+            : inputGradient4D;
     }
 
     /// <summary>
@@ -224,9 +258,24 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Reshape to 4D [1, C, H, W]
-        var input4D = _lastInput.Reshape(1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2]);
-        var gradient4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
+        // Handle both 3D and 4D input
+        Tensor<T> input4D;
+        Tensor<T> gradient4D;
+
+        if (_lastInput.Shape.Length == 3)
+        {
+            // Reshape to 4D: [C, H, W] -> [1, C, H, W]
+            input4D = _lastInput.Reshape(1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2]);
+            gradient4D = outputGradient.Shape.Length == 3
+                ? outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2])
+                : outputGradient;
+        }
+        else
+        {
+            // Already 4D
+            input4D = _lastInput;
+            gradient4D = outputGradient;
+        }
 
         // Convert input to computation node
         var inputNode = Autodiff.TensorOperations<T>.Variable(input4D, "input", requiresGradient: true);
@@ -280,9 +329,9 @@ public class MaxPoolingLayer<T> : LayerBase<T>
             }
         }
 
-        // Extract input gradient and reshape back to 3D
+        // Extract input gradient and reshape back to original dimensions
         var inputGrad4D = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-        return inputGrad4D.Reshape(_lastInput.Shape);
+        return _addedBatchDimension ? inputGrad4D.Reshape(_lastInput.Shape) : inputGrad4D;
     }
 
     /// <summary>
@@ -395,6 +444,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         // Clear cached values from forward pass
         _lastInput = null;
         _maxIndices = null;
+        _addedBatchDimension = false;
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
@@ -422,5 +472,13 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         {
             return InputShape != null && InputShape.Length > 0;
         }
+    }
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["PoolSize"] = PoolSize.ToString();
+        metadata["Strides"] = Strides.ToString();
+        return metadata;
     }
 }

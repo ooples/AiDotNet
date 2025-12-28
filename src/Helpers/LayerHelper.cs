@@ -145,6 +145,121 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates layers for a VGG network based on the specified configuration.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="configuration">The VGG-specific configuration.</param>
+    /// <returns>A collection of layers forming a VGG network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> VGG networks are deep convolutional neural networks known for their
+    /// simplicity and effectiveness. They use stacks of 3x3 convolutions followed by max pooling
+    /// to progressively extract higher-level features from images.
+    /// </para>
+    /// <para>
+    /// The VGG architecture consists of:
+    /// <list type="bullet">
+    /// <item>5 convolutional blocks with increasing number of filters (64 -> 128 -> 256 -> 512 -> 512)</item>
+    /// <item>Max pooling after each block to reduce spatial dimensions by half</item>
+    /// <item>Optional batch normalization after each convolution (in _BN variants)</item>
+    /// <item>3 fully connected layers (4096 -> 4096 -> numClasses)</item>
+    /// <item>Dropout regularization in the fully connected layers</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultVGGLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        Configuration.VGGConfiguration configuration)
+    {
+        if (configuration == null)
+        {
+            throw new ArgumentNullException(nameof(configuration));
+        }
+
+        var inputShape = architecture.GetInputShape();
+        int currentChannels = inputShape[0];
+        int currentHeight = inputShape[1];
+        int currentWidth = inputShape[2];
+
+        var blockConfig = configuration.BlockConfiguration;
+
+        // Process each VGG block
+        for (int blockIdx = 0; blockIdx < blockConfig.Length; blockIdx++)
+        {
+            var block = blockConfig[blockIdx];
+
+            // Add convolutional layers in this block
+            for (int convIdx = 0; convIdx < block.Length; convIdx++)
+            {
+                int outputChannels = block[convIdx];
+
+                // Convolutional layer with 3x3 kernel
+                yield return new ConvolutionalLayer<T>(
+                    inputDepth: currentChannels,
+                    inputHeight: currentHeight,
+                    inputWidth: currentWidth,
+                    outputDepth: outputChannels,
+                    kernelSize: 3,
+                    stride: 1,
+                    padding: 1,  // Same padding to preserve spatial dimensions
+                    activation: new ReLUActivation<T>()
+                );
+
+                // Optional batch normalization (per-channel normalization)
+                // BatchNormalizationLayer only needs the number of channels - spatial dimensions
+                // are handled dynamically in the forward pass via Engine.BatchNorm
+                if (configuration.UseBatchNormalization)
+                {
+                    yield return new BatchNormalizationLayer<T>(outputChannels);
+                }
+
+                currentChannels = outputChannels;
+            }
+
+            // Max pooling after each block (2x2, stride 2)
+            yield return new MaxPoolingLayer<T>(
+                inputShape: [currentChannels, currentHeight, currentWidth],
+                poolSize: 2,
+                strides: 2
+            );
+
+            currentHeight /= 2;
+            currentWidth /= 2;
+        }
+
+        // Flatten before fully connected layers
+        int flattenedSize = currentChannels * currentHeight * currentWidth;
+        yield return new FlattenLayer<T>(inputShape: [currentChannels, currentHeight, currentWidth]);
+
+        // Classifier (fully connected layers) - only if included
+        if (configuration.IncludeClassifier)
+        {
+            // FC1: flattenedSize -> 4096
+            yield return new DenseLayer<T>(
+                inputSize: flattenedSize,
+                outputSize: 4096,
+                activationFunction: new ReLUActivation<T>()
+            );
+            yield return new DropoutLayer<T>((float)configuration.DropoutRate);
+
+            // FC2: 4096 -> 4096
+            yield return new DenseLayer<T>(
+                inputSize: 4096,
+                outputSize: 4096,
+                activationFunction: new ReLUActivation<T>()
+            );
+            yield return new DropoutLayer<T>((float)configuration.DropoutRate);
+
+            // FC3 (Output): 4096 -> numClasses
+            yield return new DenseLayer<T>(
+                inputSize: 4096,
+                outputSize: configuration.NumClasses,
+                activationFunction: new SoftmaxActivation<T>() as IActivationFunction<T>
+            );
+        }
+    }
+
+    /// <summary>
     /// Creates default layers for an occupancy detection neural network with temporal data.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration that defines input and output shapes.</param>
@@ -3739,6 +3854,558 @@ public static class LayerHelper<T>
             inputSize: fcInput,
             outputSize: numClasses,
             activationFunction: outputActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for a DenseNet network based on the specified configuration.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="configuration">The DenseNet-specific configuration.</param>
+    /// <returns>A collection of layers forming a DenseNet network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DenseNet (Densely Connected Convolutional Network) connects each layer
+    /// to every other layer in a feed-forward fashion. This creates strong gradient flow and
+    /// feature reuse, enabling very deep networks with fewer parameters.
+    /// </para>
+    /// <para>
+    /// The DenseNet architecture consists of:
+    /// <list type="bullet">
+    /// <item>Stem: Initial 7x7 conv with stride 2, followed by 3x3 max pooling</item>
+    /// <item>Dense Blocks: Multiple dense blocks with transition layers between them</item>
+    /// <item>Transition Layers: 1x1 conv for channel reduction followed by 2x2 avg pooling</item>
+    /// <item>Classification Head: Global average pooling followed by a dense layer</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultDenseNetLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        Configuration.DenseNetConfiguration configuration)
+    {
+        if (configuration == null)
+        {
+            throw new ArgumentNullException(nameof(configuration));
+        }
+
+        int currentHeight = configuration.InputHeight;
+        int currentWidth = configuration.InputWidth;
+        var blockLayers = configuration.GetBlockLayers();
+
+        // Stem: 7x7 conv, stride 2, padding 3
+        int stemChannels = 64;
+        yield return new ConvolutionalLayer<T>(
+            inputDepth: configuration.InputChannels,
+            outputDepth: stemChannels,
+            kernelSize: 7,
+            inputHeight: currentHeight,
+            inputWidth: currentWidth,
+            stride: 2,
+            padding: 3,
+            activation: new IdentityActivation<T>());
+
+        currentHeight = (currentHeight + 2 * 3 - 7) / 2 + 1;
+        currentWidth = (currentWidth + 2 * 3 - 7) / 2 + 1;
+
+        yield return new BatchNormalizationLayer<T>(stemChannels);
+        yield return new ActivationLayer<T>([stemChannels, currentHeight, currentWidth],
+            activationFunction: new ReLUActivation<T>());
+
+        // MaxPool 3x3, stride 2, padding 1
+        yield return new MaxPoolingLayer<T>(
+            inputShape: [stemChannels, currentHeight, currentWidth],
+            poolSize: 3,
+            strides: 2);
+
+        currentHeight = (currentHeight + 2 * 1 - 3) / 2 + 1;
+        currentWidth = (currentWidth + 2 * 1 - 3) / 2 + 1;
+
+        int currentChannels = stemChannels;
+
+        // Dense blocks and transitions
+        for (int i = 0; i < blockLayers.Length; i++)
+        {
+            int numLayersInBlock = blockLayers[i];
+
+            // Add Dense Block
+            var denseBlock = new DenseBlock<T>(
+                inputChannels: currentChannels,
+                numLayers: numLayersInBlock,
+                growthRate: configuration.GrowthRate,
+                inputHeight: currentHeight,
+                inputWidth: currentWidth);
+
+            yield return denseBlock;
+            currentChannels = denseBlock.OutputChannels;
+
+            // Add Transition (except after the last block)
+            if (i < blockLayers.Length - 1)
+            {
+                var transition = new TransitionLayer<T>(
+                    inputChannels: currentChannels,
+                    inputHeight: currentHeight,
+                    inputWidth: currentWidth,
+                    compressionFactor: configuration.CompressionFactor);
+
+                yield return transition;
+                currentChannels = transition.OutputChannels;
+                currentHeight /= 2;
+                currentWidth /= 2;
+            }
+        }
+
+        // Final BN and ReLU
+        yield return new BatchNormalizationLayer<T>(currentChannels);
+        yield return new ActivationLayer<T>([currentChannels, currentHeight, currentWidth],
+            activationFunction: new ReLUActivation<T>());
+
+        // Global average pooling
+        yield return new AdaptiveAvgPoolingLayer<T>(currentChannels, currentHeight, currentWidth, 1, 1);
+
+        // Flatten
+        yield return new FlattenLayer<T>([currentChannels, 1, 1]);
+
+        // Classification head
+        yield return new DenseLayer<T>(currentChannels, configuration.NumClasses,
+            activationFunction: new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default layers for an EfficientNet network based on the specified configuration.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="configuration">The EfficientNet-specific configuration.</param>
+    /// <returns>A collection of layers forming an EfficientNet network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> EfficientNet uses compound scaling to balance network depth, width,
+    /// and resolution. Each variant (B0-B7) represents a different scale factor, achieving
+    /// excellent accuracy with fewer parameters than previous architectures.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultEfficientNetLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        Configuration.EfficientNetConfiguration configuration)
+    {
+        if (configuration == null)
+        {
+            throw new ArgumentNullException(nameof(configuration));
+        }
+
+        var widthCoeff = configuration.GetWidthMultiplier();
+        var depthCoeff = configuration.GetDepthMultiplier();
+        var resolution = configuration.GetInputHeight();
+
+        int currentHeight = resolution;
+        int currentWidth = resolution;
+
+        // Stem: 3x3 conv, stride 2
+        int stemChannels = MakeScaledChannels(32, widthCoeff);
+        yield return new ConvolutionalLayer<T>(
+            inputDepth: configuration.InputChannels,
+            outputDepth: stemChannels,
+            kernelSize: 3,
+            inputHeight: currentHeight,
+            inputWidth: currentWidth,
+            stride: 2,
+            padding: 1,
+            activation: new IdentityActivation<T>());
+
+        currentHeight = (currentHeight + 2 * 1 - 3) / 2 + 1;
+        currentWidth = (currentWidth + 2 * 1 - 3) / 2 + 1;
+
+        yield return new BatchNormalizationLayer<T>(stemChannels);
+        yield return new ActivationLayer<T>([stemChannels, currentHeight, currentWidth],
+            activationFunction: new SwishActivation<T>());
+
+        int currentChannels = stemChannels;
+
+        // EfficientNet-B0 block configuration:
+        // (expansion, output_channels, num_layers, stride, kernel_size)
+        var blockConfigs = new (int expansion, int outChannels, int numLayers, int stride, int kernelSize)[]
+        {
+            (1, 16, 1, 1, 3),
+            (6, 24, 2, 2, 3),
+            (6, 40, 2, 2, 5),
+            (6, 80, 3, 2, 3),
+            (6, 112, 3, 1, 5),
+            (6, 192, 4, 2, 5),
+            (6, 320, 1, 1, 3)
+        };
+
+        // Add MBConv blocks with SE and Swish activation
+        foreach (var (expansion, outChannels, numLayers, stride, kernelSize) in blockConfigs)
+        {
+            int scaledOutChannels = MakeScaledChannels(outChannels, widthCoeff);
+            int scaledNumLayers = MakeScaledDepth(numLayers, depthCoeff);
+
+            // First block in each stage may have stride > 1
+            yield return new InvertedResidualBlock<T>(
+                inChannels: currentChannels,
+                outChannels: scaledOutChannels,
+                inputHeight: currentHeight,
+                inputWidth: currentWidth,
+                expansionRatio: expansion,
+                stride: stride,
+                useSE: true,
+                seRatio: 4,
+                activation: new SwishActivation<T>());
+
+            // Update dimensions after first block
+            currentHeight = (currentHeight + stride - 1) / stride;
+            currentWidth = (currentWidth + stride - 1) / stride;
+            currentChannels = scaledOutChannels;
+
+            // Remaining blocks in the stage (stride=1)
+            for (int i = 1; i < scaledNumLayers; i++)
+            {
+                yield return new InvertedResidualBlock<T>(
+                    inChannels: currentChannels,
+                    outChannels: currentChannels,
+                    inputHeight: currentHeight,
+                    inputWidth: currentWidth,
+                    expansionRatio: expansion,
+                    stride: 1,
+                    useSE: true,
+                    seRatio: 4,
+                    activation: new SwishActivation<T>());
+            }
+        }
+
+        // Head: 1x1 conv
+        int headChannels = MakeScaledChannels(1280, widthCoeff);
+        yield return new ConvolutionalLayer<T>(
+            inputDepth: currentChannels,
+            outputDepth: headChannels,
+            kernelSize: 1,
+            inputHeight: currentHeight,
+            inputWidth: currentWidth,
+            stride: 1,
+            padding: 0,
+            activation: new IdentityActivation<T>());
+
+        yield return new BatchNormalizationLayer<T>(headChannels);
+        yield return new ActivationLayer<T>([headChannels, currentHeight, currentWidth],
+            activationFunction: new SwishActivation<T>());
+
+        // Global average pooling
+        yield return new AdaptiveAvgPoolingLayer<T>(headChannels, currentHeight, currentWidth, 1, 1);
+
+        // Flatten
+        yield return new FlattenLayer<T>([headChannels, 1, 1]);
+
+        // Classification head
+        yield return new DenseLayer<T>(headChannels, configuration.NumClasses,
+            activationFunction: new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default layers for a MobileNetV2 network based on the specified configuration.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="configuration">The MobileNetV2-specific configuration.</param>
+    /// <returns>A collection of layers forming a MobileNetV2 network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> MobileNetV2 is designed for efficient mobile inference, using
+    /// inverted residual blocks with linear bottlenecks to achieve high accuracy with
+    /// low computational cost.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultMobileNetV2Layers(
+        NeuralNetworkArchitecture<T> architecture,
+        Configuration.MobileNetV2Configuration configuration)
+    {
+        if (configuration == null)
+        {
+            throw new ArgumentNullException(nameof(configuration));
+        }
+
+        int currentHeight = configuration.InputHeight;
+        int currentWidth = configuration.InputWidth;
+        var alpha = configuration.Alpha;
+
+        // Initial convolution: 3x3, stride 2
+        int firstConvChannels = MakeScaledChannels(32, alpha);
+        yield return new ConvolutionalLayer<T>(
+            inputDepth: configuration.InputChannels,
+            outputDepth: firstConvChannels,
+            kernelSize: 3,
+            inputHeight: currentHeight,
+            inputWidth: currentWidth,
+            stride: 2,
+            padding: 1,
+            activation: new IdentityActivation<T>());
+
+        currentHeight = (currentHeight + 2 * 1 - 3) / 2 + 1;
+        currentWidth = (currentWidth + 2 * 1 - 3) / 2 + 1;
+
+        yield return new BatchNormalizationLayer<T>(firstConvChannels);
+        yield return new ActivationLayer<T>([firstConvChannels, currentHeight, currentWidth],
+            activationFunction: new ReLU6Activation<T>());
+
+        int currentChannels = firstConvChannels;
+
+        // MobileNetV2 inverted residual block configuration:
+        // (expansion, output_channels, num_blocks, stride)
+        var blockConfigs = new (int expansion, int outChannels, int numBlocks, int stride)[]
+        {
+            (1, 16, 1, 1),
+            (6, 24, 2, 2),
+            (6, 32, 3, 2),
+            (6, 64, 4, 2),
+            (6, 96, 3, 1),
+            (6, 160, 3, 2),
+            (6, 320, 1, 1)
+        };
+
+        // Add inverted residual blocks
+        foreach (var (expansion, outChannels, numBlocks, stride) in blockConfigs)
+        {
+            int scaledOutChannels = MakeScaledChannels(outChannels, alpha);
+
+            // First block in each stage may have stride > 1
+            yield return new InvertedResidualBlock<T>(
+                inChannels: currentChannels,
+                outChannels: scaledOutChannels,
+                inputHeight: currentHeight,
+                inputWidth: currentWidth,
+                expansionRatio: expansion,
+                stride: stride,
+                useSE: false,
+                activation: new ReLU6Activation<T>());
+
+            // Update dimensions after first block
+            currentHeight = (currentHeight + stride - 1) / stride;
+            currentWidth = (currentWidth + stride - 1) / stride;
+            currentChannels = scaledOutChannels;
+
+            // Remaining blocks in the stage (stride=1)
+            for (int i = 1; i < numBlocks; i++)
+            {
+                yield return new InvertedResidualBlock<T>(
+                    inChannels: currentChannels,
+                    outChannels: currentChannels,
+                    inputHeight: currentHeight,
+                    inputWidth: currentWidth,
+                    expansionRatio: expansion,
+                    stride: 1,
+                    useSE: false,
+                    activation: new ReLU6Activation<T>());
+            }
+        }
+
+        // Final 1x1 convolution
+        // Per MobileNetV2 spec: base is 1280, scaled by alpha for alpha > 1.0
+        int finalConvChannels = configuration.WidthMultiplier switch
+        {
+            Enums.MobileNetV2WidthMultiplier.Alpha140 => 1792,  // 1280 * 1.4 = 1792
+            Enums.MobileNetV2WidthMultiplier.Alpha130 => 1664,  // 1280 * 1.3 = 1664
+            Enums.MobileNetV2WidthMultiplier.Alpha125 => 1600,  // 1280 * 1.25 = 1600
+            _ => 1280  // For alpha <= 1.0, keep at 1280 for better accuracy
+        };
+        yield return new ConvolutionalLayer<T>(
+            inputDepth: currentChannels,
+            outputDepth: finalConvChannels,
+            kernelSize: 1,
+            inputHeight: currentHeight,
+            inputWidth: currentWidth,
+            stride: 1,
+            padding: 0,
+            activation: new IdentityActivation<T>());
+
+        yield return new BatchNormalizationLayer<T>(finalConvChannels);
+        yield return new ActivationLayer<T>([finalConvChannels, currentHeight, currentWidth],
+            activationFunction: new ReLU6Activation<T>());
+
+        // Global average pooling
+        yield return new AdaptiveAvgPoolingLayer<T>(finalConvChannels, currentHeight, currentWidth, 1, 1);
+
+        // Flatten
+        yield return new FlattenLayer<T>([finalConvChannels, 1, 1]);
+
+        // Classification head
+        yield return new DenseLayer<T>(finalConvChannels, configuration.NumClasses,
+            activationFunction: new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default layers for a MobileNetV3 network based on the specified configuration.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="configuration">The MobileNetV3-specific configuration.</param>
+    /// <returns>A collection of layers forming a MobileNetV3 network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> MobileNetV3 builds on MobileNetV2 with additional optimizations
+    /// including squeeze-and-excitation blocks and hard-swish activation for improved
+    /// accuracy and efficiency.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultMobileNetV3Layers(
+        NeuralNetworkArchitecture<T> architecture,
+        Configuration.MobileNetV3Configuration configuration)
+    {
+        if (configuration == null)
+        {
+            throw new ArgumentNullException(nameof(configuration));
+        }
+
+        int currentHeight = configuration.InputHeight;
+        int currentWidth = configuration.InputWidth;
+        var alpha = configuration.Alpha;
+        bool isLarge = configuration.Variant == Enums.MobileNetV3Variant.Large;
+
+        // Initial convolution: 3x3, stride 2
+        int firstConvChannels = MakeScaledChannels(16, alpha);
+        yield return new ConvolutionalLayer<T>(
+            inputDepth: configuration.InputChannels,
+            outputDepth: firstConvChannels,
+            kernelSize: 3,
+            inputHeight: currentHeight,
+            inputWidth: currentWidth,
+            stride: 2,
+            padding: 1,
+            activation: new IdentityActivation<T>());
+
+        currentHeight = (currentHeight + 2 * 1 - 3) / 2 + 1;
+        currentWidth = (currentWidth + 2 * 1 - 3) / 2 + 1;
+
+        yield return new BatchNormalizationLayer<T>(firstConvChannels);
+        yield return new ActivationLayer<T>([firstConvChannels, currentHeight, currentWidth],
+            activationFunction: new HardSwishActivation<T>());
+
+        int currentChannels = firstConvChannels;
+
+        // Get block configurations based on variant
+        var blockConfigs = isLarge
+            ? GetMobileNetV3LargeBlocks(alpha)
+            : GetMobileNetV3SmallBlocks(alpha);
+
+        // Add inverted residual blocks
+        foreach (var block in blockConfigs)
+        {
+            yield return new InvertedResidualBlock<T>(
+                inChannels: currentChannels,
+                outChannels: block.outChannels,
+                inputHeight: currentHeight,
+                inputWidth: currentWidth,
+                expansionRatio: block.expansion,
+                stride: block.stride,
+                useSE: block.useSE,
+                seRatio: 4,
+                activation: block.useHardSwish ? new HardSwishActivation<T>() : new ReLUActivation<T>());
+
+            // Update dimensions after block
+            currentHeight = (currentHeight + block.stride - 1) / block.stride;
+            currentWidth = (currentWidth + block.stride - 1) / block.stride;
+            currentChannels = block.outChannels;
+        }
+
+        // Final convolution layers
+        int penultimateChannels = isLarge ? MakeScaledChannels(960, alpha) : MakeScaledChannels(576, alpha);
+        yield return new ConvolutionalLayer<T>(
+            inputDepth: currentChannels,
+            outputDepth: penultimateChannels,
+            kernelSize: 1,
+            inputHeight: currentHeight,
+            inputWidth: currentWidth,
+            stride: 1,
+            padding: 0,
+            activation: new IdentityActivation<T>());
+
+        yield return new BatchNormalizationLayer<T>(penultimateChannels);
+        yield return new ActivationLayer<T>([penultimateChannels, currentHeight, currentWidth],
+            activationFunction: new HardSwishActivation<T>());
+
+        // Global average pooling
+        yield return new AdaptiveAvgPoolingLayer<T>(penultimateChannels, currentHeight, currentWidth, 1, 1);
+
+        // Final classification layers
+        int finalChannels = isLarge ? 1280 : 1024;
+        yield return new ConvolutionalLayer<T>(
+            inputDepth: penultimateChannels,
+            outputDepth: finalChannels,
+            kernelSize: 1,
+            inputHeight: 1,
+            inputWidth: 1,
+            stride: 1,
+            padding: 0,
+            activation: new IdentityActivation<T>());
+
+        yield return new ActivationLayer<T>([finalChannels, 1, 1],
+            activationFunction: new HardSwishActivation<T>());
+
+        // Flatten
+        yield return new FlattenLayer<T>([finalChannels, 1, 1]);
+
+        // Classification head
+        yield return new DenseLayer<T>(finalChannels, configuration.NumClasses,
+            activationFunction: new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Gets MobileNetV3-Large block configurations.
+    /// </summary>
+    private static IEnumerable<(int outChannels, int expansion, int stride, bool useSE, bool useHardSwish)> GetMobileNetV3LargeBlocks(double alpha)
+    {
+        // MobileNetV3-Large inverted residual block configuration
+        return new[]
+        {
+            (MakeScaledChannels(16, alpha), 1, 1, false, false),
+            (MakeScaledChannels(24, alpha), 4, 2, false, false),
+            (MakeScaledChannels(24, alpha), 3, 1, false, false),
+            (MakeScaledChannels(40, alpha), 3, 2, true, false),
+            (MakeScaledChannels(40, alpha), 3, 1, true, false),
+            (MakeScaledChannels(40, alpha), 3, 1, true, false),
+            (MakeScaledChannels(80, alpha), 6, 2, false, true),
+            (MakeScaledChannels(80, alpha), 2, 1, false, true),
+            (MakeScaledChannels(80, alpha), 2, 1, false, true),
+            (MakeScaledChannels(80, alpha), 2, 1, false, true),
+            (MakeScaledChannels(112, alpha), 6, 1, true, true),
+            (MakeScaledChannels(112, alpha), 6, 1, true, true),
+            (MakeScaledChannels(160, alpha), 6, 2, true, true),
+            (MakeScaledChannels(160, alpha), 6, 1, true, true),
+            (MakeScaledChannels(160, alpha), 6, 1, true, true)
+        };
+    }
+
+    /// <summary>
+    /// Gets MobileNetV3-Small block configurations.
+    /// </summary>
+    private static IEnumerable<(int outChannels, int expansion, int stride, bool useSE, bool useHardSwish)> GetMobileNetV3SmallBlocks(double alpha)
+    {
+        // MobileNetV3-Small inverted residual block configuration
+        return new[]
+        {
+            (MakeScaledChannels(16, alpha), 1, 2, true, false),
+            (MakeScaledChannels(24, alpha), 4, 2, false, false),
+            (MakeScaledChannels(24, alpha), 11, 1, false, false),
+            (MakeScaledChannels(40, alpha), 4, 2, true, true),
+            (MakeScaledChannels(40, alpha), 6, 1, true, true),
+            (MakeScaledChannels(40, alpha), 6, 1, true, true),
+            (MakeScaledChannels(48, alpha), 3, 1, true, true),
+            (MakeScaledChannels(48, alpha), 3, 1, true, true),
+            (MakeScaledChannels(96, alpha), 6, 2, true, true),
+            (MakeScaledChannels(96, alpha), 6, 1, true, true),
+            (MakeScaledChannels(96, alpha), 6, 1, true, true)
+        };
+    }
+
+    /// <summary>
+    /// Scales channel count by the width coefficient for EfficientNet/MobileNet architectures.
+    /// </summary>
+    private static int MakeScaledChannels(int channels, double widthCoefficient)
+    {
+        int scaled = (int)Math.Round(channels * widthCoefficient);
+        return Math.Max(8, (scaled + 4) / 8 * 8);
+    }
+
+    /// <summary>
+    /// Scales layer repeat count by the depth coefficient for EfficientNet.
+    /// </summary>
+    private static int MakeScaledDepth(int numLayers, double depthCoefficient)
+    {
+        return (int)Math.Ceiling(numLayers * depthCoefficient);
     }
 
     /// <summary>

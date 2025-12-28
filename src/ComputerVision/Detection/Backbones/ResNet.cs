@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.Detection.Backbones;
@@ -191,23 +192,6 @@ public class ResNet<T> : BackboneBase<T>
 
         return output;
     }
-}
-
-/// <summary>
-/// ResNet variant enumeration.
-/// </summary>
-public enum ResNetVariant
-{
-    /// <summary>ResNet-18: 18 layers, basic blocks.</summary>
-    ResNet18,
-    /// <summary>ResNet-34: 34 layers, basic blocks.</summary>
-    ResNet34,
-    /// <summary>ResNet-50: 50 layers, bottleneck blocks.</summary>
-    ResNet50,
-    /// <summary>ResNet-101: 101 layers, bottleneck blocks.</summary>
-    ResNet101,
-    /// <summary>ResNet-152: 152 layers, bottleneck blocks.</summary>
-    ResNet152
 }
 
 /// <summary>

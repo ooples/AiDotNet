@@ -1,5 +1,6 @@
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
+using AiDotNet.Enums;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.Detection.TextDetection;
