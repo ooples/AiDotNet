@@ -113,6 +113,11 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// Stored output from the depthwise convolution step, used for backpropagation.
     /// </summary>
     /// <remarks>
@@ -672,10 +677,44 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: need at least 3D [H, W, channels]
+        Tensor<T> input4D;
+        int batchSize;
+
+        if (rank == 3)
+        {
+            // 3D: [H, W, channels] -> add batch dim
+            batchSize = 1;
+            input4D = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+        }
+        else if (rank == 4)
+        {
+            // Standard 4D: [batch, H, W, channels]
+            batchSize = input.Shape[0];
+            input4D = input;
+        }
+        else if (rank > 4)
+        {
+            // Higher-rank: collapse leading dims into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 3; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            input4D = input.Reshape([flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
+        }
+        else
+        {
+            throw new ArgumentException($"DepthwiseSeparableConvolutionalLayer requires at least 3D input, got {rank}D");
+        }
+
+        _lastInput = input4D;
 
         // Convert input from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W]
-        var inputNCHW = input.Transpose([0, 3, 1, 2]);
+        var inputNCHW = input4D.Transpose([0, 3, 1, 2]);
 
         var strideArr = new int[] { _stride, _stride };
         var paddingArr = new int[] { _padding, _padding };
@@ -699,7 +738,29 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         // Cache pre-activation for proper derivative computation during backward pass
         // Some activation functions (Sigmoid, Tanh) require the pre-activation value
         _lastPreActivation = output;
-        _lastOutput = ApplyActivation(output);
+        var activated = ApplyActivation(output);
+
+        // Restore original batch dimensions for any-rank support
+        if (_originalInputShape != null && _originalInputShape.Length > 4)
+        {
+            // Output shape: [...leadingDims, outH, outW, outputDepth]
+            int outH = activated.Shape[1];
+            int outW = activated.Shape[2];
+            int[] newShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 3; d++)
+                newShape[d] = _originalInputShape[d];
+            newShape[_originalInputShape.Length - 3] = outH;
+            newShape[_originalInputShape.Length - 2] = outW;
+            newShape[_originalInputShape.Length - 1] = _outputDepth;
+            activated = activated.Reshape(newShape);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 3)
+        {
+            // 3D input -> 3D output (remove batch dim)
+            activated = activated.Reshape([activated.Shape[1], activated.Shape[2], _outputDepth]);
+        }
+
+        _lastOutput = activated;
         return _lastOutput;
     }
 

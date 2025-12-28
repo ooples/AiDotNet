@@ -96,6 +96,11 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _transformationMatrixGradient;
     private Tensor<T>? _biasGradient;
     private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
     private Tensor<T>? _lastOutput;
     private Tensor<T>? _lastCouplingCoefficients;
 
@@ -435,13 +440,52 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-        int batchSize = input.Shape[0];
-        int inputCapsules = input.Shape[1];
-        int inputDimension = input.Shape[2];
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: need at least 2D [capsules, dim]
+        Tensor<T> input3D;
+        int batchSize;
+        int inputCapsules;
+        int inputDimension;
+
+        if (rank == 2)
+        {
+            // 2D: [capsules, dim] -> add batch dim
+            batchSize = 1;
+            inputCapsules = input.Shape[0];
+            inputDimension = input.Shape[1];
+            input3D = input.Reshape([1, inputCapsules, inputDimension]);
+        }
+        else if (rank == 3)
+        {
+            // Standard 3D: [batch, capsules, dim]
+            batchSize = input.Shape[0];
+            inputCapsules = input.Shape[1];
+            inputDimension = input.Shape[2];
+            input3D = input;
+        }
+        else if (rank > 3)
+        {
+            // Higher-rank: collapse leading dims into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            inputCapsules = input.Shape[rank - 2];
+            inputDimension = input.Shape[rank - 1];
+            input3D = input.Reshape([flatBatch, inputCapsules, inputDimension]);
+        }
+        else
+        {
+            throw new ArgumentException($"CapsuleLayer requires at least 2D input, got {rank}D");
+        }
+
+        _lastInput = input3D;
 
         // Reshape input for matrix multiplication
-        var reshapedInput = input.Reshape(batchSize * inputCapsules, inputDimension);
+        var reshapedInput = input3D.Reshape(batchSize * inputCapsules, inputDimension);
 
         // Perform transformation
         var transformedInput = reshapedInput.Multiply(_transformationMatrix);
@@ -506,6 +550,23 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // output is guaranteed to be non-null because _numRoutingIterations is validated to be >= 1
         if (output == null)
             throw new InvalidOperationException("Output tensor was not initialized during forward pass.");
+
+        // Restore original batch dimensions for any-rank support
+        if (_originalInputShape != null && _originalInputShape.Length > 3)
+        {
+            // Output shape: [...leadingDims, numCapsules, capsuleDimension]
+            int[] newShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 2; d++)
+                newShape[d] = _originalInputShape[d];
+            newShape[_originalInputShape.Length - 2] = _numCapsules;
+            newShape[_originalInputShape.Length - 1] = _capsuleDimension;
+            output = output!.Reshape(newShape);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 2)
+        {
+            // 2D input -> 2D output (remove batch dim)
+            output = output!.Reshape([_numCapsules, _capsuleDimension]);
+        }
 
         _lastOutput = output;
         _lastCouplingCoefficients = couplingCoefficients;
