@@ -147,6 +147,9 @@ public class UpsamplingLayer<T> : LayerBase<T>
     /// </remarks>
     private static int[] CalculateOutputShape(int[] inputShape, int scaleFactor)
     {
+        // Industry-standard: support tensors of any rank
+        // The last two dimensions are always height and width for upsampling
+        // Supports: 2D [H, W], 3D [C, H, W], 4D [B, C, H, W], etc.
         if (inputShape.Length < 2)
             throw new ArgumentException("Input shape must have at least 2 dimensions for upsampling.");
 
