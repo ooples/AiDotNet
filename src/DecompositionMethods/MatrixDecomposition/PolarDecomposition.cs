@@ -211,27 +211,38 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
 
         // Scale the matrix to have spectral norm close to 1 for convergence
         T norm = MatrixHelper<T>.SpectralNorm(A);
+
+        // Handle case where matrix is zero or nearly zero
+        if (NumOps.LessThan(norm, NumOps.FromDouble(1e-14)))
+        {
+            U = Matrix<T>.CreateIdentity(n);
+            P = new Matrix<T>(n, n);
+            return;
+        }
+
         Matrix<T> X = A.Multiply(NumOps.Divide(NumOps.One, norm));
 
         T tolerance = NumOps.FromDouble(1e-10);
         int maxIterations = 100;
         Matrix<T> I = Matrix<T>.CreateIdentityMatrix(n);
 
-        for (int i = 0; i < maxIterations; i++)
+        for (int iter = 0; iter < maxIterations; iter++)
         {
-            // Halley iteration: X_{k+1} = X_k * (3*I + X_k^T * X_k)^{-1} * (I + 3*X_k^T * X_k)
+            // Correct Halley iteration: X_{k+1} = X_k * (3*X_k^T*X_k + I)^{-1} * (X_k^T*X_k + 3*I)
             Matrix<T> XtX = X.Transpose().Multiply(X);
 
-            // Compute (3*I + X^T * X)
-            Matrix<T> term1 = I.Multiply(NumOps.FromDouble(3.0)).Add(XtX);
+            // term1 = 3*X^T*X + I (denominator)
+            Matrix<T> term1 = XtX.Multiply(NumOps.FromDouble(3.0)).Add(I);
 
+            // term2 = X^T*X + 3*I (numerator)
+            Matrix<T> term2 = XtX.Add(I.Multiply(NumOps.FromDouble(3.0)));
+
+            // Check invertibility with regularization if needed
             if (!MatrixHelper<T>.IsInvertible(term1))
             {
-                throw new InvalidOperationException("Matrix became singular during Halley iteration.");
+                // Add small regularization for numerical stability
+                term1 = term1.Add(I.Multiply(NumOps.FromDouble(1e-10)));
             }
-
-            // Compute (I + 3*X^T * X)
-            Matrix<T> term2 = I.Add(XtX.Multiply(NumOps.FromDouble(3.0)));
 
             // X_{k+1} = X * term1^{-1} * term2
             Matrix<T> nextX = X.Multiply(term1.Inverse()).Multiply(term2);
@@ -246,10 +257,13 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
 
             X = nextX;
 
-            // Check for divergence
-            if (NumOps.GreaterThan(error, NumOps.FromDouble(1e6)))
+            // Check for divergence - increase threshold
+            T xNorm = X.FrobeniusNorm();
+            if (NumOps.GreaterThan(xNorm, NumOps.FromDouble(1e10)))
             {
-                throw new InvalidOperationException("Halley iteration diverged.");
+                // Fall back to SVD method if Halley diverges
+                DecomposeSVD();
+                return;
             }
         }
 

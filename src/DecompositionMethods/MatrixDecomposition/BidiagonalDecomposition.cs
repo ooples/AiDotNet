@@ -156,14 +156,19 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
             Vector<T> x = B.GetColumnSegment(k, k, m - k);
             Vector<T> v = HouseholderVector(x);
 
-            // Apply Householder reflection to B
-            Matrix<T> P = Matrix<T>.CreateIdentity(m - k).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
-            Matrix<T> subB = B.GetSubMatrix(k, k, m - k, n - k);
-            B.SetSubMatrix(k, k, P.Multiply(subB));
+            // Only apply transformation if v is non-zero
+            T vNorm = v.Norm();
+            if (NumOps.GreaterThan(vNorm, NumOps.FromDouble(1e-14)))
+            {
+                // Apply Householder reflection to B
+                Matrix<T> P = Matrix<T>.CreateIdentity(m - k).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
+                Matrix<T> subB = B.GetSubMatrix(k, k, m - k, n - k);
+                B.SetSubMatrix(k, k, P.Multiply(subB));
 
-            // Update U
-            Matrix<T> subU = U.GetSubMatrix(0, k, m, m - k);
-            U.SetSubMatrix(0, k, subU.Multiply(P.Transpose()));
+                // Update U
+                Matrix<T> subU = U.GetSubMatrix(0, k, m, m - k);
+                U.SetSubMatrix(0, k, subU.Multiply(P.Transpose()));
+            }
 
             if (k < n - 2)
             {
@@ -171,14 +176,19 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
                 x = B.GetRowSegment(k, k + 1, n - k - 1);
                 v = HouseholderVector(x);
 
-                // Apply Householder reflection to B
-                P = Matrix<T>.CreateIdentity(n - k - 1).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
-                subB = B.GetSubMatrix(k, k + 1, m - k, n - k - 1);
-                B.SetSubMatrix(k, k + 1, subB.Multiply(P));
+                // Only apply transformation if v is non-zero
+                vNorm = v.Norm();
+                if (NumOps.GreaterThan(vNorm, NumOps.FromDouble(1e-14)))
+                {
+                    // Apply Householder reflection to B
+                    Matrix<T> P = Matrix<T>.CreateIdentity(n - k - 1).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
+                    Matrix<T> subB = B.GetSubMatrix(k, k + 1, m - k, n - k - 1);
+                    B.SetSubMatrix(k, k + 1, subB.Multiply(P));
 
-                // Update V
-                Matrix<T> subV = V.GetSubMatrix(k + 1, 0, n - k - 1, n);
-                V.SetSubMatrix(k + 1, 0, P.Multiply(subV));
+                    // Update V
+                    Matrix<T> subV = V.GetSubMatrix(k + 1, 0, n - k - 1, n);
+                    V.SetSubMatrix(k + 1, 0, P.Multiply(subV));
+                }
             }
         }
     }
@@ -340,11 +350,30 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
     private Vector<T> HouseholderVector(Vector<T> x)
     {
         T norm = x.Norm();
+
+        // If the input vector has zero norm, return a zero vector
+        // (no Householder transformation needed)
+        if (NumOps.LessThan(norm, NumOps.FromDouble(1e-14)))
+        {
+            return new Vector<T>(x.Length);
+        }
+
         Vector<T> v = x.Clone();
-        v[0] = NumOps.Add(v[0], NumOps.Multiply(NumOps.SignOrZero(x[0]), norm));
+        // Use opposite sign to avoid cancellation
+        v[0] = NumOps.LessThan(x[0], NumOps.Zero)
+            ? NumOps.Subtract(v[0], norm)
+            : NumOps.Add(v[0], norm);
+
+        T vNorm = v.Norm();
+
+        // If the Householder vector has zero norm, return a zero vector
+        if (NumOps.LessThan(vNorm, NumOps.FromDouble(1e-14)))
+        {
+            return new Vector<T>(x.Length);
+        }
 
         // VECTORIZED: Normalize using Engine division
-        return (Vector<T>)Engine.Divide(v, v.Norm());
+        return (Vector<T>)Engine.Divide(v, vNorm);
     }
 
     /// <summary>
