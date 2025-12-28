@@ -283,7 +283,7 @@ public class MahalanobisDistanceIntegrationTests
     /// Use perfectly correlated data (y = x) which should have correlation coefficient ~1.
     /// </summary>
     [Fact]
-    public void MahalanobisDistance_FitFromData_CaputuresCorrelation()
+    public void MahalanobisDistance_FitFromData_CapturesCorrelation()
     {
         // Arrange - Data where y = x (perfect positive correlation)
         var data = new Matrix<double>(new double[,]

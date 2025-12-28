@@ -1756,30 +1756,33 @@ public static class StatisticsHelper<T>
     /// </remarks>
     private static T Erf(T x)
     {
-        T t = _numOps.Divide(_numOps.One, _numOps.Add(_numOps.One, _numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Abs(x))));
+        // Abramowitz & Stegun approximation 7.1.26
+        // Uses the complementary error function: erfc(x) = 1 - erf(x)
+        T absX = _numOps.Abs(x);
+        T t = _numOps.Divide(_numOps.One, _numOps.Add(_numOps.One, _numOps.Multiply(_numOps.FromDouble(0.3275911), absX)));
 
-        T result = _numOps.Subtract(_numOps.One, _numOps.Multiply(t, _numOps.Exp(_numOps.Negate(_numOps.Square(x)))));
-        result = _numOps.Multiply(result, _numOps.Exp(_numOps.Negate(_numOps.Add(
-            _numOps.FromDouble(1.26551223),
+        // Polynomial coefficients for the approximation
+        T poly = _numOps.Add(
+            _numOps.FromDouble(0.254829592),
             _numOps.Multiply(t, _numOps.Add(
-                _numOps.FromDouble(1.00002368),
+                _numOps.FromDouble(-0.284496736),
                 _numOps.Multiply(t, _numOps.Add(
-                    _numOps.FromDouble(0.37409196),
+                    _numOps.FromDouble(1.421413741),
                     _numOps.Multiply(t, _numOps.Add(
-                        _numOps.FromDouble(0.09678418),
-                        _numOps.Multiply(t, _numOps.Add(
-                            _numOps.FromDouble(-0.18628806),
-                            _numOps.Multiply(t, _numOps.Add(
-                                _numOps.FromDouble(0.27886807),
-                                _numOps.Multiply(t, _numOps.FromDouble(-1.13520398))
-                            ))
-                        ))
+                        _numOps.FromDouble(-1.453152027),
+                        _numOps.Multiply(t, _numOps.FromDouble(1.061405429))
                     ))
                 ))
             ))
-        ))));
+        );
 
-        return _numOps.GreaterThan(x, _numOps.Zero) ? result : _numOps.Negate(result);
+        // erfc(x) = t * poly * exp(-x²)
+        T erfc = _numOps.Multiply(_numOps.Multiply(t, poly), _numOps.Exp(_numOps.Negate(_numOps.Square(absX))));
+
+        // erf(x) = 1 - erfc(x) for x >= 0, erf(x) = erfc(-x) - 1 for x < 0
+        T erfPositive = _numOps.Subtract(_numOps.One, erfc);
+
+        return _numOps.LessThan(x, _numOps.Zero) ? _numOps.Negate(erfPositive) : erfPositive;
     }
 
     /// <summary>
@@ -4286,12 +4289,15 @@ public static class StatisticsHelper<T>
     {
         var vifValues = new List<T>();
 
+        // The correct formula for VIF from a correlation matrix is:
+        // VIF_i = (R^-1)_ii where R^-1 is the inverse of the correlation matrix
+        // This gives the diagonal elements of the inverse correlation matrix
+        var inverseCorrelationMatrix = correlationMatrix.Inverse();
+
         for (int i = 0; i < correlationMatrix.Rows; i++)
         {
-            var subMatrix = correlationMatrix.RemoveRow(i).RemoveColumn(i);
-            var inverseSubMatrix = subMatrix.Inverse();
-            var rSquared = _numOps.Subtract(_numOps.One, _numOps.Divide(_numOps.One, inverseSubMatrix[0, 0]));
-            var vif = _numOps.Divide(_numOps.One, _numOps.Subtract(_numOps.One, rSquared));
+            // VIF is the diagonal element of the inverse correlation matrix
+            var vif = inverseCorrelationMatrix[i, i];
             vifValues.Add(vif);
 
             // Check if VIF exceeds the maximum allowed value
@@ -6839,8 +6845,7 @@ public static class StatisticsHelper<T>
             T relevance = idealOrder[i].Actual;
             T position = _numOps.FromDouble(i + 1);
             T logDenominator = _numOps.Log(_numOps.Add(position, _numOps.One));
-            T log2Denominator = _numOps.Divide(logDenominator, _numOps.Log(_numOps.FromDouble(2)));
-            idcg = _numOps.Add(idcg, _numOps.Divide(relevance, log2Denominator));
+            idcg = _numOps.Add(idcg, _numOps.Divide(relevance, logDenominator));
         }
 
         return _numOps.Divide(dcg, idcg);
@@ -7131,7 +7136,14 @@ public static class StatisticsHelper<T>
         var n = series.Length;
         var acf = new T[maxLag + 1];
         var mean = CalculateMean(series);
-        var variance = CalculateVariance(series);
+
+        // Calculate the total sum of squared deviations (denominator for normalization)
+        var totalSumSquares = _numOps.Zero;
+        for (int i = 0; i < n; i++)
+        {
+            var deviation = _numOps.Subtract(series[i], mean);
+            totalSumSquares = _numOps.Add(totalSumSquares, _numOps.Multiply(deviation, deviation));
+        }
 
         for (int lag = 0; lag <= maxLag; lag++)
         {
@@ -7142,7 +7154,7 @@ public static class StatisticsHelper<T>
                     _numOps.Subtract(series[i], mean),
                     _numOps.Subtract(series[i + lag], mean)));
             }
-            acf[lag] = _numOps.Divide(sum, _numOps.Multiply(_numOps.FromDouble(n - lag), variance));
+            acf[lag] = _numOps.Divide(sum, totalSumSquares);
         }
 
         return new Vector<T>(acf);

@@ -66,9 +66,9 @@ public class ClusteringMetricsIntegrationTests
     }
 
     /// <summary>
-    /// Verified with scipy.spatial.distance.mahalanobis
+    /// Verified with manual calculation matching scipy.spatial.distance.mahalanobis formula.
     /// Covariance matrix: [[2, 1], [1, 2]], inverse: [[2/3, -1/3], [-1/3, 2/3]]
-    /// scipy.spatial.distance.mahalanobis([0, 0], [3, 3], [[2/3, -1/3], [-1/3, 2/3]]) = 3.0
+    /// Result: sqrt(6) ≈ 2.449
     /// </summary>
     [Fact]
     public void MahalanobisDistance_CustomCovariance_ReturnsExactValue()
@@ -87,14 +87,11 @@ public class ClusteringMetricsIntegrationTests
         // Act
         var distance = metric.Compute(a, b);
 
-        // Assert - scipy verified: 3.0
-        // (3,3)^T * [[2/3, -1/3], [-1/3, 2/3]] * (3,3) = (3,3)^T * (1, 1) = 6
-        // sqrt(6) = 2.449...
-        // Wait, let me recalculate:
+        // Assert - Manual calculation:
         // diff = (3, 3)
         // temp = [[2/3, -1/3], [-1/3, 2/3]] * (3, 3) = (2-1, -1+2) = (1, 1)
         // result = (3, 3) dot (1, 1) = 3 + 3 = 6
-        // sqrt(6) = 2.449...
+        // sqrt(6) ≈ 2.449
         Assert.Equal(Math.Sqrt(6.0), distance, Tolerance);
     }
 
