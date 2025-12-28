@@ -154,9 +154,9 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
         int l = Math.Min(m, n);
 
         Matrix<T> A = matrix.Clone();
-        Matrix<T> U = new(m, m);
+        Matrix<T> U = Matrix<T>.CreateIdentityMatrix(m);
         Vector<T> S = new(l);
-        Matrix<T> VT = new(n, n);
+        Matrix<T> VT = Matrix<T>.CreateIdentityMatrix(n);
 
         // Bidiagonalization
         Bidiagonalize(A, U, VT);
@@ -164,10 +164,20 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
         // Diagonalization
         DiagonalizeGolubReinsch(A, U, VT);
 
-        // Extract singular values (must be non-negative by definition)
+        // Extract singular values and ensure they are non-negative
         for (int i = 0; i < l; i++)
         {
-            S[i] = NumOps.Abs(A[i, i]);
+            T diagValue = A[i, i];
+            S[i] = NumOps.Abs(diagValue);
+
+            // If singular value was negative, flip the sign of the corresponding column of U
+            if (NumOps.LessThan(diagValue, NumOps.Zero))
+            {
+                for (int row = 0; row < m; row++)
+                {
+                    U[row, i] = NumOps.Negate(U[row, i]);
+                }
+            }
         }
 
         // Sort singular values in descending order
@@ -204,40 +214,46 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
 
             Vector<T> u = x.Clone();
             u[0] = NumOps.Add(u[0], alpha);
-            T beta = NumOps.Multiply(NumOps.FromDouble(2), NumOps.Divide(NumOps.One, u.DotProduct(u)));
-
-            // Apply the Householder reflection to A and U
-            for (int j = k; j < n; j++)
+            T uDotU = u.DotProduct(u);
+            
+            // Only apply Householder if the vector is non-zero
+            if (!NumOps.Equals(uDotU, NumOps.Zero))
             {
-                // VECTORIZED: Use dot product for sum computation
-                int rowCount = m - k;
-                var colSlice = new T[rowCount];
-                for (int i = 0; i < rowCount; i++)
-                    colSlice[i] = A[k + i, j];
-                var colVec = new Vector<T>(colSlice);
-                T sum = u.DotProduct(colVec);
-                sum = NumOps.Multiply(beta, sum);
+                T beta = NumOps.Multiply(NumOps.FromDouble(2), NumOps.Divide(NumOps.One, uDotU));
 
-                for (int i = k; i < m; i++)
-                    A[i, j] = NumOps.Subtract(A[i, j], NumOps.Multiply(u[i - k], sum));
+                // Apply the Householder reflection to A and U
+                for (int j = k; j < n; j++)
+                {
+                    // VECTORIZED: Use dot product for sum computation
+                    int rowCount = m - k;
+                    var colSlice = new T[rowCount];
+                    for (int i = 0; i < rowCount; i++)
+                        colSlice[i] = A[k + i, j];
+                    var colVec = new Vector<T>(colSlice);
+                    T sum = u.DotProduct(colVec);
+                    sum = NumOps.Multiply(beta, sum);
+
+                    for (int i = k; i < m; i++)
+                        A[i, j] = NumOps.Subtract(A[i, j], NumOps.Multiply(u[i - k], sum));
+                }
+
+                for (int j = 0; j < m; j++)
+                {
+                    // VECTORIZED: Use dot product for sum computation
+                    int colCount = m - k;
+                    var rowSlice = new T[colCount];
+                    for (int i = 0; i < colCount; i++)
+                        rowSlice[i] = U[j, k + i];
+                    var rowVec = new Vector<T>(rowSlice);
+                    T sum = u.DotProduct(rowVec);
+                    sum = NumOps.Multiply(beta, sum);
+
+                    for (int i = k; i < m; i++)
+                        U[j, i] = NumOps.Subtract(U[j, i], NumOps.Multiply(u[i - k], sum));
+                }
+
+                A[k, k] = NumOps.Negate(alpha);
             }
-
-            for (int j = 0; j < m; j++)
-            {
-                // VECTORIZED: Use dot product for sum computation
-                int colCount = m - k;
-                var rowSlice = new T[colCount];
-                for (int i = 0; i < colCount; i++)
-                    rowSlice[i] = U[j, k + i];
-                var rowVec = new Vector<T>(rowSlice);
-                T sum = u.DotProduct(rowVec);
-                sum = NumOps.Multiply(beta, sum);
-
-                for (int i = k; i < m; i++)
-                    U[j, i] = NumOps.Subtract(U[j, i], NumOps.Multiply(u[i - k], sum));
-            }
-
-            A[k, k] = NumOps.Negate(alpha);
 
             // If this is not the last column, compute the Householder vector for the kth row
             if (k < n - 2)
@@ -249,40 +265,46 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
 
                 Vector<T> v = x.Clone();
                 v[0] = NumOps.Add(v[0], alpha);
-                beta = NumOps.Multiply(NumOps.FromDouble(2), NumOps.Divide(NumOps.One, v.DotProduct(v)));
-
-                // Apply the Householder reflection to A and VT
-                for (int i = k; i < m; i++)
+                T vDotV = v.DotProduct(v);
+                
+                // Only apply Householder if the vector is non-zero
+                if (!NumOps.Equals(vDotV, NumOps.Zero))
                 {
-                    // VECTORIZED: Use dot product for sum computation
-                    int colCount = n - k - 1;
-                    var rowSlice = new T[colCount];
-                    for (int j = 0; j < colCount; j++)
-                        rowSlice[j] = A[i, k + 1 + j];
-                    var rowVec = new Vector<T>(rowSlice);
-                    T sum = v.DotProduct(rowVec);
-                    sum = NumOps.Multiply(beta, sum);
+                    T beta = NumOps.Multiply(NumOps.FromDouble(2), NumOps.Divide(NumOps.One, vDotV));
 
-                    for (int j = k + 1; j < n; j++)
-                        A[i, j] = NumOps.Subtract(A[i, j], NumOps.Multiply(v[j - k - 1], sum));
+                    // Apply the Householder reflection to A and VT
+                    for (int i = k; i < m; i++)
+                    {
+                        // VECTORIZED: Use dot product for sum computation
+                        int colCount = n - k - 1;
+                        var rowSlice = new T[colCount];
+                        for (int j = 0; j < colCount; j++)
+                            rowSlice[j] = A[i, k + 1 + j];
+                        var rowVec = new Vector<T>(rowSlice);
+                        T sum = v.DotProduct(rowVec);
+                        sum = NumOps.Multiply(beta, sum);
+
+                        for (int j = k + 1; j < n; j++)
+                            A[i, j] = NumOps.Subtract(A[i, j], NumOps.Multiply(v[j - k - 1], sum));
+                    }
+
+                    for (int i = 0; i < n; i++)
+                    {
+                        // VECTORIZED: Use dot product for sum computation
+                        int rowCount = n - k - 1;
+                        var colSlice = new T[rowCount];
+                        for (int j = 0; j < rowCount; j++)
+                            colSlice[j] = VT[k + 1 + j, i];
+                        var colVec = new Vector<T>(colSlice);
+                        T sum = v.DotProduct(colVec);
+                        sum = NumOps.Multiply(beta, sum);
+
+                        for (int j = k + 1; j < n; j++)
+                            VT[j, i] = NumOps.Subtract(VT[j, i], NumOps.Multiply(v[j - k - 1], sum));
+                    }
+
+                    A[k, k + 1] = NumOps.Negate(alpha);
                 }
-
-                for (int i = 0; i < n; i++)
-                {
-                    // VECTORIZED: Use dot product for sum computation
-                    int rowCount = n - k - 1;
-                    var colSlice = new T[rowCount];
-                    for (int j = 0; j < rowCount; j++)
-                        colSlice[j] = VT[k + 1 + j, i];
-                    var colVec = new Vector<T>(colSlice);
-                    T sum = v.DotProduct(colVec);
-                    sum = NumOps.Multiply(beta, sum);
-
-                    for (int j = k + 1; j < n; j++)
-                        VT[j, i] = NumOps.Subtract(VT[j, i], NumOps.Multiply(v[j - k - 1], sum));
-                }
-
-                A[k, k + 1] = NumOps.Negate(alpha);
             }
         }
     }
@@ -542,16 +564,23 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
             iteration++;
         }
 
-        // Extract singular values
+        // After Jacobi rotations, A has orthogonal columns
+        // S[i] = norm of column i, U = A with normalized columns
         for (int i = 0; i < l; i++)
         {
-            // Guard against out of range access when i == l-1
-            T offDiag = NumOps.Zero;
-            if (i + 1 < A.Columns)
+            var colI = Engine.GetColumn(A, i);
+            T norm = colI.Norm();
+            S[i] = norm;
+            
+            // Normalize the column to get U
+            if (!NumOps.Equals(norm, NumOps.Zero))
             {
-                offDiag = NumOps.Multiply(A[i, i + 1], A[i, i + 1]);
+                var normalizedCol = colI.Divide(norm);
+                for (int row = 0; row < m; row++)
+                {
+                    U[row, i] = normalizedCol[row];
+                }
             }
-            S[i] = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(A[i, i], A[i, i]), offDiag));
         }
 
         // Sort singular values in descending order
