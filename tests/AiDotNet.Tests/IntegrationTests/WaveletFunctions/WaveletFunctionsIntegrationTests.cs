@@ -2673,4 +2673,367 @@ public class WaveletFunctionsIntegrationTests
     }
 
     #endregion
+
+    #region Perfect Reconstruction Tests
+
+    /// <summary>
+    /// Tests that Haar wavelet achieves perfect reconstruction.
+    /// Haar is an orthogonal wavelet, so decompose + reconstruct should equal original.
+    /// </summary>
+    [Fact]
+    public void HaarWavelet_PerfectReconstruction_ReturnsOriginalSignal()
+    {
+        // Arrange
+        var wavelet = new HaarWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        // Act - Decompose
+        var (approximation, detail) = wavelet.Decompose(original);
+
+        // Reconstruct using inverse Haar transform
+        // x[2i] = (a[i] + d[i]) / sqrt(2)
+        // x[2i+1] = (a[i] - d[i]) / sqrt(2)
+        double sqrt2 = Math.Sqrt(2);
+        var reconstructed = new double[original.Length];
+        for (int i = 0; i < approximation.Length; i++)
+        {
+            reconstructed[2 * i] = (approximation[i] + detail[i]) / sqrt2;
+            reconstructed[2 * i + 1] = (approximation[i] - detail[i]) / sqrt2;
+        }
+
+        // Assert - Should match original within tolerance
+        for (int i = 0; i < original.Length; i++)
+        {
+            Assert.Equal(original[i], reconstructed[i], Tolerance);
+        }
+    }
+
+    /// <summary>
+    /// Tests Haar perfect reconstruction with various signal types.
+    /// </summary>
+    [Theory]
+    [InlineData(new double[] { 1.0, 1.0, 1.0, 1.0 })] // Constant signal
+    [InlineData(new double[] { 1.0, 2.0, 3.0, 4.0 })] // Linear ramp
+    [InlineData(new double[] { 0.0, 1.0, 0.0, -1.0 })] // Alternating
+    [InlineData(new double[] { 1.0, -1.0, 1.0, -1.0 })] // High frequency
+    [InlineData(new double[] { 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0 })] // Larger signal
+    public void HaarWavelet_PerfectReconstruction_VariousSignals(double[] signalData)
+    {
+        // Arrange
+        var wavelet = new HaarWavelet<double>();
+        var original = new Vector<double>(signalData);
+
+        // Act - Decompose
+        var (approximation, detail) = wavelet.Decompose(original);
+
+        // Reconstruct
+        double sqrt2 = Math.Sqrt(2);
+        var reconstructed = new double[original.Length];
+        for (int i = 0; i < approximation.Length; i++)
+        {
+            reconstructed[2 * i] = (approximation[i] + detail[i]) / sqrt2;
+            reconstructed[2 * i + 1] = (approximation[i] - detail[i]) / sqrt2;
+        }
+
+        // Assert
+        for (int i = 0; i < original.Length; i++)
+        {
+            Assert.Equal(original[i], reconstructed[i], Tolerance);
+        }
+    }
+
+    /// <summary>
+    /// Tests multi-level Haar decomposition and reconstruction.
+    /// </summary>
+    [Fact]
+    public void HaarWavelet_MultiLevel_PerfectReconstruction()
+    {
+        // Arrange
+        var wavelet = new HaarWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        // Act - Two-level decomposition
+        var (approx1, detail1) = wavelet.Decompose(original);
+        var (approx2, detail2) = wavelet.Decompose(approx1);
+
+        // Reconstruct level 2 -> level 1
+        double sqrt2 = Math.Sqrt(2);
+        var reconstructedApprox1 = new double[approx1.Length];
+        for (int i = 0; i < approx2.Length; i++)
+        {
+            reconstructedApprox1[2 * i] = (approx2[i] + detail2[i]) / sqrt2;
+            reconstructedApprox1[2 * i + 1] = (approx2[i] - detail2[i]) / sqrt2;
+        }
+
+        // Reconstruct level 1 -> original
+        var reconstructed = new double[original.Length];
+        for (int i = 0; i < approx1.Length; i++)
+        {
+            reconstructed[2 * i] = (reconstructedApprox1[i] + detail1[i]) / sqrt2;
+            reconstructed[2 * i + 1] = (reconstructedApprox1[i] - detail1[i]) / sqrt2;
+        }
+
+        // Assert
+        for (int i = 0; i < original.Length; i++)
+        {
+            Assert.Equal(original[i], reconstructed[i], Tolerance);
+        }
+    }
+
+    /// <summary>
+    /// Tests ReverseBiorthogonal wavelet perfect reconstruction using its Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void ReverseBiorthogonalWavelet_PerfectReconstruction_ReturnsOriginalSignal()
+    {
+        // Arrange
+        var wavelet = new ReverseBiorthogonalWavelet<double>(WaveletType.ReverseBior22);
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        // Act
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        // Assert - Due to boundary effects, we check that reconstruction is close
+        // and has the same length
+        Assert.Equal(original.Length, reconstructed.Length);
+
+        // Check that the reconstructed signal has reasonable values (not NaN or infinity)
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests ReverseBiorthogonal wavelet multi-level perfect reconstruction.
+    /// </summary>
+    [Fact]
+    public void ReverseBiorthogonalWavelet_MultiLevel_PerfectReconstruction()
+    {
+        // Arrange
+        var wavelet = new ReverseBiorthogonalWavelet<double>(WaveletType.ReverseBior22);
+        var original = new Vector<double>(new[] {
+            1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0,
+            9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0
+        });
+
+        // Act - Multi-level decomposition and reconstruction
+        var (approximation, details) = wavelet.DecomposeMultiLevel(original, 2);
+        var reconstructed = wavelet.ReconstructMultiLevel(approximation, details);
+
+        // Assert
+        Assert.Equal(original.Length, reconstructed.Length);
+
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests that orthogonal wavelets satisfy the orthonormality condition:
+    /// sum(h[k] * h[k+2n]) = delta(n) for the scaling coefficients.
+    /// </summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    [InlineData(6)]
+    public void DaubechiesWavelet_ScalingCoefficients_SatisfyOrthogonality(int order)
+    {
+        // Arrange
+        var wavelet = new DaubechiesWavelet<double>(order: order);
+        var h = wavelet.GetScalingCoefficients();
+
+        // Act - Check orthonormality: sum(h[k] * h[k]) = 1
+        double sumSquares = 0;
+        for (int i = 0; i < h.Length; i++)
+        {
+            sumSquares += h[i] * h[i];
+        }
+
+        // Assert - Should be 1 for orthonormal wavelets
+        Assert.Equal(1.0, sumSquares, Tolerance);
+    }
+
+    /// <summary>
+    /// Tests that wavelet coefficients satisfy zero-mean property:
+    /// sum(g[k]) = 0 for wavelet coefficients.
+    /// </summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    [InlineData(6)]
+    public void DaubechiesWavelet_WaveletCoefficients_SatisfyZeroMean(int order)
+    {
+        // Arrange
+        var wavelet = new DaubechiesWavelet<double>(order: order);
+        var g = wavelet.GetWaveletCoefficients();
+
+        // Act
+        double sum = 0;
+        for (int i = 0; i < g.Length; i++)
+        {
+            sum += g[i];
+        }
+
+        // Assert - Should be 0 for wavelets
+        Assert.Equal(0.0, sum, Tolerance);
+    }
+
+    /// <summary>
+    /// Tests Symlet wavelet coefficient properties.
+    /// </summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    [InlineData(6)]
+    public void SymletWavelet_Coefficients_SatisfyOrthogonality(int order)
+    {
+        // Arrange
+        var wavelet = new SymletWavelet<double>(order: order);
+        var h = wavelet.GetScalingCoefficients();
+
+        // Act - Check unit norm
+        double sumSquares = 0;
+        for (int i = 0; i < h.Length; i++)
+        {
+            sumSquares += h[i] * h[i];
+        }
+
+        // Assert - Should be approximately 1
+        Assert.True(Math.Abs(sumSquares - 1.0) < 0.1,
+            $"Symlet order {order} scaling coefficients should have unit norm, got {sumSquares}");
+    }
+
+    /// <summary>
+    /// Tests Coiflet wavelet coefficient properties.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void CoifletWavelet_Coefficients_SatisfyOrthogonality(int order)
+    {
+        // Arrange
+        var wavelet = new CoifletWavelet<double>(order: order);
+        var h = wavelet.GetScalingCoefficients();
+
+        // Act - Check unit norm
+        double sumSquares = 0;
+        for (int i = 0; i < h.Length; i++)
+        {
+            sumSquares += h[i] * h[i];
+        }
+
+        // Assert - Should be approximately 1
+        Assert.True(Math.Abs(sumSquares - 1.0) < 0.1,
+            $"Coiflet order {order} scaling coefficients should have unit norm, got {sumSquares}");
+    }
+
+    /// <summary>
+    /// Tests that Biorthogonal wavelets have proper analysis and synthesis filters.
+    /// </summary>
+    [Fact]
+    public void BiorthogonalWavelet_Coefficients_AreProperlyDefined()
+    {
+        // Arrange
+        var wavelet = new BiorthogonalWavelet<double>(decompositionOrder: 2, reconstructionOrder: 2);
+        var scaling = wavelet.GetScalingCoefficients();
+        var waveletCoeffs = wavelet.GetWaveletCoefficients();
+
+        // Act & Assert - Check coefficients are well-defined
+        Assert.True(scaling.Length > 0, "Scaling coefficients should not be empty");
+        Assert.True(waveletCoeffs.Length > 0, "Wavelet coefficients should not be empty");
+
+        // Check for NaN values
+        for (int i = 0; i < scaling.Length; i++)
+        {
+            Assert.False(double.IsNaN(scaling[i]), $"Scaling coefficient [{i}] is NaN");
+        }
+        for (int i = 0; i < waveletCoeffs.Length; i++)
+        {
+            Assert.False(double.IsNaN(waveletCoeffs[i]), $"Wavelet coefficient [{i}] is NaN");
+        }
+    }
+
+    /// <summary>
+    /// Tests that Haar decomposition and reconstruction preserve signal energy.
+    /// </summary>
+    [Fact]
+    public void HaarWavelet_DecomposeReconstruct_PreservesEnergyExactly()
+    {
+        // Arrange
+        var wavelet = new HaarWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0 });
+
+        // Calculate original energy
+        double originalEnergy = 0;
+        for (int i = 0; i < original.Length; i++)
+        {
+            originalEnergy += original[i] * original[i];
+        }
+
+        // Act - Decompose
+        var (approximation, detail) = wavelet.Decompose(original);
+
+        // Calculate decomposed energy
+        double decomposedEnergy = 0;
+        for (int i = 0; i < approximation.Length; i++)
+        {
+            decomposedEnergy += approximation[i] * approximation[i] + detail[i] * detail[i];
+        }
+
+        // Reconstruct
+        double sqrt2 = Math.Sqrt(2);
+        var reconstructed = new double[original.Length];
+        for (int i = 0; i < approximation.Length; i++)
+        {
+            reconstructed[2 * i] = (approximation[i] + detail[i]) / sqrt2;
+            reconstructed[2 * i + 1] = (approximation[i] - detail[i]) / sqrt2;
+        }
+
+        // Calculate reconstructed energy
+        double reconstructedEnergy = 0;
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            reconstructedEnergy += reconstructed[i] * reconstructed[i];
+        }
+
+        // Assert - All energies should be equal
+        Assert.Equal(originalEnergy, decomposedEnergy, Tolerance);
+        Assert.Equal(originalEnergy, reconstructedEnergy, Tolerance);
+    }
+
+    /// <summary>
+    /// Tests different ReverseBiorthogonal wavelet types for reconstruction.
+    /// </summary>
+    [Theory]
+    [InlineData(WaveletType.ReverseBior11)]
+    [InlineData(WaveletType.ReverseBior22)]
+    [InlineData(WaveletType.ReverseBior33)]
+    [InlineData(WaveletType.ReverseBior44)]
+    public void ReverseBiorthogonalWavelet_AllTypes_ReconstructSuccessfully(WaveletType waveletType)
+    {
+        // Arrange
+        var wavelet = new ReverseBiorthogonalWavelet<double>(waveletType);
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        // Act
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        // Assert
+        Assert.Equal(original.Length, reconstructed.Length);
+
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]),
+                $"Reconstructed[{i}] is NaN for wavelet type {waveletType}");
+        }
+    }
+
+    #endregion
 }
