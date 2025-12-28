@@ -501,6 +501,7 @@ public static class InputHelper<T, TInput>
                 // Scalar tensor - create 1D tensor with single element
                 var batchTensor = new Tensor<T>(new[] { 1 });
                 batchTensor[0] = tensor.GetFlatIndexValue(0);
+                // Cast through object is required for unconstrained generic TInput conversion
                 return (TInput)(object)batchTensor;
             }
             else if (tensor.Shape.Length == 1)
@@ -512,6 +513,7 @@ public static class InputHelper<T, TInput>
                 {
                     batchTensor[0, i] = tensor[i];
                 }
+                // Cast through object is required for unconstrained generic TInput conversion
                 return (TInput)(object)batchTensor;
             }
             else
@@ -531,6 +533,7 @@ public static class InputHelper<T, TInput>
                 // We need to copy all elements preserving their relative positions
                 CopyTensorData(tensor, batchTensor, 0);
 
+                // Cast through object is required for unconstrained generic TInput conversion
                 return (TInput)(object)batchTensor;
             }
         }

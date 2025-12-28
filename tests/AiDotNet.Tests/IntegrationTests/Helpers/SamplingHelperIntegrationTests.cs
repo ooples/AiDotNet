@@ -542,8 +542,8 @@ public class SamplingHelperIntegrationTests : IDisposable
 
     private class TestPerson
     {
-        public string Name { get; init; } = string.Empty;
-        public int Age { get; init; }
+        public string Name { get; set; } = string.Empty;
+        public int Age { get; set; }
     }
 
     [Fact]

@@ -410,19 +410,23 @@ public class InputHelperIntegrationTests
     [Fact]
     public void CreateSingleItemBatch_Vector_ReturnsMatrixWithOneRow()
     {
+        // Create a vector with test values
         var vector = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 });
 
-        var batch = InputHelper<double, Matrix<double>>.CreateSingleItemBatch((Matrix<double>)(object)new Matrix<double>(1, vector.Length));
+        // Convert vector to single-row matrix for CreateSingleItemBatch
+        var singleRowMatrix = new Matrix<double>(1, vector.Length);
+        for (int i = 0; i < vector.Length; i++) singleRowMatrix[0, i] = vector[i];
 
-        // For Vector input returning Matrix<double>, we need the proper type
-        // Let's test with Matrix type directly
-        var singleRowMatrix = new Matrix<double>(1, 4);
-        for (int i = 0; i < 4; i++) singleRowMatrix[0, i] = vector[i];
-
+        // Act
         var result = InputHelper<double, Matrix<double>>.CreateSingleItemBatch(singleRowMatrix);
 
+        // Assert - verify dimensions and that original vector values are preserved
         Assert.Equal(1, result.Rows);
         Assert.Equal(4, result.Columns);
+        Assert.Equal(1.0, result[0, 0]);
+        Assert.Equal(2.0, result[0, 1]);
+        Assert.Equal(3.0, result[0, 2]);
+        Assert.Equal(4.0, result[0, 3]);
     }
 
     #endregion
@@ -573,10 +577,16 @@ public class InputHelperIntegrationTests
             { 7, 8, 9 }
         });
 
-        var item = InputHelper<double, Vector<double>>.GetItem((Vector<double>)(object)new Vector<double>(new[] { 4.0, 5.0, 6.0 }), 0);
+        // Get the second row (index 1) which should be { 4, 5, 6 }
+        var item = InputHelper<double, Matrix<double>>.GetItem(matrix, 1);
 
-        // The method should return a Vector<double> for Matrix input
+        // Verify the row was correctly extracted
         Assert.NotNull(item);
+        Assert.Equal(1, item.Rows);
+        Assert.Equal(3, item.Columns);
+        Assert.Equal(4.0, item[0, 0]);
+        Assert.Equal(5.0, item[0, 1]);
+        Assert.Equal(6.0, item[0, 2]);
     }
 
     [Fact]
