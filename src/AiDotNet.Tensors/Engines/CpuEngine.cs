@@ -7006,7 +7006,7 @@ public class CpuEngine : IEngine
         // gamma.Shape defines which trailing dimensions to normalize over
         int normalizedDims = gamma.Shape.Length;
         int inputRank = input.Shape.Length;
-        
+
         if (normalizedDims > inputRank)
         {
             throw new ArgumentException($"Gamma shape ({string.Join(", ", gamma.Shape)}) has more dimensions than input shape ({string.Join(", ", input.Shape)})");
@@ -7027,13 +7027,13 @@ public class CpuEngine : IEngine
         int batchSize = 1;
         int batchDims = inputRank - normalizedDims;
         var batchShape = new int[Math.Max(1, batchDims)];
-        
+
         for (int i = 0; i < batchDims; i++)
         {
             batchSize *= input.Shape[i];
             batchShape[i] = input.Shape[i];
         }
-        
+
         // Handle case where all dimensions are normalized (batchDims = 0)
         if (batchDims == 0)
         {

@@ -1,7 +1,7 @@
-using Xunit;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
+using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 

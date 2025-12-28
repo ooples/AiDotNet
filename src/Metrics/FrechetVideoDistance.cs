@@ -156,7 +156,7 @@ public class FrechetVideoDistance<T>
         try
         {
             // Determine video format (NTCHW or NCTHW)            // Heuristic: If second dimension > 3, assume temporal (NTCHW format)            // since channels are typically 1-3. For videos with exactly 3 frames,            // this may misidentify the format - ensure input uses proper format.
-            bool isNTCHW = videos.Shape[1] > 3; 
+            bool isNTCHW = videos.Shape[1] > 3;
 
             for (int v = 0; v < numVideos; v++)
             {

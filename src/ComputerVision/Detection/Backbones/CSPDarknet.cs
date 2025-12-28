@@ -63,7 +63,7 @@ public class CSPDarknet<T> : BackboneBase<T>
         // _stageChannels contains all 4 stage channels for building the network
         int[] baseChannels = { 64, 128, 256, 512 };
         _stageChannels = baseChannels.Select(c => (int)(c * widthMultiplier)).ToArray();
-        
+
         // OutputChannels only reflects stages 1, 2, 3 (P3, P4, P5) which are actually extracted
         OutputChannels = new[] { _stageChannels[1], _stageChannels[2], _stageChannels[3] };
 

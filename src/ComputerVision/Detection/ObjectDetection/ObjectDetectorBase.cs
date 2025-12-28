@@ -198,7 +198,7 @@ public abstract class ObjectDetectorBase<T>
                 var itemTensor = new Tensor<T>(itemShape);
                 int elementsPerItem = output.Length / batchSize;
                 int sourceOffset = batchIndex * elementsPerItem;
-                
+
                 for (int j = 0; j < elementsPerItem; j++)
                 {
                     itemTensor[j] = output[sourceOffset + j];

@@ -71,7 +71,7 @@ public class PANet<T> : NeckBase<T>
         _bottomUpBiases = new List<Tensor<T>>();
         _downsampleWeights = new List<Tensor<T>>();
         _downsampleBiases = new List<Tensor<T>>();
-        
+
         // Create random generator once for all weight initializations
         // Using a seed for reproducibility, but the same RNG instance ensures different values
         _random = RandomHelper.CreateSeededRandom(42);

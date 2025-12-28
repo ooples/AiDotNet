@@ -779,7 +779,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         output = Engine.TensorBroadcastAdd(output, biasReshaped);
 
         _lastOutput = ApplyActivation(output);
-        
+
         // Return with matching dimensions (3D if batch was added, 4D otherwise)
         return _addedBatchDimension ? _lastOutput.Reshape(OutputShape) : _lastOutput;
     }
@@ -958,7 +958,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         }
 
         var inputGrad = inputNode.Gradient!;
-        
+
         // Return with matching dimensions
         if (_addedBatchDimension)
         {
