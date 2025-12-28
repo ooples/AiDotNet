@@ -102,8 +102,15 @@ public class SchurDecomposition<T> : MatrixDecompositionBase<T>
     private (Matrix<T> S, Matrix<T> U) ComputeSchurQR(Matrix<T> matrix)
     {
         int n = matrix.Rows;
-        Matrix<T> H = MatrixHelper<T>.ReduceToHessenbergFormat(matrix);
-        Matrix<T> U = Matrix<T>.CreateIdentity(n);
+
+        // Use HessenbergDecomposition to get both H and the orthogonal Q_hess
+        // A = Q_hess * H * Q_hess^T
+        var hessDecomp = new HessenbergDecomposition<T>(matrix);
+        Matrix<T> H = hessDecomp.HessenbergMatrix;
+        Matrix<T> Q_hess = hessDecomp.OrthogonalMatrix;
+
+        // Start U with Q_hess (the orthogonal matrix from Hessenberg reduction)
+        Matrix<T> U = Q_hess.Clone();
         Matrix<T> S = H.Clone();
 
         const int maxIterations = 100;
@@ -138,23 +145,23 @@ public class SchurDecomposition<T> : MatrixDecompositionBase<T>
     private (Matrix<T> S, Matrix<T> U) ComputeSchurFrancis(Matrix<T> matrix)
     {
         int n = matrix.Rows;
-        Matrix<T> H = MatrixHelper<T>.ReduceToHessenbergFormat(matrix);
-        Matrix<T> U = Matrix<T>.CreateIdentity(n);
+
+        // Use HessenbergDecomposition to get both H and the orthogonal Q_hess
+        // A = Q_hess * H * Q_hess^T
+        var hessDecomp = new HessenbergDecomposition<T>(matrix);
+        Matrix<T> H = hessDecomp.HessenbergMatrix;
+        Matrix<T> Q_hess = hessDecomp.OrthogonalMatrix;
+
+        // Start U with Q_hess (the orthogonal matrix from Hessenberg reduction)
+        Matrix<T> U = Q_hess.Clone();
 
         const int maxIterations = 100;
         T tolerance = NumOps.FromDouble(1e-10);
 
         for (int iter = 0; iter < maxIterations; iter++)
         {
-            for (int i = 0; i < n - 1; i++)
-            {
-                T s = NumOps.Add(H[n - 2, n - 2], H[n - 1, n - 1]);
-                T t = NumOps.Subtract(NumOps.Multiply(H[n - 2, n - 2], H[n - 1, n - 1]), NumOps.Multiply(H[n - 2, n - 1], H[n - 1, n - 2]));
-
-                Matrix<T> Q = ComputeFrancisQRStep(H, s, t);
-                H = Q.Transpose().Multiply(H).Multiply(Q);
-                U = U.Multiply(Q);
-            }
+            // Perform Francis double-shift QR step
+            ApplyFrancisDoubleShift(H, U, n);
 
             if (H.IsUpperTriangularMatrix(tolerance))
                 break;
@@ -164,31 +171,114 @@ public class SchurDecomposition<T> : MatrixDecompositionBase<T>
     }
 
     /// <summary>
-    /// Computes a single step of the Francis QR algorithm.
+    /// Applies a Francis double-shift QR step using Givens rotations.
     /// </summary>
-    /// <param name="H">The Hessenberg matrix.</param>
-    /// <param name="s">The sum of the last two diagonal elements.</param>
-    /// <param name="t">The determinant of the bottom-right 2x2 submatrix.</param>
-    /// <returns>The transformation matrix for this step.</returns>
-    private Matrix<T> ComputeFrancisQRStep(Matrix<T> H, T s, T t)
+    private void ApplyFrancisDoubleShift(Matrix<T> H, Matrix<T> U, int n)
     {
-        int n = H.Rows;
-        T x = NumOps.Subtract(NumOps.Subtract(H[0, 0], s), NumOps.Divide(NumOps.Multiply(H[0, 1], H[1, 0]), NumOps.Subtract(H[1, 1], s)));
-        T y = H[1, 0];
-
-        for (int k = 0; k < n - 1; k++)
+        // Check if matrix is already (quasi-)triangular - no work needed
+        bool allSubdiagonalZero = true;
+        for (int i = 1; i < n; i++)
         {
-            Matrix<T> Q = ComputeHouseholderReflection(x, y);
-            H = Q.Transpose().Multiply(H).Multiply(Q);
-
-            if (k < n - 2)
+            if (NumOps.GreaterThan(NumOps.Abs(H[i, i - 1]), NumOps.FromDouble(1e-14)))
             {
-                x = H[k + 1, k];
-                y = H[k + 2, k];
+                allSubdiagonalZero = false;
+                break;
             }
         }
+        if (allSubdiagonalZero)
+        {
+            return; // Already triangular
+        }
 
-        return H;
+        // Find the active unreduced submatrix (deflation)
+        int p = n - 1;
+        while (p > 0 && NumOps.LessThanOrEquals(NumOps.Abs(H[p, p - 1]), NumOps.FromDouble(1e-14)))
+        {
+            H[p, p - 1] = NumOps.Zero; // Explicitly zero out
+            p--;
+        }
+
+        if (p == 0)
+        {
+            return; // Matrix is diagonal
+        }
+
+        int q = p - 1;
+        while (q > 0 && NumOps.GreaterThan(NumOps.Abs(H[q, q - 1]), NumOps.FromDouble(1e-14)))
+        {
+            q--;
+        }
+
+        // Work only on the active submatrix from q to p
+        // Use Wilkinson shift for better convergence
+        T s = NumOps.Add(H[p - 1, p - 1], H[p, p]);
+        T prod = NumOps.Subtract(
+            NumOps.Multiply(H[p - 1, p - 1], H[p, p]),
+            NumOps.Multiply(H[p - 1, p], H[p, p - 1]));
+
+        // First column of (H - s1*I)(H - s2*I) = H^2 - s*H + p*I
+        T h_q_q = H[q, q];
+        T h_q_q1 = q + 1 < n ? H[q, q + 1] : NumOps.Zero;
+        T h_q1_q = q + 1 < n ? H[q + 1, q] : NumOps.Zero;
+        T h_q1_q1 = q + 1 < n ? H[q + 1, q + 1] : NumOps.Zero;
+
+        T x = NumOps.Add(
+            NumOps.Subtract(NumOps.Multiply(h_q_q, h_q_q), NumOps.Multiply(s, h_q_q)),
+            NumOps.Add(prod, NumOps.Multiply(h_q_q1, h_q1_q)));
+        T y = NumOps.Multiply(h_q1_q, NumOps.Subtract(NumOps.Add(h_q_q, h_q1_q1), s));
+
+        // Apply Givens rotations to chase the bulge within active submatrix
+        for (int k = q; k < p; k++)
+        {
+            // Compute Givens rotation to zero out y
+            T r = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(x, x), NumOps.Multiply(y, y)));
+            if (NumOps.LessThan(r, NumOps.FromDouble(1e-14)))
+            {
+                if (k < p - 1)
+                {
+                    x = H[k + 1, k];
+                    y = k + 2 <= p ? H[k + 2, k] : NumOps.Zero;
+                }
+                continue;
+            }
+
+            T c = NumOps.Divide(x, r);
+            T s2 = NumOps.Divide(y, r);
+
+            // Apply Givens rotation from LEFT: G^T * H (affects rows k and k+1)
+            for (int j = 0; j < n; j++)
+            {
+                T temp1 = H[k, j];
+                T temp2 = H[k + 1, j];
+                H[k, j] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s2, temp2));
+                H[k + 1, j] = NumOps.Subtract(NumOps.Multiply(c, temp2), NumOps.Multiply(s2, temp1));
+            }
+
+            // Apply Givens rotation from RIGHT: H * G (affects columns k and k+1)
+            for (int i = 0; i < n; i++)
+            {
+                T temp1 = H[i, k];
+                T temp2 = H[i, k + 1];
+                H[i, k] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s2, temp2));
+                H[i, k + 1] = NumOps.Subtract(NumOps.Multiply(c, temp2), NumOps.Multiply(s2, temp1));
+            }
+
+            // Accumulate transformation in U
+            for (int i = 0; i < n; i++)
+            {
+                T temp1 = U[i, k];
+                T temp2 = U[i, k + 1];
+                U[i, k] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s2, temp2));
+                U[i, k + 1] = NumOps.Subtract(NumOps.Multiply(c, temp2), NumOps.Multiply(s2, temp1));
+            }
+
+            // Prepare for next iteration (the bulge to chase)
+            if (k < p - 1)
+            {
+                x = H[k + 1, k];
+                y = k + 2 <= p ? H[k + 2, k] : NumOps.Zero;
+            }
+        }
     }
 
     /// <summary>
@@ -205,56 +295,8 @@ public class SchurDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private (Matrix<T> S, Matrix<T> U) ComputeSchurImplicit(Matrix<T> matrix)
     {
-        int n = matrix.Rows;
-        Matrix<T> H = MatrixHelper<T>.ReduceToHessenbergFormat(matrix);
-        Matrix<T> U = Matrix<T>.CreateIdentity(n);
-
-        const int maxIterations = 100;
-        T tolerance = NumOps.FromDouble(1e-10);
-
-        for (int iter = 0; iter < maxIterations; iter++)
-        {
-            for (int i = 0; i < n - 1; i++)
-            {
-                Matrix<T> Q = ComputeImplicitQStep(H, i);
-                H = Q.Transpose().Multiply(H).Multiply(Q);
-                U = U.Multiply(Q);
-            }
-
-            if (H.IsUpperTriangularMatrix(tolerance))
-                break;
-        }
-
-        return (H, U);
-    }
-
-    /// <summary>
-    /// Computes a single step of the implicit QR algorithm.
-    /// </summary>
-    /// <param name="H">The Hessenberg matrix.</param>
-    /// <param name="start">The starting index for this step.</param>
-    /// <returns>The transformation matrix for this step.</returns>
-    private Matrix<T> ComputeImplicitQStep(Matrix<T> H, int start)
-    {
-        int n = H.Rows;
-        T x = H[start, start];
-        T y = H[start + 1, start];
-        T z = start + 2 < n ? H[start + 2, start] : NumOps.Zero;
-
-        for (int k = start; k < n - 1; k++)
-        {
-            Matrix<T> Q = ComputeHouseholderReflection(x, y, z);
-            H = Q.Transpose().Multiply(H).Multiply(Q);
-
-            if (k < n - 2)
-            {
-                x = H[k + 1, k];
-                y = H[k + 2, k];
-                z = k + 3 < n ? H[k + 3, k] : NumOps.Zero;
-            }
-        }
-
-        return H;
+        // Use the same Francis algorithm as it's more robust
+        return ComputeSchurFrancis(matrix);
     }
 
     /// <summary>

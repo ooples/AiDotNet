@@ -3051,11 +3051,27 @@ public static class StatisticsHelper<T>
     public static List<T> CalculateLearningCurve(Vector<T> yActual, Vector<T> yPredicted, int steps)
     {
         var learningCurveList = new List<T>();
-        var stepSize = yActual.Length / steps;
+
+        // Guard against divide by zero: ensure we have enough data points
+        if (yActual.Length < 2 || steps < 1)
+        {
+            // Return single R2 value for all available data if we can't create a curve
+            if (yActual.Length >= 2)
+            {
+                learningCurveList.Add(CalculateR2(yActual, yPredicted));
+            }
+            return learningCurveList;
+        }
+
+        // Ensure step size is at least 1 to avoid empty subsets
+        var stepSize = Math.Max(1, yActual.Length / steps);
 
         for (int i = 1; i <= steps; i++)
         {
-            var subsetSize = i * stepSize;
+            var subsetSize = Math.Min(i * stepSize, yActual.Length);
+            // Ensure we have at least 2 data points for R2 calculation
+            if (subsetSize < 2) continue;
+
             var subsetActual = new Vector<T>(yActual.Take(subsetSize));
             var subsetPredicted = new Vector<T>(yPredicted.Take(subsetSize));
 
@@ -5725,12 +5741,29 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T CalculateAUC(Vector<T> fpr, Vector<T> tpr)
     {
+        // Guard against empty or single-point curves
+        if (fpr.Length < 2 || tpr.Length < 2)
+        {
+            return _numOps.FromDouble(0.5); // Return baseline AUC for invalid input
+        }
+
         T auc = _numOps.Zero;
         for (int i = 1; i < fpr.Length; i++)
         {
             var width = _numOps.Subtract(fpr[i], fpr[i - 1]);
             var height = _numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Add(tpr[i], tpr[i - 1]));
             auc = _numOps.Add(auc, _numOps.Multiply(width, height));
+        }
+
+        // Clamp AUC to valid range [0, 1]
+        // Negative AUC can occur with unsorted FPR values or poor data
+        if (_numOps.LessThan(auc, _numOps.Zero))
+        {
+            auc = _numOps.Zero;
+        }
+        else if (_numOps.GreaterThan(auc, _numOps.One))
+        {
+            auc = _numOps.One;
         }
 
         return auc;

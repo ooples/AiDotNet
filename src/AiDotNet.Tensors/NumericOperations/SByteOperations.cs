@@ -872,4 +872,6 @@ public class SByteOperations : INumericOperations<sbyte>
             destination[i] = (sbyte)Math.Cos(x[i]);
     }
 
+    public void MultiplyAdd(ReadOnlySpan<sbyte> x, ReadOnlySpan<sbyte> y, sbyte scalar, Span<sbyte> destination)
+        => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
 }

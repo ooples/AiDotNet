@@ -833,4 +833,6 @@ public class ShortOperations : INumericOperations<short>
             destination[i] = (short)Math.Cos(x[i]);
     }
 
+    public void MultiplyAdd(ReadOnlySpan<short> x, ReadOnlySpan<short> y, short scalar, Span<short> destination)
+        => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
 }

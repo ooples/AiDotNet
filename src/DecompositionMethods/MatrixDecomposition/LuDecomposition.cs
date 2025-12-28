@@ -161,6 +161,11 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
             {
                 Engine.SwapRows(A, k, pivotRow);
                 (P[pivotRow], P[k]) = (P[k], P[pivotRow]);
+                // Also swap the already-computed multipliers in L (columns 0 to k-1)
+                for (int j = 0; j < k; j++)
+                {
+                    (L[k, j], L[pivotRow, j]) = (L[pivotRow, j], L[k, j]);
+                }
             }
 
             // VECTORIZED: Perform elimination using Engine operations
@@ -177,21 +182,15 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
             }
         }
 
-        // Extract L and U matrices from the modified A
+        // Extract U matrix from the modified A (upper triangular part)
+        // L already has the multipliers stored during elimination, just set diagonal to 1
         Matrix<T> U = new(n, n);
         for (int i = 0; i < n; i++)
         {
-            for (int j = 0; j < n; j++)
+            L[i, i] = NumOps.One;  // Set diagonal of L to 1
+            for (int j = i; j < n; j++)
             {
-                if (i > j)
-                    L[i, j] = A[i, j];
-                else if (i == j)
-                {
-                    L[i, j] = NumOps.One;
-                    U[i, j] = A[i, j];  // Also copy diagonal to U
-                }
-                else
-                    U[i, j] = A[i, j];
+                U[i, j] = A[i, j];  // U gets upper triangular part including diagonal
             }
         }
 
@@ -246,6 +245,11 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
             if (pivotRow != k)
             {
                 Engine.SwapRows(A, k, pivotRow);
+                // Also swap the already-computed multipliers in L (columns 0 to k-1)
+                for (int j = 0; j < k; j++)
+                {
+                    (L[k, j], L[pivotRow, j]) = (L[pivotRow, j], L[k, j]);
+                }
                 (P[pivotRow], P[k]) = (P[k], P[pivotRow]);
             }
 
@@ -270,20 +274,15 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
             }
         }
 
+        // Extract U matrix from the modified A (upper triangular part)
+        // L already has the multipliers stored during elimination, just set diagonal to 1
         Matrix<T> U = new(n, n);
         for (int i = 0; i < n; i++)
         {
-            for (int j = 0; j < n; j++)
+            L[i, i] = NumOps.One;  // Set diagonal of L to 1
+            for (int j = i; j < n; j++)
             {
-                if (i > j)
-                    L[i, j] = A[i, j];
-                else if (i == j)
-                {
-                    L[i, j] = NumOps.One;
-                    U[i, j] = A[i, j];  // Also copy diagonal to U
-                }
-                else
-                    U[i, j] = A[i, j];
+                U[i, j] = A[i, j];  // U gets upper triangular part including diagonal
             }
         }
 

@@ -888,4 +888,6 @@ public class DecimalOperations : INumericOperations<decimal>
             destination[i] = (decimal)Math.Cos((double)x[i]);
     }
 
+    public void MultiplyAdd(ReadOnlySpan<decimal> x, ReadOnlySpan<decimal> y, decimal scalar, Span<decimal> destination)
+        => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
 }

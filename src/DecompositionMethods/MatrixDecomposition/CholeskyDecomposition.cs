@@ -106,6 +106,9 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
     /// <exception cref="ArgumentException">Thrown when an unsupported algorithm is specified.</exception>
     private Matrix<T> ComputeDecomposition(Matrix<T> matrix, CholeskyAlgorithmType algorithm)
     {
+        // Validate matrix is symmetric (required for all Cholesky algorithms)
+        ValidateSymmetric(matrix);
+
         return algorithm switch
         {
             CholeskyAlgorithmType.Crout => ComputeCholeskyCrout(matrix),
@@ -114,6 +117,26 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
             CholeskyAlgorithmType.BlockCholesky => ComputeBlockCholesky(matrix),
             _ => throw new ArgumentException("Unsupported Cholesky decomposition algorithm.")
         };
+    }
+
+    /// <summary>
+    /// Validates that the matrix is symmetric.
+    /// </summary>
+    /// <param name="matrix">The matrix to validate.</param>
+    /// <exception cref="ArgumentException">Thrown when the matrix is not symmetric.</exception>
+    private void ValidateSymmetric(Matrix<T> matrix)
+    {
+        int n = matrix.Rows;
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = i + 1; j < n; j++)
+            {
+                if (!NumOps.Equals(matrix[i, j], matrix[j, i]))
+                {
+                    throw new ArgumentException("Matrix must be symmetric for Cholesky decomposition.");
+                }
+            }
+        }
     }
 
     /// <summary>

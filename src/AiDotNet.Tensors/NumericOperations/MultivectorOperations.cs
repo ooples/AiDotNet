@@ -413,6 +413,9 @@ public class MultivectorOperations<T> : INumericOperations<Multivector<T>>
     public void Cos(ReadOnlySpan<Multivector<T>> x, Span<Multivector<T>> destination)
         => VectorizedOperationsFallback.Cos(this, x, destination);
 
+    public void MultiplyAdd(ReadOnlySpan<Multivector<T>> x, ReadOnlySpan<Multivector<T>> y, Multivector<T> scalar, Span<Multivector<T>> destination)
+        => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
+
     #endregion
 
     private void EnsureCompatible(Multivector<T> value)

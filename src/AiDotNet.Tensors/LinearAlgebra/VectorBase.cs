@@ -515,10 +515,50 @@ public abstract class VectorBase<T>
         if (Length != other.Length)
             throw new ArgumentException("Vectors must have the same length");
 
-        var resultArray = new T[Length];
-        _numOps.Add(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), new Span<T>(resultArray));
+        var result = CreateInstance(Length);
+        _numOps.Add(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), result.AsWritableSpan());
+        return result;
+    }
 
-        return CreateInstance(resultArray);
+    /// <summary>
+    /// Adds another vector to this vector in-place, modifying this vector.
+    /// </summary>
+    /// <param name="other">The vector to add to this vector.</param>
+    /// <exception cref="ArgumentException">Thrown when the vectors have different lengths.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This adds another vector to this vector, modifying the current vector
+    /// instead of creating a new one. This is more memory-efficient when you don't need to preserve
+    /// the original vector.</para>
+    /// <para><b>Performance:</b> This method performs zero allocations and uses SIMD-accelerated operations,
+    /// making it significantly faster than the regular Add method for repeated operations.</para>
+    /// </remarks>
+    public virtual void AddInPlace(VectorBase<T> other)
+    {
+        if (Length != other.Length)
+            throw new ArgumentException("Vectors must have the same length");
+
+        _numOps.Add(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), new Span<T>(_data));
+    }
+
+    /// <summary>
+    /// Adds another vector to this vector, storing the result in the destination span.
+    /// </summary>
+    /// <param name="other">The vector to add to this vector.</param>
+    /// <param name="destination">The span to store the result in.</param>
+    /// <exception cref="ArgumentException">Thrown when the vectors have different lengths or destination is too small.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This adds two vectors and stores the result in a pre-allocated buffer,
+    /// avoiding any memory allocation. This is the fastest way to add vectors when you can reuse buffers.</para>
+    /// <para><b>Performance:</b> Zero-allocation SIMD-accelerated addition - matches TensorPrimitives performance.</para>
+    /// </remarks>
+    public virtual void Add(VectorBase<T> other, Span<T> destination)
+    {
+        if (Length != other.Length)
+            throw new ArgumentException("Vectors must have the same length");
+        if (destination.Length < Length)
+            throw new ArgumentException("Destination span is too small", nameof(destination));
+
+        _numOps.Add(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), destination);
     }
 
     /// <summary>
@@ -539,10 +579,47 @@ public abstract class VectorBase<T>
         if (Length != other.Length)
             throw new ArgumentException("Vectors must have the same length");
 
-        var resultArray = new T[Length];
-        _numOps.Subtract(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), new Span<T>(resultArray));
+        var result = CreateInstance(Length);
+        _numOps.Subtract(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), result.AsWritableSpan());
+        return result;
+    }
 
-        return CreateInstance(resultArray);
+    /// <summary>
+    /// Subtracts another vector from this vector in-place, modifying this vector.
+    /// </summary>
+    /// <param name="other">The vector to subtract from this vector.</param>
+    /// <exception cref="ArgumentException">Thrown when the vectors have different lengths.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This subtracts another vector from this vector, modifying the current vector
+    /// instead of creating a new one. This is more memory-efficient when you don't need to preserve
+    /// the original vector.</para>
+    /// <para><b>Performance:</b> Zero-allocation SIMD-accelerated subtraction.</para>
+    /// </remarks>
+    public virtual void SubtractInPlace(VectorBase<T> other)
+    {
+        if (Length != other.Length)
+            throw new ArgumentException("Vectors must have the same length");
+
+        _numOps.Subtract(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), new Span<T>(_data));
+    }
+
+    /// <summary>
+    /// Subtracts another vector from this vector, storing the result in the destination span.
+    /// </summary>
+    /// <param name="other">The vector to subtract from this vector.</param>
+    /// <param name="destination">The span to store the result in.</param>
+    /// <exception cref="ArgumentException">Thrown when the vectors have different lengths or destination is too small.</exception>
+    /// <remarks>
+    /// <para><b>Performance:</b> Zero-allocation SIMD-accelerated subtraction.</para>
+    /// </remarks>
+    public virtual void Subtract(VectorBase<T> other, Span<T> destination)
+    {
+        if (Length != other.Length)
+            throw new ArgumentException("Vectors must have the same length");
+        if (destination.Length < Length)
+            throw new ArgumentException("Destination span is too small", nameof(destination));
+
+        _numOps.Subtract(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), destination);
     }
 
     /// <summary>
@@ -555,14 +632,44 @@ public abstract class VectorBase<T>
     /// For example, if you multiply [1,2,3] by 2, you get [2,4,6]. Scalar multiplication is used to
     /// scale vectors, which is useful in many AI algorithms like gradient descent where you need to
     /// adjust values by a learning rate.</para>
+    /// <para><b>Performance:</b> Uses SIMD-accelerated operations (5-15x faster with AVX2).</para>
     /// </remarks>
     public virtual VectorBase<T> Multiply(T scalar)
     {
         var result = CreateInstance(Length);
-        // Use vectorized scalar multiplication for SIMD acceleration (5-15x faster with AVX2)
         _numOps.MultiplyScalar(new ReadOnlySpan<T>(_data), scalar, result.AsWritableSpan());
-
         return result;
+    }
+
+    /// <summary>
+    /// Multiplies each element of this vector by a scalar value in-place.
+    /// </summary>
+    /// <param name="scalar">The scalar value to multiply by.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This multiplies every element in your vector by the same number,
+    /// modifying the current vector instead of creating a new one.</para>
+    /// <para><b>Performance:</b> Zero-allocation SIMD-accelerated multiplication.</para>
+    /// </remarks>
+    public virtual void MultiplyInPlace(T scalar)
+    {
+        _numOps.MultiplyScalar(new ReadOnlySpan<T>(_data), scalar, new Span<T>(_data));
+    }
+
+    /// <summary>
+    /// Multiplies each element of this vector by a scalar value, storing the result in the destination span.
+    /// </summary>
+    /// <param name="scalar">The scalar value to multiply by.</param>
+    /// <param name="destination">The span to store the result in.</param>
+    /// <exception cref="ArgumentException">Thrown when destination is too small.</exception>
+    /// <remarks>
+    /// <para><b>Performance:</b> Zero-allocation SIMD-accelerated multiplication.</para>
+    /// </remarks>
+    public virtual void Multiply(T scalar, Span<T> destination)
+    {
+        if (destination.Length < Length)
+            throw new ArgumentException("Destination span is too small", nameof(destination));
+
+        _numOps.MultiplyScalar(new ReadOnlySpan<T>(_data), scalar, destination);
     }
 
     /// <summary>
@@ -575,14 +682,42 @@ public abstract class VectorBase<T>
     /// For example, if you divide [2,4,6] by 2, you get [1,2,3]. Division is often used in
     /// normalization, where you might divide by the sum or maximum value to scale your data
     /// to a specific range.</para>
+    /// <para><b>Performance:</b> Uses SIMD-accelerated operations (5-15x faster with AVX2).</para>
     /// </remarks>
     public virtual VectorBase<T> Divide(T scalar)
     {
         var result = CreateInstance(Length);
-        // Use vectorized scalar division for SIMD acceleration (5-15x faster with AVX2)
         _numOps.DivideScalar(new ReadOnlySpan<T>(_data), scalar, result.AsWritableSpan());
-
         return result;
+    }
+
+    /// <summary>
+    /// Divides each element of this vector by a scalar value in-place.
+    /// </summary>
+    /// <param name="scalar">The scalar value to divide by.</param>
+    /// <remarks>
+    /// <para><b>Performance:</b> Zero-allocation SIMD-accelerated division.</para>
+    /// </remarks>
+    public virtual void DivideInPlace(T scalar)
+    {
+        _numOps.DivideScalar(new ReadOnlySpan<T>(_data), scalar, new Span<T>(_data));
+    }
+
+    /// <summary>
+    /// Divides each element of this vector by a scalar value, storing the result in the destination span.
+    /// </summary>
+    /// <param name="scalar">The scalar value to divide by.</param>
+    /// <param name="destination">The span to store the result in.</param>
+    /// <exception cref="ArgumentException">Thrown when destination is too small.</exception>
+    /// <remarks>
+    /// <para><b>Performance:</b> Zero-allocation SIMD-accelerated division.</para>
+    /// </remarks>
+    public virtual void Divide(T scalar, Span<T> destination)
+    {
+        if (destination.Length < Length)
+            throw new ArgumentException("Destination span is too small", nameof(destination));
+
+        _numOps.DivideScalar(new ReadOnlySpan<T>(_data), scalar, destination);
     }
 
     /// <summary>

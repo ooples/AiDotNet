@@ -1052,5 +1052,14 @@ public class DoubleOperations : INumericOperations<double>
         Engines.Simd.SimdKernels.Cos(x, destination);
     }
 
+    /// <summary>
+    /// Computes fused multiply-add: destination[i] = x[i] + y[i] * scalar.
+    /// Uses SIMD with FMA intrinsics when available.
+    /// </summary>
+    public void MultiplyAdd(ReadOnlySpan<double> x, ReadOnlySpan<double> y, double scalar, Span<double> destination)
+    {
+        Engines.Simd.SimdKernels.ScalarMultiplyAdd(x, y, scalar, destination);
+    }
+
     #endregion
 }
