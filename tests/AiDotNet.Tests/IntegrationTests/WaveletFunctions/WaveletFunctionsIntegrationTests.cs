@@ -2904,7 +2904,7 @@ public class WaveletFunctionsIntegrationTests
         }
 
         // Assert - Should be approximately 1
-        Assert.True(Math.Abs(sumSquares - 1.0) < 0.1,
+        Assert.True(Math.Abs(sumSquares - 1.0) < Tolerance,
             $"Symlet order {order} scaling coefficients should have unit norm, got {sumSquares}");
     }
 
@@ -2929,7 +2929,7 @@ public class WaveletFunctionsIntegrationTests
         }
 
         // Assert - Should be approximately 1
-        Assert.True(Math.Abs(sumSquares - 1.0) < 0.1,
+        Assert.True(Math.Abs(sumSquares - 1.0) < Tolerance,
             $"Coiflet order {order} scaling coefficients should have unit norm, got {sumSquares}");
     }
 

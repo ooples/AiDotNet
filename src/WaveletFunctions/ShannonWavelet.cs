@@ -166,7 +166,6 @@ public class ShannonWavelet<T> : WaveletFunctionBase<T>
     public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
     {
         var fft = new FastFourierTransform<T>();
-        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
 
         // Transform both to frequency domain
         Vector<Complex<T>> approxSpectrum = fft.Forward(approximation);
