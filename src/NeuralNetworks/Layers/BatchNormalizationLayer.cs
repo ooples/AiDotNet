@@ -240,7 +240,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// Initializes a new instance of the BatchNormalizationLayer class.
     /// </summary>
-    /// <param name="featureSize">The number of features (neurons) to normalize.</param>
+    /// <param name="numFeatures">The number of features (neurons) to normalize.</param>
     /// <param name="epsilon">A small constant added to the variance for numerical stability (default: 1e-5).</param>
     /// <param name="momentum">The momentum for updating running statistics (default: 0.9).</param>
     /// <remarks>
@@ -258,7 +258,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This creates a batch normalization layer with the specified settings.
     /// 
     /// When creating a BatchNormalizationLayer:
-    /// - featureSize: How many features (neurons) this layer will normalize
+    /// - numFeatures: How many features (neurons) this layer will normalize
     /// - epsilon: A small number (like 0.00001) to prevent division by zero
     /// - momentum: How quickly running statistics are updated (0.9 means 90% old + 10% new)
     /// 
@@ -274,15 +274,15 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// - Running statistics (mean and variance) initialized to 0.0 and 1.0
     /// </para>
     /// </remarks>
-    public BatchNormalizationLayer(int featureSize, double epsilon = NumericalStabilityHelper.LargeEpsilon, double momentum = 0.9)
-        : base([featureSize], [featureSize])
+    public BatchNormalizationLayer(int numFeatures, double epsilon = NumericalStabilityHelper.LargeEpsilon, double momentum = 0.9)
+        : base([numFeatures], [numFeatures])
     {
         _epsilon = NumericalStabilityHelper.GetEpsilon<T>(epsilon);
         _momentum = NumOps.FromDouble(momentum);
-        _gamma = Tensor<T>.CreateDefault([featureSize], NumOps.One);
-        _beta = new Tensor<T>([featureSize]);
-        _runningMean = new Tensor<T>([featureSize]);
-        _runningVariance = Tensor<T>.CreateDefault([featureSize], NumOps.One);
+        _gamma = Tensor<T>.CreateDefault([numFeatures], NumOps.One);
+        _beta = new Tensor<T>([numFeatures]);
+        _runningMean = new Tensor<T>([numFeatures]);
+        _runningVariance = Tensor<T>.CreateDefault([numFeatures], NumOps.One);
     }
 
     /// <summary>

@@ -113,14 +113,14 @@ public class GpuAccelerationBenchmarks
         _convLayer_CPU = new ConvolutionalLayer<float>(
             inputDepth: 64, outputDepth: 128, kernelSize: 3,
             inputHeight: 56, inputWidth: 56, stride: 1, padding: 1,
-            activation: null);
+            activationFunction: null);
 
         if (_gpuEngine != null)
         {
             _convLayer_GPU = new ConvolutionalLayer<float>(
                 inputDepth: 64, outputDepth: 128, kernelSize: 3,
                 inputHeight: 56, inputWidth: 56, stride: 1, padding: 1,
-                activation: null);
+                activationFunction: null);
         }
 
         _poolLayer_CPU = new PoolingLayer<float>(

@@ -192,11 +192,11 @@ public class Conv3DLayer<T> : LayerBase<T>
         int inputWidth,
         int stride = 1,
         int padding = 0,
-        IActivationFunction<T>? activation = null)
+        IActivationFunction<T>? activationFunction = null)
         : base(
             CalculateInputShape(inputChannels, inputDepth, inputHeight, inputWidth),
             CalculateOutputShape(outputChannels, inputDepth, inputHeight, inputWidth, kernelSize, stride, padding),
-            activation ?? new ReLUActivation<T>())
+            activationFunction ?? new ReLUActivation<T>())
     {
         ValidateParameters(inputChannels, outputChannels, kernelSize, inputDepth, inputHeight, inputWidth, stride);
 
@@ -226,7 +226,7 @@ public class Conv3DLayer<T> : LayerBase<T>
     /// <param name="inputWidth">Width of the input volume.</param>
     /// <param name="stride">Stride of the convolution. Defaults to 1.</param>
     /// <param name="padding">Zero-padding added to all sides. Defaults to 0.</param>
-    /// <param name="vectorActivation">The vector activation function to apply. Defaults to ReLU.</param>
+    /// <param name="vectorActivationFunction">The vector activation function to apply. Defaults to ReLU.</param>
     /// <remarks>
     /// <para>
     /// Vector activation functions operate on entire vectors at once, which can be more efficient
@@ -242,11 +242,11 @@ public class Conv3DLayer<T> : LayerBase<T>
         int inputWidth,
         int stride = 1,
         int padding = 0,
-        IVectorActivationFunction<T>? vectorActivation = null)
+        IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base(
             CalculateInputShape(inputChannels, inputDepth, inputHeight, inputWidth),
             CalculateOutputShape(outputChannels, inputDepth, inputHeight, inputWidth, kernelSize, stride, padding),
-            vectorActivation ?? new ReLUActivation<T>())
+            vectorActivationFunction ?? new ReLUActivation<T>())
     {
         ValidateParameters(inputChannels, outputChannels, kernelSize, inputDepth, inputHeight, inputWidth, stride);
 

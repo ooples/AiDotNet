@@ -246,7 +246,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             inputWidth: 64,
             stride: 1,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         // Time embedding MLP
         _timeEmbedMlp1 = new DenseLayer<T>(
@@ -270,7 +270,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
                 inputWidth: 64,
                 stride: 1,
                 padding: 0,
-                activation: new IdentityActivation<T>());
+                activationFunction: new IdentityActivation<T>());
         }
 
         // Build encoder
@@ -360,7 +360,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             inputWidth: 64,
             stride: 1,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
     }
 
     /// <inheritdoc />
@@ -853,7 +853,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             inputWidth: 64,
             stride: 2,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
     }
 
     private ILayer<T> CreateUpsample(int channels)

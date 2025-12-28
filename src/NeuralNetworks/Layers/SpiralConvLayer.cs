@@ -157,11 +157,11 @@ public class SpiralConvLayer<T> : LayerBase<T>
         int outputChannels,
         int spiralLength,
         int numVertices = 1,
-        IActivationFunction<T>? activation = null)
+        IActivationFunction<T>? activationFunction = null)
         : base(
             [numVertices, inputChannels],
             [numVertices, outputChannels],
-            activation ?? new ReLUActivation<T>())
+            activationFunction ?? new ReLUActivation<T>())
     {
         ValidateParameters(inputChannels, outputChannels, spiralLength);
 

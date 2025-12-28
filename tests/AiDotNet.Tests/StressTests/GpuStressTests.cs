@@ -336,7 +336,7 @@ public class GpuStressTests
             var layer = new ConvolutionalLayer<float>(
                 inputDepth: 32, outputDepth: 64, kernelSize: 3,
                 inputHeight: 28, inputWidth: 28, stride: 1, padding: 1,
-                activation: null);
+                activationFunction: null);
 
             var input = CreateRandomTensor(new[] { 4, 32, 28, 28 });
 

@@ -149,11 +149,11 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
         int inputChannels,
         int outputChannels,
         int numNeighbors = 4,
-        IActivationFunction<T>? activation = null)
+        IActivationFunction<T>? activationFunction = null)
         : base(
             [inputChannels],
             [outputChannels],
-            activation ?? new ReLUActivation<T>())
+            activationFunction ?? new ReLUActivation<T>())
     {
         ValidateParameters(inputChannels, outputChannels, numNeighbors);
 

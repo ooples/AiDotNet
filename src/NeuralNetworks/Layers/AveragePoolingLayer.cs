@@ -23,7 +23,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// Average pooling is often used in the final layers of a network or when you want to
 /// preserve more spatial information compared to max pooling.
 /// </remarks>
-public class AvgPoolingLayer<T> : LayerBase<T>
+public class AveragePoolingLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Gets the size of the pooling window.
@@ -80,7 +80,7 @@ public class AvgPoolingLayer<T> : LayerBase<T>
     /// <b>For Beginners:</b> This constructor sets up the average pooling layer with your chosen settings.
     /// It calculates what the output shape will be based on your input shape, pool size, and strides.
     /// </remarks>
-    public AvgPoolingLayer(int[] inputShape, int poolSize, int strides)
+    public AveragePoolingLayer(int[] inputShape, int poolSize, int strides)
         : base(inputShape, CalculateOutputShape(inputShape, poolSize, strides))
     {
         PoolSize = poolSize;
@@ -433,7 +433,7 @@ public class AvgPoolingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // AvgPoolingLayer has no trainable parameters
+        // AveragePoolingLayer has no trainable parameters
         return Vector<T>.Empty();
     }
 
@@ -502,7 +502,7 @@ public class AvgPoolingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Layer input shape not configured. Initialize the layer first.");
 
         // Create symbolic input node (shape definition only, batch size adapts at runtime)
-        // AvgPoolingLayer expects input shape: [channels, height, width]
+        // AveragePoolingLayer expects input shape: [channels, height, width]
         // AvgPool2D expects: [batch, channels, height, width]
         var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
         var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
@@ -554,7 +554,7 @@ public class AvgPoolingLayer<T> : LayerBase<T>
     {
         get
         {
-            // AvgPooling supports JIT if input shape is configured
+            // AveragePooling supports JIT if input shape is configured
             // No trainable parameters needed
             return InputShape != null && InputShape.Length > 0;
         }
