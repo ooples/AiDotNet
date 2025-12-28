@@ -299,16 +299,22 @@ public class TensorMatMulTransposeTests
     }
 
     [Fact]
-    public void TensorMatMul_Non2DTensor_ThrowsArgumentException()
+    public void TensorMatMul_3Dx2D_ReturnsBatchedResult()
     {
-        // Arrange
+        // Arrange - TensorMatMul now supports ND x 2D (industry standard batched matmul)
+        // [batch, M, K] @ [K, N] = [batch, M, N]
         var engine = new CpuEngine();
-        var a = new Tensor<float>([2, 2, 2]); // 3D tensor
-        var b = new Tensor<float>([2, 2]);
+        var a = new Tensor<float>([2, 3, 4]); // 3D tensor: batch=2, 3x4 matrices
+        var b = new Tensor<float>([4, 5]);    // 2D tensor: 4x5 weight matrix
 
-        // Act & Assert
-        var ex = Assert.Throws<ArgumentException>(() => engine.TensorMatMul(a, b));
-        Assert.Contains("2D tensors", ex.Message);
+        // Act
+        var result = engine.TensorMatMul(a, b);
+
+        // Assert - output should be [2, 3, 5]
+        Assert.Equal(3, result.Rank);
+        Assert.Equal(2, result.Shape[0]);
+        Assert.Equal(3, result.Shape[1]);
+        Assert.Equal(5, result.Shape[2]);
     }
 
     [Fact]
