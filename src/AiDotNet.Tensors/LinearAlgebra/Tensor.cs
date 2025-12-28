@@ -883,6 +883,22 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     }
 
     /// <summary>
+    /// Subtracts another tensor from this tensor in-place, modifying this tensor.
+    /// </summary>
+    /// <param name="other">The tensor to subtract.</param>
+    /// <exception cref="ArgumentException">Thrown when tensors have different shapes.</exception>
+    /// <remarks>
+    /// <para><b>Performance:</b> Zero-allocation SIMD-accelerated subtraction.</para>
+    /// </remarks>
+    public void SubtractInPlace(Tensor<T> other)
+    {
+        if (!Shape.SequenceEqual(other.Shape))
+            throw new ArgumentException("Tensors must have the same shape for subtraction.");
+
+        _numOps.Subtract(_data.AsSpan(), other._data.AsSpan(), _data.AsWritableSpan());
+    }
+
+    /// <summary>
     /// Computes the sum of tensor elements along specified axes.
     /// </summary>
     /// <param name="axes">The axes along which to sum. If null or empty, sums all elements.</param>
@@ -1096,6 +1112,18 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     public Tensor<T> Multiply(T scalar)
     {
         return new Tensor<T>(Shape, _data.Multiply(scalar));
+    }
+
+    /// <summary>
+    /// Multiplies this tensor by a scalar value in-place.
+    /// </summary>
+    /// <param name="scalar">The scalar value to multiply by.</param>
+    /// <remarks>
+    /// <para><b>Performance:</b> Zero-allocation SIMD-accelerated multiplication.</para>
+    /// </remarks>
+    public void MultiplyInPlace(T scalar)
+    {
+        _numOps.MultiplyScalar(_data.AsSpan(), scalar, _data.AsWritableSpan());
     }
 
     /// <summary>
@@ -2283,6 +2311,22 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
         // Use vectorized Add operation for SIMD acceleration (5-15x faster with AVX2)
         _numOps.Add(_data.AsSpan(), other._data.AsSpan(), result._data.AsWritableSpan());
         return result;
+    }
+
+    /// <summary>
+    /// Adds another tensor to this tensor in-place, modifying this tensor.
+    /// </summary>
+    /// <param name="other">The tensor to add.</param>
+    /// <exception cref="ArgumentException">Thrown when tensors have different shapes.</exception>
+    /// <remarks>
+    /// <para><b>Performance:</b> Zero-allocation SIMD-accelerated addition.</para>
+    /// </remarks>
+    public void AddInPlace(Tensor<T> other)
+    {
+        if (!Shape.SequenceEqual(other.Shape))
+            throw new ArgumentException("Tensors must have the same shape for addition.");
+
+        _numOps.Add(_data.AsSpan(), other._data.AsSpan(), _data.AsWritableSpan());
     }
 
     /// <summary>

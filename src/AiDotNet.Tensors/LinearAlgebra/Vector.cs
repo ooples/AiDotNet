@@ -1034,10 +1034,16 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method adds two vectors together element by element.
     /// For example, adding [1,2,3] and [4,5,6] gives [5,7,9].</para>
+    /// <para><b>Performance:</b> Uses SIMD-accelerated operations with single allocation.</para>
     /// </remarks>
     public new Vector<T> Add(VectorBase<T> other)
     {
-        return new Vector<T>(base.Add(other).ToArray());
+        if (Length != other.Length)
+            throw new ArgumentException("Vectors must have the same length");
+
+        var resultArray = new T[Length];
+        _numOps.Add(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other.Data), new Span<T>(resultArray));
+        return new Vector<T>(resultArray);
     }
 
     /// <summary>
@@ -1048,10 +1054,16 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method subtracts one vector from another element by element.
     /// For example, subtracting [4,5,6] from [10,10,10] gives [6,5,4].</para>
+    /// <para><b>Performance:</b> Uses SIMD-accelerated operations with single allocation.</para>
     /// </remarks>
     public new Vector<T> Subtract(VectorBase<T> other)
     {
-        return new Vector<T>(base.Subtract(other).ToArray());
+        if (Length != other.Length)
+            throw new ArgumentException("Vectors must have the same length");
+
+        var resultArray = new T[Length];
+        _numOps.Subtract(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other.Data), new Span<T>(resultArray));
+        return new Vector<T>(resultArray);
     }
 
     /// <summary>
@@ -1062,10 +1074,13 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method multiplies every element in your vector by the same number.
     /// For example, multiplying [1,2,3] by 2 gives [2,4,6].</para>
+    /// <para><b>Performance:</b> Uses SIMD-accelerated operations with single allocation.</para>
     /// </remarks>
     public new Vector<T> Multiply(T scalar)
     {
-        return new Vector<T>(base.Multiply(scalar).ToArray());
+        var resultArray = new T[Length];
+        _numOps.MultiplyScalar(new ReadOnlySpan<T>(_data), scalar, new Span<T>(resultArray));
+        return new Vector<T>(resultArray);
     }
 
     /// <summary>

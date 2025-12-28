@@ -568,6 +568,7 @@ public abstract class MatrixBase<T>
     /// in this matrix. Both matrices must have exactly the same shape (same number of rows and columns).
     /// The result is a new matrix of the same size where each element is the difference between the corresponding elements
     /// from the two input matrices.</para>
+    /// <para><b>Performance:</b> Uses SIMD-accelerated operations (5-15x faster with AVX2).</para>
     /// </remarks>
     public virtual MatrixBase<T> Subtract(MatrixBase<T> other)
     {
@@ -575,10 +576,43 @@ public abstract class MatrixBase<T>
             throw new ArgumentException("Matrix dimensions must match for subtraction.");
 
         var result = CreateInstance(_rows, _cols);
-        // Use vectorized Subtract operation for SIMD acceleration (5-15x faster with AVX2)
         _numOps.Subtract(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), result.AsWritableSpan());
-
         return result;
+    }
+
+    /// <summary>
+    /// Subtracts another matrix from this matrix in-place, modifying this matrix.
+    /// </summary>
+    /// <param name="other">The matrix to subtract.</param>
+    /// <exception cref="ArgumentException">Thrown when matrices have different dimensions.</exception>
+    /// <remarks>
+    /// <para><b>Performance:</b> Zero-allocation SIMD-accelerated subtraction.</para>
+    /// </remarks>
+    public virtual void SubtractInPlace(MatrixBase<T> other)
+    {
+        if (_rows != other.Rows || _cols != other.Columns)
+            throw new ArgumentException("Matrix dimensions must match for subtraction.");
+
+        _numOps.Subtract(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), new Span<T>(_data));
+    }
+
+    /// <summary>
+    /// Subtracts another matrix from this matrix, storing the result in the destination span.
+    /// </summary>
+    /// <param name="other">The matrix to subtract.</param>
+    /// <param name="destination">The span to store the result in (must be at least rows*cols in size).</param>
+    /// <exception cref="ArgumentException">Thrown when matrices have different dimensions or destination is too small.</exception>
+    /// <remarks>
+    /// <para><b>Performance:</b> Zero-allocation SIMD-accelerated subtraction.</para>
+    /// </remarks>
+    public virtual void Subtract(MatrixBase<T> other, Span<T> destination)
+    {
+        if (_rows != other.Rows || _cols != other.Columns)
+            throw new ArgumentException("Matrix dimensions must match for subtraction.");
+        if (destination.Length < _rows * _cols)
+            throw new ArgumentException("Destination span is too small", nameof(destination));
+
+        _numOps.Subtract(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), destination);
     }
 
     /// <summary>
@@ -768,15 +802,42 @@ public abstract class MatrixBase<T>
     /// <para><b>For Beginners:</b> Scalar multiplication means multiplying every element in the matrix by the same number (the scalar).
     /// The result is a new matrix of the same size where each element is the product of the corresponding element in the original matrix and the scalar value.
     /// This operation is useful for scaling data or adjusting the magnitude of values in a matrix.</para>
-    /// <para><b>Performance:</b> Uses vectorized MultiplyScalar operation for SIMD acceleration (5-15x faster with AVX2).</para>
+    /// <para><b>Performance:</b> Uses SIMD-accelerated operations (5-15x faster with AVX2).</para>
     /// </remarks>
     public virtual MatrixBase<T> Multiply(T scalar)
     {
         var result = CreateInstance(_rows, _cols);
-        // Use vectorized MultiplyScalar operation for SIMD acceleration
         _numOps.MultiplyScalar(new ReadOnlySpan<T>(_data), scalar, result.AsWritableSpan());
-
         return result;
+    }
+
+    /// <summary>
+    /// Multiplies this matrix by a scalar value in-place.
+    /// </summary>
+    /// <param name="scalar">The scalar value to multiply with.</param>
+    /// <remarks>
+    /// <para><b>Performance:</b> Zero-allocation SIMD-accelerated multiplication.</para>
+    /// </remarks>
+    public virtual void MultiplyInPlace(T scalar)
+    {
+        _numOps.MultiplyScalar(new ReadOnlySpan<T>(_data), scalar, new Span<T>(_data));
+    }
+
+    /// <summary>
+    /// Multiplies this matrix by a scalar value, storing the result in the destination span.
+    /// </summary>
+    /// <param name="scalar">The scalar value to multiply with.</param>
+    /// <param name="destination">The span to store the result in (must be at least rows*cols in size).</param>
+    /// <exception cref="ArgumentException">Thrown when destination is too small.</exception>
+    /// <remarks>
+    /// <para><b>Performance:</b> Zero-allocation SIMD-accelerated multiplication.</para>
+    /// </remarks>
+    public virtual void Multiply(T scalar, Span<T> destination)
+    {
+        if (destination.Length < _rows * _cols)
+            throw new ArgumentException("Destination span is too small", nameof(destination));
+
+        _numOps.MultiplyScalar(new ReadOnlySpan<T>(_data), scalar, destination);
     }
 
     /// <summary>
