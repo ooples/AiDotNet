@@ -2478,12 +2478,28 @@ public interface IEngine
     Tensor<T> TensorTranspose<T>(Tensor<T> tensor);
 
     /// <summary>
-    /// Performs matrix multiplication on two 2D tensors.
+    /// Performs matrix multiplication supporting tensors of any rank (PyTorch-style batched matmul).
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
-    /// <param name="a">The first 2D tensor with shape [M, N].</param>
-    /// <param name="b">The second 2D tensor with shape [N, P].</param>
-    /// <returns>The result tensor with shape [M, P].</returns>
+    /// <param name="a">The first tensor. Can be 2D [M, N] or higher rank [..., M, N].</param>
+    /// <param name="b">The second tensor. Can be 2D [N, P] or higher rank [..., N, P].</param>
+    /// <returns>The result tensor with appropriately broadcasted batch dimensions.</returns>
+    /// <remarks>
+    /// <para>
+    /// This follows PyTorch's torch.matmul semantics for batched matrix multiplication:
+    /// </para>
+    /// <para><b>Supported combinations:</b></para>
+    /// <list type="bullet">
+    ///   <item>2D x 2D: [M, N] @ [N, P] = [M, P] (standard matrix multiplication)</item>
+    ///   <item>3D x 2D: [B, M, N] @ [N, P] = [B, M, P] (batch matmul, weights broadcasted)</item>
+    ///   <item>ND x 2D: [..., M, N] @ [N, P] = [..., M, P] (any batch dims, weights broadcasted)</item>
+    ///   <item>3D x 3D: [B, M, N] @ [B, N, P] = [B, M, P] (batched matrix multiplication)</item>
+    /// </list>
+    /// <para><b>For Transformers:</b></para>
+    /// <para>
+    /// Input [batch, seq, features] @ weights [features, output] = [batch, seq, output]
+    /// </para>
+    /// </remarks>
     Tensor<T> TensorMatMul<T>(Tensor<T> a, Tensor<T> b);
 
     /// <summary>
@@ -3044,31 +3060,49 @@ public interface IEngine
     Tensor<T> BatchNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta);
 
     /// <summary>
-    /// Applies layer normalization to a 2D tensor [batch, features].
+    /// Applies layer normalization to a tensor of any rank, normalizing over the last N dimensions.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
-    /// <param name="input">The input tensor with shape [batch, features].</param>
-    /// <param name="gamma">Scale parameter with shape [features].</param>
-    /// <param name="beta">Shift parameter with shape [features].</param>
+    /// <param name="input">The input tensor with shape [d0, d1, ..., dn] of any rank.</param>
+    /// <param name="gamma">Scale parameter with shape matching the last N dimensions to normalize over.
+    /// For example, if input is [batch, seq, embed] and gamma is [embed], normalizes over the last dimension.
+    /// If gamma is [seq, embed], normalizes over the last two dimensions.</param>
+    /// <param name="beta">Shift parameter with the same shape as gamma.</param>
     /// <param name="epsilon">Small constant for numerical stability.</param>
-    /// <param name="mean">Output: computed mean per sample with shape [batch].</param>
-    /// <param name="variance">Output: computed variance per sample with shape [batch].</param>
-    /// <returns>The normalized tensor.</returns>
+    /// <param name="mean">Output: computed mean with shape [d0, d1, ..., d(n-N)] where N is the number of normalized dimensions.</param>
+    /// <param name="variance">Output: computed variance with the same shape as mean.</param>
+    /// <returns>The normalized tensor with the same shape as input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This follows the industry standard (PyTorch/TensorFlow) behavior for layer normalization:
+    /// - Supports tensors of any rank (2D, 3D, 4D, etc.)
+    /// - Normalizes over the last N dimensions as determined by gamma's shape
+    /// - Each position in the preceding dimensions is normalized independently
+    /// </para>
+    /// <para><b>Examples:</b>
+    /// - Input [32, 64] with gamma [64]: normalizes each of 32 samples over 64 features
+    /// - Input [2, 10, 64] with gamma [64]: normalizes each of 20 positions over 64 features
+    /// - Input [2, 10, 64] with gamma [10, 64]: normalizes each of 2 batches over 640 features
+    /// </para>
+    /// </remarks>
     Tensor<T> LayerNorm<T>(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double epsilon, out Tensor<T> mean, out Tensor<T> variance);
 
     /// <summary>
-    /// Computes the backward pass for layer normalization.
+    /// Computes the backward pass for layer normalization on tensors of any rank.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
-    /// <param name="gradOutput">The gradient from the next layer.</param>
-    /// <param name="input">The original input tensor.</param>
-    /// <param name="gamma">Scale parameter.</param>
+    /// <param name="gradOutput">The gradient from the next layer (same shape as forward output).</param>
+    /// <param name="input">The original input tensor of any rank.</param>
+    /// <param name="gamma">Scale parameter with shape matching normalized dimensions.</param>
     /// <param name="mean">The mean computed during forward pass.</param>
     /// <param name="variance">The variance computed during forward pass.</param>
     /// <param name="epsilon">Small constant used during forward pass.</param>
-    /// <param name="gradGamma">Output: gradient with respect to gamma.</param>
-    /// <param name="gradBeta">Output: gradient with respect to beta.</param>
-    /// <returns>The gradient with respect to the input.</returns>
+    /// <param name="gradGamma">Output: gradient with respect to gamma (same shape as gamma).</param>
+    /// <param name="gradBeta">Output: gradient with respect to beta (same shape as beta).</param>
+    /// <returns>The gradient with respect to the input (same shape as input).</returns>
+    /// <remarks>
+    /// This backward pass supports the same any-rank tensor semantics as the forward pass.
+    /// </remarks>
     Tensor<T> LayerNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta);
 
     /// <summary>

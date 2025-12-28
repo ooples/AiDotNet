@@ -78,6 +78,11 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private T _lastAuxiliaryLoss;
 
     /// <summary>
+    /// Tracks whether the last input was originally 2D (and thus reshaped to 3D).
+    /// </summary>
+    private bool _inputWas2D = false;
+
+    /// <summary>
     /// The size of the embeddings for queries, keys, values, and outputs.
     /// </summary>
     /// <remarks>
@@ -203,7 +208,16 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// making final decisions about what features to extract from each position.
     /// </para>
     /// </remarks>
-    private FeedForwardLayer<T> _feedForward;
+    private readonly FeedForwardLayer<T> _feedForward1;
+
+    /// <summary>
+    /// The second (projection) layer of the feed-forward network.
+    /// </summary>
+    /// <remarks>
+    /// Projects the expanded representation back to the original embedding size.
+    /// A proper transformer FFN has two layers: expansion and projection.
+    /// </remarks>
+    private readonly FeedForwardLayer<T> _feedForward2;
 
     /// <summary>
     /// The layer normalization applied after the feed-forward network.
@@ -293,10 +307,16 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         _norm1 = new LayerNormalizationLayer<T>(_embeddingSize);
 
-        _feedForward = new FeedForwardLayer<T>(
+        // Standard transformer FFN: Linear(embed -> ff) + GELU + Linear(ff -> embed)
+        _feedForward1 = new FeedForwardLayer<T>(
             _embeddingSize,
             _feedForwardDim,
             new GELUActivation<T>() as IActivationFunction<T>);
+
+        _feedForward2 = new FeedForwardLayer<T>(
+            _feedForwardDim,
+            _embeddingSize,
+            (IActivationFunction<T>?)null); // No activation on projection layer
 
         _norm2 = new LayerNormalizationLayer<T>(_embeddingSize);
 
@@ -342,16 +362,32 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        var attention = _selfAttention.Forward(input);
+        // Handle both 2D [seq, embed] and 3D [batch, seq, embed] input
+        _inputWas2D = input.Shape.Length == 2;
+        Tensor<T> input3D = _inputWas2D
+            ? input.Reshape(1, input.Shape[0], input.Shape[1])
+            : input;
+
+        var attention = _selfAttention.Forward(input3D);
         // Residual connection: input + attention
-        var residual1 = Engine.TensorAdd(input, attention);
+        var residual1 = Engine.TensorAdd(input3D, attention);
 
+        // Layer norm now supports any-rank tensors (normalizes over last dimension)
         var normalized1 = _norm1.Forward(residual1);
-        var feedForward = _feedForward.Forward(normalized1);
+        
+        // Standard transformer FFN: Linear(embed -> ff) + GELU + Linear(ff -> embed)
+        var ffExpanded = _feedForward1.Forward(normalized1);
+        var ffProjected = _feedForward2.Forward(ffExpanded);
 
-        // Residual connection: normalized1 + feedForward
-        var residual2 = Engine.TensorAdd(normalized1, feedForward);
+        // Residual connection: normalized1 + ffProjected
+        var residual2 = Engine.TensorAdd(normalized1, ffProjected);
         var output = _norm2.Forward(residual2);
+
+        // If input was 2D, reshape output back to 2D
+        if (_inputWas2D)
+        {
+            output = output.Reshape(output.Shape[1], output.Shape[2]);
+        }
 
         return output;
     }
@@ -402,15 +438,31 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
+        // If forward received 2D input, the output gradient will also be 2D
+        // We need to reshape it to 3D to match internal processing shapes
+        Tensor<T> grad3D;
+        bool gradWas2D = outputGradient.Shape.Length == 2;
+
+        if (gradWas2D)
+        {
+            // 2D gradient: [seq, embed] -> [1, seq, embed]
+            grad3D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1]);
+        }
+        else
+        {
+            grad3D = outputGradient;
+        }
+
         // Backward pass through the second normalization layer
-        var dNorm2 = _norm2.Backward(outputGradient);
+        var dNorm2 = _norm2.Backward(grad3D);
 
         // Split the gradient for the residual connection (copy gradient to both paths)
         var dFeedForward = dNorm2;
         var dNormalized1 = dNorm2; // Residual gradient flows directly
 
-        // Backward pass through the feed-forward layer
-        var dFeedForwardInput = _feedForward.Backward(dFeedForward);
+        // Backward pass through FFN (reverse order: projection then expansion)
+        var dFF2 = _feedForward2.Backward(dFeedForward);
+        var dFeedForwardInput = _feedForward1.Backward(dFF2);
         // Add gradients at the join point: dNormalized1 = dNorm2 + dFeedForwardInput
         dNormalized1 = Engine.TensorAdd(dNormalized1, dFeedForwardInput);
 
@@ -425,6 +477,12 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var dSelfAttentionInput = _selfAttention.Backward(dAttention);
         // Add gradients at the join point: dInput = dNorm1 + dSelfAttentionInput
         dInput = Engine.TensorAdd(dInput, dSelfAttentionInput);
+
+        // If input was originally 2D, reshape gradient back to 2D
+        if (gradWas2D)
+        {
+            dInput = dInput.Reshape(dInput.Shape[1], dInput.Shape[2]);
+        }
 
         return dInput;
     }
@@ -473,7 +531,8 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Update parameters for each sub-layer
         _selfAttention.UpdateParameters(learningRate);
         _norm1.UpdateParameters(learningRate);
-        _feedForward.UpdateParameters(learningRate);
+        _feedForward1.UpdateParameters(learningRate);
+        _feedForward2.UpdateParameters(learningRate);
         _norm2.UpdateParameters(learningRate);
     }
 
@@ -509,14 +568,17 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Collect parameters from all sublayers and concatenate them
         var selfAttentionParams = _selfAttention.GetParameters();
         var norm1Params = _norm1.GetParameters();
-        var feedForwardParams = _feedForward.GetParameters();
+        var ff1Params = _feedForward1.GetParameters();
+        var ff2Params = _feedForward2.GetParameters();
         var norm2Params = _norm2.GetParameters();
 
         // Concatenate all parameter vectors at once
         return Vector<T>.Concatenate(
             Vector<T>.Concatenate(
-                Vector<T>.Concatenate(selfAttentionParams, norm1Params),
-                feedForwardParams),
+                Vector<T>.Concatenate(
+                    Vector<T>.Concatenate(selfAttentionParams, norm1Params),
+                    ff1Params),
+                ff2Params),
             norm2Params);
     }
 
@@ -549,7 +611,8 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Reset all sublayers
         _selfAttention.ResetState();
         _norm1.ResetState();
-        _feedForward.ResetState();
+        _feedForward1.ResetState();
+        _feedForward2.ResetState();
         _norm2.ResetState();
     }
 
@@ -726,7 +789,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured. Initialize the layer first.");
 
-        if (_selfAttention == null || _norm1 == null || _feedForward == null || _norm2 == null)
+        if (_selfAttention == null || _norm1 == null || _feedForward1 == null || _feedForward2 == null || _norm2 == null)
             throw new InvalidOperationException("Sublayers not initialized. Initialize the layer first.");
 
         // Create symbolic input node with batch dimension
@@ -744,8 +807,9 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Step 3: First layer normalization
         var normalized1 = ApplyLayerNormGraph(_norm1, residual1);
 
-        // Step 4: Feed-forward sublayer
-        var ffApplied = ApplyFeedForwardGraph(_feedForward, normalized1);
+        // Step 4: Feed-forward sublayer (two linear layers)
+        var ffExpanded = ApplyFeedForwardGraph(_feedForward1, normalized1);
+        var ffApplied = ApplyFeedForwardGraph(_feedForward2, ffExpanded);
 
         // Step 5: Second residual connection: residual2 = normalized1 + ff_out
         var residual2 = TensorOperations<T>.Add(normalized1, ffApplied);
@@ -876,7 +940,8 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // It supports JIT if all sublayers support JIT
             return _selfAttention != null && _selfAttention.SupportsJitCompilation &&
                    _norm1 != null && _norm1.SupportsJitCompilation &&
-                   _feedForward != null && _feedForward.SupportsJitCompilation &&
+                   _feedForward1 != null && _feedForward1.SupportsJitCompilation &&
+                   _feedForward2 != null && _feedForward2.SupportsJitCompilation &&
                    _norm2 != null && _norm2.SupportsJitCompilation;
         }
     }
