@@ -144,6 +144,35 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(graphRag);
         }
 
+        [Fact]
+        public void Constructor_WithCustomMaxHops_InitializesCorrectly()
+        {
+            // Arrange
+            var generator = new EntityExtractionMockGenerator();
+            var retriever = new ContentAwareMockRetriever(CreateEinsteinDocuments());
+
+            // Act
+            var graphRag = new GraphRAG<double>(generator, retriever, maxHops: 3);
+
+            // Assert
+            Assert.NotNull(graphRag);
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-1)]
+        [InlineData(-100)]
+        public void Constructor_WithInvalidMaxHops_ThrowsArgumentOutOfRangeException(int maxHops)
+        {
+            // Arrange
+            var generator = new EntityExtractionMockGenerator();
+            var retriever = new ContentAwareMockRetriever(CreateEinsteinDocuments());
+
+            // Act & Assert
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                new GraphRAG<double>(generator, retriever, maxHops));
+        }
+
         #endregion
 
         #region AddRelation Tests
@@ -585,7 +614,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         }
 
         [Fact]
-        public void Retrieve_BoostFactorIncreasesWithMoreMatches()
+        public void Retrieve_BoostFactorIsFixed1_5x()
         {
             // Arrange - Document mentions multiple graph-connected entities
             var generator = new EntityExtractionMockGenerator();
@@ -612,8 +641,11 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Assert
             Assert.NotEmpty(resultList);
-            // Document mentioning both related entities should have higher boost
-            // Boost = 1.0 + (2 * 0.1) = 1.2 for two matches
+            // Document mentioning graph-connected entities gets fixed 1.5x boost
+            // 0.60 * 1.5 = 0.90 boosted score
+            var firstDoc = resultList.First();
+            Assert.True(firstDoc.HasRelevanceScore);
+            Assert.Equal(0.90, Convert.ToDouble(firstDoc.RelevanceScore), 2);
         }
 
         [Fact]
@@ -761,21 +793,133 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #endregion
 
-        #region Multi-hop Limitation Tests
+        #region Multi-hop Traversal Tests
 
         [Fact]
-        public void Retrieve_OnlyTraversesOneHop()
+        public void Retrieve_TraversesMultipleHops_DefaultTwoHops()
         {
-            // Arrange - Create a chain: A -> B -> C
-            // Current implementation only traverses one hop
+            // Arrange - Create a chain: Alpha -> Beta -> Gamma (2 hops needed to reach Gamma from Alpha)
             var generator = new EntityExtractionMockGenerator();
             var docs = new List<Document<double>>
             {
                 new Document<double>
                 {
-                    Id = "c_doc",
-                    Content = "Document about Entity C only.",
+                    Id = "gamma_doc",
+                    Content = "Document about Gamma only, no other entities mentioned.",
                     RelevanceScore = 0.80,
+                    HasRelevanceScore = true,
+                    Metadata = new Dictionary<string, object>()
+                }
+            };
+            var retriever = new ContentAwareMockRetriever(docs);
+            var graphRag = new GraphRAG<double>(generator, retriever); // Default maxHops = 2
+
+            // Alpha -> Beta, Beta -> Gamma (two hops needed to reach Gamma from Alpha)
+            graphRag.AddRelation("Alpha", "RELATED_TO", "Beta");
+            graphRag.AddRelation("Beta", "RELATED_TO", "Gamma");
+
+            // Act - Query about Alpha
+            var results = graphRag.Retrieve("Tell me about Alpha", 10);
+            var resultList = results.ToList();
+
+            // Assert
+            // With default maxHops=2, Gamma IS reachable from Alpha
+            Assert.NotEmpty(resultList);
+            // Document about "Gamma" SHOULD be boosted (2 hops away, within maxHops)
+            var firstDoc = resultList.First();
+            Assert.True(firstDoc.Metadata.ContainsKey("graph_boosted"));
+            Assert.True((bool)firstDoc.Metadata["graph_boosted"]);
+        }
+
+        [Fact]
+        public void Retrieve_DoesNotExceedMaxHops()
+        {
+            // Arrange - Create a chain: Alpha -> Beta -> Gamma -> Delta (3 hops needed to reach Delta from Alpha)
+            var generator = new EntityExtractionMockGenerator();
+            var docs = new List<Document<double>>
+            {
+                new Document<double>
+                {
+                    Id = "delta_doc",
+                    Content = "Document about Delta only, no other entities mentioned.",
+                    RelevanceScore = 0.80,
+                    HasRelevanceScore = true,
+                    Metadata = new Dictionary<string, object>()
+                }
+            };
+            var retriever = new ContentAwareMockRetriever(docs);
+            var graphRag = new GraphRAG<double>(generator, retriever, maxHops: 2); // Only 2 hops
+
+            // Alpha -> Beta, Beta -> Gamma, Gamma -> Delta (three hops needed to reach Delta from Alpha)
+            graphRag.AddRelation("Alpha", "RELATED_TO", "Beta");
+            graphRag.AddRelation("Beta", "RELATED_TO", "Gamma");
+            graphRag.AddRelation("Gamma", "RELATED_TO", "Delta");
+
+            // Act - Query about Alpha
+            var results = graphRag.Retrieve("Tell me about Alpha", 10);
+            var resultList = results.ToList();
+
+            // Assert
+            // With maxHops=2, Delta is NOT reachable from Alpha (3 hops away)
+            Assert.NotEmpty(resultList);
+            // Document about "Delta" should NOT be boosted (3 hops away, exceeds maxHops)
+            var firstDoc = resultList.First();
+            Assert.False(firstDoc.Metadata.ContainsKey("graph_boosted"));
+        }
+
+        [Fact]
+        public void Retrieve_WithMaxHopsThree_ReachesThreeHopEntities()
+        {
+            // Arrange - Create a chain: Alpha -> Beta -> Gamma -> Delta
+            var generator = new EntityExtractionMockGenerator();
+            var docs = new List<Document<double>>
+            {
+                new Document<double>
+                {
+                    Id = "delta_doc",
+                    Content = "Document about Delta only, no other entities mentioned.",
+                    RelevanceScore = 0.80,
+                    HasRelevanceScore = true,
+                    Metadata = new Dictionary<string, object>()
+                }
+            };
+            var retriever = new ContentAwareMockRetriever(docs);
+            var graphRag = new GraphRAG<double>(generator, retriever, maxHops: 3); // 3 hops
+
+            // Alpha -> Beta, Beta -> Gamma, Gamma -> Delta (three hops needed to reach Delta from Alpha)
+            graphRag.AddRelation("Alpha", "RELATED_TO", "Beta");
+            graphRag.AddRelation("Beta", "RELATED_TO", "Gamma");
+            graphRag.AddRelation("Gamma", "RELATED_TO", "Delta");
+
+            // Act - Query about Alpha
+            var results = graphRag.Retrieve("Tell me about Alpha", 10);
+            var resultList = results.ToList();
+
+            // Assert
+            // With maxHops=3, Delta IS reachable from Alpha
+            Assert.NotEmpty(resultList);
+            // Document about "Delta" SHOULD be boosted (3 hops away, within maxHops)
+            var firstDoc = resultList.First();
+            Assert.True(firstDoc.Metadata.ContainsKey("graph_boosted"));
+            Assert.True((bool)firstDoc.Metadata["graph_boosted"]);
+        }
+
+        #endregion
+
+        #region Case-Insensitive Entity Matching Tests
+
+        [Fact]
+        public void AddRelation_IsCaseInsensitive()
+        {
+            // Arrange
+            var generator = new EntityExtractionMockGenerator();
+            var docs = new List<Document<double>>
+            {
+                new Document<double>
+                {
+                    Id = "doc1",
+                    Content = "Einstein discovered Relativity.",
+                    RelevanceScore = 0.9,
                     HasRelevanceScore = true,
                     Metadata = new Dictionary<string, object>()
                 }
@@ -783,19 +927,89 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var retriever = new ContentAwareMockRetriever(docs);
             var graphRag = new GraphRAG<double>(generator, retriever);
 
-            // A -> B, B -> C (two hops needed to reach C from A)
-            graphRag.AddRelation("Entity A", "RELATED_TO", "Entity B");
-            graphRag.AddRelation("Entity B", "RELATED_TO", "Entity C");
+            // Add relation with uppercase entity names (different from doc content case)
+            graphRag.AddRelation("EINSTEIN", "DISCOVERED", "RELATIVITY");
 
-            // Act - Query about Entity A
-            var results = graphRag.Retrieve("Tell me about Entity A", 10);
+            // Act - Query with proper case (entity extraction requires capitalized words)
+            // The graph lookup is case-insensitive, so "Einstein" in query finds "EINSTEIN" relation
+            var results = graphRag.Retrieve("Tell me about Einstein", 10);
             var resultList = results.ToList();
 
             // Assert
-            // The implementation only does 1-hop traversal, so Entity C won't be in related entities
-            // when querying for Entity A (only Entity B would be found)
             Assert.NotEmpty(resultList);
-            // Document about "Entity C" should NOT be boosted (2 hops away)
+            // Document mentioning "Relativity" should be boosted
+            // because "RELATIVITY" in graph matches "Relativity" in doc (case-insensitive)
+            var firstDoc = resultList.First();
+            Assert.True(firstDoc.Metadata.ContainsKey("graph_boosted"));
+        }
+
+        [Fact]
+        public void Retrieve_MatchesEntitiesCaseInsensitively()
+        {
+            // Arrange
+            var generator = new EntityExtractionMockGenerator();
+            var docs = new List<Document<double>>
+            {
+                new Document<double>
+                {
+                    Id = "doc1",
+                    Content = "The theory of RELATIVITY changed physics forever.",
+                    RelevanceScore = 0.9,
+                    HasRelevanceScore = true,
+                    Metadata = new Dictionary<string, object>()
+                }
+            };
+            var retriever = new ContentAwareMockRetriever(docs);
+            var graphRag = new GraphRAG<double>(generator, retriever);
+
+            // Add relation with lowercase
+            graphRag.AddRelation("einstein", "discovered", "relativity");
+
+            // Act - Document content has uppercase "RELATIVITY"
+            var results = graphRag.Retrieve("Tell me about Einstein", 10);
+            var resultList = results.ToList();
+
+            // Assert
+            Assert.NotEmpty(resultList);
+            // Document with uppercase "RELATIVITY" should match lowercase "relativity" in graph
+            var firstDoc = resultList.First();
+            Assert.True(firstDoc.Metadata.ContainsKey("graph_boosted"));
+        }
+
+        [Fact]
+        public void AddRelation_PreventsDuplicatesRegardlessOfCase()
+        {
+            // Arrange
+            var generator = new EntityExtractionMockGenerator();
+            var docs = new List<Document<double>>
+            {
+                new Document<double>
+                {
+                    Id = "doc1",
+                    Content = "Einstein discovered Relativity.",
+                    RelevanceScore = 0.60,
+                    HasRelevanceScore = true,
+                    Metadata = new Dictionary<string, object>()
+                }
+            };
+            var retriever = new ContentAwareMockRetriever(docs);
+            var graphRag = new GraphRAG<double>(generator, retriever);
+
+            // Add same relation with different cases - should be treated as duplicates
+            graphRag.AddRelation("Einstein", "DISCOVERED", "Relativity");
+            graphRag.AddRelation("EINSTEIN", "discovered", "RELATIVITY");
+            graphRag.AddRelation("einstein", "Discovered", "relativity");
+
+            // Act
+            var results = graphRag.Retrieve("Einstein", 10);
+            var resultList = results.ToList();
+
+            // Assert
+            Assert.NotEmpty(resultList);
+            // Score should only be boosted once, not multiple times for "duplicate" relations
+            // 0.60 * 1.5 = 0.90 (fixed 1.5x boost)
+            var firstDoc = resultList.First();
+            Assert.Equal(0.90, Convert.ToDouble(firstDoc.RelevanceScore), 2);
         }
 
         #endregion
