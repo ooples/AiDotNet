@@ -1,3 +1,6 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -942,12 +945,192 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
     }
 
     /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
+    public override bool SupportsJitCompilation => true;
 
     /// <inheritdoc/>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
-        throw new NotSupportedException(
-            "HeterogeneousGraphLayer does not support computation graph export due to type-specific transformations.");
+        if (inputNodes == null || inputNodes.Count < 1)
+        {
+            throw new ArgumentException("HeterogeneousGraphLayer requires at least 1 input node (node features).");
+        }
+
+        if (_adjacencyMatrices == null || _nodeTypeMap == null)
+        {
+            throw new InvalidOperationException(
+                "Adjacency matrices and node type map must be set before exporting computation graph. " +
+                "Call SetAdjacencyMatrices() and SetNodeTypeMap() first.");
+        }
+
+        var inputNode = inputNodes[0]; // Node features [batch, numNodes, inputFeatures]
+        var inputShape = inputNode.Value.Shape;
+        int batchSize = inputShape[0];
+        int numNodes = inputShape[1];
+
+        // Create output accumulator initialized to zero
+        var outputTensor = new Tensor<T>(new int[] { batchSize, numNodes, _outputFeatures });
+        outputTensor.Fill(NumOps.Zero);
+        var outputNode = TensorOperations<T>.Constant(outputTensor, "hgnn_output_init");
+
+        // Process each edge type
+        foreach (var edgeType in _metadata.EdgeTypes)
+        {
+            if (!_adjacencyMatrices.TryGetValue(edgeType, out var adjacency))
+                continue;
+
+            var (sourceType, _) = _metadata.EdgeTypeSchema[edgeType];
+            int inFeatures = _metadata.NodeTypeFeatures[sourceType];
+
+            // Get weights for this edge type
+            Tensor<T> weights;
+            if (_useBasis && _basisMatrices != null && _basisCoefficients != null)
+            {
+                // Reconstruct weights from basis decomposition
+                var coeffs = _basisCoefficients[edgeType];
+                weights = new Tensor<T>(new int[] { InputFeatures, _outputFeatures });
+                weights.Fill(NumOps.Zero);
+
+                for (int b = 0; b < _numBases; b++)
+                {
+                    var basisSlice = ExtractBasisMatrix(_basisMatrices, b, InputFeatures, _outputFeatures);
+                    var scaledBasis = Engine.TensorMultiplyScalar(basisSlice, coeffs[b]);
+                    weights = Engine.TensorAdd(weights, scaledBasis);
+                }
+            }
+            else
+            {
+                weights = _edgeTypeWeights[edgeType];
+            }
+
+            // Create constant nodes for weights and normalized adjacency
+            var weightsNode = TensorOperations<T>.Constant(weights, $"edge_weights_{edgeType}");
+
+            // Normalize and store adjacency as constant
+            var normalizedAdj = NormalizeAdjacency(adjacency, batchSize, numNodes);
+            var adjNode = TensorOperations<T>.Constant(normalizedAdj, $"adj_{edgeType}");
+
+            // Extract input features if needed (or use full input if dimensions match)
+            ComputationNode<T> inputSlice;
+            if (inputShape[2] == inFeatures)
+            {
+                inputSlice = inputNode;
+            }
+            else
+            {
+                // Extract relevant input features at export time by slicing
+                var extractedFeatures = ExtractInputFeatures(inputNode.Value, batchSize, numNodes, inFeatures);
+                inputSlice = TensorOperations<T>.Constant(extractedFeatures, $"input_slice_{edgeType}");
+            }
+
+            // Compute: normalizedAdj @ inputSlice @ weights
+            // First: inputSlice @ weights (batched matrix multiply across last dimensions)
+            var xw = TensorOperations<T>.BatchMatrixMultiply(inputSlice, weightsNode);
+
+            // Then: adj @ xw for message passing
+            var convOutput = TensorOperations<T>.BatchMatrixMultiply(adjNode, xw);
+
+            // Accumulate to output
+            outputNode = TensorOperations<T>.Add(outputNode, convOutput);
+        }
+
+        // Add self-loops and biases per node type
+        // For JIT compilation, we precompute the self-loop contribution for all nodes
+        foreach (var nodeType in _metadata.NodeTypes)
+        {
+            var selfWeights = _selfLoopWeights[nodeType];
+            var bias = _biases[nodeType];
+            int inFeatures = _metadata.NodeTypeFeatures[nodeType];
+
+            // Create constant nodes
+            var selfWeightsNode = TensorOperations<T>.Constant(selfWeights, $"self_weights_{nodeType}");
+            var biasNode = TensorOperations<T>.Constant(bias, $"bias_{nodeType}");
+
+            // Create a mask tensor for nodes of this type
+            var nodeMask = new Tensor<T>(new int[] { batchSize, numNodes, 1 });
+            nodeMask.Fill(NumOps.Zero);
+            for (int n = 0; n < numNodes; n++)
+            {
+                if (_nodeTypeMap.TryGetValue(n, out var type) && type == nodeType)
+                {
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        nodeMask[b, n, 0] = NumOps.One;
+                    }
+                }
+            }
+            var maskNode = TensorOperations<T>.Constant(nodeMask, $"node_mask_{nodeType}");
+
+            // For nodes of this type: compute input @ selfWeights and add bias
+            // Since we need type-specific extraction, compute it for all nodes
+            // then mask to keep only relevant nodes
+
+            // Extract features for this node type
+            ComputationNode<T> typeInput;
+            if (inputShape[2] == inFeatures)
+            {
+                typeInput = inputNode;
+            }
+            else
+            {
+                var extractedFeatures = ExtractInputFeatures(inputNode.Value, batchSize, numNodes, inFeatures);
+                typeInput = TensorOperations<T>.Constant(extractedFeatures, $"type_input_{nodeType}");
+            }
+
+            // Compute self-loop transformation: input @ selfWeights
+            var selfOutput = TensorOperations<T>.BatchMatrixMultiply(typeInput, selfWeightsNode);
+
+            // Broadcast and add bias
+            var biasBroadcast = new Tensor<T>(new int[] { batchSize, numNodes, _outputFeatures });
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int n = 0; n < numNodes; n++)
+                {
+                    for (int f = 0; f < _outputFeatures; f++)
+                    {
+                        biasBroadcast[b, n, f] = bias[f];
+                    }
+                }
+            }
+            var biasBroadcastNode = TensorOperations<T>.Constant(biasBroadcast, $"bias_broadcast_{nodeType}");
+            selfOutput = TensorOperations<T>.Add(selfOutput, biasBroadcastNode);
+
+            // Mask to only keep contribution from nodes of this type
+            // Broadcast mask to match output features
+            var maskBroadcast = new Tensor<T>(new int[] { batchSize, numNodes, _outputFeatures });
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int n = 0; n < numNodes; n++)
+                {
+                    T maskVal = nodeMask[b, n, 0];
+                    for (int f = 0; f < _outputFeatures; f++)
+                    {
+                        maskBroadcast[b, n, f] = maskVal;
+                    }
+                }
+            }
+            var maskBroadcastNode = TensorOperations<T>.Constant(maskBroadcast, $"mask_broadcast_{nodeType}");
+
+            // Apply mask: selfOutput * mask (element-wise)
+            var maskedSelfOutput = TensorOperations<T>.ElementwiseMultiply(selfOutput, maskBroadcastNode);
+
+            // Accumulate to output
+            outputNode = TensorOperations<T>.Add(outputNode, maskedSelfOutput);
+        }
+
+        // Apply activation function
+        if (ScalarActivation is not null && ScalarActivation is not IdentityActivation<T>)
+        {
+            if (ScalarActivation.SupportsJitCompilation)
+            {
+                outputNode = ScalarActivation.ApplyToGraph(outputNode);
+            }
+            else
+            {
+                var activated = ScalarActivation.Activate(outputNode.Value);
+                outputNode = TensorOperations<T>.Constant(activated, "activated_output");
+            }
+        }
+
+        return outputNode;
     }
 }

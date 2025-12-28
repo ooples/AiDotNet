@@ -225,7 +225,7 @@ public class StandardVAE<T> : VAEModelBase<T>
             inputWidth: 64,
             stride: 1,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         // Build encoder
         var inChannels = _baseChannels;
@@ -257,7 +257,7 @@ public class StandardVAE<T> : VAEModelBase<T>
             inputWidth: 8,
             stride: 1,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         _logVarConv = new ConvolutionalLayer<T>(
             inputDepth: lastEncoderChannels,
@@ -267,7 +267,7 @@ public class StandardVAE<T> : VAEModelBase<T>
             inputWidth: 8,
             stride: 1,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         // Quant convolution for latent processing
         _quantConv = new ConvolutionalLayer<T>(
@@ -278,7 +278,7 @@ public class StandardVAE<T> : VAEModelBase<T>
             inputWidth: 8,
             stride: 1,
             padding: 0,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         // Post-quant convolution for decoder input
         _postQuantConv = new ConvolutionalLayer<T>(
@@ -289,7 +289,7 @@ public class StandardVAE<T> : VAEModelBase<T>
             inputWidth: 8,
             stride: 1,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         // Build decoder (mirror of encoder)
         inChannels = lastEncoderChannels;
@@ -320,7 +320,7 @@ public class StandardVAE<T> : VAEModelBase<T>
             inputWidth: 64,
             stride: 1,
             padding: 1,
-            activation: new TanhActivation<T>()); // Output in [-1, 1]
+            activationFunction: new TanhActivation<T>()); // Output in [-1, 1]
     }
 
     /// <inheritdoc />
@@ -480,7 +480,7 @@ public class StandardVAE<T> : VAEModelBase<T>
             inputWidth: 32,
             stride: 2,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
     }
 
     private ILayer<T> CreateUpsample(int channels)

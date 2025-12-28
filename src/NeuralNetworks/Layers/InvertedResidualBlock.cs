@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -37,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class InvertedResidualBlock<T> : LayerBase<T>
+public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
 {
     private readonly ConvolutionalLayer<T>? _expandConv;
     private readonly BatchNormalizationLayer<T>? _expandBn;
@@ -109,7 +110,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>
         int stride = 1,
         bool useSE = false,
         int seRatio = 4,
-        IActivationFunction<T>? activation = null)
+        IActivationFunction<T>? activationFunction = null)
         : base(
             inputShape: [inChannels, inputHeight, inputWidth],
             outputShape: [outChannels, (inputHeight + stride - 1) / stride, (inputWidth + stride - 1) / stride])
@@ -120,7 +121,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>
         Stride = stride;
 
         int hiddenDim = inChannels * expansionRatio;
-        _activation = activation ?? new ReLU6Activation<T>();
+        _activation = activationFunction ?? new ReLU6Activation<T>();
         _hasExpansion = expansionRatio != 1;
         _useSE = useSE;
 
@@ -141,7 +142,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>
                 inputWidth: currentWidth,
                 stride: 1,
                 padding: 0,
-                activation: new IdentityActivation<T>());
+                activationFunction: new IdentityActivation<T>());
 
             _expandBn = new BatchNormalizationLayer<T>(hiddenDim);
         }
@@ -162,7 +163,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>
             inputWidth: currentWidth,
             stride: stride,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         _dwBn = new BatchNormalizationLayer<T>(dwInputChannels);
 
@@ -185,7 +186,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>
             inputWidth: dwOutputWidth,
             stride: 1,
             padding: 0,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         _projectBn = new BatchNormalizationLayer<T>(outChannels);
     }
@@ -422,18 +423,153 @@ public class InvertedResidualBlock<T> : LayerBase<T>
     /// <summary>
     /// Gets whether this block supports JIT compilation.
     /// </summary>
-    public override bool SupportsJitCompilation => false;
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            // Check all required sub-layers support JIT
+            if (_hasExpansion)
+            {
+                if (_expandConv is null || !_expandConv.SupportsJitCompilation ||
+                    _expandBn is null || !_expandBn.SupportsJitCompilation)
+                    return false;
+            }
+
+            if (!_dwConv.SupportsJitCompilation || !_dwBn.SupportsJitCompilation)
+                return false;
+
+            if (_useSE && _se is not null && !_se.SupportsJitCompilation)
+                return false;
+
+            if (!_projectConv.SupportsJitCompilation || !_projectBn.SupportsJitCompilation)
+                return false;
+
+            return true;
+        }
+    }
 
     /// <summary>
     /// Exports the computation graph for JIT compilation.
     /// </summary>
     /// <param name="inputNodes">List to populate with input computation nodes.</param>
     /// <returns>The output computation node.</returns>
-    /// <exception cref="NotSupportedException">Compound blocks don't support JIT.</exception>
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
-        throw new NotSupportedException(
-            "InvertedResidualBlock does not support JIT compilation. Use the standard Forward/Backward API instead.");
+        if (inputNodes is null)
+        {
+            throw new ArgumentNullException(nameof(inputNodes));
+        }
+
+        if (InputShape is null || InputShape.Length == 0)
+        {
+            throw new InvalidOperationException("Layer input shape not configured.");
+        }
+
+        // Create symbolic input node with batch dimension [B, C, H, W]
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        return BuildComputationGraph(inputNode, "");
+    }
+
+    /// <inheritdoc />
+    public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
+    {
+        var current = inputNode;
+
+        // Expansion phase (if expansion > 1)
+        if (_hasExpansion && _expandConv is not null && _expandBn is not null)
+        {
+            // Conv1x1 expansion
+            var expandBiases = _expandConv.GetBiases();
+            current = TensorOperations<T>.Conv2D(
+                current,
+                TensorOperations<T>.Constant(_expandConv.GetFilters(), $"{namePrefix}expand_kernel"),
+                expandBiases is not null ? TensorOperations<T>.Constant(expandBiases, $"{namePrefix}expand_bias") : null,
+                stride: new int[] { _expandConv.Stride, _expandConv.Stride },
+                padding: new int[] { _expandConv.Padding, _expandConv.Padding });
+
+            // BN
+            current = TensorOperations<T>.BatchNorm(
+                current,
+                gamma: TensorOperations<T>.Constant(_expandBn.GetGamma(), $"{namePrefix}expand_bn_gamma"),
+                beta: TensorOperations<T>.Constant(_expandBn.GetBeta(), $"{namePrefix}expand_bn_beta"),
+                runningMean: _expandBn.GetRunningMean(),
+                runningVar: _expandBn.GetRunningVariance(),
+                training: false,
+                epsilon: NumOps.ToDouble(_expandBn.GetEpsilon()));
+
+            // Activation (ReLU6 approximated as ReLU clamped)
+            current = TensorOperations<T>.ReLU(current);
+        }
+
+        // Depthwise convolution phase
+        {
+            var dwBiases = _dwConv.GetBiases();
+            current = TensorOperations<T>.Conv2D(
+                current,
+                TensorOperations<T>.Constant(_dwConv.GetFilters(), $"{namePrefix}dw_kernel"),
+                dwBiases is not null ? TensorOperations<T>.Constant(dwBiases, $"{namePrefix}dw_bias") : null,
+                stride: new int[] { _dwConv.Stride, _dwConv.Stride },
+                padding: new int[] { _dwConv.Padding, _dwConv.Padding });
+
+            // BN
+            current = TensorOperations<T>.BatchNorm(
+                current,
+                gamma: TensorOperations<T>.Constant(_dwBn.GetGamma(), $"{namePrefix}dw_bn_gamma"),
+                beta: TensorOperations<T>.Constant(_dwBn.GetBeta(), $"{namePrefix}dw_bn_beta"),
+                runningMean: _dwBn.GetRunningMean(),
+                runningVar: _dwBn.GetRunningVariance(),
+                training: false,
+                epsilon: NumOps.ToDouble(_dwBn.GetEpsilon()));
+
+            // Activation
+            current = TensorOperations<T>.ReLU(current);
+        }
+
+        // Squeeze-and-Excitation phase (if used)
+        // Note: SE layer expects NHWC format, so we need to transpose
+        if (_useSE && _se is not null)
+        {
+            // Transpose NCHW [B, C, H, W] -> NHWC [B, H, W, C]
+            current = TensorOperations<T>.Permute(current, new int[] { 0, 2, 3, 1 });
+
+            // Apply SE layer
+            current = _se.BuildComputationGraph(current, $"{namePrefix}se_");
+
+            // Transpose NHWC [B, H, W, C] -> NCHW [B, C, H, W]
+            current = TensorOperations<T>.Permute(current, new int[] { 0, 3, 1, 2 });
+        }
+
+        // Projection phase (LINEAR - no activation)
+        {
+            var projectBiases = _projectConv.GetBiases();
+            current = TensorOperations<T>.Conv2D(
+                current,
+                TensorOperations<T>.Constant(_projectConv.GetFilters(), $"{namePrefix}project_kernel"),
+                projectBiases is not null ? TensorOperations<T>.Constant(projectBiases, $"{namePrefix}project_bias") : null,
+                stride: new int[] { _projectConv.Stride, _projectConv.Stride },
+                padding: new int[] { _projectConv.Padding, _projectConv.Padding });
+
+            // BN only, no activation (linear bottleneck)
+            current = TensorOperations<T>.BatchNorm(
+                current,
+                gamma: TensorOperations<T>.Constant(_projectBn.GetGamma(), $"{namePrefix}project_bn_gamma"),
+                beta: TensorOperations<T>.Constant(_projectBn.GetBeta(), $"{namePrefix}project_bn_beta"),
+                runningMean: _projectBn.GetRunningMean(),
+                runningVar: _projectBn.GetRunningVariance(),
+                training: false,
+                epsilon: NumOps.ToDouble(_projectBn.GetEpsilon()));
+        }
+
+        // Residual connection (only if dimensions match)
+        if (_useResidual)
+        {
+            current = TensorOperations<T>.Add(current, inputNode);
+        }
+
+        return current;
     }
 
     #region Helper Methods

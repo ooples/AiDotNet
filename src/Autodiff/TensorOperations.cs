@@ -3998,6 +3998,437 @@ public static class TensorOperations<T>
         }
     }
     /// <summary>
+    /// Applies group normalization to a computation node.
+    /// </summary>
+    /// <param name="a">The input node with shape [batch, channels, ...] where ... can be spatial dimensions.</param>
+    /// <param name="numGroups">The number of groups to divide channels into.</param>
+    /// <param name="gamma">Optional scale parameter per channel. If null, uses ones.</param>
+    /// <param name="beta">Optional shift parameter per channel. If null, uses zeros.</param>
+    /// <param name="epsilon">Small constant for numerical stability. Default is 1e-5.</param>
+    /// <returns>A new computation node containing the group normalized result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Group normalization divides channels into groups and normalizes within each group.
+    /// Unlike batch normalization, it doesn't depend on batch size, making it suitable
+    /// for small batch sizes or generative models.
+    /// </para>
+    /// <para><b>For Beginners:</b> GroupNorm is an alternative to BatchNorm that works better
+    /// when batch sizes are small.
+    ///
+    /// For group normalization:
+    /// - Divides channels into groups (e.g., 32 groups for 256 channels = 8 channels per group)
+    /// - Normalizes each group independently: (x - mean) / sqrt(variance + epsilon)
+    /// - Scales and shifts per channel: result * gamma + beta
+    /// - Works the same during training and inference (no batch dependency)
+    ///
+    /// Key advantages:
+    /// - Works with batch size of 1 (unlike BatchNorm)
+    /// - More stable for generative models (VAEs, GANs, diffusion models)
+    /// - Used in modern architectures like Stable Diffusion VAE
+    ///
+    /// Typical usage:
+    /// - numGroups=32 for 256+ channels
+    /// - numGroups=16 for 128 channels
+    /// - numGroups=8 for 64 channels
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> GroupNorm(
+        ComputationNode<T> a,
+        int numGroups,
+        ComputationNode<T>? gamma = null,
+        ComputationNode<T>? beta = null,
+        double epsilon = 1e-5)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = a.Value.Shape;
+        var eps = numOps.FromDouble(epsilon);
+
+        if (shape.Length < 2)
+            throw new ArgumentException("GroupNorm requires at least 2D input [batch, channels, ...]");
+
+        int batchSize = shape[0];
+        int channels = shape[1];
+
+        if (channels % numGroups != 0)
+            throw new ArgumentException($"Number of channels ({channels}) must be divisible by number of groups ({numGroups}).");
+
+        int channelsPerGroup = channels / numGroups;
+
+        // Compute spatial size (product of all dimensions after channels)
+        int spatialSize = 1;
+        for (int i = 2; i < shape.Length; i++)
+            spatialSize *= shape[i];
+
+        int elementsPerGroup = channelsPerGroup * spatialSize;
+
+        // Create gamma and beta nodes if not provided
+        var gammaNode = gamma ?? new ComputationNode<T>(
+            Tensor<T>.CreateDefault(new int[] { channels }, numOps.One), requiresGradient: false);
+        var betaNode = beta ?? new ComputationNode<T>(
+            Tensor<T>.CreateDefault(new int[] { channels }, numOps.Zero), requiresGradient: false);
+
+        var result = new Tensor<T>(shape);
+        var normalized = new Tensor<T>(shape);
+        var groupMeans = new T[batchSize * numGroups];
+        var groupVars = new T[batchSize * numGroups];
+
+        // Handle 4D case [batch, channels, height, width] - most common for CNNs
+        if (shape.Length == 4)
+        {
+            int height = shape[2];
+            int width = shape[3];
+
+            // Compute mean and variance for each group
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int g = 0; g < numGroups; g++)
+                {
+                    int groupIdx = b * numGroups + g;
+                    int cStart = g * channelsPerGroup;
+
+                    // Compute mean
+                    var sum = numOps.Zero;
+                    for (int c = cStart; c < cStart + channelsPerGroup; c++)
+                    {
+                        for (int h = 0; h < height; h++)
+                        {
+                            for (int w = 0; w < width; w++)
+                            {
+                                sum = numOps.Add(sum, a.Value[b, c, h, w]);
+                            }
+                        }
+                    }
+                    groupMeans[groupIdx] = numOps.Divide(sum, numOps.FromDouble(elementsPerGroup));
+
+                    // Compute variance
+                    var varSum = numOps.Zero;
+                    for (int c = cStart; c < cStart + channelsPerGroup; c++)
+                    {
+                        for (int h = 0; h < height; h++)
+                        {
+                            for (int w = 0; w < width; w++)
+                            {
+                                var diff = numOps.Subtract(a.Value[b, c, h, w], groupMeans[groupIdx]);
+                                varSum = numOps.Add(varSum, numOps.Multiply(diff, diff));
+                            }
+                        }
+                    }
+                    groupVars[groupIdx] = numOps.Divide(varSum, numOps.FromDouble(elementsPerGroup));
+
+                    // Normalize and apply gamma/beta
+                    var std = numOps.Sqrt(numOps.Add(groupVars[groupIdx], eps));
+                    for (int c = cStart; c < cStart + channelsPerGroup; c++)
+                    {
+                        for (int h = 0; h < height; h++)
+                        {
+                            for (int w = 0; w < width; w++)
+                            {
+                                var norm = numOps.Divide(numOps.Subtract(a.Value[b, c, h, w], groupMeans[groupIdx]), std);
+                                normalized[b, c, h, w] = norm;
+                                result[b, c, h, w] = numOps.Add(
+                                    numOps.Multiply(norm, gammaNode.Value[c]),
+                                    betaNode.Value[c]);
+                            }
+                        }
+                    }
+                }
+            }
+
+            var capturedHeight = height;
+            var capturedWidth = width;
+
+            void BackwardFunction(Tensor<T> gradient)
+            {
+                // Gradient for gamma
+                if (gammaNode.RequiresGradient)
+                {
+                    var gradGamma = new Tensor<T>(new int[] { channels });
+                    for (int c = 0; c < channels; c++)
+                    {
+                        var sum = numOps.Zero;
+                        for (int b = 0; b < batchSize; b++)
+                        {
+                            for (int h = 0; h < capturedHeight; h++)
+                            {
+                                for (int w = 0; w < capturedWidth; w++)
+                                {
+                                    sum = numOps.Add(sum, numOps.Multiply(gradient[b, c, h, w], normalized[b, c, h, w]));
+                                }
+                            }
+                        }
+                        gradGamma[c] = sum;
+                    }
+                    var existingGrad = gammaNode.Gradient;
+                    gammaNode.Gradient = existingGrad == null ? gradGamma : existingGrad.Add(gradGamma);
+                }
+
+                // Gradient for beta
+                if (betaNode.RequiresGradient)
+                {
+                    var gradBeta = new Tensor<T>(new int[] { channels });
+                    for (int c = 0; c < channels; c++)
+                    {
+                        var sum = numOps.Zero;
+                        for (int b = 0; b < batchSize; b++)
+                        {
+                            for (int h = 0; h < capturedHeight; h++)
+                            {
+                                for (int w = 0; w < capturedWidth; w++)
+                                {
+                                    sum = numOps.Add(sum, gradient[b, c, h, w]);
+                                }
+                            }
+                        }
+                        gradBeta[c] = sum;
+                    }
+                    var existingGrad = betaNode.Gradient;
+                    betaNode.Gradient = existingGrad == null ? gradBeta : existingGrad.Add(gradBeta);
+                }
+
+                // Gradient for input
+                if (a.RequiresGradient)
+                {
+                    var gradA = new Tensor<T>(shape);
+                    var elementsPerGroupT = numOps.FromDouble(elementsPerGroup);
+
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        for (int g = 0; g < numGroups; g++)
+                        {
+                            int groupIdx = b * numGroups + g;
+                            int cStart = g * channelsPerGroup;
+                            var std = numOps.Sqrt(numOps.Add(groupVars[groupIdx], eps));
+                            var invStd = numOps.Divide(numOps.One, std);
+
+                            // Compute gradient sums for the group
+                            var gradSum = numOps.Zero;
+                            var gradNormSum = numOps.Zero;
+                            for (int c = cStart; c < cStart + channelsPerGroup; c++)
+                            {
+                                for (int h = 0; h < capturedHeight; h++)
+                                {
+                                    for (int w = 0; w < capturedWidth; w++)
+                                    {
+                                        var grad = numOps.Multiply(gradient[b, c, h, w], gammaNode.Value[c]);
+                                        gradSum = numOps.Add(gradSum, grad);
+                                        gradNormSum = numOps.Add(gradNormSum, numOps.Multiply(grad, normalized[b, c, h, w]));
+                                    }
+                                }
+                            }
+
+                            // Apply gradient formula
+                            for (int c = cStart; c < cStart + channelsPerGroup; c++)
+                            {
+                                for (int h = 0; h < capturedHeight; h++)
+                                {
+                                    for (int w = 0; w < capturedWidth; w++)
+                                    {
+                                        var grad = numOps.Multiply(gradient[b, c, h, w], gammaNode.Value[c]);
+                                        var term1 = grad;
+                                        var term2 = numOps.Divide(gradSum, elementsPerGroupT);
+                                        var term3 = numOps.Divide(numOps.Multiply(normalized[b, c, h, w], gradNormSum), elementsPerGroupT);
+                                        gradA[b, c, h, w] = numOps.Multiply(numOps.Subtract(numOps.Subtract(term1, term2), term3), invStd);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    var existingGrad = a.Gradient;
+                    a.Gradient = existingGrad == null ? gradA : existingGrad.Add(gradA);
+                }
+            }
+
+            var parents = new List<ComputationNode<T>> { a, gammaNode, betaNode };
+            var node = new ComputationNode<T>(
+                value: result,
+                requiresGradient: a.RequiresGradient || gammaNode.RequiresGradient || betaNode.RequiresGradient,
+                parents: parents,
+                backwardFunction: BackwardFunction,
+                name: null);
+
+            node.OperationType = OperationType.GroupNormalization;
+            node.OperationParams = new Dictionary<string, object>
+            {
+                { "NumGroups", numGroups },
+                { "Epsilon", epsilon }
+            };
+
+            var tape = GradientTape<T>.Current;
+            if (tape != null && tape.IsRecording)
+                tape.RecordOperation(node);
+            return node;
+        }
+        else
+        {
+            // Generic N-dimensional GroupNorm: for 2D [batch, channels] or higher dimensional inputs
+            // Compute mean and variance for each group
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int g = 0; g < numGroups; g++)
+                {
+                    int groupIdx = b * numGroups + g;
+                    int cStart = g * channelsPerGroup;
+
+                    // Compute mean over all elements in the group
+                    var sum = numOps.Zero;
+                    for (int c = cStart; c < cStart + channelsPerGroup; c++)
+                    {
+                        for (int s = 0; s < spatialSize; s++)
+                        {
+                            int idx = b * (channels * spatialSize) + c * spatialSize + s;
+                            sum = numOps.Add(sum, a.Value[idx]);
+                        }
+                    }
+                    groupMeans[groupIdx] = numOps.Divide(sum, numOps.FromDouble(elementsPerGroup));
+
+                    // Compute variance
+                    var varSum = numOps.Zero;
+                    for (int c = cStart; c < cStart + channelsPerGroup; c++)
+                    {
+                        for (int s = 0; s < spatialSize; s++)
+                        {
+                            int idx = b * (channels * spatialSize) + c * spatialSize + s;
+                            var diff = numOps.Subtract(a.Value[idx], groupMeans[groupIdx]);
+                            varSum = numOps.Add(varSum, numOps.Multiply(diff, diff));
+                        }
+                    }
+                    groupVars[groupIdx] = numOps.Divide(varSum, numOps.FromDouble(elementsPerGroup));
+
+                    // Normalize and apply gamma/beta
+                    var std = numOps.Sqrt(numOps.Add(groupVars[groupIdx], eps));
+                    for (int c = cStart; c < cStart + channelsPerGroup; c++)
+                    {
+                        for (int s = 0; s < spatialSize; s++)
+                        {
+                            int idx = b * (channels * spatialSize) + c * spatialSize + s;
+                            var norm = numOps.Divide(numOps.Subtract(a.Value[idx], groupMeans[groupIdx]), std);
+                            normalized[idx] = norm;
+                            result[idx] = numOps.Add(
+                                numOps.Multiply(norm, gammaNode.Value[c]),
+                                betaNode.Value[c]);
+                        }
+                    }
+                }
+            }
+
+            var capturedSpatialSize = spatialSize;
+
+            void BackwardFunction(Tensor<T> gradient)
+            {
+                // Gradient for gamma
+                if (gammaNode.RequiresGradient)
+                {
+                    var gradGamma = new Tensor<T>(new int[] { channels });
+                    for (int c = 0; c < channels; c++)
+                    {
+                        var sum = numOps.Zero;
+                        for (int b = 0; b < batchSize; b++)
+                        {
+                            for (int s = 0; s < capturedSpatialSize; s++)
+                            {
+                                int idx = b * (channels * capturedSpatialSize) + c * capturedSpatialSize + s;
+                                sum = numOps.Add(sum, numOps.Multiply(gradient[idx], normalized[idx]));
+                            }
+                        }
+                        gradGamma[c] = sum;
+                    }
+                    var existingGrad = gammaNode.Gradient;
+                    gammaNode.Gradient = existingGrad == null ? gradGamma : existingGrad.Add(gradGamma);
+                }
+
+                // Gradient for beta
+                if (betaNode.RequiresGradient)
+                {
+                    var gradBeta = new Tensor<T>(new int[] { channels });
+                    for (int c = 0; c < channels; c++)
+                    {
+                        var sum = numOps.Zero;
+                        for (int b = 0; b < batchSize; b++)
+                        {
+                            for (int s = 0; s < capturedSpatialSize; s++)
+                            {
+                                int idx = b * (channels * capturedSpatialSize) + c * capturedSpatialSize + s;
+                                sum = numOps.Add(sum, gradient[idx]);
+                            }
+                        }
+                        gradBeta[c] = sum;
+                    }
+                    var existingGrad = betaNode.Gradient;
+                    betaNode.Gradient = existingGrad == null ? gradBeta : existingGrad.Add(gradBeta);
+                }
+
+                // Gradient for input
+                if (a.RequiresGradient)
+                {
+                    var gradA = new Tensor<T>(shape);
+                    var elementsPerGroupT = numOps.FromDouble(elementsPerGroup);
+
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        for (int g = 0; g < numGroups; g++)
+                        {
+                            int groupIdx = b * numGroups + g;
+                            int cStart = g * channelsPerGroup;
+                            var std = numOps.Sqrt(numOps.Add(groupVars[groupIdx], eps));
+                            var invStd = numOps.Divide(numOps.One, std);
+
+                            // Compute gradient sums for the group
+                            var gradSum = numOps.Zero;
+                            var gradNormSum = numOps.Zero;
+                            for (int c = cStart; c < cStart + channelsPerGroup; c++)
+                            {
+                                for (int s = 0; s < capturedSpatialSize; s++)
+                                {
+                                    int idx = b * (channels * capturedSpatialSize) + c * capturedSpatialSize + s;
+                                    var grad = numOps.Multiply(gradient[idx], gammaNode.Value[c]);
+                                    gradSum = numOps.Add(gradSum, grad);
+                                    gradNormSum = numOps.Add(gradNormSum, numOps.Multiply(grad, normalized[idx]));
+                                }
+                            }
+
+                            // Apply gradient formula
+                            for (int c = cStart; c < cStart + channelsPerGroup; c++)
+                            {
+                                for (int s = 0; s < capturedSpatialSize; s++)
+                                {
+                                    int idx = b * (channels * capturedSpatialSize) + c * capturedSpatialSize + s;
+                                    var grad = numOps.Multiply(gradient[idx], gammaNode.Value[c]);
+                                    var term1 = grad;
+                                    var term2 = numOps.Divide(gradSum, elementsPerGroupT);
+                                    var term3 = numOps.Divide(numOps.Multiply(normalized[idx], gradNormSum), elementsPerGroupT);
+                                    gradA[idx] = numOps.Multiply(numOps.Subtract(numOps.Subtract(term1, term2), term3), invStd);
+                                }
+                            }
+                        }
+                    }
+                    var existingGrad = a.Gradient;
+                    a.Gradient = existingGrad == null ? gradA : existingGrad.Add(gradA);
+                }
+            }
+
+            var parents = new List<ComputationNode<T>> { a, gammaNode, betaNode };
+            var node = new ComputationNode<T>(
+                value: result,
+                requiresGradient: a.RequiresGradient || gammaNode.RequiresGradient || betaNode.RequiresGradient,
+                parents: parents,
+                backwardFunction: BackwardFunction,
+                name: null);
+
+            node.OperationType = OperationType.GroupNormalization;
+            node.OperationParams = new Dictionary<string, object>
+            {
+                { "NumGroups", numGroups },
+                { "Epsilon", epsilon }
+            };
+
+            var tape = GradientTape<T>.Current;
+            if (tape != null && tape.IsRecording)
+                tape.RecordOperation(node);
+            return node;
+        }
+    }
+
+    /// <summary>
     /// Performs 2D convolution on a 4D tensor (batch, channels, height, width).
     /// </summary>
     /// <param name="input">The input node with shape [batch, inChannels, height, width].</param>
@@ -10910,6 +11341,331 @@ public static class TensorOperations<T>
 
 
     /// <summary>
+    /// Performs octonion matrix multiplication for OctonionLinearLayer.
+    /// </summary>
+    /// <param name="input">Input tensor with shape [batch, inputFeatures * 8] where each group of 8 represents an octonion.</param>
+    /// <param name="weights">Weight tensor with shape [outputFeatures, inputFeatures, 8] where last dimension is octonion components.</param>
+    /// <param name="biases">Optional bias tensor with shape [outputFeatures, 8].</param>
+    /// <returns>Output tensor with shape [batch, outputFeatures * 8].</returns>
+    /// <remarks>
+    /// <para>
+    /// Octonions are 8-dimensional numbers that generalize quaternions. They are non-associative
+    /// but can capture more complex relationships in data. This operation performs:
+    /// output[b, o] = sum_i(input[b, i] * weights[o, i]) + biases[o]
+    /// where * is octonion multiplication.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like matrix multiplication but using 8-dimensional
+    /// octonion numbers instead of regular numbers. Each octonion has 8 components:
+    /// (scalar, e1, e2, e3, e4, e5, e6, e7).
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> OctonionMatMul(
+        ComputationNode<T> input,
+        ComputationNode<T> weights,
+        ComputationNode<T>? biases = null)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputShape = input.Value.Shape;
+        var weightShape = weights.Value.Shape;
+
+        if (inputShape.Length != 2)
+            throw new ArgumentException("OctonionMatMul input must have shape [batch, inputFeatures * 8]");
+        if (weightShape.Length != 3 || weightShape[2] != 8)
+            throw new ArgumentException("OctonionMatMul weights must have shape [outputFeatures, inputFeatures, 8]");
+        if (inputShape[1] != weightShape[1] * 8)
+            throw new ArgumentException($"Input features ({inputShape[1] / 8}) must match weight input features ({weightShape[1]})");
+
+        int batchSize = inputShape[0];
+        int inputFeatures = weightShape[1];
+        int outputFeatures = weightShape[0];
+
+        var result = new Tensor<T>(new int[] { batchSize, outputFeatures * 8 });
+
+        // Forward pass: compute octonion matrix multiplication
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int o = 0; o < outputFeatures; o++)
+            {
+                // Initialize output octonion to zero
+                var outOct = new T[8];
+                for (int k = 0; k < 8; k++)
+                    outOct[k] = numOps.Zero;
+
+                // Sum over input features
+                for (int i = 0; i < inputFeatures; i++)
+                {
+                    // Get input octonion at position i
+                    var inOct = new T[8];
+                    for (int k = 0; k < 8; k++)
+                        inOct[k] = input.Value[b, i * 8 + k];
+
+                    // Get weight octonion at position [o, i]
+                    var wOct = new T[8];
+                    for (int k = 0; k < 8; k++)
+                        wOct[k] = weights.Value[o, i, k];
+
+                    // Multiply octonions and accumulate (using Cayley-Dickson construction)
+                    var product = OctonionMultiplyComponents(numOps, inOct, wOct);
+                    for (int k = 0; k < 8; k++)
+                        outOct[k] = numOps.Add(outOct[k], product[k]);
+                }
+
+                // Add bias if provided
+                if (biases != null)
+                {
+                    for (int k = 0; k < 8; k++)
+                        outOct[k] = numOps.Add(outOct[k], biases.Value[o, k]);
+                }
+
+                // Store result
+                for (int k = 0; k < 8; k++)
+                    result[b, o * 8 + k] = outOct[k];
+            }
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            // Gradient for input
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputShape);
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int i = 0; i < inputFeatures; i++)
+                    {
+                        var gradOct = new T[8];
+                        for (int k = 0; k < 8; k++)
+                            gradOct[k] = numOps.Zero;
+
+                        for (int o = 0; o < outputFeatures; o++)
+                        {
+                            // Get output gradient octonion
+                            var outGradOct = new T[8];
+                            for (int k = 0; k < 8; k++)
+                                outGradOct[k] = gradient[b, o * 8 + k];
+
+                            // Get weight octonion conjugate
+                            var wOct = new T[8];
+                            for (int k = 0; k < 8; k++)
+                                wOct[k] = weights.Value[o, i, k];
+                            var wConjugate = OctonionConjugateComponents(numOps, wOct);
+
+                            // Multiply gradient by conjugate of weight
+                            var product = OctonionMultiplyComponents(numOps, outGradOct, wConjugate);
+                            for (int k = 0; k < 8; k++)
+                                gradOct[k] = numOps.Add(gradOct[k], product[k]);
+                        }
+
+                        for (int k = 0; k < 8; k++)
+                            gradInput[b, i * 8 + k] = gradOct[k];
+                    }
+                }
+                var existingGrad = input.Gradient;
+                input.Gradient = existingGrad == null ? gradInput : existingGrad.Add(gradInput);
+            }
+
+            // Gradient for weights
+            if (weights.RequiresGradient)
+            {
+                var gradWeights = new Tensor<T>(weightShape);
+                for (int o = 0; o < outputFeatures; o++)
+                {
+                    for (int i = 0; i < inputFeatures; i++)
+                    {
+                        var gradOct = new T[8];
+                        for (int k = 0; k < 8; k++)
+                            gradOct[k] = numOps.Zero;
+
+                        for (int b = 0; b < batchSize; b++)
+                        {
+                            // Get output gradient octonion conjugate
+                            var outGradOct = new T[8];
+                            for (int k = 0; k < 8; k++)
+                                outGradOct[k] = gradient[b, o * 8 + k];
+                            var outGradConjugate = OctonionConjugateComponents(numOps, outGradOct);
+
+                            // Get input octonion
+                            var inOct = new T[8];
+                            for (int k = 0; k < 8; k++)
+                                inOct[k] = input.Value[b, i * 8 + k];
+
+                            // Multiply conjugate of gradient by input
+                            var product = OctonionMultiplyComponents(numOps, outGradConjugate, inOct);
+                            for (int k = 0; k < 8; k++)
+                                gradOct[k] = numOps.Add(gradOct[k], product[k]);
+                        }
+
+                        for (int k = 0; k < 8; k++)
+                            gradWeights[o, i, k] = gradOct[k];
+                    }
+                }
+                var existingGrad = weights.Gradient;
+                weights.Gradient = existingGrad == null ? gradWeights : existingGrad.Add(gradWeights);
+            }
+
+            // Gradient for biases
+            if (biases != null && biases.RequiresGradient)
+            {
+                var gradBiases = new Tensor<T>(new int[] { outputFeatures, 8 });
+                for (int o = 0; o < outputFeatures; o++)
+                {
+                    for (int k = 0; k < 8; k++)
+                    {
+                        var sum = numOps.Zero;
+                        for (int b = 0; b < batchSize; b++)
+                            sum = numOps.Add(sum, gradient[b, o * 8 + k]);
+                        gradBiases[o, k] = sum;
+                    }
+                }
+                var existingGrad = biases.Gradient;
+                biases.Gradient = existingGrad == null ? gradBiases : existingGrad.Add(gradBiases);
+            }
+        }
+
+        var parents = new List<ComputationNode<T>> { input, weights };
+        if (biases != null)
+            parents.Add(biases);
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient || weights.RequiresGradient || (biases?.RequiresGradient ?? false),
+            parents: parents,
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.OctonionMatMul;
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Multiplies two octonions represented as 8-component arrays.
+    /// Uses the Cayley-Dickson construction for octonion multiplication.
+    /// </summary>
+    private static T[] OctonionMultiplyComponents(INumericOperations<T> numOps, T[] a, T[] b)
+    {
+        // Octonion multiplication table:
+        // Each octonion is (e0, e1, e2, e3, e4, e5, e6, e7) where e0 is the real part
+        // Using Cayley-Dickson construction: (a, b) * (c, d) = (ac - d*b, da + bc*)
+        // where a, b, c, d are quaternions
+
+        var result = new T[8];
+
+        // Real part (e0)
+        result[0] = numOps.Subtract(numOps.Subtract(numOps.Subtract(numOps.Subtract(
+            numOps.Subtract(numOps.Subtract(numOps.Subtract(
+                numOps.Multiply(a[0], b[0]),
+                numOps.Multiply(a[1], b[1])),
+                numOps.Multiply(a[2], b[2])),
+                numOps.Multiply(a[3], b[3])),
+                numOps.Multiply(a[4], b[4])),
+                numOps.Multiply(a[5], b[5])),
+                numOps.Multiply(a[6], b[6])),
+                numOps.Multiply(a[7], b[7]));
+
+        // e1
+        result[1] = numOps.Add(numOps.Add(numOps.Add(numOps.Subtract(numOps.Subtract(numOps.Subtract(numOps.Add(
+            numOps.Multiply(a[0], b[1]),
+            numOps.Multiply(a[1], b[0])),
+            numOps.Multiply(a[2], b[3])),
+            numOps.Multiply(a[3], b[2])),
+            numOps.Multiply(a[4], b[5])),
+            numOps.Multiply(a[5], b[4])),
+            numOps.Multiply(a[6], b[7])),
+            numOps.Multiply(a[7], b[6]));
+
+        // e2
+        result[2] = numOps.Add(numOps.Subtract(numOps.Add(numOps.Subtract(numOps.Subtract(numOps.Add(numOps.Add(
+            numOps.Multiply(a[0], b[2]),
+            numOps.Multiply(a[2], b[0])),
+            numOps.Multiply(a[1], b[3])),
+            numOps.Multiply(a[3], b[1])),
+            numOps.Multiply(a[4], b[6])),
+            numOps.Multiply(a[6], b[4])),
+            numOps.Multiply(a[5], b[7])),
+            numOps.Multiply(a[7], b[5]));
+
+        // e3
+        result[3] = numOps.Add(numOps.Add(numOps.Subtract(numOps.Add(numOps.Subtract(numOps.Subtract(numOps.Add(
+            numOps.Multiply(a[0], b[3]),
+            numOps.Multiply(a[3], b[0])),
+            numOps.Multiply(a[1], b[2])),
+            numOps.Multiply(a[2], b[1])),
+            numOps.Multiply(a[4], b[7])),
+            numOps.Multiply(a[7], b[4])),
+            numOps.Multiply(a[5], b[6])),
+            numOps.Multiply(a[6], b[5]));
+
+        // e4
+        result[4] = numOps.Add(numOps.Subtract(numOps.Subtract(numOps.Add(numOps.Add(numOps.Add(numOps.Add(
+            numOps.Multiply(a[0], b[4]),
+            numOps.Multiply(a[4], b[0])),
+            numOps.Multiply(a[1], b[5])),
+            numOps.Multiply(a[5], b[1])),
+            numOps.Multiply(a[2], b[6])),
+            numOps.Multiply(a[6], b[2])),
+            numOps.Multiply(a[3], b[7])),
+            numOps.Multiply(a[7], b[3]));
+
+        // e5
+        result[5] = numOps.Subtract(numOps.Add(numOps.Subtract(numOps.Add(numOps.Subtract(numOps.Add(numOps.Add(
+            numOps.Multiply(a[0], b[5]),
+            numOps.Multiply(a[5], b[0])),
+            numOps.Multiply(a[1], b[4])),
+            numOps.Multiply(a[4], b[1])),
+            numOps.Multiply(a[2], b[7])),
+            numOps.Multiply(a[7], b[2])),
+            numOps.Multiply(a[3], b[6])),
+            numOps.Multiply(a[6], b[3]));
+
+        // e6
+        result[6] = numOps.Subtract(numOps.Subtract(numOps.Add(numOps.Add(numOps.Subtract(numOps.Add(numOps.Add(
+            numOps.Multiply(a[0], b[6]),
+            numOps.Multiply(a[6], b[0])),
+            numOps.Multiply(a[1], b[7])),
+            numOps.Multiply(a[7], b[1])),
+            numOps.Multiply(a[2], b[4])),
+            numOps.Multiply(a[4], b[2])),
+            numOps.Multiply(a[3], b[5])),
+            numOps.Multiply(a[5], b[3]));
+
+        // e7
+        result[7] = numOps.Add(numOps.Subtract(numOps.Subtract(numOps.Subtract(numOps.Add(numOps.Add(numOps.Add(
+            numOps.Multiply(a[0], b[7]),
+            numOps.Multiply(a[7], b[0])),
+            numOps.Multiply(a[1], b[6])),
+            numOps.Multiply(a[6], b[1])),
+            numOps.Multiply(a[2], b[5])),
+            numOps.Multiply(a[5], b[2])),
+            numOps.Multiply(a[3], b[4])),
+            numOps.Multiply(a[4], b[3]));
+
+        return result;
+    }
+
+    /// <summary>
+    /// Computes the conjugate of an octonion.
+    /// The conjugate negates all imaginary components.
+    /// </summary>
+    private static T[] OctonionConjugateComponents(INumericOperations<T> numOps, T[] a)
+    {
+        return new T[]
+        {
+            a[0],                      // Real part stays the same
+            numOps.Negate(a[1]),       // Negate e1
+            numOps.Negate(a[2]),       // Negate e2
+            numOps.Negate(a[3]),       // Negate e3
+            numOps.Negate(a[4]),       // Negate e4
+            numOps.Negate(a[5]),       // Negate e5
+            numOps.Negate(a[6]),       // Negate e6
+            numOps.Negate(a[7])        // Negate e7
+        };
+    }
+
+    /// <summary>
     /// Creates sinusoidal time embeddings for diffusion models.
     /// </summary>
     /// <param name="timesteps">The timesteps to embed [batchSize] or [batchSize, 1].</param>
@@ -10944,5 +11700,982 @@ public static class TensorOperations<T>
             backwardFunction: null,
             name: "sinusoidal_time_embedding");
     }
+
+    #region Hyperbolic Geometry Operations
+
+    /// <summary>
+    /// Projects a point onto the Poincare ball to ensure it stays inside the unit ball.
+    /// </summary>
+    /// <param name="point">Input point tensor [batchSize, dim] or [dim].</param>
+    /// <param name="curvature">Negative curvature of hyperbolic space (default -1).</param>
+    /// <param name="epsilon">Small value for numerical stability.</param>
+    /// <returns>Projected point on the Poincare ball.</returns>
+    /// <remarks>
+    /// Projects points that are outside or on the boundary of the Poincare ball
+    /// back inside by scaling to have norm slightly less than 1/sqrt(|c|).
+    /// </remarks>
+    public static ComputationNode<T> PoincareProject(
+        ComputationNode<T> point,
+        double curvature = -1.0,
+        double epsilon = 1e-5)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var input = point.Value;
+        var shape = input.Shape;
+
+        // Compute max radius based on curvature
+        double absC = Math.Abs(curvature);
+        double maxRadius = 1.0 / Math.Sqrt(absC) - epsilon;
+
+        int batchSize = shape.Length > 1 ? shape[0] : 1;
+        int dim = shape.Length > 1 ? shape[^1] : shape[0];
+        var result = new Tensor<T>(shape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Compute squared norm
+            double sqNorm = 0;
+            for (int i = 0; i < dim; i++)
+            {
+                double val = shape.Length > 1
+                    ? numOps.ToDouble(input[b, i])
+                    : numOps.ToDouble(input[i]);
+                sqNorm += val * val;
+            }
+
+            double norm = Math.Sqrt(sqNorm);
+            double scale = 1.0;
+
+            // If outside the ball, project back inside
+            if (norm >= maxRadius)
+            {
+                scale = maxRadius / (norm + epsilon);
+            }
+
+            // Apply scaling
+            for (int i = 0; i < dim; i++)
+            {
+                double val = shape.Length > 1
+                    ? numOps.ToDouble(input[b, i])
+                    : numOps.ToDouble(input[i]);
+                T scaledVal = numOps.FromDouble(val * scale);
+
+                if (shape.Length > 1)
+                    result[b, i] = scaledVal;
+                else
+                    result[i] = scaledVal;
+            }
+        }
+
+        // Backward: gradient flows through with projection Jacobian
+        void BackwardFunction(Tensor<T> outputGradient)
+        {
+            if (!point.RequiresGradient) return;
+
+            var inputGrad = new Tensor<T>(shape);
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                double sqNorm = 0;
+                for (int i = 0; i < dim; i++)
+                {
+                    double val = shape.Length > 1
+                        ? numOps.ToDouble(input[b, i])
+                        : numOps.ToDouble(input[i]);
+                    sqNorm += val * val;
+                }
+
+                double norm = Math.Sqrt(sqNorm);
+                bool wasProjected = norm >= maxRadius;
+
+                if (wasProjected && norm > epsilon)
+                {
+                    double normCubed = norm * norm * norm + epsilon;
+
+                    for (int i = 0; i < dim; i++)
+                    {
+                        double xi = shape.Length > 1
+                            ? numOps.ToDouble(input[b, i])
+                            : numOps.ToDouble(input[i]);
+
+                        double gradSum = 0;
+                        for (int j = 0; j < dim; j++)
+                        {
+                            double xj = shape.Length > 1
+                                ? numOps.ToDouble(input[b, j])
+                                : numOps.ToDouble(input[j]);
+                            double gradJ = shape.Length > 1
+                                ? numOps.ToDouble(outputGradient[b, j])
+                                : numOps.ToDouble(outputGradient[j]);
+
+                            double jacobian = (i == j ? 1.0 / norm : 0) - (xi * xj / normCubed);
+                            gradSum += jacobian * maxRadius * gradJ;
+                        }
+
+                        if (shape.Length > 1)
+                            inputGrad[b, i] = numOps.FromDouble(gradSum);
+                        else
+                            inputGrad[i] = numOps.FromDouble(gradSum);
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < dim; i++)
+                    {
+                        if (shape.Length > 1)
+                            inputGrad[b, i] = outputGradient[b, i];
+                        else
+                            inputGrad[i] = outputGradient[i];
+                    }
+                }
+            }
+
+            if (point.Gradient == null)
+                point.Gradient = inputGrad;
+            else
+                point.Gradient = point.Gradient.Add(inputGrad);
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: point.RequiresGradient,
+            parents: new List<ComputationNode<T>> { point },
+            backwardFunction: BackwardFunction,
+            name: "poincare_project");
+
+        node.OperationType = OperationType.Custom;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "op", "PoincareProject" },
+            { "curvature", curvature },
+            { "epsilon", epsilon }
+        };
+
+        return node;
+    }
+
+    /// <summary>
+    /// Mobius addition in the Poincare ball model.
+    /// </summary>
+    /// <param name="x">First point tensor [batchSize, dim] or [dim].</param>
+    /// <param name="y">Second point tensor with same shape as x.</param>
+    /// <param name="curvature">Negative curvature of hyperbolic space (default -1).</param>
+    /// <returns>Result of Mobius addition x ⊕ y.</returns>
+    /// <remarks>
+    /// Mobius addition is the hyperbolic analog of vector addition:
+    /// x ⊕ y = ((1 + 2c⟨x,y⟩ + c||y||²)x + (1 - c||x||²)y) / (1 + 2c⟨x,y⟩ + c²||x||²||y||²)
+    /// </remarks>
+    public static ComputationNode<T> MobiusAdd(
+        ComputationNode<T> x,
+        ComputationNode<T> y,
+        double curvature = -1.0)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var xVal = x.Value;
+        var yVal = y.Value;
+        var shape = xVal.Shape;
+        double c = Math.Abs(curvature); // Use absolute value of curvature
+
+        int batchSize = shape.Length > 1 ? shape[0] : 1;
+        int dim = shape.Length > 1 ? shape[^1] : shape[0];
+        var result = new Tensor<T>(shape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Compute dot product ⟨x, y⟩
+            double dotXY = 0;
+            double sqNormX = 0;
+            double sqNormY = 0;
+
+            for (int i = 0; i < dim; i++)
+            {
+                double xi = shape.Length > 1 ? numOps.ToDouble(xVal[b, i]) : numOps.ToDouble(xVal[i]);
+                double yi = shape.Length > 1 ? numOps.ToDouble(yVal[b, i]) : numOps.ToDouble(yVal[i]);
+                dotXY += xi * yi;
+                sqNormX += xi * xi;
+                sqNormY += yi * yi;
+            }
+
+            // Compute coefficients
+            double numeratorX = 1.0 + 2.0 * c * dotXY + c * sqNormY;
+            double numeratorY = 1.0 - c * sqNormX;
+            double denominator = 1.0 + 2.0 * c * dotXY + c * c * sqNormX * sqNormY;
+            denominator = Math.Max(denominator, 1e-10); // Numerical stability
+
+            // Compute result
+            for (int i = 0; i < dim; i++)
+            {
+                double xi = shape.Length > 1 ? numOps.ToDouble(xVal[b, i]) : numOps.ToDouble(xVal[i]);
+                double yi = shape.Length > 1 ? numOps.ToDouble(yVal[b, i]) : numOps.ToDouble(yVal[i]);
+                double ri = (numeratorX * xi + numeratorY * yi) / denominator;
+
+                if (shape.Length > 1)
+                    result[b, i] = numOps.FromDouble(ri);
+                else
+                    result[i] = numOps.FromDouble(ri);
+            }
+        }
+
+        // Backward function for Mobius addition
+        void BackwardFunction(Tensor<T> outputGradient)
+        {
+            for (int b = 0; b < batchSize; b++)
+            {
+                // Recompute forward values
+                double dotXY = 0, sqNormX = 0, sqNormY = 0;
+                for (int i = 0; i < dim; i++)
+                {
+                    double xi = shape.Length > 1 ? numOps.ToDouble(xVal[b, i]) : numOps.ToDouble(xVal[i]);
+                    double yi = shape.Length > 1 ? numOps.ToDouble(yVal[b, i]) : numOps.ToDouble(yVal[i]);
+                    dotXY += xi * yi;
+                    sqNormX += xi * xi;
+                    sqNormY += yi * yi;
+                }
+
+                double numeratorX = 1.0 + 2.0 * c * dotXY + c * sqNormY;
+                double numeratorY = 1.0 - c * sqNormX;
+                double denominator = 1.0 + 2.0 * c * dotXY + c * c * sqNormX * sqNormY;
+                denominator = Math.Max(denominator, 1e-10);
+
+                // Simplified gradient computation
+                for (int i = 0; i < dim; i++)
+                {
+                    double gradOut = shape.Length > 1
+                        ? numOps.ToDouble(outputGradient[b, i])
+                        : numOps.ToDouble(outputGradient[i]);
+
+                    double gradXi = gradOut * numeratorX / denominator;
+                    double gradYi = gradOut * numeratorY / denominator;
+
+                    if (x.RequiresGradient)
+                    {
+                        if (x.Gradient == null)
+                            x.Gradient = new Tensor<T>(shape);
+                        if (shape.Length > 1)
+                            x.Gradient[b, i] = numOps.Add(x.Gradient[b, i], numOps.FromDouble(gradXi));
+                        else
+                            x.Gradient[i] = numOps.Add(x.Gradient[i], numOps.FromDouble(gradXi));
+                    }
+
+                    if (y.RequiresGradient)
+                    {
+                        if (y.Gradient == null)
+                            y.Gradient = new Tensor<T>(shape);
+                        if (shape.Length > 1)
+                            y.Gradient[b, i] = numOps.Add(y.Gradient[b, i], numOps.FromDouble(gradYi));
+                        else
+                            y.Gradient[i] = numOps.Add(y.Gradient[i], numOps.FromDouble(gradYi));
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: x.RequiresGradient || y.RequiresGradient,
+            parents: new List<ComputationNode<T>> { x, y },
+            backwardFunction: BackwardFunction,
+            name: "mobius_add");
+
+        node.OperationType = OperationType.MobiusAdd;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "curvature", curvature }
+        };
+
+        return node;
+    }
+
+    /// <summary>
+    /// Poincare ball exponential map from tangent space at a point.
+    /// </summary>
+    /// <param name="point">Base point on the Poincare ball [batchSize, dim] or [dim].</param>
+    /// <param name="tangent">Tangent vector at the point with same shape.</param>
+    /// <param name="curvature">Negative curvature of hyperbolic space (default -1).</param>
+    /// <returns>Point on manifold after following geodesic.</returns>
+    /// <remarks>
+    /// The exponential map takes a tangent vector at point p and returns the point
+    /// reached by following the geodesic in that direction:
+    /// exp_p(v) = p ⊕ (tanh(sqrt(c)||v||_p / 2) * v / (sqrt(c)||v||))
+    /// where ||v||_p = ||v|| * 2 / (1 - c||p||²) is the Poincare norm.
+    /// </remarks>
+    public static ComputationNode<T> PoincareExpMap(
+        ComputationNode<T> point,
+        ComputationNode<T> tangent,
+        double curvature = -1.0)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var pVal = point.Value;
+        var vVal = tangent.Value;
+        var shape = pVal.Shape;
+        double c = Math.Abs(curvature);
+        double sqrtC = Math.Sqrt(c);
+
+        int batchSize = shape.Length > 1 ? shape[0] : 1;
+        int dim = shape.Length > 1 ? shape[^1] : shape[0];
+        var result = new Tensor<T>(shape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Compute ||p||² and ||v||
+            double sqNormP = 0;
+            double sqNormV = 0;
+
+            for (int i = 0; i < dim; i++)
+            {
+                double pi = shape.Length > 1 ? numOps.ToDouble(pVal[b, i]) : numOps.ToDouble(pVal[i]);
+                double vi = shape.Length > 1 ? numOps.ToDouble(vVal[b, i]) : numOps.ToDouble(vVal[i]);
+                sqNormP += pi * pi;
+                sqNormV += vi * vi;
+            }
+
+            double normV = Math.Sqrt(sqNormV);
+
+            // Conformal factor at p
+            double lambda_p = 2.0 / Math.Max(1.0 - c * sqNormP, 1e-10);
+
+            // Poincare norm of v
+            double normV_p = lambda_p * normV;
+
+            if (normV < 1e-10)
+            {
+                // Zero tangent vector - just copy point
+                for (int i = 0; i < dim; i++)
+                {
+                    if (shape.Length > 1)
+                        result[b, i] = pVal[b, i];
+                    else
+                        result[i] = pVal[i];
+                }
+                continue;
+            }
+
+            // Compute the direction in tangent space
+            double scale = Math.Tanh(sqrtC * normV_p / 2.0) / (sqrtC * normV);
+
+            // Compute scaled tangent vector
+            var scaledV = new double[dim];
+            for (int i = 0; i < dim; i++)
+            {
+                double vi = shape.Length > 1 ? numOps.ToDouble(vVal[b, i]) : numOps.ToDouble(vVal[i]);
+                scaledV[i] = scale * vi;
+            }
+
+            // Apply Mobius addition: exp_p(v) = p ⊕ scaledV
+            double dotPV = 0;
+            double sqNormScaledV = 0;
+            for (int i = 0; i < dim; i++)
+            {
+                double pi = shape.Length > 1 ? numOps.ToDouble(pVal[b, i]) : numOps.ToDouble(pVal[i]);
+                dotPV += pi * scaledV[i];
+                sqNormScaledV += scaledV[i] * scaledV[i];
+            }
+
+            double numeratorP = 1.0 + 2.0 * c * dotPV + c * sqNormScaledV;
+            double numeratorV = 1.0 - c * sqNormP;
+            double denominator = Math.Max(1.0 + 2.0 * c * dotPV + c * c * sqNormP * sqNormScaledV, 1e-10);
+
+            for (int i = 0; i < dim; i++)
+            {
+                double pi = shape.Length > 1 ? numOps.ToDouble(pVal[b, i]) : numOps.ToDouble(pVal[i]);
+                double ri = (numeratorP * pi + numeratorV * scaledV[i]) / denominator;
+
+                if (shape.Length > 1)
+                    result[b, i] = numOps.FromDouble(ri);
+                else
+                    result[i] = numOps.FromDouble(ri);
+            }
+        }
+
+        // Backward function
+        void BackwardFunction(Tensor<T> outputGradient)
+        {
+            for (int b = 0; b < batchSize; b++)
+            {
+                double sqNormP = 0;
+                for (int i = 0; i < dim; i++)
+                {
+                    double pi = shape.Length > 1 ? numOps.ToDouble(pVal[b, i]) : numOps.ToDouble(pVal[i]);
+                    sqNormP += pi * pi;
+                }
+
+                double lambda_p = 2.0 / Math.Max(1.0 - c * sqNormP, 1e-10);
+                double conformalFactor = lambda_p * lambda_p / 4.0;
+
+                for (int i = 0; i < dim; i++)
+                {
+                    double gradOut = shape.Length > 1
+                        ? numOps.ToDouble(outputGradient[b, i])
+                        : numOps.ToDouble(outputGradient[i]);
+
+                    double pGrad = gradOut * conformalFactor;
+                    double vGrad = gradOut * conformalFactor;
+
+                    if (point.RequiresGradient)
+                    {
+                        if (point.Gradient == null)
+                            point.Gradient = new Tensor<T>(shape);
+                        if (shape.Length > 1)
+                            point.Gradient[b, i] = numOps.Add(point.Gradient[b, i], numOps.FromDouble(pGrad));
+                        else
+                            point.Gradient[i] = numOps.Add(point.Gradient[i], numOps.FromDouble(pGrad));
+                    }
+
+                    if (tangent.RequiresGradient)
+                    {
+                        if (tangent.Gradient == null)
+                            tangent.Gradient = new Tensor<T>(shape);
+                        if (shape.Length > 1)
+                            tangent.Gradient[b, i] = numOps.Add(tangent.Gradient[b, i], numOps.FromDouble(vGrad));
+                        else
+                            tangent.Gradient[i] = numOps.Add(tangent.Gradient[i], numOps.FromDouble(vGrad));
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: point.RequiresGradient || tangent.RequiresGradient,
+            parents: new List<ComputationNode<T>> { point, tangent },
+            backwardFunction: BackwardFunction,
+            name: "poincare_exp_map");
+
+        node.OperationType = OperationType.PoincareExpMap;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "curvature", curvature }
+        };
+
+        return node;
+    }
+
+    /// <summary>
+    /// Poincare ball logarithmic map to tangent space at a point.
+    /// </summary>
+    /// <param name="point">Base point on the Poincare ball [batchSize, dim] or [dim].</param>
+    /// <param name="target">Target point on the Poincare ball with same shape.</param>
+    /// <param name="curvature">Negative curvature of hyperbolic space (default -1).</param>
+    /// <returns>Tangent vector at point pointing towards target.</returns>
+    /// <remarks>
+    /// The logarithmic map is the inverse of the exponential map:
+    /// log_p(q) = (2 / (sqrt(c) * lambda_p)) * arctanh(sqrt(c) || -p ⊕ q ||) * (-p ⊕ q) / || -p ⊕ q ||
+    /// </remarks>
+    public static ComputationNode<T> PoincareLogMap(
+        ComputationNode<T> point,
+        ComputationNode<T> target,
+        double curvature = -1.0)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var pVal = point.Value;
+        var qVal = target.Value;
+        var shape = pVal.Shape;
+        double c = Math.Abs(curvature);
+        double sqrtC = Math.Sqrt(c);
+
+        int batchSize = shape.Length > 1 ? shape[0] : 1;
+        int dim = shape.Length > 1 ? shape[^1] : shape[0];
+        var result = new Tensor<T>(shape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // First compute -p ⊕ q using Mobius addition
+            double sqNormP = 0;
+            double sqNormQ = 0;
+            double dotPQ = 0;
+
+            for (int i = 0; i < dim; i++)
+            {
+                double pi = shape.Length > 1 ? numOps.ToDouble(pVal[b, i]) : numOps.ToDouble(pVal[i]);
+                double qi = shape.Length > 1 ? numOps.ToDouble(qVal[b, i]) : numOps.ToDouble(qVal[i]);
+                sqNormP += pi * pi;
+                sqNormQ += qi * qi;
+                dotPQ += (-pi) * qi; // Using -p
+            }
+
+            // Mobius add: -p ⊕ q
+            double numeratorNegP = 1.0 + 2.0 * c * dotPQ + c * sqNormQ;
+            double numeratorQ = 1.0 - c * sqNormP;
+            double denominator = Math.Max(1.0 + 2.0 * c * dotPQ + c * c * sqNormP * sqNormQ, 1e-10);
+
+            var diff = new double[dim];
+            double sqNormDiff = 0;
+            for (int i = 0; i < dim; i++)
+            {
+                double pi = shape.Length > 1 ? numOps.ToDouble(pVal[b, i]) : numOps.ToDouble(pVal[i]);
+                double qi = shape.Length > 1 ? numOps.ToDouble(qVal[b, i]) : numOps.ToDouble(qVal[i]);
+                diff[i] = (numeratorNegP * (-pi) + numeratorQ * qi) / denominator;
+                sqNormDiff += diff[i] * diff[i];
+            }
+
+            double normDiff = Math.Sqrt(sqNormDiff);
+            double lambda_p = 2.0 / Math.Max(1.0 - c * sqNormP, 1e-10);
+
+            if (normDiff < 1e-10)
+            {
+                // Points are the same, return zero tangent
+                for (int i = 0; i < dim; i++)
+                {
+                    if (shape.Length > 1)
+                        result[b, i] = numOps.Zero;
+                    else
+                        result[i] = numOps.Zero;
+                }
+                continue;
+            }
+
+            // Compute scale factor
+            double arg = Math.Min(sqrtC * normDiff, 1.0 - 1e-10);
+            double scale = (2.0 / (sqrtC * lambda_p)) * Atanh(arg) / normDiff;
+
+            for (int i = 0; i < dim; i++)
+            {
+                double ri = scale * diff[i];
+                if (shape.Length > 1)
+                    result[b, i] = numOps.FromDouble(ri);
+                else
+                    result[i] = numOps.FromDouble(ri);
+            }
+        }
+
+        // Backward function
+        void BackwardFunction(Tensor<T> outputGradient)
+        {
+            for (int b = 0; b < batchSize; b++)
+            {
+                double sqNormP = 0;
+                for (int i = 0; i < dim; i++)
+                {
+                    double pi = shape.Length > 1 ? numOps.ToDouble(pVal[b, i]) : numOps.ToDouble(pVal[i]);
+                    sqNormP += pi * pi;
+                }
+
+                double lambda_p = 2.0 / Math.Max(1.0 - c * sqNormP, 1e-10);
+                double conformalFactor = 4.0 / (lambda_p * lambda_p);
+
+                for (int i = 0; i < dim; i++)
+                {
+                    double gradOut = shape.Length > 1
+                        ? numOps.ToDouble(outputGradient[b, i])
+                        : numOps.ToDouble(outputGradient[i]);
+
+                    double pGrad = -gradOut * conformalFactor;
+                    double qGrad = gradOut * conformalFactor;
+
+                    if (point.RequiresGradient)
+                    {
+                        if (point.Gradient == null)
+                            point.Gradient = new Tensor<T>(shape);
+                        if (shape.Length > 1)
+                            point.Gradient[b, i] = numOps.Add(point.Gradient[b, i], numOps.FromDouble(pGrad));
+                        else
+                            point.Gradient[i] = numOps.Add(point.Gradient[i], numOps.FromDouble(pGrad));
+                    }
+
+                    if (target.RequiresGradient)
+                    {
+                        if (target.Gradient == null)
+                            target.Gradient = new Tensor<T>(shape);
+                        if (shape.Length > 1)
+                            target.Gradient[b, i] = numOps.Add(target.Gradient[b, i], numOps.FromDouble(qGrad));
+                        else
+                            target.Gradient[i] = numOps.Add(target.Gradient[i], numOps.FromDouble(qGrad));
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: point.RequiresGradient || target.RequiresGradient,
+            parents: new List<ComputationNode<T>> { point, target },
+            backwardFunction: BackwardFunction,
+            name: "poincare_log_map");
+
+        node.OperationType = OperationType.PoincareLogMap;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "curvature", curvature }
+        };
+
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the Poincare ball distance between two points.
+    /// </summary>
+    /// <param name="x">First point tensor [batchSize, dim] or [dim].</param>
+    /// <param name="y">Second point tensor with same shape as x.</param>
+    /// <param name="curvature">Negative curvature of hyperbolic space (default -1).</param>
+    /// <returns>Distance tensor [batchSize] or scalar.</returns>
+    /// <remarks>
+    /// The Poincare distance between points x and y is:
+    /// d(x, y) = (2/sqrt(c)) * arctanh(sqrt(c) || -x ⊕ y ||)
+    /// </remarks>
+    public static ComputationNode<T> PoincareDistance(
+        ComputationNode<T> x,
+        ComputationNode<T> y,
+        double curvature = -1.0)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var xVal = x.Value;
+        var yVal = y.Value;
+        var shape = xVal.Shape;
+        double c = Math.Abs(curvature);
+        double sqrtC = Math.Sqrt(c);
+
+        int batchSize = shape.Length > 1 ? shape[0] : 1;
+        int dim = shape.Length > 1 ? shape[^1] : shape[0];
+        var resultShape = shape.Length > 1 ? new int[] { batchSize } : new int[] { 1 };
+        var result = new Tensor<T>(resultShape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Compute -x ⊕ y using Mobius addition
+            double sqNormX = 0;
+            double sqNormY = 0;
+            double dotNegXY = 0;
+
+            for (int i = 0; i < dim; i++)
+            {
+                double xi = shape.Length > 1 ? numOps.ToDouble(xVal[b, i]) : numOps.ToDouble(xVal[i]);
+                double yi = shape.Length > 1 ? numOps.ToDouble(yVal[b, i]) : numOps.ToDouble(yVal[i]);
+                sqNormX += xi * xi;
+                sqNormY += yi * yi;
+                dotNegXY += (-xi) * yi;
+            }
+
+            double numeratorNegX = 1.0 + 2.0 * c * dotNegXY + c * sqNormY;
+            double numeratorY = 1.0 - c * sqNormX;
+            double denominator = Math.Max(1.0 + 2.0 * c * dotNegXY + c * c * sqNormX * sqNormY, 1e-10);
+
+            double sqNormDiff = 0;
+            for (int i = 0; i < dim; i++)
+            {
+                double xi = shape.Length > 1 ? numOps.ToDouble(xVal[b, i]) : numOps.ToDouble(xVal[i]);
+                double yi = shape.Length > 1 ? numOps.ToDouble(yVal[b, i]) : numOps.ToDouble(yVal[i]);
+                double diff_i = (numeratorNegX * (-xi) + numeratorY * yi) / denominator;
+                sqNormDiff += diff_i * diff_i;
+            }
+
+            double normDiff = Math.Sqrt(sqNormDiff);
+            double arg = Math.Min(sqrtC * normDiff, 1.0 - 1e-10);
+            double distance = (2.0 / sqrtC) * Atanh(arg);
+
+            result[b] = numOps.FromDouble(distance);
+        }
+
+        // Backward function
+        void BackwardFunction(Tensor<T> outputGradient)
+        {
+            for (int b = 0; b < batchSize; b++)
+            {
+                double gradOut = numOps.ToDouble(outputGradient[b]);
+
+                // Compute Mobius add components again
+                double sqNormX = 0, sqNormY = 0, dotNegXY = 0;
+                for (int i = 0; i < dim; i++)
+                {
+                    double xi = shape.Length > 1 ? numOps.ToDouble(xVal[b, i]) : numOps.ToDouble(xVal[i]);
+                    double yi = shape.Length > 1 ? numOps.ToDouble(yVal[b, i]) : numOps.ToDouble(yVal[i]);
+                    sqNormX += xi * xi;
+                    sqNormY += yi * yi;
+                    dotNegXY += (-xi) * yi;
+                }
+
+                double numeratorNegX = 1.0 + 2.0 * c * dotNegXY + c * sqNormY;
+                double numeratorY = 1.0 - c * sqNormX;
+                double denominator = Math.Max(1.0 + 2.0 * c * dotNegXY + c * c * sqNormX * sqNormY, 1e-10);
+
+                var diff = new double[dim];
+                double sqNormDiff = 0;
+                for (int i = 0; i < dim; i++)
+                {
+                    double xi = shape.Length > 1 ? numOps.ToDouble(xVal[b, i]) : numOps.ToDouble(xVal[i]);
+                    double yi = shape.Length > 1 ? numOps.ToDouble(yVal[b, i]) : numOps.ToDouble(yVal[i]);
+                    diff[i] = (numeratorNegX * (-xi) + numeratorY * yi) / denominator;
+                    sqNormDiff += diff[i] * diff[i];
+                }
+
+                double normDiff = Math.Max(Math.Sqrt(sqNormDiff), 1e-10);
+                double arg = Math.Min(sqrtC * normDiff, 1.0 - 1e-10);
+                double atanhDeriv = 1.0 / Math.Max(1.0 - arg * arg, 1e-10);
+                double distDeriv = (2.0 / sqrtC) * atanhDeriv * sqrtC / normDiff;
+
+                for (int i = 0; i < dim; i++)
+                {
+                    double diffDeriv = gradOut * distDeriv * diff[i] / normDiff;
+                    double xGradVal = -diffDeriv * numeratorNegX / denominator;
+                    double yGradVal = diffDeriv * numeratorY / denominator;
+
+                    if (x.RequiresGradient)
+                    {
+                        if (x.Gradient == null)
+                            x.Gradient = new Tensor<T>(shape);
+                        if (shape.Length > 1)
+                            x.Gradient[b, i] = numOps.Add(x.Gradient[b, i], numOps.FromDouble(xGradVal));
+                        else
+                            x.Gradient[i] = numOps.Add(x.Gradient[i], numOps.FromDouble(xGradVal));
+                    }
+
+                    if (y.RequiresGradient)
+                    {
+                        if (y.Gradient == null)
+                            y.Gradient = new Tensor<T>(shape);
+                        if (shape.Length > 1)
+                            y.Gradient[b, i] = numOps.Add(y.Gradient[b, i], numOps.FromDouble(yGradVal));
+                        else
+                            y.Gradient[i] = numOps.Add(y.Gradient[i], numOps.FromDouble(yGradVal));
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: x.RequiresGradient || y.RequiresGradient,
+            parents: new List<ComputationNode<T>> { x, y },
+            backwardFunction: BackwardFunction,
+            name: "poincare_distance");
+
+        node.OperationType = OperationType.PoincareDistance;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "curvature", curvature }
+        };
+
+        return node;
+    }
+
+    /// <summary>
+    /// Hyperbolic linear transformation in the Poincare ball model.
+    /// </summary>
+    /// <param name="input">Input tensor [batchSize, inputFeatures].</param>
+    /// <param name="weights">Weight matrix in tangent space [outputFeatures, inputFeatures].</param>
+    /// <param name="biases">Bias points on Poincare ball [outputFeatures, inputFeatures].</param>
+    /// <param name="curvature">Negative curvature of hyperbolic space (default -1).</param>
+    /// <returns>Output tensor [batchSize, outputFeatures] with Poincare distances.</returns>
+    /// <remarks>
+    /// Performs hyperbolic linear transformation:
+    /// 1. Project input to Poincare ball
+    /// 2. For each output: exp_origin(weight) → Mobius add with input → Mobius add with bias → distance from origin
+    /// </remarks>
+    public static ComputationNode<T> HyperbolicLinear(
+        ComputationNode<T> input,
+        ComputationNode<T> weights,
+        ComputationNode<T>? biases = null,
+        double curvature = -1.0)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+        var weightsVal = weights.Value;
+        double c = Math.Abs(curvature);
+        double sqrtC = Math.Sqrt(c);
+
+        int batchSize = inputVal.Shape[0];
+        int inputFeatures = inputVal.Shape[1];
+        int outputFeatures = weightsVal.Shape[0];
+        var result = new Tensor<T>(new int[] { batchSize, outputFeatures });
+
+        double epsilon = 1e-5;
+        double maxRadius = 1.0 / sqrtC - epsilon;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Project input to Poincare ball
+            double sqNormInput = 0;
+            for (int i = 0; i < inputFeatures; i++)
+            {
+                double val = numOps.ToDouble(inputVal[b, i]);
+                sqNormInput += val * val;
+            }
+            double normInput = Math.Sqrt(sqNormInput);
+            double inputScale = normInput >= maxRadius ? maxRadius / (normInput + epsilon) : 1.0;
+
+            for (int o = 0; o < outputFeatures; o++)
+            {
+                // Get weight vector and project to Poincare ball via exp map from origin
+                double sqNormWeight = 0;
+                for (int i = 0; i < inputFeatures; i++)
+                {
+                    double w = numOps.ToDouble(weightsVal[o, i]);
+                    sqNormWeight += w * w;
+                }
+                double normWeight = Math.Sqrt(sqNormWeight);
+
+                double weightScale = normWeight > epsilon
+                    ? Math.Tanh(sqrtC * normWeight / 2.0) / (sqrtC * normWeight)
+                    : 0.5;
+
+                // Compute Mobius addition: projectedInput ⊕ scaledWeight
+                double dotIW = 0;
+                double sqNormProjInput = 0;
+                double sqNormScaledWeight = 0;
+
+                for (int i = 0; i < inputFeatures; i++)
+                {
+                    double inp = numOps.ToDouble(inputVal[b, i]) * inputScale;
+                    double w = numOps.ToDouble(weightsVal[o, i]) * weightScale;
+                    dotIW += inp * w;
+                    sqNormProjInput += inp * inp;
+                    sqNormScaledWeight += w * w;
+                }
+
+                double num1 = 1.0 + 2.0 * c * dotIW + c * sqNormScaledWeight;
+                double num2 = 1.0 - c * sqNormProjInput;
+                double den = Math.Max(1.0 + 2.0 * c * dotIW + c * c * sqNormProjInput * sqNormScaledWeight, epsilon);
+
+                // Compute transformed point
+                var transformed = new double[inputFeatures];
+                double sqNormTransformed = 0;
+                for (int i = 0; i < inputFeatures; i++)
+                {
+                    double inp = numOps.ToDouble(inputVal[b, i]) * inputScale;
+                    double w = numOps.ToDouble(weightsVal[o, i]) * weightScale;
+                    transformed[i] = (num1 * inp + num2 * w) / den;
+                    sqNormTransformed += transformed[i] * transformed[i];
+                }
+
+                // Add bias if provided
+                double sqNormFinal = sqNormTransformed;
+                if (biases is not null)
+                {
+                    var biasesVal = biases.Value;
+
+                    // Project bias
+                    double sqNormBias = 0;
+                    for (int i = 0; i < inputFeatures; i++)
+                    {
+                        double bias = numOps.ToDouble(biasesVal[o, i]);
+                        sqNormBias += bias * bias;
+                    }
+                    double normBias = Math.Sqrt(sqNormBias);
+                    double biasScale = normBias >= maxRadius ? maxRadius / (normBias + epsilon) : 1.0;
+
+                    // Mobius add transformed ⊕ projectedBias
+                    double dotTB = 0;
+                    double sqNormProjBias = 0;
+                    for (int i = 0; i < inputFeatures; i++)
+                    {
+                        double bias = numOps.ToDouble(biasesVal[o, i]) * biasScale;
+                        dotTB += transformed[i] * bias;
+                        sqNormProjBias += bias * bias;
+                    }
+
+                    double numT = 1.0 + 2.0 * c * dotTB + c * sqNormProjBias;
+                    double numB = 1.0 - c * sqNormTransformed;
+                    double denTB = Math.Max(1.0 + 2.0 * c * dotTB + c * c * sqNormTransformed * sqNormProjBias, epsilon);
+
+                    sqNormFinal = 0;
+                    for (int i = 0; i < inputFeatures; i++)
+                    {
+                        double bias = numOps.ToDouble(biasesVal[o, i]) * biasScale;
+                        double finalVal = (numT * transformed[i] + numB * bias) / denTB;
+                        sqNormFinal += finalVal * finalVal;
+                    }
+                }
+
+                // Compute distance from origin
+                double normFinal = Math.Sqrt(sqNormFinal);
+                double arg = Math.Min(sqrtC * normFinal, 1.0 - epsilon);
+                double distance = (2.0 / sqrtC) * Atanh(arg);
+
+                result[b, o] = numOps.FromDouble(distance);
+            }
+        }
+
+        // Build parent list
+        var parents = biases is not null
+            ? new List<ComputationNode<T>> { input, weights, biases }
+            : new List<ComputationNode<T>> { input, weights };
+
+        // Backward function
+        void BackwardFunction(Tensor<T> outputGradient)
+        {
+            // Approximate gradients using Riemannian geometry
+            for (int b = 0; b < batchSize; b++)
+            {
+                double sqNormInput = 0;
+                for (int i = 0; i < inputFeatures; i++)
+                {
+                    double val = numOps.ToDouble(inputVal[b, i]);
+                    sqNormInput += val * val;
+                }
+                double conformalFactor = Math.Pow(1.0 - c * sqNormInput, 2) / 4.0;
+
+                for (int o = 0; o < outputFeatures; o++)
+                {
+                    double gradOut = numOps.ToDouble(outputGradient[b, o]);
+                    double scaledGrad = gradOut * conformalFactor;
+
+                    for (int i = 0; i < inputFeatures; i++)
+                    {
+                        double inp = numOps.ToDouble(inputVal[b, i]);
+                        double w = numOps.ToDouble(weightsVal[o, i]);
+
+                        // Accumulate input gradients
+                        if (input.RequiresGradient)
+                        {
+                            if (input.Gradient == null)
+                                input.Gradient = new Tensor<T>(inputVal.Shape);
+                            double existingInputGrad = numOps.ToDouble(input.Gradient[b, i]);
+                            input.Gradient[b, i] = numOps.FromDouble(existingInputGrad + scaledGrad * w);
+                        }
+
+                        // Accumulate weight gradients
+                        if (weights.RequiresGradient)
+                        {
+                            if (weights.Gradient == null)
+                                weights.Gradient = new Tensor<T>(weightsVal.Shape);
+                            double existingWeightGrad = numOps.ToDouble(weights.Gradient[o, i]);
+                            weights.Gradient[o, i] = numOps.FromDouble(existingWeightGrad + scaledGrad * inp);
+                        }
+
+                        // Accumulate bias gradients
+                        if (biases is not null && biases.RequiresGradient)
+                        {
+                            if (biases.Gradient == null)
+                                biases.Gradient = new Tensor<T>(biases.Value.Shape);
+                            double existingBiasGrad = numOps.ToDouble(biases.Gradient[o, i]);
+                            biases.Gradient[o, i] = numOps.FromDouble(existingBiasGrad + scaledGrad / inputFeatures);
+                        }
+                    }
+                }
+            }
+        }
+
+        bool requiresGrad = input.RequiresGradient || weights.RequiresGradient ||
+                           (biases is not null && biases.RequiresGradient);
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: requiresGrad,
+            parents: parents,
+            backwardFunction: BackwardFunction,
+            name: "hyperbolic_linear");
+
+        node.OperationType = OperationType.Custom;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "op", "HyperbolicLinear" },
+            { "curvature", curvature },
+            { "inputFeatures", inputFeatures },
+            { "outputFeatures", outputFeatures }
+        };
+
+        return node;
+    }
+
+    /// <summary>
+    /// Computes arctanh (inverse hyperbolic tangent) with numerical stability.
+    /// </summary>
+    private static double Atanh(double x)
+    {
+        // Clamp to avoid NaN at boundaries
+        x = Math.Max(-0.999999, Math.Min(0.999999, x));
+        return 0.5 * Math.Log((1.0 + x) / (1.0 - x));
+    }
+
+    #endregion
 
 }

@@ -27,7 +27,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class AdaptiveAvgPoolingLayer<T> : LayerBase<T>
+public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
 {
     private readonly int _outputHeight;
     private readonly int _outputWidth;
@@ -45,7 +45,7 @@ public class AdaptiveAvgPoolingLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="AdaptiveAvgPoolingLayer{T}"/> class.
+    /// Initializes a new instance of the <see cref="AdaptiveAveragePoolingLayer{T}"/> class.
     /// </summary>
     /// <param name="inputChannels">The number of input channels.</param>
     /// <param name="inputHeight">The expected input height (can vary at runtime).</param>
@@ -59,7 +59,7 @@ public class AdaptiveAvgPoolingLayer<T> : LayerBase<T>
     /// This is commonly used before the final classification layer in modern CNNs.
     /// </para>
     /// </remarks>
-    public AdaptiveAvgPoolingLayer(
+    public AdaptiveAveragePoolingLayer(
         int inputChannels,
         int inputHeight,
         int inputWidth,
@@ -90,9 +90,9 @@ public class AdaptiveAvgPoolingLayer<T> : LayerBase<T>
     /// <param name="inputHeight">The expected input height.</param>
     /// <param name="inputWidth">The expected input width.</param>
     /// <returns>An adaptive pooling layer that performs global average pooling.</returns>
-    public static AdaptiveAvgPoolingLayer<T> GlobalPool(int inputChannels, int inputHeight, int inputWidth)
+    public static AdaptiveAveragePoolingLayer<T> GlobalPool(int inputChannels, int inputHeight, int inputWidth)
     {
-        return new AdaptiveAvgPoolingLayer<T>(inputChannels, inputHeight, inputWidth, 1, 1);
+        return new AdaptiveAveragePoolingLayer<T>(inputChannels, inputHeight, inputWidth, 1, 1);
     }
 
     /// <summary>
@@ -258,7 +258,7 @@ public class AdaptiveAvgPoolingLayer<T> : LayerBase<T>
     /// Gets whether this layer supports JIT compilation.
     /// </summary>
     /// <remarks>
-    /// AdaptiveAvgPoolingLayer supports JIT compilation by computing the appropriate
+    /// AdaptiveAveragePoolingLayer supports JIT compilation by computing the appropriate
     /// pool size and stride to achieve the desired output dimensions, then using AvgPool2D.
     /// </remarks>
     public override bool SupportsJitCompilation => true;
@@ -267,7 +267,7 @@ public class AdaptiveAvgPoolingLayer<T> : LayerBase<T>
     /// Exports the computation graph for JIT compilation.
     /// </summary>
     /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the AdaptiveAvgPoolingLayer.</returns>
+    /// <returns>The output computation node representing the AdaptiveAveragePoolingLayer.</returns>
     /// <remarks>
     /// <para>
     /// Adaptive average pooling is implemented by calculating the appropriate pool size
