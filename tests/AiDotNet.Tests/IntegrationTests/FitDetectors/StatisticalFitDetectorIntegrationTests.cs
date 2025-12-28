@@ -407,17 +407,17 @@ public class StatisticalFitDetectorIntegrationTests
     }
 
     [Fact]
-    public void CookDistanceFitDetector_DetectFit_WithoutModel_ThrowsException()
+    public void CookDistanceFitDetector_DetectFit_WithoutModel_ThrowsInvalidOperationException()
     {
         // Arrange
         var detector = new CookDistanceFitDetector<double, Matrix<double>, Vector<double>>();
         var evaluationData = CreateGoodFitData();
-        // Note: CookDistanceFitDetector requires Model to be set on ModelStats
-        // Since our test helper doesn't set up a full model, this should throw
 
-        // Act & Assert
-        var exception = Assert.Throws<AiDotNetException>(() => detector.DetectFit(evaluationData));
+        // Act & Assert - InvalidOperationException is thrown when Model is not set,
+        // as this is a required dependency for Cook's distance calculation
+        var exception = Assert.Throws<InvalidOperationException>(() => detector.DetectFit(evaluationData));
         Assert.Contains("Model is null", exception.Message);
+        Assert.Contains("CookDistanceFitDetector requires Model", exception.Message);
     }
 
     #endregion
@@ -524,7 +524,8 @@ public class StatisticalFitDetectorIntegrationTests
         // Act
         var result = detector.DetectFit(evaluationData);
 
-        // Assert - Confidence level should be between 0 and 1 (clamped AUC * scaling factor)
+        // Assert - Confidence level is AUC * scaling factor, clamped to [0, 1] range
+        // The implementation ensures confidence never goes negative or exceeds 1.0
         Assert.NotNull(result);
         Assert.True(result.ConfidenceLevel >= 0.0,
             $"ConfidenceLevel should be >= 0, actual: {result.ConfidenceLevel}");
