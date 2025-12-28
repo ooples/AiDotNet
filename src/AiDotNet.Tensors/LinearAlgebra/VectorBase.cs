@@ -508,17 +508,90 @@ public abstract class VectorBase<T>
     /// For example, [1,2,3] + [4,5,6] = [5,7,9]. Vector addition is a fundamental operation in
     /// linear algebra and is used extensively in machine learning algorithms.</para>
     /// <para><b>Performance:</b> This method uses SIMD-accelerated operations for float/double types
-    /// via TensorPrimitives, providing 5-15x speedup for large vectors.</para>
+    /// via TensorPrimitives, providing 5-15x speedup for large vectors. Uses ArrayPool to minimize
+    /// allocation overhead for large vectors.</para>
     /// </remarks>
     public virtual VectorBase<T> Add(VectorBase<T> other)
     {
         if (Length != other.Length)
             throw new ArgumentException("Vectors must have the same length");
 
-        var resultArray = new T[Length];
-        _numOps.Add(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), new Span<T>(resultArray));
+        // Use ArrayPool for large vectors to reduce allocation pressure
+        T[] resultArray;
+        bool usePool = Length >= 256;
+        if (usePool)
+        {
+            resultArray = System.Buffers.ArrayPool<T>.Shared.Rent(Length);
+        }
+        else
+        {
+            resultArray = new T[Length];
+        }
 
-        return CreateInstance(resultArray);
+        try
+        {
+            _numOps.Add(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), new Span<T>(resultArray, 0, Length));
+
+            // Create result and copy data if using pooled array
+            if (usePool)
+            {
+                var result = CreateInstance(Length);
+                new ReadOnlySpan<T>(resultArray, 0, Length).CopyTo(result.AsWritableSpan());
+                return result;
+            }
+            else
+            {
+                return CreateInstance(resultArray);
+            }
+        }
+        finally
+        {
+            if (usePool)
+            {
+                System.Buffers.ArrayPool<T>.Shared.Return(resultArray);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Adds another vector to this vector in-place, modifying this vector.
+    /// </summary>
+    /// <param name="other">The vector to add to this vector.</param>
+    /// <exception cref="ArgumentException">Thrown when the vectors have different lengths.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This adds another vector to this vector, modifying the current vector
+    /// instead of creating a new one. This is more memory-efficient when you don't need to preserve
+    /// the original vector.</para>
+    /// <para><b>Performance:</b> This method performs zero allocations and uses SIMD-accelerated operations,
+    /// making it significantly faster than the regular Add method for repeated operations.</para>
+    /// </remarks>
+    public virtual void AddInPlace(VectorBase<T> other)
+    {
+        if (Length != other.Length)
+            throw new ArgumentException("Vectors must have the same length");
+
+        _numOps.Add(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), new Span<T>(_data));
+    }
+
+    /// <summary>
+    /// Adds another vector to this vector, storing the result in the destination span.
+    /// </summary>
+    /// <param name="other">The vector to add to this vector.</param>
+    /// <param name="destination">The span to store the result in.</param>
+    /// <exception cref="ArgumentException">Thrown when the vectors have different lengths or destination is too small.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This adds two vectors and stores the result in a pre-allocated buffer,
+    /// avoiding any memory allocation. This is the fastest way to add vectors when you can reuse buffers.</para>
+    /// <para><b>Performance:</b> Zero-allocation SIMD-accelerated addition - matches TensorPrimitives performance.</para>
+    /// </remarks>
+    public virtual void Add(VectorBase<T> other, Span<T> destination)
+    {
+        if (Length != other.Length)
+            throw new ArgumentException("Vectors must have the same length");
+        if (destination.Length < Length)
+            throw new ArgumentException("Destination span is too small", nameof(destination));
+
+        _numOps.Add(new ReadOnlySpan<T>(_data), new ReadOnlySpan<T>(other._data), destination);
     }
 
     /// <summary>

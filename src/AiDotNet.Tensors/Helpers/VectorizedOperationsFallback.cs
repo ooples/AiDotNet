@@ -456,4 +456,16 @@ internal static class VectorizedOperationsFallback
         for (int i = 0; i < x.Length; i++)
             destination[i] = ops.Cos(x[i]);
     }
+
+    /// <summary>
+    /// Computes fused multiply-add: destination[i] = x[i] + y[i] * scalar.
+    /// </summary>
+    public static void MultiplyAdd<T>(INumericOperations<T> ops, ReadOnlySpan<T> x, ReadOnlySpan<T> y, T scalar, Span<T> destination)
+    {
+        if (x.Length != y.Length || x.Length != destination.Length)
+            throw new ArgumentException("All spans must have the same length");
+
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = ops.Add(x[i], ops.Multiply(y[i], scalar));
+    }
 }

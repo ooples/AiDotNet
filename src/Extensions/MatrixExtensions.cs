@@ -1666,6 +1666,12 @@ public static class MatrixExtensions
                 {
                     return false;
                 }
+
+                // Check symmetry: for undirected graphs, A[i,j] must equal A[j,i]
+                if (!ops.Equals(matrix[i, j], matrix[j, i]))
+                {
+                    return false;
+                }
             }
         }
 
@@ -1774,13 +1780,33 @@ public static class MatrixExtensions
         var cols = matrix.Columns;
         var ops = MathHelper.GetNumericOperations<T>();
 
-        // Check if the matrix has at least 2 rows and if each column forms a geometric progression
-        for (int j = 1; j < cols; j++)
+        // A Vandermonde matrix has V[i,j] = x_i^j, where x_i is the base for row i
+        // This means V[i,0] = 1 for all rows (x^0 = 1)
+        // And V[i,j] = V[i,j-1] * x_i where x_i = V[i,1]
+
+        // Check that first column is all 1's (x^0 = 1)
+        for (int i = 0; i < rows; i++)
         {
-            for (int i = 1; i < rows; i++)
+            if (!ops.Equals(matrix[i, 0], ops.One))
             {
-                // Check if the current element is equal to the previous element multiplied by x_i
-                T expectedValue = ops.Multiply(matrix[i - 1, j], matrix[i, 0]);
+                return false;
+            }
+        }
+
+        if (cols < 2)
+        {
+            return true; // A single column of 1's is a valid Vandermonde matrix
+        }
+
+        // For each row, check that V[i,j] = V[i,j-1] * x_i where x_i = V[i,1]
+        for (int i = 0; i < rows; i++)
+        {
+            T x_i = matrix[i, 1]; // The base for this row
+
+            for (int j = 2; j < cols; j++)
+            {
+                // V[i,j] should equal V[i,j-1] * x_i
+                T expectedValue = ops.Multiply(matrix[i, j - 1], x_i);
                 if (ops.GreaterThan(ops.Abs(ops.Subtract(matrix[i, j], expectedValue)), ops.FromDouble(1e-10)))
                 {
                     return false;
@@ -1801,12 +1827,11 @@ public static class MatrixExtensions
     /// <para>
     /// <b>For Beginners:</b> A Cauchy matrix is formed from two sequences of numbers (x1, x2, ...) and (y1, y2, ...).
     /// Each element at position [i,j] equals 1/(x_i - y_j).
-    /// 
-    /// For this implementation:
-    /// - The x values are taken from the first column of the matrix
-    /// - The y values are taken from the first row of the matrix
-    /// - The method checks if each element follows the Cauchy formula
-    /// 
+    ///
+    /// This method verifies the Cauchy property by checking that for any 2x2 submatrix,
+    /// the difference of reciprocals is consistent across rows:
+    /// 1/C[i,j] - 1/C[i,l] = 1/C[k,j] - 1/C[k,l] for all i,k,j,l
+    ///
     /// Cauchy matrices have applications in interpolation problems and numerical analysis.
     /// </para>
     /// </remarks>
@@ -1816,29 +1841,66 @@ public static class MatrixExtensions
         var cols = matrix.Columns;
         var ops = MathHelper.GetNumericOperations<T>();
 
-        // Check if the matrix is square
-        if (!matrix.IsSquareMatrix())
+        // Need at least 2x2 matrix to verify Cauchy property
+        if (rows < 2 || cols < 2)
         {
-            return false;
+            // 1x1 matrix is trivially Cauchy if non-zero
+            return rows == 1 && cols == 1 && !ops.Equals(matrix[0, 0], ops.Zero);
         }
 
-        // Check if each element satisfies the Cauchy matrix definition
+        // All elements must be non-zero (they are reciprocals of differences)
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)
             {
-                T element = matrix[i, j];
-                T x = matrix[i, 0];
-                T y = matrix[0, j];
-
-                // Avoid division by zero
-                if (ops.LessThan(ops.Abs(ops.Subtract(x, y)), ops.FromDouble(1e-10)))
+                if (ops.Equals(matrix[i, j], ops.Zero))
                 {
                     return false;
                 }
+            }
+        }
 
-                T expectedValue = ops.Divide(ops.One, ops.Subtract(x, y));
-                if (ops.GreaterThan(ops.Abs(ops.Subtract(element, expectedValue)), ops.FromDouble(1e-10)))
+        // For a Cauchy matrix C[i,j] = 1/(x_i - y_j), the following must hold:
+        // 1/C[i,j] - 1/C[i,l] = y_l - y_j (independent of i)
+        // This means for any rows i,k and columns j,l:
+        // 1/C[i,j] - 1/C[i,l] must equal 1/C[k,j] - 1/C[k,l]
+
+        // Use row 0 as reference to compute expected column differences
+        for (int j = 0; j < cols - 1; j++)
+        {
+            // Reference difference: 1/C[0,j] - 1/C[0,j+1]
+            T refDiff = ops.Subtract(
+                ops.Divide(ops.One, matrix[0, j]),
+                ops.Divide(ops.One, matrix[0, j + 1]));
+
+            // Check all other rows have the same difference
+            for (int i = 1; i < rows; i++)
+            {
+                T rowDiff = ops.Subtract(
+                    ops.Divide(ops.One, matrix[i, j]),
+                    ops.Divide(ops.One, matrix[i, j + 1]));
+
+                if (ops.GreaterThan(ops.Abs(ops.Subtract(refDiff, rowDiff)), ops.FromDouble(1e-10)))
+                {
+                    return false;
+                }
+            }
+        }
+
+        // Also verify row consistency: 1/C[i,j] - 1/C[k,j] should be constant for all j
+        for (int i = 0; i < rows - 1; i++)
+        {
+            T refDiff = ops.Subtract(
+                ops.Divide(ops.One, matrix[i, 0]),
+                ops.Divide(ops.One, matrix[i + 1, 0]));
+
+            for (int j = 1; j < cols; j++)
+            {
+                T colDiff = ops.Subtract(
+                    ops.Divide(ops.One, matrix[i, j]),
+                    ops.Divide(ops.One, matrix[i + 1, j]));
+
+                if (ops.GreaterThan(ops.Abs(ops.Subtract(refDiff, colDiff)), ops.FromDouble(1e-10)))
                 {
                     return false;
                 }
@@ -1917,31 +1979,35 @@ public static class MatrixExtensions
             return false;
         }
 
-        // Check if the first row contains the coefficients of a polynomial in reverse order
-        for (int j = 0; j < cols - 1; j++)
-        {
-            if (!ops.Equals(matrix[0, j], ops.Zero) && !ops.Equals(matrix[0, j], ops.One))
-            {
-                return false;
-            }
-        }
-        if (!ops.Equals(matrix[0, cols - 1], ops.One))
-        {
-            return false;
-        }
-
-        // Check if each subdiagonal contains a 1
-        for (int i = 1; i < rows; i++)
+        // A companion matrix has:
+        // - Subdiagonal (i = j+1) contains all 1's
+        // - Last column contains polynomial coefficients (any values allowed)
+        // - All other elements are 0
+        for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)
             {
-                if (i == j + 1 && !ops.Equals(matrix[i, j], ops.One))
+                // Skip last column - it contains polynomial coefficients (any value allowed)
+                if (j == cols - 1)
                 {
-                    return false;
+                    continue;
                 }
-                if (i != j + 1 && !ops.Equals(matrix[i, j], ops.Zero))
+
+                // Subdiagonal elements (i = j+1) must be 1
+                if (i == j + 1)
                 {
-                    return false;
+                    if (!ops.Equals(matrix[i, j], ops.One))
+                    {
+                        return false;
+                    }
+                }
+                // All other elements (except last column) must be 0
+                else
+                {
+                    if (!ops.Equals(matrix[i, j], ops.Zero))
+                    {
+                        return false;
+                    }
                 }
             }
         }
@@ -2048,12 +2114,14 @@ public static class MatrixExtensions
         var cols = matrix.Columns;
         var ops = MathHelper.GetNumericOperations<T>();
 
-        // Check if each element is the same as the one diagonally above and to the right of it
+        // A Hankel matrix has constant anti-diagonals (values along lines from bottom-left to top-right)
+        // For a Hankel matrix, matrix[i, j] depends only on i + j
+        // Check if each element equals the one below and to the left (same anti-diagonal)
         for (int i = 0; i < rows - 1; i++)
         {
-            for (int j = 0; j < cols - 1; j++)
+            for (int j = 1; j < cols; j++)
             {
-                if (!ops.Equals(matrix[i, j], matrix[i + 1, j + 1]))
+                if (!ops.Equals(matrix[i, j], matrix[i + 1, j - 1]))
                 {
                     return false;
                 }
@@ -2177,19 +2245,25 @@ public static class MatrixExtensions
     }
 
     /// <summary>
-    /// Determines if a matrix is an incidence matrix for an undirected graph.
+    /// Determines if a matrix is an incidence matrix for a graph.
     /// </summary>
     /// <typeparam name="T">The numeric type of the matrix elements.</typeparam>
     /// <param name="matrix">The matrix to check.</param>
     /// <returns>True if the matrix is an incidence matrix; otherwise, false.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> An incidence matrix represents the relationship between vertices (rows) and edges (columns) 
-    /// in a graph. For an undirected graph:
-    /// 1. Each element is either 0 or 1
-    /// 2. Each column has exactly two 1's (representing the two vertices connected by that edge)
-    /// 3. All other elements are 0
-    /// 
+    /// <b>For Beginners:</b> An incidence matrix represents the relationship between vertices (rows) and edges (columns)
+    /// in a graph. This implementation supports both undirected and directed graphs:
+    ///
+    /// For an undirected graph:
+    /// - Each element is either 0 or 1
+    /// - Each column has exactly two 1's (representing the two vertices connected by that edge)
+    ///
+    /// For a directed graph:
+    /// - Each element is -1, 0, or +1
+    /// - Each column has exactly one +1 (edge source) and one -1 (edge destination)
+    /// - The sum of each column must be 0
+    ///
     /// Incidence matrices are used in graph theory and network analysis to represent connections between nodes.
     /// </para>
     /// </remarks>
@@ -2198,28 +2272,42 @@ public static class MatrixExtensions
         var rows = matrix.Rows; // number of vertices
         var cols = matrix.Columns; // number of edges
         var ops = MathHelper.GetNumericOperations<T>();
+        T negOne = ops.FromDouble(-1);
 
         for (int j = 0; j < cols; j++)
         {
-            int countOnes = 0;
+            int countPlusOnes = 0;
+            int countMinusOnes = 0;
 
             for (int i = 0; i < rows; i++)
             {
-                // Check if the element is either 0 or 1
-                if (!ops.Equals(matrix[i, j], ops.Zero) && !ops.Equals(matrix[i, j], ops.One))
+                T element = matrix[i, j];
+
+                // Check if the element is -1, 0, or +1
+                if (!ops.Equals(element, ops.Zero) &&
+                    !ops.Equals(element, ops.One) &&
+                    !ops.Equals(element, negOne))
                 {
                     return false;
                 }
 
-                // Count the number of 1's in the current column
-                if (ops.Equals(matrix[i, j], ops.One))
+                // Count +1's and -1's
+                if (ops.Equals(element, ops.One))
                 {
-                    countOnes++;
+                    countPlusOnes++;
+                }
+                else if (ops.Equals(element, negOne))
+                {
+                    countMinusOnes++;
                 }
             }
 
-            // Each column must have exactly two 1's for an undirected graph
-            if (countOnes != 2)
+            // For undirected: two +1's, no -1's
+            // For directed: one +1, one -1
+            bool isUndirectedEdge = countPlusOnes == 2 && countMinusOnes == 0;
+            bool isDirectedEdge = countPlusOnes == 1 && countMinusOnes == 1;
+
+            if (!isUndirectedEdge && !isDirectedEdge)
             {
                 return false;
             }
@@ -2514,21 +2602,25 @@ public static class MatrixExtensions
         int n = matrix.Rows;
         var ops = MathHelper.GetNumericOperations<T>();
 
-        // Create the inverse matrix
+        // Create the inverse matrix (also upper triangular)
         var inverse = Matrix<T>.CreateMatrix<T>(n, n);
 
-        for (int i = 0; i < n; i++)
+        // Process columns from right to left
+        for (int j = n - 1; j >= 0; j--)
         {
-            for (int j = 0; j < n; j++)
+            // Diagonal element: inv[j,j] = 1 / U[j,j]
+            inverse[j, j] = ops.Divide(ops.One, matrix[j, j]);
+
+            // Off-diagonal elements above diagonal: inv[i,j] for i < j
+            // inv[i,j] = -sum(U[i,k] * inv[k,j] for k=i+1 to j) / U[i,i]
+            for (int i = j - 1; i >= 0; i--)
             {
-                if (i <= j)
+                T sum = ops.Zero;
+                for (int k = i + 1; k <= j; k++)
                 {
-                    inverse[i, j] = ops.Divide(ops.One, matrix[i, j]);
+                    sum = ops.Add(sum, ops.Multiply(matrix[i, k], inverse[k, j]));
                 }
-                else
-                {
-                    inverse[i, j] = ops.Zero;
-                }
+                inverse[i, j] = ops.Negate(ops.Divide(sum, matrix[i, i]));
             }
         }
 
@@ -2835,28 +2927,15 @@ public static class MatrixExtensions
     /// </remarks>
     public static int GetNullity<T>(this Matrix<T> matrix, T? threshold = default)
     {
-        var rows = matrix.Rows;
         var columns = matrix.Columns;
         var ops = MathHelper.GetNumericOperations<T>();
-        var weightsVector = new Vector<T>(columns);
-        var _epsilon = ops.FromDouble(1e-10); // Small number instead of Epsilon
-        var _threshold = threshold != null && ops.GreaterThanOrEquals(threshold, ops.Zero)
-            ? threshold
-            : ops.Multiply(
-                ops.FromDouble(0.5 * Math.Sqrt(rows + columns + 1)),
-                ops.Multiply(weightsVector[0], _epsilon)
-            );
-        int nullity = 0;
 
-        for (int i = 0; i < columns; i++)
-        {
-            if (ops.LessThanOrEquals(weightsVector[i], _threshold))
-            {
-                nullity++;
-            }
-        }
+        // Use default threshold if not provided
+        var _threshold = threshold ?? ops.FromDouble(1e-10);
 
-        return nullity;
+        // Nullity = n - rank (dimension of column space minus rank gives dimension of null space)
+        int rank = matrix.GetRank(_threshold);
+        return columns - rank;
     }
 
     /// <summary>
@@ -3069,20 +3148,54 @@ public static class MatrixExtensions
             throw new ArgumentException("Matrix must be square.");
 
         int n = A.Rows;
-        var X = A.Transpose();
-        var I = Matrix<T>.CreateIdentity(n);
         var NumOps = MathHelper.GetNumericOperations<T>();
-        tolerance ??= NumOps.FromDouble(1e-10);
+
+        // For value types like double, default(T?) gives 0, not null
+        // So we need to check if tolerance equals zero to use our default
+        T tol;
+        if (tolerance == null || NumOps.Equals(tolerance, NumOps.Zero))
+        {
+            tol = NumOps.FromDouble(1e-10);
+        }
+        else
+        {
+            tol = tolerance;
+        }
+
+        // Newton-Schulz iteration: X_{k+1} = X_k (2I - A X_k)
+        // For convergence, we need spectral radius of (I - A X_0) < 1
+        // Initial guess: X_0 = alpha * A^T where alpha = 1 / ||A||_F^2
+        var At = A.Transpose();
+        var frobNorm = A.FrobeniusNorm();
+        var normSquared = NumOps.Multiply(frobNorm, frobNorm);
+        var alpha = NumOps.Divide(NumOps.One, normSquared);
+
+        // Manually create scaled matrix to ensure type is Matrix<T>
+        var X = new Matrix<T>(n, n);
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                X[i, j] = NumOps.Multiply(At[i, j], alpha);
+            }
+        }
+
+        var I = Matrix<T>.CreateIdentity(n);
 
         for (int k = 0; k < maxIterations; k++)
         {
-            var R = I.Subtract(A.Multiply(X));
-            if (NumOps.LessThan(R.FrobeniusNorm(), tolerance))
+            var AX = A.Multiply(X);
+            var R = I.Subtract(AX);
+            var residualNorm = R.FrobeniusNorm();
+
+            if (NumOps.LessThan(residualNorm, tol))
             {
                 return X;
             }
 
-            X = X.Add(X.Multiply(R));
+            // Newton-Schulz update: X_{k+1} = X_k + X_k * R = X_k + X_k * (I - A X_k)
+            var XR = X.Multiply(R);
+            X = X.Add(XR);
         }
 
         throw new InvalidOperationException("Newton's method did not converge.");
@@ -3240,19 +3353,65 @@ public static class MatrixExtensions
         var rows = matrix.Rows;
         var columns = matrix.Columns;
         var ops = MathHelper.GetNumericOperations<T>();
-        var weightsVector = new Vector<T>(columns);
-        var epsilon = ops.FromDouble(1e-10); // Small number instead of Epsilon
-        var thresh = ops.GreaterThanOrEquals(threshold, ops.Zero)
-            ? threshold
-            : ops.Multiply(ops.FromDouble(0.5 * Math.Sqrt(rows + columns + 1)), ops.Multiply(weightsVector[0], epsilon));
-        int rank = 0;
 
-        for (int i = 0; i < columns; i++)
+        // Create a copy to perform Gaussian elimination without modifying original
+        var work = new Matrix<T>(rows, columns);
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < columns; j++)
+                work[i, j] = matrix[i, j];
+
+        int rank = 0;
+        int pivotRow = 0;
+
+        // Gaussian elimination with partial pivoting to find row echelon form
+        for (int col = 0; col < columns && pivotRow < rows; col++)
         {
-            if (ops.GreaterThan(weightsVector[i], thresh))
+            // Find the row with the largest absolute value in this column (partial pivoting)
+            int maxRow = pivotRow;
+            T maxVal = ops.Abs(work[pivotRow, col]);
+
+            for (int row = pivotRow + 1; row < rows; row++)
             {
-                rank++;
+                T absVal = ops.Abs(work[row, col]);
+                if (ops.GreaterThan(absVal, maxVal))
+                {
+                    maxVal = absVal;
+                    maxRow = row;
+                }
             }
+
+            // If the maximum value is below threshold, skip this column (no pivot)
+            if (ops.LessThanOrEquals(maxVal, threshold))
+                continue;
+
+            // Swap rows to bring the pivot to the current row
+            if (maxRow != pivotRow)
+            {
+                for (int j = col; j < columns; j++)
+                {
+                    T temp = work[pivotRow, j];
+                    work[pivotRow, j] = work[maxRow, j];
+                    work[maxRow, j] = temp;
+                }
+            }
+
+            // Eliminate entries below the pivot
+            T pivot = work[pivotRow, col];
+            for (int row = pivotRow + 1; row < rows; row++)
+            {
+                if (!ops.Equals(work[row, col], ops.Zero))
+                {
+                    T factor = ops.Divide(work[row, col], pivot);
+                    work[row, col] = ops.Zero;
+                    for (int j = col + 1; j < columns; j++)
+                    {
+                        work[row, j] = ops.Subtract(work[row, j], ops.Multiply(factor, work[pivotRow, j]));
+                    }
+                }
+            }
+
+            rank++;
+            pivotRow++;
         }
 
         return rank;
@@ -3273,8 +3432,8 @@ public static class MatrixExtensions
     /// </remarks>
     public static void SwapRows<T>(this Matrix<T> matrix, int row1Index, int row2Index)
     {
-        var rows = matrix.Rows;
-        for (int i = 0; i < rows; i++)
+        var cols = matrix.Columns;
+        for (int i = 0; i < cols; i++)
         {
             (matrix[row2Index, i], matrix[row1Index, i]) = (matrix[row1Index, i], matrix[row2Index, i]);
         }
@@ -3321,7 +3480,7 @@ public static class MatrixExtensions
     /// </remarks>
     public static Matrix<Complex<T>> InvertUnitaryMatrix<T>(this Matrix<Complex<T>> matrix)
     {
-        return matrix.Transpose();
+        return matrix.ConjugateTranspose();
     }
 
     /// <summary>
@@ -3422,15 +3581,19 @@ public static class MatrixExtensions
         }
         else
         {
+            // Cofactor expansion along the first row
             T determinant = ops.Zero;
             for (int i = 0; i < rows; i++)
             {
+                // Create minor matrix by removing row 0 and column i
                 var tempMatrix = new Matrix<T>(rows - 1, rows - 1);
                 for (int j = 0; j < rows - 1; j++)
                 {
                     for (int k = 0; k < rows - 1; k++)
                     {
-                        tempMatrix[j, k] = matrix[j < i ? j : j + 1, k];
+                        // Row j in minor = row j+1 in original (skip row 0)
+                        // Column k in minor = column k if k < i, or column k+1 if k >= i (skip column i)
+                        tempMatrix[j, k] = matrix[j + 1, k < i ? k : k + 1];
                     }
                 }
 
@@ -3719,7 +3882,20 @@ public static class MatrixExtensions
     /// </remarks>
     public static Matrix<T> GetColumns<T>(this Matrix<T> matrix, IEnumerable<int> columnIndices)
     {
-        return new Matrix<T>(GetColumnVectors(matrix, [.. columnIndices]));
+        var indices = columnIndices.ToArray();
+        var rows = matrix.Rows;
+        var result = new Matrix<T>(rows, indices.Length);
+
+        for (int j = 0; j < indices.Length; j++)
+        {
+            int srcCol = indices[j];
+            for (int i = 0; i < rows; i++)
+            {
+                result[i, j] = matrix[i, srcCol];
+            }
+        }
+
+        return result;
     }
 
     /// <summary>

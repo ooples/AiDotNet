@@ -922,4 +922,6 @@ public class Int32Operations : INumericOperations<int>
             destination[i] = (int)Math.Cos(x[i]);
     }
 
+    public void MultiplyAdd(ReadOnlySpan<int> x, ReadOnlySpan<int> y, int scalar, Span<int> destination)
+        => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
 }

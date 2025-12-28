@@ -460,21 +460,48 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// </remarks>
     public byte[] Serialize()
     {
-        throw new NotImplementedException("Serialization requires AI-specific SerializationHelper class");
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Write length
+        writer.Write(Length);
+
+        // Write each element as bytes
+        for (int i = 0; i < Length; i++)
+        {
+            double value = _numOps.ToDouble(_data[i]);
+            writer.Write(value);
+        }
+
+        return ms.ToArray();
     }
 
     /// <summary>
     /// Creates a vector from a previously serialized byte array.
     /// </summary>
-    /// <param name="_data">The byte array containing the serialized vector _data.</param>
-    /// <returns>A new vector created from the serialized _data.</returns>
+    /// <param name="data">The byte array containing the serialized vector data.</param>
+    /// <returns>A new vector created from the serialized data.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> This converts a previously serialized vector back into
     /// a usable vector object. Use this when loading a saved model from a file.</para>
     /// </remarks>
-    public static Vector<T> Deserialize(byte[] _data)
+    public static Vector<T> Deserialize(byte[] data)
     {
-        throw new NotImplementedException("Deserialization requires AI-specific SerializationHelper class");
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        // Read length
+        int length = reader.ReadInt32();
+
+        // Read each element
+        var result = new Vector<T>(length);
+        for (int i = 0; i < length; i++)
+        {
+            double value = reader.ReadDouble();
+            result[i] = _numOps.FromDouble(value);
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -830,43 +857,51 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     }
 
     /// <summary>
-    /// Converts this vector into a 1xn matrix (a row vector).
+    /// Transposes this vector into an nx1 column matrix.
     /// </summary>
-    /// <returns>A matrix with 1 row and n columns, where n is the length of this vector.</returns>
+    /// <returns>A matrix with n rows and 1 column, where n is the length of this vector.</returns>
     /// <remarks>
-    /// <para><b>For Beginners:</b> This method transforms your vector into a matrix with just one row.
-    /// For example, the vector [1,2,3] becomes the matrix [[1,2,3]]. This is useful when you need to
-    /// perform matrix operations with your vector _data.</para>
+    /// <para><b>For Beginners:</b> This method transforms your vector into a column matrix.
+    /// A vector [1,2,3] becomes the matrix:
+    /// [[1],
+    ///  [2],
+    ///  [3]]
+    /// This is the standard mathematical interpretation of transposing a row vector to a column vector.
+    /// Useful when you need to perform matrix operations that require column vectors.</para>
     /// </remarks>
     public Matrix<T> Transpose()
     {
-        // Create matrix directly from vector data - Matrix constructor accepts IEnumerable<T[]>
-        // For a 1xn matrix, pass the data as a single row
-        return new Matrix<T>([_data]);
+        // Create a column matrix (Nx1) from this vector
+        // In linear algebra, transposing a row vector (1xN) gives a column vector (Nx1)
+        var result = new Matrix<T>(Length, 1);
+        for (int i = 0; i < Length; i++)
+        {
+            result[i, 0] = _data[i];
+        }
+        return result;
     }
 
     /// <summary>
-    /// Creates a matrix by appending a constant value as a second column to this vector.
+    /// Creates a row matrix by appending a value to this vector.
     /// </summary>
-    /// <param name="value">The value to append to each element of the vector.</param>
-    /// <returns>A matrix where the first column contains this vector's values and the second column contains the specified value.</returns>
+    /// <param name="value">The value to append at the end of the vector.</param>
+    /// <returns>A 1×(N+1) row matrix containing the vector elements followed by the appended value.</returns>
     /// <remarks>
-    /// <para><b>For Beginners:</b> This method creates a matrix with two columns. The first column contains
-    /// your original vector values, and the second column has the same value repeated for each row.
+    /// <para><b>For Beginners:</b> This method creates a row matrix from your vector with an extra value at the end.
     /// For example, if your vector is [1,2,3] and the value is 5, the result will be:
-    /// [[1,5],
-    ///  [2,5],
-    ///  [3,5]]
-    /// This is particularly useful in machine learning when adding a bias term to feature vectors.</para>
+    /// [[1, 2, 3, 5]]
+    /// This is particularly useful in machine learning when adding a bias term to feature vectors.
+    /// A feature vector [x1, x2, x3] becomes [x1, x2, x3, 1] for linear regression with bias.</para>
     /// </remarks>
     public Matrix<T> AppendAsMatrix(T value)
     {
-        var result = new Matrix<T>(this.Length, 2);
-        for (int i = 0; i < this.Length; i++)
+        // Create a 1×(N+1) row matrix: [v1, v2, ..., vN, value]
+        var result = new Matrix<T>(1, Length + 1);
+        for (int i = 0; i < Length; i++)
         {
-            result[i, 0] = this[i];
-            result[i, 1] = value;
+            result[0, i] = this[i];
         }
+        result[0, Length] = value;
 
         return result;
     }

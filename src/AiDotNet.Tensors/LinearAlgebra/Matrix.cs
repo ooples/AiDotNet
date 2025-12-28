@@ -1104,7 +1104,24 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     /// </remarks>
     public byte[] Serialize()
     {
-        throw new NotImplementedException("Serialization requires AI-specific SerializationHelper class");
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Write dimensions
+        writer.Write(Rows);
+        writer.Write(Columns);
+
+        // Write each element as bytes (row-major order)
+        for (int i = 0; i < Rows; i++)
+        {
+            for (int j = 0; j < Columns; j++)
+            {
+                double value = _numOps.ToDouble(this[i, j]);
+                writer.Write(value);
+            }
+        }
+
+        return ms.ToArray();
     }
 
     /// <summary>
@@ -1118,7 +1135,25 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     /// </remarks>
     public static Matrix<T> Deserialize(byte[] data)
     {
-        throw new NotImplementedException("Deserialization requires AI-specific SerializationHelper class");
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        // Read dimensions
+        int rows = reader.ReadInt32();
+        int columns = reader.ReadInt32();
+
+        // Read each element
+        var result = new Matrix<T>(rows, columns);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < columns; j++)
+            {
+                double value = reader.ReadDouble();
+                result[i, j] = _numOps.FromDouble(value);
+            }
+        }
+
+        return result;
     }
 
     /// <summary>

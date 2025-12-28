@@ -11,10 +11,14 @@
 
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.15.6" />
+    <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
+    <PackageReference Include="NumSharp" Version="0.30.0" />
+    <PackageReference Include="System.Numerics.Tensors" Version="10.0.1" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AiDotNet.Tensors\AiDotNet.Tensors.csproj" />
+    <ProjectReference Include="..\..\src\AiDotNet.csproj" />
   </ItemGroup>
 
 </Project>

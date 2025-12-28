@@ -334,7 +334,7 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
         Tensor<T> subTensor = new Tensor<T>(newShape);
         int[] currentIndices = new int[Shape.Length];
         Array.Copy(indices, currentIndices, indices.Length);
-        CopySubTensorData(this, subTensor, currentIndices, indices.Length);
+        CopySubTensorData(this, subTensor, currentIndices, indices.Length, indices.Length);
 
         return subTensor;
     }
@@ -345,19 +345,26 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     /// <param name="source">The source tensor to copy from.</param>
     /// <param name="destination">The destination tensor to copy to.</param>
     /// <param name="currentIndices">The current indices being processed.</param>
-    /// <param name="fixedDimensions">The number of dimensions that are fixed.</param>
-    private static void CopySubTensorData(Tensor<T> source, Tensor<T> destination, int[] currentIndices, int fixedDimensions)
+    /// <param name="fixedDimensions">The number of dimensions that were originally fixed in SubTensor call.</param>
+    /// <param name="currentDimension">The current dimension being iterated (starts at fixedDimensions).</param>
+    private static void CopySubTensorData(Tensor<T> source, Tensor<T> destination, int[] currentIndices, int fixedDimensions, int currentDimension)
     {
-        if (fixedDimensions == source.Shape.Length)
+        if (currentDimension == source.Shape.Length)
         {
-            destination[[]] = source[currentIndices];
+            // Extract destination indices from the unfixed portion of currentIndices
+            int[] destIndices = new int[destination.Shape.Length];
+            for (int i = 0; i < destIndices.Length; i++)
+            {
+                destIndices[i] = currentIndices[fixedDimensions + i];
+            }
+            destination[destIndices] = source[currentIndices];
             return;
         }
 
-        for (int i = 0; i < source.Shape[fixedDimensions]; i++)
+        for (int i = 0; i < source.Shape[currentDimension]; i++)
         {
-            currentIndices[fixedDimensions] = i;
-            CopySubTensorData(source, destination, currentIndices, fixedDimensions + 1);
+            currentIndices[currentDimension] = i;
+            CopySubTensorData(source, destination, currentIndices, fixedDimensions, currentDimension + 1);
         }
     }
 
@@ -375,8 +382,11 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     /// </remarks>
     public void SetSubTensor(int[] indices, Tensor<T> subTensor)
     {
-        if (indices.Length != subTensor.Rank)
-            throw new ArgumentException("Number of indices must match the rank of the sub-tensor.");
+        // indices.Length specifies how many dimensions to fix
+        // subTensor.Rank is the remaining dimensions
+        // Together they must equal the parent tensor's rank
+        if (indices.Length + subTensor.Rank != Rank)
+            throw new ArgumentException($"Number of indices ({indices.Length}) plus sub-tensor rank ({subTensor.Rank}) must equal tensor rank ({Rank}).");
 
         int[] currentIndices = new int[Rank];
         Array.Copy(indices, currentIndices, indices.Length);
@@ -562,7 +572,9 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
         int offset = index * sliceSize;
 
         // Use vectorized Copy operation for SIMD acceleration (5-15x faster with AVX2)
-        _numOps.Copy(slice._data.AsSpan(), new Span<T>(_data, offset, sliceSize));
+        // Use internal AsWritableSpan to get writable span - do NOT use implicit T[] conversion
+        var destSpan = _data.AsWritableSpan().Slice(offset, sliceSize);
+        _numOps.Copy(slice._data.AsSpan(), destSpan);
     }
 
     /// <summary>
@@ -661,7 +673,9 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
         int offset = index * sliceSize;
 
         var sliceData = new Vector<T>(sliceSize);
-        Array.Copy(_data, offset, sliceData, 0, sliceSize);
+        // Use internal Span methods - do NOT use implicit T[] conversion as it creates copies
+        var sourceSpan = _data.AsSpan().Slice(offset, sliceSize);
+        _numOps.Copy(sourceSpan, sliceData.AsWritableSpan());
 
         return new Tensor<T>(newShape, sliceData);
     }
@@ -929,8 +943,16 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     /// </remarks>
     public Vector<T> GetSlice(int start, int length)
     {
-        // TODO: Implement Slice extension method for Vector<T>
-        throw new NotImplementedException("GetSlice requires Vector<T>.Slice() extension method");
+        if (start < 0 || start >= _data.Length)
+            throw new ArgumentOutOfRangeException(nameof(start), "Start index must be within bounds of the tensor data.");
+        if (length < 0 || start + length > _data.Length)
+            throw new ArgumentOutOfRangeException(nameof(length), "Length must not exceed remaining elements from start.");
+
+        var result = new Vector<T>(length);
+        var sourceSpan = _data.AsSpan().Slice(start, length);
+        var destSpan = result.AsWritableSpan();
+        _numOps.Copy(sourceSpan, destSpan);
+        return result;
     }
 
     /// <summary>
