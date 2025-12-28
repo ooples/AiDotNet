@@ -164,10 +164,15 @@ public class LinearClassifierIntegrationTests
             normWithReg += paramsWithReg[i] * paramsWithReg[i];
         }
 
-        // Note: This assertion may not always hold depending on convergence
-        // The important thing is both classifiers work
+        // Verify both models trained successfully
         Assert.True(perceptronNoReg.GetParameters().Length > 0);
         Assert.True(perceptronWithReg.GetParameters().Length > 0);
+
+        // L2 regularization should constrain weight growth
+        // Allow some tolerance due to SGD variance, but regularized should be smaller or comparable
+        Assert.True(normWithReg <= normNoReg * 1.5,
+            $"L2 regularized norm ({Math.Sqrt(normWithReg):F3}) should be smaller or comparable to " +
+            $"unregularized norm ({Math.Sqrt(normNoReg):F3})");
     }
 
     #endregion
@@ -469,6 +474,10 @@ public class LinearClassifierIntegrationTests
 
         // Verify model has weights for features (could be 10 or 11 with bias)
         Assert.True(weights.Length >= 10, $"Should have at least 10 weights, got {weights.Length}");
+
+        // L1 regularization should drive some of the 8 irrelevant feature weights near zero
+        Assert.True(nearZeroCount >= 3,
+            $"L1 regularization should produce sparse weights. Expected at least 3 near-zero weights, got {nearZeroCount}/{weights.Length}");
     }
 
     [Fact]

@@ -128,9 +128,9 @@ public class SVMIntegrationTests
         }
 
         // Assert: RBF should generally do better on XOR-like data
-        // Note: Due to algorithm variations, we just verify both train
-        Assert.True(correctLinear >= 0 && correctRBF >= 0,
-            $"Both models should train. Linear: {correctLinear}/20, RBF: {correctRBF}/20");
+        Assert.True(correctRBF >= correctLinear,
+            $"RBF should perform at least as well as linear on XOR data. Linear: {correctLinear}/20, RBF: {correctRBF}/20");
+        Assert.True(correctRBF >= 10, $"RBF should classify at least half correctly. Got {correctRBF}/20");
     }
 
     [Fact]
@@ -463,8 +463,9 @@ public class SVMIntegrationTests
             if (Math.Abs(predsHigh[i] - y[i]) < 0.01) correctHigh++;
         }
 
-        Assert.True(correctLow >= 0, $"Low C model should train. Got {correctLow}/10");
-        Assert.True(correctHigh >= 0, $"High C model should train. Got {correctHigh}/10");
+        // Both should train successfully and make reasonable predictions
+        Assert.True(correctLow >= 5, $"Low C model should achieve reasonable accuracy. Got {correctLow}/10");
+        Assert.True(correctHigh >= 5, $"High C model should achieve reasonable accuracy. Got {correctHigh}/10");
     }
 
     #endregion
