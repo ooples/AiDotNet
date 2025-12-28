@@ -368,11 +368,14 @@ public class BasicStatsIntegrationTests
 
     #endregion
 
-    #region MAD (Median Absolute Deviation) Tests
+    #region MAD (Mean Absolute Deviation) Tests
 
     /// <summary>
-    /// MAD = median(|x_i - median(x)|)
-    /// For [1, 2, 3, 4, 5]: median=3, deviations=[2, 1, 0, 1, 2], MAD=1.0
+    /// Mean Absolute Deviation = mean(|x_i - median(x)|)
+    /// For [1, 2, 3, 4, 5]: median=3, deviations=[2, 1, 0, 1, 2], MAD=(2+1+0+1+2)/5=1.2
+    ///
+    /// Note: Despite being called MAD (commonly Median Absolute Deviation in literature),
+    /// the StatisticsHelper.CalculateMeanAbsoluteDeviation computes the MEAN of absolute deviations.
     /// </summary>
     [Fact]
     public void MAD_SimpleSequence_ReturnsExactValue()
@@ -380,8 +383,8 @@ public class BasicStatsIntegrationTests
         // Arrange & Act
         var stats = CreateBasicStats(new[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
 
-        // Assert - MAD = median([|1-3|, |2-3|, |3-3|, |4-3|, |5-3|]) = median([2, 1, 0, 1, 2]) = 1.0
-        Assert.Equal(1.0, stats.MAD, Tolerance);
+        // Assert - Mean Absolute Deviation = (|1-3| + |2-3| + |3-3| + |4-3| + |5-3|) / 5 = (2+1+0+1+2)/5 = 1.2
+        Assert.Equal(1.2, stats.MAD, Tolerance);
     }
 
     #endregion

@@ -63,33 +63,25 @@ public static class StatisticsHelper<T>
     }
 
     /// <summary>
-    /// Calculates the Median Absolute Deviation (MAD) of a vector of values from a given median.
+    /// Calculates the Mean Absolute Deviation (MAD) of a vector of values from a given median.
     /// </summary>
     /// <param name="values">The vector of values to calculate MAD for.</param>
     /// <param name="median">The median value to calculate deviations from.</param>
-    /// <returns>The Median Absolute Deviation of the values.</returns>
+    /// <returns>The Mean Absolute Deviation of the values.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Median Absolute Deviation (MAD) measures how spread out your data is from
-    /// the central value (median). It calculates the median of the absolute differences between each
-    /// value and the median. MAD is a robust measure of statistical dispersion that is more resilient
-    /// to outliers than standard deviation.
+    /// <b>For Beginners:</b> Mean Absolute Deviation measures how spread out your data is from a central value (median).
+    /// It calculates the average of the absolute differences between each value and the median.
     /// </para>
     /// <para>
-    /// For example, for values [1, 2, 3, 4, 5] with median 3:
-    /// 1. Calculate absolute differences: |1-3|=2, |2-3|=1, |3-3|=0, |4-3|=1, |5-3|=2
-    /// 2. Calculate median of deviations: median([2, 1, 0, 1, 2]) = median(sorted: [0, 1, 1, 2, 2]) = 1
-    /// </para>
-    /// <para>
-    /// This matches scipy.stats.median_abs_deviation from Python's SciPy library.
+    /// For example, for values [2, 4, 6, 8] with median 5:
+    /// 1. Calculate absolute differences: |2-5|=3, |4-5|=1, |6-5|=1, |8-5|=3
+    /// 2. Calculate average: (3+1+1+3)/4 = 2
     /// </para>
     /// </remarks>
     public static T CalculateMeanAbsoluteDeviation(Vector<T> values, T median)
     {
-        // Calculate Median Absolute Deviation (MAD) to match scipy.stats.median_abs_deviation
-        var absoluteDeviations = values.Select(x => _numOps.Abs(_numOps.Subtract(x, median)));
-        var deviationsVector = new Vector<T>(absoluteDeviations.ToArray());
-        return CalculateMedian(deviationsVector);
+        return _numOps.Divide(values.Select(x => _numOps.Abs(_numOps.Subtract(x, median))).Aggregate(_numOps.Zero, _numOps.Add), _numOps.FromDouble(values.Length));
     }
 
     /// <summary>
