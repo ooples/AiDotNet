@@ -23,7 +23,7 @@ internal static class AutoMLTaskFamilyInference
         var predictionType = PredictionTypeInference.InferFromTargets<T, TOutput>(targets);
         return predictionType switch
         {
-            PredictionType.Binary => AutoMLTaskFamily.BinaryClassification,
+            PredictionType.BinaryClassification => AutoMLTaskFamily.BinaryClassification,
             PredictionType.MultiClass => AutoMLTaskFamily.MultiClassClassification,
             PredictionType.MultiLabel => AutoMLTaskFamily.MultiLabelClassification,
             _ => AutoMLTaskFamily.Regression

@@ -6,8 +6,8 @@ namespace AiDotNet.Enums;
 /// <remarks>
 /// <b>For Beginners:</b> This enum helps you tell the library what kind of prediction you're trying to make.
 /// Think of it as telling the AI system what type of question you're asking:
-/// 
-/// - Are you asking a yes/no question? Use Binary.
+///
+/// - Are you asking a yes/no question? Use BinaryClassification.
 /// - Are you asking "how much" or "what value"? Use Regression.
 /// 
 /// Choosing the right prediction type helps the AI model understand what you're trying to accomplish
@@ -31,7 +31,7 @@ public enum PredictionType
     /// 
     /// Examples: Email spam detection, disease diagnosis, fraud detection
     /// </remarks>
-    Binary,
+    BinaryClassification,
 
     /// <summary>
     /// Represents a regression task where the output is a continuous numerical value.

@@ -60,7 +60,7 @@ internal static class PredictionTypeInference
 
         if (classes.Count <= 2 && classes.All(c => c == 0 || c == 1))
         {
-            return PredictionType.Binary;
+            return PredictionType.BinaryClassification;
         }
 
         if (classes.Count == 0 || classes.Count >= maxTrackedClasses)
