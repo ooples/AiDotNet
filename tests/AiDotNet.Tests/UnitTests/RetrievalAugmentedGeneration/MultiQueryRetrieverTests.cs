@@ -85,8 +85,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             private double CalculateDefaultScore(string query, Document<double> doc)
             {
-                var queryTerms = query.ToLower().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                var contentTerms = doc.Content.ToLower().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                var queryTerms = query.ToLower().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                var contentTerms = doc.Content.ToLower().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
                 var matchCount = queryTerms.Count(q => contentTerms.Contains(q));
                 return matchCount > 0 ? matchCount / (double)queryTerms.Length : 0;
             }
