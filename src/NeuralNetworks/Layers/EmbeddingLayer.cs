@@ -13,24 +13,29 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// vector in a high-dimensional space, allowing the model to learn meaningful representations.
 /// </para>
 /// <para><b>For Beginners:</b> An embedding layer turns words or other symbols into lists of numbers that capture their meaning.
-/// 
+///
 /// Imagine you have a dictionary where:
 /// - Each word has an ID number (like "cat" = 5, "dog" = 10)
 /// - The embedding layer gives each ID a unique "coordinate" in a multi-dimensional space
 /// - Words with similar meanings end up with similar coordinates
-/// 
+///
 /// For example:
 /// - "Cat" might become [0.2, -0.5, 0.1, 0.8]
 /// - "Kitten" might become [0.25, -0.4, 0.15, 0.7]
 /// - "Computer" might become [-0.8, 0.2, 0.5, -0.3]
-/// 
+///
 /// The embedding layer learns these representations during training, so that:
 /// - Similar words end up close to each other
 /// - Related concepts form clusters
 /// - The vectors capture meaningful semantic relationships
-/// 
+///
 /// This allows neural networks to work with text and other discrete tokens in a way
 /// that captures their meaning and relationships.
+/// </para>
+/// <para>
+/// <b>Thread Safety:</b> This layer is not thread-safe. Each layer instance maintains internal state
+/// during forward and backward passes. If you need concurrent execution, use separate layer instances
+/// per thread or synchronize access to shared instances.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -295,19 +300,13 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Calculate total number of indices to look up
         int totalIndices = input.Length;
-        if (input.Rank >= 1 && input.Shape[^1] == 1)
-        {
-            // Last dim is 1 (legacy format), don't count it
-            totalIndices = input.Length;
-        }
 
         // Create flattened indices tensor for embedding lookup
         var flatIndices = new Tensor<int>([totalIndices]);
-        var inputData = input.ToArray();
 
         for (int i = 0; i < totalIndices; i++)
         {
-            int index = Convert.ToInt32(inputData[i]);
+            int index = Convert.ToInt32(NumOps.ToDouble(input.Data[i]));
 
             // Validate index is within vocabulary bounds
             if (index < 0 || index >= vocabularySize)
@@ -341,14 +340,11 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Legacy format [batch, seqLen, 1] -> [batch, seqLen, embeddingDim]
             outputShape = [input.Shape[0], input.Shape[1], embeddingDim];
         }
-        else if (input.Rank == 3)
-        {
-            // [dim1, dim2, dim3] -> [dim1, dim2, dim3, embeddingDim]
-            outputShape = [input.Shape[0], input.Shape[1], input.Shape[2], embeddingDim];
-        }
         else
         {
-            // Generic case: append embeddingDim
+            // Generic case for any rank: input shape [...] -> [..., embeddingDim]
+            // This matches PyTorch's nn.Embedding behavior which accepts any shape
+            // and appends the embedding dimension to the output
             outputShape = new int[input.Rank + 1];
             for (int i = 0; i < input.Rank; i++)
             {
@@ -414,10 +410,9 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Flatten input indices to 1D
         var flatIndices = new Tensor<int>([totalIndices]);
-        var inputData = _lastInput.ToArray();
         for (int i = 0; i < totalIndices; i++)
         {
-            flatIndices[i] = Convert.ToInt32(inputData[i]);
+            flatIndices[i] = Convert.ToInt32(NumOps.ToDouble(_lastInput.Data[i]));
         }
 
         // Flatten outputGradient: [..., embeddingDim] -> [totalIndices, embeddingDim]

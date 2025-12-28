@@ -13,6 +13,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// to capture various relationships in the data simultaneously. This is similar to how you might ask
 /// several friends for advice on a decision - each person might notice different important factors.
 /// </para>
+/// <para>
+/// <b>Thread Safety:</b> This layer is not thread-safe. Each layer instance maintains internal state
+/// during forward and backward passes. If you need concurrent execution, use separate layer instances
+/// per thread or synchronize access to shared instances.
+/// </para>
 /// </remarks>
 public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {

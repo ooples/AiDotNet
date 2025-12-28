@@ -973,15 +973,12 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             _biasesGradient = biasNode.Gradient;
         }
 
-        var inputGrad = inputNode.Gradient!;
+        var inputGrad = inputNode.Gradient ?? throw new InvalidOperationException("Input gradient was not computed during backward pass.");
 
-        // Return with matching dimensions
-        if (_addedBatchDimension)
-        {
-            // Remove batch dimension: [1, C, H, W] -> [C, H, W]
-            return inputGrad.Reshape(inputGrad.Shape[1], inputGrad.Shape[2], inputGrad.Shape[3]);
-        }
-        return inputGrad;
+        // Return with matching dimensions: remove batch dimension if added: [1, C, H, W] -> [C, H, W]
+        return _addedBatchDimension
+            ? inputGrad.Reshape(inputGrad.Shape[1], inputGrad.Shape[2], inputGrad.Shape[3])
+            : inputGrad;
     }
 
     /// <summary>

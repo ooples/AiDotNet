@@ -13,19 +13,24 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// Dense layers are capable of learning complex patterns by adjusting these weights during training.
 /// </para>
 /// <para><b>For Beginners:</b> A dense layer is like a voting system where every input gets to vote on every output.
-/// 
+///
 /// Think of it like this:
 /// - Each input sends information to every output
 /// - Each connection has a different "importance" (weight)
 /// - The layer learns which connections should be strong and which should be weak
-/// 
+///
 /// For example, in an image recognition task:
 /// - One input might detect a curved edge
 /// - Another might detect a straight line
 /// - The dense layer combines these features to recognize higher-level patterns
-/// 
+///
 /// Dense layers are the building blocks of many neural networks because they can learn
 /// almost any relationship between inputs and outputs, given enough neurons and training data.
+/// </para>
+/// <para>
+/// <b>Thread Safety:</b> This layer is not thread-safe. Each layer instance maintains internal state
+/// during forward and backward passes. If you need concurrent execution, use separate layer instances
+/// per thread or synchronize access to shared instances.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -653,25 +658,22 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         Tensor<T> flattenedInput;
-        int batchDim;
 
         if (input.Rank == 1)
         {
             // 1D input [features]: reshape to [1, features]
-            batchDim = 1;
             flattenedInput = input.Reshape(1, inputSize);
         }
         else if (input.Rank == 2)
         {
             // 2D input [batch, features]: use directly
-            batchDim = input.Shape[0];
             flattenedInput = input;
         }
         else
         {
             // ND input [..., features]: flatten batch dimensions
             // E.g., [batch, seq, features] -> [batch*seq, features]
-            batchDim = 1;
+            int batchDim = 1;
             for (int i = 0; i < input.Rank - 1; i++)
             {
                 batchDim *= input.Shape[i];
