@@ -386,6 +386,11 @@ public class LSTMLayer<T> : LayerBase<T>
     private Tensor<T>? _cachedCellStates;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// The sigmoid activation function for element-wise operations.
     /// </summary>
     /// <remarks>
@@ -885,9 +890,41 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-        int batchSize = input.Shape[0];
-        int timeSteps = input.Shape[1];
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: collapse leading dims into batch for rank > 3
+        Tensor<T> input3D;
+        int batchSize;
+        int timeSteps;
+
+        if (rank == 2)
+        {
+            // 2D input [timeSteps, inputSize] -> add batch dim
+            batchSize = 1;
+            timeSteps = input.Shape[0];
+            input3D = input.Reshape([1, timeSteps, _inputSize]);
+        }
+        else if (rank == 3)
+        {
+            // Standard 3D input [batchSize, timeSteps, inputSize]
+            batchSize = input.Shape[0];
+            timeSteps = input.Shape[1];
+            input3D = input;
+        }
+        else
+        {
+            // Higher-rank tensor: collapse leading dims into batch
+            timeSteps = input.Shape[rank - 2];
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            input3D = input.Reshape([flatBatch, timeSteps, _inputSize]);
+        }
+
+        _lastInput = input3D;
 
         var output = new Tensor<T>(new int[] { batchSize, timeSteps, _hiddenSize });
 
@@ -909,7 +946,7 @@ public class LSTMLayer<T> : LayerBase<T>
 
         for (int t = 0; t < timeSteps; t++)
         {
-            var xt = input.GetSlice(t);
+            var xt = input3D.GetSlice(t);
 
             // Forget Gate - using Engine.TensorAdd for bias addition
             var f = Engine.TensorMatMul(xt, WfiT);
@@ -952,6 +989,23 @@ public class LSTMLayer<T> : LayerBase<T>
 
         _lastHiddenState = currentH;
         _lastCellState = currentC;
+
+        // Restore original batch dimensions for any-rank support
+        if (_originalInputShape != null && _originalInputShape.Length > 3)
+        {
+            // Output shape: [...leadingDims, timeSteps, hiddenSize]
+            int[] newShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 2; d++)
+                newShape[d] = _originalInputShape[d];
+            newShape[_originalInputShape.Length - 2] = timeSteps;
+            newShape[_originalInputShape.Length - 1] = _hiddenSize;
+            output = output.Reshape(newShape);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 2)
+        {
+            // 2D input -> 2D output (remove added batch dim)
+            output = output.Reshape([timeSteps, _hiddenSize]);
+        }
 
         return output;
     }

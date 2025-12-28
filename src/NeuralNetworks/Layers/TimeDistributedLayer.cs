@@ -74,6 +74,11 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// The output tensor from the last forward pass.
     /// </summary>
     /// <remarks>
@@ -297,21 +302,80 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-        int timeSteps = input.Shape[0];
-        int batchSize = input.Shape[1];
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
 
-        var outputShape = new[] { timeSteps, batchSize }.Concat(_innerLayer.GetOutputShape()).ToArray();
+        // Handle any-rank tensor: need at least 2D [timeSteps, batchSize, ...]
+        Tensor<T> processInput;
+        int timeSteps;
+        int batchSize;
+
+        if (rank == 1)
+        {
+            throw new ArgumentException($"TimeDistributedLayer requires at least 2D input, got {rank}D");
+        }
+        else if (rank == 2)
+        {
+            // 2D: [timeSteps, features] -> add batch dim
+            timeSteps = input.Shape[0];
+            batchSize = 1;
+            int features = input.Shape[1];
+            processInput = input.Reshape([timeSteps, 1, features]);
+        }
+        else if (rank == 3)
+        {
+            // Standard 3D: [timeSteps, batchSize, features]
+            timeSteps = input.Shape[0];
+            batchSize = input.Shape[1];
+            processInput = input;
+        }
+        else
+        {
+            // Higher-rank: collapse middle dims into batch
+            timeSteps = input.Shape[0];
+            int flatBatch = 1;
+            for (int d = 1; d < rank - 1; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            int lastDim = input.Shape[rank - 1];
+            processInput = input.Reshape([timeSteps, flatBatch, lastDim]);
+        }
+
+        _lastInput = processInput;
+
+        var innerOutputShape = _innerLayer.GetOutputShape();
+        var outputShape = new[] { timeSteps, batchSize }.Concat(innerOutputShape).ToArray();
         var output = new Tensor<T>(outputShape);
 
         for (int t = 0; t < timeSteps; t++)
         {
-            var stepInput = input.Slice(0, t, 1);
+            var stepInput = processInput.Slice(0, t, 1);
             var stepOutput = _innerLayer.Forward(stepInput);
             output.SetSlice(0, t, stepOutput);
         }
 
-        _lastOutput = ApplyActivation(output);
+        var activated = ApplyActivation(output);
+
+        // Restore original batch dimensions for any-rank support
+        if (_originalInputShape != null && _originalInputShape.Length > 3)
+        {
+            // Restore shape: [timeSteps, ...middleDims, ...innerOutputShape]
+            int[] newShape = new int[_originalInputShape.Length - 1 + innerOutputShape.Length];
+            newShape[0] = timeSteps;
+            for (int d = 1; d < _originalInputShape.Length - 1; d++)
+                newShape[d] = _originalInputShape[d];
+            for (int d = 0; d < innerOutputShape.Length; d++)
+                newShape[_originalInputShape.Length - 1 + d] = innerOutputShape[d];
+            activated = activated.Reshape(newShape);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 2)
+        {
+            // 2D input -> remove added batch dim
+            activated = activated.Reshape(new[] { timeSteps }.Concat(innerOutputShape).ToArray());
+        }
+
+        _lastOutput = activated;
         return _lastOutput;
     }
 

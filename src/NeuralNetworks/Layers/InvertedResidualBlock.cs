@@ -472,7 +472,8 @@ public class InvertedResidualBlock<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> TransposeNCHWToNHWC(Tensor<T> input)
     {
-        if (input.Shape.Length == 3)
+        int rank = input.Shape.Length;
+        if (rank == 3)
         {
             // 3D input [C, H, W] -> add batch dimension -> [1, C, H, W]
             var input4D = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
@@ -481,9 +482,27 @@ public class InvertedResidualBlock<T> : LayerBase<T>
             // Remove batch dimension -> [H, W, C]
             return result4D.Reshape([result4D.Shape[1], result4D.Shape[2], result4D.Shape[3]]);
         }
-
-        // 4D input: NCHW [0, 1, 2, 3] -> NHWC [0, 2, 3, 1]
-        return Engine.TensorPermute(input, [0, 2, 3, 1]);
+        else if (rank == 4)
+        {
+            // 4D input: NCHW [0, 1, 2, 3] -> NHWC [0, 2, 3, 1]
+            return Engine.TensorPermute(input, [0, 2, 3, 1]);
+        }
+        else
+        {
+            // Higher rank: flatten leading dims, transpose, restore
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 3; d++)
+                flatBatch *= input.Shape[d];
+            var input4D = input.Reshape([flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
+            var result4D = Engine.TensorPermute(input4D, [0, 2, 3, 1]);
+            var outputShape = new int[rank];
+            for (int d = 0; d < rank - 3; d++)
+                outputShape[d] = input.Shape[d];
+            outputShape[rank - 3] = result4D.Shape[1];
+            outputShape[rank - 2] = result4D.Shape[2];
+            outputShape[rank - 1] = result4D.Shape[3];
+            return result4D.Reshape(outputShape);
+        }
     }
 
     /// <summary>
@@ -493,7 +512,8 @@ public class InvertedResidualBlock<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> TransposeNHWCToNCHW(Tensor<T> input)
     {
-        if (input.Shape.Length == 3)
+        int rank = input.Shape.Length;
+        if (rank == 3)
         {
             // 3D input [H, W, C] -> add batch dimension -> [1, H, W, C]
             var input4D = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
@@ -502,9 +522,27 @@ public class InvertedResidualBlock<T> : LayerBase<T>
             // Remove batch dimension -> [C, H, W]
             return result4D.Reshape([result4D.Shape[1], result4D.Shape[2], result4D.Shape[3]]);
         }
-
-        // 4D input: NHWC [0, 1, 2, 3] -> NCHW [0, 3, 1, 2]
-        return Engine.TensorPermute(input, [0, 3, 1, 2]);
+        else if (rank == 4)
+        {
+            // 4D input: NHWC [0, 1, 2, 3] -> NCHW [0, 3, 1, 2]
+            return Engine.TensorPermute(input, [0, 3, 1, 2]);
+        }
+        else
+        {
+            // Higher rank: flatten leading dims, transpose, restore
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 3; d++)
+                flatBatch *= input.Shape[d];
+            var input4D = input.Reshape([flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
+            var result4D = Engine.TensorPermute(input4D, [0, 3, 1, 2]);
+            var outputShape = new int[rank];
+            for (int d = 0; d < rank - 3; d++)
+                outputShape[d] = input.Shape[d];
+            outputShape[rank - 3] = result4D.Shape[1];
+            outputShape[rank - 2] = result4D.Shape[2];
+            outputShape[rank - 1] = result4D.Shape[3];
+            return result4D.Reshape(outputShape);
+        }
     }
 
     #endregion

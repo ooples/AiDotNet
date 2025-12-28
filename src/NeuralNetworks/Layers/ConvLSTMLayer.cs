@@ -58,6 +58,11 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     private Tensor<T> _biasO; // Output gate bias
 
     private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
     private Tensor<T>? _lastHiddenState;
     private Tensor<T>? _lastCellState;
     private Dictionary<string, object> _gradients = new Dictionary<string, object>();
@@ -364,11 +369,57 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-        int batchSize = input.Shape[0];
-        int timeSteps = input.Shape[1];
-        int height = input.Shape[2];
-        int width = input.Shape[3];
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: collapse leading dims for rank > 5
+        Tensor<T> input5D;
+        int batchSize;
+        int timeSteps;
+        int height;
+        int width;
+        int channels;
+
+        if (rank == 4)
+        {
+            // 4D: [timeSteps, height, width, channels] -> add batch dim
+            batchSize = 1;
+            timeSteps = input.Shape[0];
+            height = input.Shape[1];
+            width = input.Shape[2];
+            channels = input.Shape[3];
+            input5D = input.Reshape([1, timeSteps, height, width, channels]);
+        }
+        else if (rank == 5)
+        {
+            // Standard 5D: [batchSize, timeSteps, height, width, channels]
+            batchSize = input.Shape[0];
+            timeSteps = input.Shape[1];
+            height = input.Shape[2];
+            width = input.Shape[3];
+            channels = input.Shape[4];
+            input5D = input;
+        }
+        else if (rank > 5)
+        {
+            // Higher-rank: collapse leading dims into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 4; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            timeSteps = input.Shape[rank - 4];
+            height = input.Shape[rank - 3];
+            width = input.Shape[rank - 2];
+            channels = input.Shape[rank - 1];
+            input5D = input.Reshape([flatBatch, timeSteps, height, width, channels]);
+        }
+        else
+        {
+            throw new ArgumentException($"ConvLSTMLayer requires at least 4D input, got {rank}D");
+        }
+
+        _lastInput = input5D;
 
         var output = new Tensor<T>([batchSize, timeSteps, height, width, _filters]);
         _lastHiddenState = new Tensor<T>([batchSize, height, width, _filters]);
@@ -376,9 +427,28 @@ public class ConvLSTMLayer<T> : LayerBase<T>
 
         for (int t = 0; t < timeSteps; t++)
         {
-            var xt = input.GetSlice(t);
+            var xt = input5D.GetSlice(t);
             (_lastHiddenState, _lastCellState) = ConvLSTMCell(xt, _lastHiddenState, _lastCellState);
             output.SetSlice(t, _lastHiddenState);
+        }
+
+        // Restore original batch dimensions for any-rank support
+        if (_originalInputShape != null && _originalInputShape.Length > 5)
+        {
+            // Output shape: [...leadingDims, timeSteps, height, width, filters]
+            int[] newShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 4; d++)
+                newShape[d] = _originalInputShape[d];
+            newShape[_originalInputShape.Length - 4] = timeSteps;
+            newShape[_originalInputShape.Length - 3] = height;
+            newShape[_originalInputShape.Length - 2] = width;
+            newShape[_originalInputShape.Length - 1] = _filters;
+            output = output.Reshape(newShape);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 4)
+        {
+            // 4D input -> 4D output (remove batch dim)
+            output = output.Reshape([timeSteps, height, width, _filters]);
         }
 
         return output;

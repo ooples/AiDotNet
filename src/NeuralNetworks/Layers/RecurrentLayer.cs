@@ -78,6 +78,11 @@ public class RecurrentLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// Stores the hidden state tensor from the most recent forward pass for use in backpropagation.
     /// </summary>
     /// <remarks>
@@ -265,10 +270,45 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-        int sequenceLength = input.Shape[0];
-        int batchSize = input.Shape[1];
-        int inputSize = input.Shape[2];
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: collapse leading dims for rank > 3
+        Tensor<T> input3D;
+        int sequenceLength;
+        int batchSize;
+        int inputSize;
+
+        if (rank == 2)
+        {
+            // 2D: [sequenceLength, inputSize] -> add batch dim
+            sequenceLength = input.Shape[0];
+            batchSize = 1;
+            inputSize = input.Shape[1];
+            input3D = input.Reshape([sequenceLength, 1, inputSize]);
+        }
+        else if (rank == 3)
+        {
+            // Standard 3D: [sequenceLength, batchSize, inputSize]
+            sequenceLength = input.Shape[0];
+            batchSize = input.Shape[1];
+            inputSize = input.Shape[2];
+            input3D = input;
+        }
+        else
+        {
+            // Higher-rank: collapse middle dims into batch
+            sequenceLength = input.Shape[0];
+            int flatBatch = 1;
+            for (int d = 1; d < rank - 1; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            inputSize = input.Shape[rank - 1];
+            input3D = input.Reshape([sequenceLength, flatBatch, inputSize]);
+        }
+
+        _lastInput = input3D;
         int hiddenSize = _inputWeights.Shape[0];
 
         var output = new Tensor<T>([sequenceLength, batchSize, hiddenSize]);
@@ -287,7 +327,7 @@ public class RecurrentLayer<T> : LayerBase<T>
         for (int t = 0; t < sequenceLength; t++)
         {
             // VECTORIZED: Extract input slice for time step t: [batchSize, inputSize]
-            var inputAtT = Engine.TensorSliceAxis(input, 0, t); // [batchSize, inputSize]
+            var inputAtT = Engine.TensorSliceAxis(input3D, 0, t); // [batchSize, inputSize]
 
             // VECTORIZED: Extract previous hidden state: [batchSize, hiddenSize]
             var prevHidden = Engine.TensorSliceAxis(hiddenState, 0, t); // [batchSize, hiddenSize]
@@ -310,6 +350,23 @@ public class RecurrentLayer<T> : LayerBase<T>
 
         _lastHiddenState = hiddenState;
         _lastOutput = output;
+
+        // Restore original batch dimensions for any-rank support
+        if (_originalInputShape != null && _originalInputShape.Length > 3)
+        {
+            // Output shape: [sequenceLength, ...middleDims, hiddenSize]
+            int[] newShape = new int[_originalInputShape.Length];
+            newShape[0] = sequenceLength;
+            for (int d = 1; d < _originalInputShape.Length - 1; d++)
+                newShape[d] = _originalInputShape[d];
+            newShape[_originalInputShape.Length - 1] = hiddenSize;
+            output = output.Reshape(newShape);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 2)
+        {
+            // 2D input -> 2D output (remove batch dim)
+            output = output.Reshape([sequenceLength, hiddenSize]);
+        }
 
         return output;
     }

@@ -56,6 +56,11 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     private Tensor<T>? _outputWeightsGradient;
     private Tensor<T>? _outputBiasGradient;
 
+    /// <summary>
+    /// Stores the original query shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalQueryShape;
+
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
@@ -160,14 +165,31 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     /// <returns>Output tensor with same shape as query.</returns>
     private Tensor<T> ForwardCrossAttention(Tensor<T> query, Tensor<T> context)
     {
+        // Store original shape for any-rank tensor support
+        _originalQueryShape = query.Shape;
         var queryShape = query.Shape;
         var contextShape = context.Shape;
+        int queryRank = queryShape.Length;
 
-        // Handle 4D spatial input [batch, channels, H, W]
-        bool is4D = queryShape.Length == 4;
+        // Handle any-rank query input
         int batch, queryLen, height = 0, width = 0;
+        bool is4D = queryRank == 4;
+        bool isHigherRank = queryRank > 4;
 
-        if (is4D)
+        if (queryRank == 2)
+        {
+            // 2D: [seqLen, queryDim] -> add batch dim
+            batch = 1;
+            queryLen = queryShape[0];
+            query = query.Reshape(new[] { 1, queryLen, _queryDim });
+        }
+        else if (queryRank == 3)
+        {
+            // Standard 3D: [batch, seqLen, queryDim]
+            batch = queryShape[0];
+            queryLen = queryShape[1];
+        }
+        else if (is4D)
         {
             batch = queryShape[0];
             height = queryShape[2];
@@ -179,8 +201,13 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         }
         else
         {
-            batch = queryShape[0];
-            queryLen = queryShape[1];
+            // Higher-rank: collapse leading dims into batch
+            int flatBatch = 1;
+            for (int d = 0; d < queryRank - 2; d++)
+                flatBatch *= queryShape[d];
+            batch = flatBatch;
+            queryLen = queryShape[queryRank - 2];
+            query = query.Reshape(new[] { flatBatch, queryLen, _queryDim });
         }
 
         // Handle context shape
@@ -229,10 +256,30 @@ public class CrossAttentionLayer<T> : LayerBase<T>
 
         _lastOutput = output;
 
-        // Reshape back to 4D if input was 4D
-        if (is4D)
+        // Restore original shape for any-rank support
+        if (_originalQueryShape != null)
         {
-            output = ReshapeNLCToNCHW(output, batch, _queryDim, height, width);
+            int origRank = _originalQueryShape.Length;
+            if (origRank == 2)
+            {
+                // 2D input -> 2D output (remove batch dim)
+                output = output.Reshape(new[] { queryLen, _queryDim });
+            }
+            else if (is4D)
+            {
+                // Reshape back to 4D
+                output = ReshapeNLCToNCHW(output, batch, _queryDim, height, width);
+            }
+            else if (isHigherRank)
+            {
+                // Restore original leading dims
+                int[] newShape = new int[origRank];
+                for (int d = 0; d < origRank - 2; d++)
+                    newShape[d] = _originalQueryShape[d];
+                newShape[origRank - 2] = queryLen;
+                newShape[origRank - 1] = _queryDim;
+                output = output.Reshape(newShape);
+            }
         }
 
         return output;
