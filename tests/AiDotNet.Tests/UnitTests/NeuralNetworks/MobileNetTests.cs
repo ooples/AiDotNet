@@ -577,11 +577,12 @@ public class MobileNetTests
         var values = Enum.GetValues(typeof(MobileNetV2WidthMultiplier)).Cast<MobileNetV2WidthMultiplier>().ToArray();
 
         // Assert
-        Assert.Equal(6, values.Length);
+        Assert.Equal(7, values.Length);
         Assert.Contains(MobileNetV2WidthMultiplier.Alpha035, values);
         Assert.Contains(MobileNetV2WidthMultiplier.Alpha050, values);
         Assert.Contains(MobileNetV2WidthMultiplier.Alpha075, values);
         Assert.Contains(MobileNetV2WidthMultiplier.Alpha100, values);
+        Assert.Contains(MobileNetV2WidthMultiplier.Alpha125, values);
         Assert.Contains(MobileNetV2WidthMultiplier.Alpha130, values);
         Assert.Contains(MobileNetV2WidthMultiplier.Alpha140, values);
     }
