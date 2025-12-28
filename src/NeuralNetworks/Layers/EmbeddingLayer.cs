@@ -244,30 +244,37 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
+    /// The original input shape, saved for backward pass.
+    /// </summary>
+    private int[] _originalInputShape = [];
+
+    /// <summary>
     /// Performs the forward pass of the embedding layer, converting token indices to vector representations.
     /// </summary>
-    /// <param name="input">The input tensor containing token indices. Shape: [sequenceLength, batchSize, 1].</param>
-    /// <returns>The output tensor containing embedding vectors. Shape: [sequenceLength, batchSize, embeddingDimension].</returns>
+    /// <param name="input">The input tensor containing token indices. Supports any-rank tensors:
+    /// - 1D: [seqLen] - single sequence
+    /// - 2D: [batch, seqLen] - batch of sequences (industry standard)
+    /// - 3D: [batch, seqLen, 1] - compatible with legacy format
+    /// </param>
+    /// <returns>The output tensor containing embedding vectors with the same leading dimensions plus embeddingDim.</returns>
     /// <remarks>
     /// <para>
-    /// This method implements the forward pass of the embedding layer. It takes a tensor of token indices
-    /// and returns a tensor of embedding vectors by looking up each index in the embedding matrix.
-    /// The input tensor should have the shape [sequenceLength, batchSize, 1], where each element
-    /// is an integer index into the embedding matrix. The output tensor will have the shape
-    /// [sequenceLength, batchSize, embeddingDimension].
+    /// <b>Industry Standard:</b> Like PyTorch's nn.Embedding, this layer supports any-rank input tensors.
+    /// The indices in the last dimension(s) are looked up in the embedding table, and the result has
+    /// the same shape with the last dimension replaced by the embedding dimension.
     /// </para>
     /// <para><b>For Beginners:</b> This method looks up the vector for each token ID in your input.
-    /// 
+    ///
     /// The forward pass works like this:
     /// 1. Take a sequence of token IDs as input (like [5, 10, 3])
     /// 2. For each ID, look up its corresponding row in the embedding matrix
     /// 3. Copy that row (the embedding vector) to the output
-    /// 
+    ///
     /// For example, with an input sequence [5, 10, 3]:
-    /// - Look up row 5 in the embedding matrix ? output row 1
-    /// - Look up row 10 in the embedding matrix ? output row 2
-    /// - Look up row 3 in the embedding matrix ? output row 3
-    /// 
+    /// - Look up row 5 in the embedding matrix -> output row 1
+    /// - Look up row 10 in the embedding matrix -> output row 2
+    /// - Look up row 3 in the embedding matrix -> output row 3
+    ///
     /// The result is a sequence of embedding vectors, one for each input token.
     /// This transforms your discrete tokens into continuous vectors that the neural
     /// network can process more effectively.
@@ -276,42 +283,81 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
+        _originalInputShape = input.Shape;
 
-        // Flatten input for embedding lookup: [seq, batch, 1] -> [seq * batch]
-        int sequenceLength = input.Shape[0];
-        int batchSize = input.Shape[1];
         int embeddingDim = _embeddingTensor.Shape[1];
-
-        // Create flattened indices tensor for embedding lookup (using int for type-safe indexing)
-        var flatIndices = new Tensor<int>([sequenceLength * batchSize]);
         int vocabularySize = _embeddingTensor.Shape[0];
-        int flatIdx = 0;
 
-        for (int t = 0; t < sequenceLength; t++)
+        // Industry standard: Support any-rank input tensors
+        // 1D: [seqLen] -> [seqLen, embeddingDim]
+        // 2D: [batch, seqLen] -> [batch, seqLen, embeddingDim]
+        // 3D: [batch, seqLen, 1] -> [batch, seqLen, embeddingDim]
+
+        // Calculate total number of indices to look up
+        int totalIndices = input.Length;
+        if (input.Rank >= 1 && input.Shape[^1] == 1)
         {
-            for (int b = 0; b < batchSize; b++)
-            {
-                T indexValue = input[t, b, 0];
-                int index = Convert.ToInt32(indexValue);
-
-                // Validate index is within vocabulary bounds
-                if (index < 0 || index >= vocabularySize)
-                {
-                    throw new ArgumentOutOfRangeException(
-                        nameof(input),
-                        $"Input index {index} at position (sequence={t}, batch={b}) is out of range. " +
-                        $"Valid index range is [0, {vocabularySize - 1}] (vocabulary size: {vocabularySize}).");
-                }
-
-                flatIndices[flatIdx++] = index;
-            }
+            // Last dim is 1 (legacy format), don't count it
+            totalIndices = input.Length;
         }
 
-        // Use Engine embedding lookup operation with separate value/index types
+        // Create flattened indices tensor for embedding lookup
+        var flatIndices = new Tensor<int>([totalIndices]);
+        var inputData = input.ToArray();
+
+        for (int i = 0; i < totalIndices; i++)
+        {
+            int index = Convert.ToInt32(inputData[i]);
+
+            // Validate index is within vocabulary bounds
+            if (index < 0 || index >= vocabularySize)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(input),
+                    $"Input index {index} at flat position {i} is out of range. " +
+                    $"Valid index range is [0, {vocabularySize - 1}] (vocabulary size: {vocabularySize}).");
+            }
+
+            flatIndices[i] = index;
+        }
+
+        // Use Engine embedding lookup operation
         var flatOutput = Engine.TensorEmbeddingLookup<T, int>(_embeddingTensor, flatIndices);
 
-        // Reshape output: [seq * batch, embedding_dim] -> [seq, batch, embedding_dim]
-        return flatOutput.Reshape([sequenceLength, batchSize, embeddingDim]);
+        // Calculate output shape: same as input but last dim becomes embeddingDim
+        int[] outputShape;
+        if (input.Rank == 1)
+        {
+            // [seqLen] -> [seqLen, embeddingDim]
+            outputShape = [input.Shape[0], embeddingDim];
+        }
+        else if (input.Rank == 2)
+        {
+            // [batch, seqLen] -> [batch, seqLen, embeddingDim]
+            outputShape = [input.Shape[0], input.Shape[1], embeddingDim];
+        }
+        else if (input.Rank == 3 && input.Shape[2] == 1)
+        {
+            // Legacy format [batch, seqLen, 1] -> [batch, seqLen, embeddingDim]
+            outputShape = [input.Shape[0], input.Shape[1], embeddingDim];
+        }
+        else if (input.Rank == 3)
+        {
+            // [dim1, dim2, dim3] -> [dim1, dim2, dim3, embeddingDim]
+            outputShape = [input.Shape[0], input.Shape[1], input.Shape[2], embeddingDim];
+        }
+        else
+        {
+            // Generic case: append embeddingDim
+            outputShape = new int[input.Rank + 1];
+            for (int i = 0; i < input.Rank; i++)
+            {
+                outputShape[i] = input.Shape[i];
+            }
+            outputShape[^1] = embeddingDim;
+        }
+
+        return flatOutput.Reshape(outputShape);
     }
 
     /// <summary>
@@ -362,30 +408,26 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        int sequenceLength = _lastInput.Shape[0];
-        int batchSize = _lastInput.Shape[1];
         int vocabSize = _embeddingTensor.Shape[0];
         int embeddingDim = _embeddingTensor.Shape[1];
+        int totalIndices = _lastInput.Length;
 
-        // Flatten input indices: [seq, batch, 1] -> [seq * batch] (using int for type-safe indexing)
-        var flatIndices = new Tensor<int>([sequenceLength * batchSize]);
-        int flatIdx = 0;
-        for (int t = 0; t < sequenceLength; t++)
+        // Flatten input indices to 1D
+        var flatIndices = new Tensor<int>([totalIndices]);
+        var inputData = _lastInput.ToArray();
+        for (int i = 0; i < totalIndices; i++)
         {
-            for (int b = 0; b < batchSize; b++)
-            {
-                flatIndices[flatIdx++] = Convert.ToInt32(_lastInput[t, b, 0]);
-            }
+            flatIndices[i] = Convert.ToInt32(inputData[i]);
         }
 
-        // Flatten outputGradient: [seq, batch, embeddingDim] -> [seq * batch, embeddingDim]
-        var flatGradOutput = outputGradient.Reshape([sequenceLength * batchSize, embeddingDim]);
+        // Flatten outputGradient: [..., embeddingDim] -> [totalIndices, embeddingDim]
+        var flatGradOutput = outputGradient.Reshape([totalIndices, embeddingDim]);
 
-        // Use Engine scatter-add operation for gradient accumulation with separate value/index types
+        // Use Engine scatter-add operation for gradient accumulation
         _embeddingGradient = Engine.TensorEmbeddingLookupBackward<T, int>(flatGradOutput, flatIndices, vocabSize, embeddingDim);
 
         // We don't compute input gradients for embedding layer (indices are not differentiable)
-        return new Tensor<T>(_lastInput.Shape);
+        return new Tensor<T>(_originalInputShape);
     }
 
     /// <summary>

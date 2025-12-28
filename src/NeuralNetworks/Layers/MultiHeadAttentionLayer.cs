@@ -556,8 +556,26 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         throw new ArgumentException("MultiHeadAttentionLayer supports 1, 2, or 3 inputs.");
     }
 
+    private bool _inputWas2D;
+
     private Tensor<T> ForwardInternal(Tensor<T> query, Tensor<T> key, Tensor<T> value)
     {
+        // Handle both 2D [seq, dim] and 3D [batch, seq, dim] input (industry standard)
+        _inputWas2D = query.Shape.Length == 2;
+        if (_inputWas2D)
+        {
+            // Reshape 2D [seq, dim] to 3D [1, seq, dim]
+            query = query.Reshape(1, query.Shape[0], query.Shape[1]);
+            key = key.Reshape(1, key.Shape[0], key.Shape[1]);
+            value = value.Reshape(1, value.Shape[0], value.Shape[1]);
+        }
+        else if (query.Shape.Length != 3)
+        {
+            throw new ArgumentException(
+                $"MultiHeadAttentionLayer expects 2D [seq, dim] or 3D [batch, seq, dim] input, " +
+                $"but received {query.Shape.Length}D tensor with shape [{string.Join(", ", query.Shape)}].");
+        }
+
         _lastInput = query;
         _lastQueryInput = query;
         _lastKeyInput = key;
@@ -626,6 +644,12 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var output = Engine.TensorBroadcastAdd(output_reshaped, biasBroadcast);
         _lastOutput = ApplyActivation(output);
 
+        // If input was 2D, reshape output back to 2D [seq, dim]
+        if (_inputWas2D)
+        {
+            return _lastOutput.Reshape(_lastOutput.Shape[1], _lastOutput.Shape[2]);
+        }
+
         return _lastOutput;
     }
 
@@ -650,9 +674,23 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        return UseAutodiff
+        // If input was 2D, reshape gradient to 3D for processing
+        if (_inputWas2D && outputGradient.Shape.Length == 2)
+        {
+            outputGradient = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1]);
+        }
+
+        var result = UseAutodiff
             ? BackwardViaAutodiff(outputGradient)
             : BackwardManual(outputGradient);
+
+        // If input was 2D, reshape gradient back to 2D
+        if (_inputWas2D && result.Shape.Length == 3 && result.Shape[0] == 1)
+        {
+            result = result.Reshape(result.Shape[1], result.Shape[2]);
+        }
+
+        return result;
     }
 
     /// <summary>
