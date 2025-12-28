@@ -550,4 +550,6 @@ public class HalfOperations : INumericOperations<Half>
             destination[i] = (Half)Math.Cos((float)x[i]);
     }
 
+    public void MultiplyAdd(ReadOnlySpan<Half> x, ReadOnlySpan<Half> y, Half scalar, Span<Half> destination)
+        => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
 }

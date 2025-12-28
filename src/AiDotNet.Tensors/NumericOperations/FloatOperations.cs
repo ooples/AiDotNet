@@ -1213,5 +1213,14 @@ public class FloatOperations : INumericOperations<float>
         Engines.Simd.SimdKernels.Cos(x, destination);
     }
 
+    /// <summary>
+    /// Computes fused multiply-add: destination[i] = x[i] + y[i] * scalar.
+    /// Uses SIMD with FMA intrinsics when available.
+    /// </summary>
+    public void MultiplyAdd(ReadOnlySpan<float> x, ReadOnlySpan<float> y, float scalar, Span<float> destination)
+    {
+        Engines.Simd.SimdKernels.ScalarMultiplyAdd(x, y, scalar, destination);
+    }
+
     #endregion
 }

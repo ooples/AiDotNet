@@ -57,11 +57,8 @@ public static class VectorExtensions
         var numOps = MathHelper.GetNumericOperations<T>();
         var span = vector.AsSpan();
 
-        // Manually compute sum of squares using vectorized multiply + sum
-        var temp = new Vector<T>(vector.Length);
-        var tempSpan = temp.AsWritableSpan();
-        numOps.Multiply(span, span, tempSpan);
-        T sumOfSquares = numOps.Sum(tempSpan);
+        // Use dot product for sum of squares - no temp allocation needed
+        T sumOfSquares = numOps.Dot(span, span);
 
         return numOps.Sqrt(sumOfSquares);
     }
@@ -162,13 +159,15 @@ public static class VectorExtensions
     /// </remarks>
     public static Vector<T> Repeat<T>(this Vector<T> vector, int count)
     {
+        var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Vector<T>(vector.Length * count);
+        var sourceSpan = vector.AsSpan();
+        var destSpan = result.AsWritableSpan();
+
+        // Use SIMD Copy for each repetition
         for (int i = 0; i < count; i++)
         {
-            for (int j = 0; j < vector.Length; j++)
-            {
-                result[i * vector.Length + j] = vector[j];
-            }
+            numOps.Copy(sourceSpan, destSpan.Slice(i * vector.Length, vector.Length));
         }
 
         return result;
@@ -385,17 +384,20 @@ public static class VectorExtensions
         if (vector.Length != matrix.Rows)
             throw new ArgumentException("Vector length must match matrix rows");
 
-        var operations = MathHelper.GetNumericOperations<T>();
+        var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++)
-        {
-            var sum = operations.Zero;
-            for (int i = 0; i < matrix.Rows; i++)
-            {
-                sum = operations.Add(sum, operations.Multiply(vector[i], matrix[i, j]));
-            }
+        var resultSpan = result.AsWritableSpan();
 
-            result[j] = sum;
+        // Initialize to zero (already done by Vector constructor, but make explicit)
+        numOps.Fill(resultSpan, numOps.Zero);
+
+        // Use SIMD row-based accumulation: result += vector[i] * row[i]
+        // This has better cache locality since rows are contiguous
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            var rowSpan = matrix.GetRowReadOnlySpan(i);
+            // MultiplyAdd computes: dest[j] = result[j] + row[j] * vector[i]
+            numOps.MultiplyAdd(resultSpan, rowSpan, vector[i], resultSpan);
         }
 
         return result;
@@ -486,11 +488,8 @@ public static class VectorExtensions
         var numOps = MathHelper.GetNumericOperations<T>();
         var span = vector.AsSpan();
 
-        // Manually compute sum of squares using vectorized multiply + sum
-        var temp = new Vector<T>(vector.Length);
-        var tempSpan = temp.AsWritableSpan();
-        numOps.Multiply(span, span, tempSpan);
-        T sumOfSquares = numOps.Sum(tempSpan);
+        // Use dot product for sum of squares - no temp allocation needed
+        T sumOfSquares = numOps.Dot(span, span);
 
         return numOps.Sqrt(sumOfSquares);
     }
@@ -675,10 +674,19 @@ public static class VectorExtensions
 
         var numOps = MathHelper.GetNumericOperations<T>();
         var span = vector.AsSpan();
-        var temp = new Vector<T>(vector.Length);
-        var tempSpan = temp.AsWritableSpan();
-        numOps.Abs(span, tempSpan);
-        return numOps.Max(tempSpan);
+
+        // Single-pass algorithm to find max absolute value without temp allocation
+        T maxAbs = numOps.Abs(span[0]);
+        for (int i = 1; i < span.Length; i++)
+        {
+            T absVal = numOps.Abs(span[i]);
+            if (numOps.GreaterThan(absVal, maxAbs))
+            {
+                maxAbs = absVal;
+            }
+        }
+
+        return maxAbs;
     }
 
     /// <summary>
@@ -717,10 +725,13 @@ public static class VectorExtensions
     /// This is useful when you need to work with magnitudes regardless of direction.
     /// </para>
     /// </remarks>
-    public static VectorBase<T> PointwiseAbs<T>(this Vector<T> vector)
+    public static Vector<T> PointwiseAbs<T>(this Vector<T> vector)
     {
-        var operations = MathHelper.GetNumericOperations<T>();
-        return vector.Transform(value => operations.Abs(value));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+        numOps.Abs(vector.AsSpan(), result.AsWritableSpan());
+
+        return result;
     }
 
     /// <summary>
@@ -763,8 +774,11 @@ public static class VectorExtensions
     /// </remarks>
     public static Vector<T> Add<T>(this Vector<T> vector, T scalar)
     {
-        var operations = MathHelper.GetNumericOperations<T>();
-        return vector.Transform(value => operations.Add(value, scalar));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+        numOps.AddScalar(vector.AsSpan(), scalar, result.AsWritableSpan());
+
+        return result;
     }
 
     /// <summary>
@@ -1023,15 +1037,12 @@ public static class VectorExtensions
             throw new ArgumentNullException(nameof(vector));
 
         int n = vector.Length;
+        // CreateMatrix initializes to zeros, so we only need to set diagonal
         var matrix = Matrix<T>.CreateMatrix<T>(n, n);
-        var ops = MathHelper.GetNumericOperations<T>();
 
         for (int i = 0; i < n; i++)
         {
-            for (int j = 0; j < n; j++)
-            {
-                matrix[i, j] = i == j ? vector[i] : ops.Zero;
-            }
+            matrix[i, i] = vector[i];
         }
 
         return matrix;
@@ -1062,10 +1073,10 @@ public static class VectorExtensions
 
         int n = vector.Length;
         var matrix = Matrix<T>.CreateMatrix<T>(1, n);
-        for (int i = 0; i < n; ++i)
-        {
-            matrix[0, i] = vector[i];
-        }
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Use SIMD Copy - matrix row is contiguous
+        numOps.Copy(vector.AsSpan(), matrix.GetRowSpan(0));
 
         return matrix;
     }
@@ -1088,8 +1099,11 @@ public static class VectorExtensions
     /// </remarks>
     public static Vector<T> Subtract<T>(this Vector<T> vector, T scalar)
     {
-        var operations = MathHelper.GetNumericOperations<T>();
-        return vector.Transform(value => operations.Subtract(value, scalar));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+        numOps.SubtractScalar(vector.AsSpan(), scalar, result.AsWritableSpan());
+
+        return result;
     }
 
     /// <summary>
@@ -1246,7 +1260,10 @@ public static class VectorExtensions
 
         int n = vector.Length;
         var matrix = Matrix<T>.CreateMatrix<T>(n, 1);
-        for (int i = 0; i < n; ++i)
+
+        // For n×1 column matrix, each row has only 1 element
+        // Direct indexing is the simplest approach here
+        for (int i = 0; i < n; i++)
         {
             matrix[i, 0] = vector[i];
         }

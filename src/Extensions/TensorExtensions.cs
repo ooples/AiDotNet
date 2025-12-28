@@ -71,13 +71,9 @@ public static class TensorExtensions
         // Create a new tensor with the same shape
         var result = new Tensor<T>(tensor.Shape);
 
-        // Copy the values from the flattened vector to the tensor
-        int index = 0;
-        result.ForEachPosition((position, _) =>
-        {
-            result[position] = flattenedValues[index++];
-            return true;
-        });
+        // Use SIMD Copy for bulk transfer
+        var numOps = MathHelper.GetNumericOperations<T>();
+        numOps.Copy(flattenedValues.AsSpan(), result.AsWritableSpan());
 
         return result;
     }
@@ -298,10 +294,10 @@ public static class TensorExtensions
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         var tensor = new Tensor<T>(new[] { size });
-        for (int i = 0; i < size; i++)
-        {
-            tensor[i] = numOps.One;
-        }
+
+        // Use SIMD Fill for bulk initialization
+        numOps.Fill(tensor.AsWritableSpan(), numOps.One);
+
         return tensor;
     }
 

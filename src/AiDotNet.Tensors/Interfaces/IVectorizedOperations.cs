@@ -313,4 +313,25 @@ public interface IVectorizedOperations<T>
     /// <param name="x">The source span (values in radians).</param>
     /// <param name="destination">The destination span for results.</param>
     void Cos(ReadOnlySpan<T> x, Span<T> destination);
+
+    /// <summary>
+    /// Computes fused multiply-add: destination[i] = x[i] + y[i] * scalar.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This operation multiplies each element of y by a scalar value,
+    /// then adds it to the corresponding element of x. It's commonly used in matrix multiplication
+    /// and neural network operations.
+    /// </para>
+    /// <para>
+    /// <b>Performance:</b> When FMA (Fused Multiply-Add) hardware is available, this operation
+    /// can be performed in a single instruction, providing better performance and precision
+    /// than separate multiply and add operations.
+    /// </para>
+    /// </remarks>
+    /// <param name="x">The first source span (values to add to).</param>
+    /// <param name="y">The second source span (values to multiply).</param>
+    /// <param name="scalar">The scalar value to multiply y by.</param>
+    /// <param name="destination">The destination span for results.</param>
+    void MultiplyAdd(ReadOnlySpan<T> x, ReadOnlySpan<T> y, T scalar, Span<T> destination);
 }
