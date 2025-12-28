@@ -26,7 +26,7 @@ public class MultiObjectiveRealIndividual : RealValuedIndividual, IMultiObjectiv
 
     public void SetObjectiveValues(ICollection<double> values)
     {
-        _objectiveValues = new List<double>();
+        _objectiveValues = [.. values];
     }
 
     public int GetRank()
@@ -72,5 +72,19 @@ public class MultiObjectiveRealIndividual : RealValuedIndividual, IMultiObjectiv
         }
 
         return atLeastOneBetter;
+    }
+
+    /// <summary>
+    /// Creates a deep clone of this multi-objective individual.
+    /// </summary>
+    /// <returns>A clone of this individual with all properties preserved.</returns>
+    public new MultiObjectiveRealIndividual Clone()
+    {
+        var clone = new MultiObjectiveRealIndividual(GetGenes());
+        clone.SetFitness(GetFitness());
+        clone._objectiveValues = [.. _objectiveValues];
+        clone._rank = _rank;
+        clone._crowdingDistance = _crowdingDistance;
+        return clone;
     }
 }
