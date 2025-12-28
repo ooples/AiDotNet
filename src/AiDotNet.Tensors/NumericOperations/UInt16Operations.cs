@@ -831,4 +831,6 @@ public class UInt16Operations : INumericOperations<ushort>
             destination[i] = (ushort)Math.Cos(x[i]);
     }
 
+    public void MultiplyAdd(ReadOnlySpan<ushort> x, ReadOnlySpan<ushort> y, ushort scalar, Span<ushort> destination)
+        => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
 }

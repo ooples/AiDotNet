@@ -207,7 +207,7 @@ public class CookDistanceFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TI
 
         if (evaluationData.ModelStats.Model == null)
         {
-            throw new AiDotNetException("Model is null. Cannot calculate Cook's distances without a valid model.");
+            throw new InvalidOperationException("Model is null. CookDistanceFitDetector requires Model to be set on ModelStats. Cannot calculate Cook's distances without a valid model.");
         }
 
         var yPredicted = ConversionsHelper.ConvertToVector<T, TOutput>(

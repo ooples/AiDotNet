@@ -42,6 +42,11 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
     public TridiagonalDecomposition(Matrix<T> matrix, TridiagonalAlgorithmType algorithm = TridiagonalAlgorithmType.Householder)
         : base(matrix)
     {
+        if (matrix.Rows != matrix.Columns)
+        {
+            throw new ArgumentException("Tridiagonal decomposition requires a square matrix.", nameof(matrix));
+        }
+
         _algorithm = algorithm;
 
         Decompose();
@@ -96,12 +101,35 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
 
         for (int k = 0; k < n - 2; k++)
         {
+            // Get the subcolumn below the diagonal
             Vector<T> x = TMatrix.GetColumn(k).GetSubVector(k + 1, n - k - 1);
-            T alpha = NumOps.Multiply(NumOps.SignOrZero(x[0]), x.Norm());
-            Vector<T> u = x.Subtract(Vector<T>.CreateDefault(x.Length, alpha).SetValue(0, x[0]));
-            u = u.Divide(u.Norm());
+            T xNorm = x.Norm();
+
+            // Skip if the column is already zero
+            if (NumOps.LessThan(xNorm, NumOps.FromDouble(1e-14)))
+            {
+                continue;
+            }
+
+            // Compute alpha = -sign(x[0]) * ||x||
+            // Use OPPOSITE sign to avoid cancellation: u[0] = x[0] - alpha becomes large, not small
+            T alpha = NumOps.LessThan(x[0], NumOps.Zero)
+                ? xNorm
+                : NumOps.Negate(xNorm);
+
+            // Householder vector: u = x - alpha * e_1
+            Vector<T> u = x.Clone();
+            u[0] = NumOps.Subtract(x[0], alpha);
+
+            T uNorm = u.Norm();
+            if (NumOps.LessThan(uNorm, NumOps.FromDouble(1e-14)))
+            {
+                continue; // Skip if u is essentially zero
+            }
+            u = u.Divide(uNorm);
 
             // VECTORIZED: Construct Householder reflection matrix using outer product
+            // P = I - 2*u*u^T (applied to the submatrix)
             Matrix<T> P = Matrix<T>.CreateIdentity(n);
             Matrix<T> uOuter = u.OuterProduct(u).Multiply(NumOps.FromDouble(2));
             for (int i = k + 1; i < n; i++)
@@ -112,8 +140,22 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
                 }
             }
 
+            // Apply similarity transformation: T = P * T * P
             TMatrix = P.Multiply(TMatrix).Multiply(P);
             QMatrix = QMatrix.Multiply(P);
+        }
+
+        // Clean up elements outside the tridiagonal structure
+        // These values should be mathematically zero by construction
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                if (Math.Abs(i - j) > 1)
+                {
+                    TMatrix[i, j] = NumOps.Zero;
+                }
+            }
         }
     }
 
@@ -133,20 +175,29 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
         QMatrix = Matrix<T>.CreateIdentity(n);
         TMatrix = A.Clone();
 
-        for (int i = 0; i < n - 1; i++)
+        // For each column, zero out elements below the subdiagonal
+        for (int i = 0; i < n - 2; i++)
         {
             for (int j = i + 2; j < n; j++)
             {
-                if (!NumOps.Equals(TMatrix[j, i], NumOps.Zero))
+                T absVal = NumOps.Abs(TMatrix[j, i]);
+                if (NumOps.GreaterThan(absVal, NumOps.FromDouble(1e-14)))
                 {
-                    // Calculate Givens rotation
+                    // Calculate Givens rotation to zero out TMatrix[j, i]
                     T a = TMatrix[i + 1, i];
                     T b = TMatrix[j, i];
                     T r = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(a, a), NumOps.Multiply(b, b)));
+
+                    if (NumOps.LessThan(r, NumOps.FromDouble(1e-14)))
+                    {
+                        continue;
+                    }
+
                     T c = NumOps.Divide(a, r);
                     T s = NumOps.Divide(b, r);
 
-                    // VECTORIZED: Apply Givens rotation to TMatrix rows using vector operations
+                    // Apply Givens rotation from the LEFT: T = G^T * T
+                    // This transforms rows i+1 and j
                     Vector<T> rowI1 = TMatrix.GetRow(i + 1);
                     Vector<T> rowJ = TMatrix.GetRow(j);
                     Vector<T> newRowI1 = rowI1.Multiply(c).Add(rowJ.Multiply(s));
@@ -154,18 +205,28 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
                     TMatrix.SetRow(i + 1, newRowI1);
                     TMatrix.SetRow(j, newRowJ);
 
-                    // VECTORIZED: Update QMatrix columns using vector operations
-                    Vector<T> colI1 = QMatrix.GetColumn(i + 1);
-                    Vector<T> colJ = QMatrix.GetColumn(j);
+                    // Apply Givens rotation from the RIGHT: T = T * G
+                    // This transforms columns i+1 and j (for similarity transformation)
+                    Vector<T> colI1 = TMatrix.GetColumn(i + 1);
+                    Vector<T> colJ = TMatrix.GetColumn(j);
                     Vector<T> newColI1 = colI1.Multiply(c).Add(colJ.Multiply(s));
                     Vector<T> newColJ = colI1.Multiply(NumOps.Negate(s)).Add(colJ.Multiply(c));
-                    QMatrix.SetColumn(i + 1, newColI1);
-                    QMatrix.SetColumn(j, newColJ);
+                    TMatrix.SetColumn(i + 1, newColI1);
+                    TMatrix.SetColumn(j, newColJ);
+
+                    // Accumulate Q: Q = Q * G
+                    Vector<T> qColI1 = QMatrix.GetColumn(i + 1);
+                    Vector<T> qColJ = QMatrix.GetColumn(j);
+                    Vector<T> newQColI1 = qColI1.Multiply(c).Add(qColJ.Multiply(s));
+                    Vector<T> newQColJ = qColI1.Multiply(NumOps.Negate(s)).Add(qColJ.Multiply(c));
+                    QMatrix.SetColumn(i + 1, newQColI1);
+                    QMatrix.SetColumn(j, newQColJ);
                 }
             }
         }
 
-        // Ensure TMatrix is tridiagonal (set small values to zero)
+        // Clean up elements outside the tridiagonal structure
+        // These values should be mathematically zero by construction
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
@@ -195,13 +256,15 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
         QMatrix = new Matrix<T>(n, n);
         TMatrix = new Matrix<T>(n, n);
 
+        // Initialize with a unit vector
         Vector<T> v = new Vector<T>(n);
         v[0] = NumOps.One;
+        Vector<T> vPrev = new Vector<T>(n); // Previous v vector (initially zero)
+
+        // First iteration
         Vector<T> w = A.Multiply(v);
         T alpha = w.DotProduct(v);
-        // VECTORIZED: Subtract projection using Engine operations
-        var proj1 = (Vector<T>)Engine.Multiply(v, alpha);
-        w = (Vector<T>)Engine.Subtract(w, proj1);
+        w = w.Subtract(v.Multiply(alpha));
         T beta = w.Norm();
 
         QMatrix.SetColumn(0, v);
@@ -209,38 +272,77 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
 
         for (int j = 1; j < n; j++)
         {
-            if (NumOps.Equals(beta, NumOps.Zero))
+            // Check for breakdown
+            if (NumOps.LessThan(beta, NumOps.FromDouble(1e-14)))
             {
-                break; // Early termination if beta becomes zero
+                // Generate a new orthogonal vector using Gram-Schmidt
+                Vector<T> newV = new Vector<T>(n);
+                bool found = false;
+                for (int k = 0; k < n && !found; k++)
+                {
+                    newV = new Vector<T>(n);
+                    newV[k] = NumOps.One;
+
+                    // Orthogonalize against all previous vectors
+                    for (int i = 0; i < j; i++)
+                    {
+                        Vector<T> qi = QMatrix.GetColumn(i);
+                        T dot = newV.DotProduct(qi);
+                        newV = newV.Subtract(qi.Multiply(dot));
+                    }
+
+                    T newVNorm = newV.Norm();
+                    if (NumOps.GreaterThan(newVNorm, NumOps.FromDouble(1e-10)))
+                    {
+                        v = newV.Divide(newVNorm);
+                        found = true;
+                    }
+                }
+
+                if (!found)
+                {
+                    break; // Cannot find orthogonal vector, stop
+                }
+            }
+            else
+            {
+                // Standard Lanczos three-term recurrence
+                vPrev = QMatrix.GetColumn(j - 1);
+                v = w.Divide(beta);
             }
 
-            // VECTORIZED: Normalize using Engine division
-            v = (Vector<T>)Engine.Divide(w, beta);
             QMatrix.SetColumn(j, v);
 
-            // VECTORIZED: Subtract projection using Engine operations
-            var proj2 = (Vector<T>)Engine.Multiply(v, beta);
-            w = (Vector<T>)Engine.Subtract(A.Multiply(v), proj2);
-            alpha = w.DotProduct(v);
-            var proj3 = (Vector<T>)Engine.Multiply(v, alpha);
-            w = (Vector<T>)Engine.Subtract(w, proj3);
+            // w = A*v - beta*v_{j-1}
+            w = A.Multiply(v).Subtract(vPrev.Multiply(beta));
 
-            if (j < n - 1)
+            // alpha = v^T * w
+            alpha = w.DotProduct(v);
+
+            // w = w - alpha*v
+            w = w.Subtract(v.Multiply(alpha));
+
+            // Re-orthogonalization (important for numerical stability)
+            for (int i = 0; i < j; i++)
             {
-                beta = w.Norm();
+                Vector<T> qi = QMatrix.GetColumn(i);
+                T dot = w.DotProduct(qi);
+                w = w.Subtract(qi.Multiply(dot));
             }
 
-            TMatrix[j, j] = alpha;
-            TMatrix[j, j - 1] = beta;
-            TMatrix[j - 1, j] = beta;
-        }
+            // Compute new beta
+            beta = w.Norm();
 
-        // Ensure QMatrix is orthogonal
-        for (int i = 0; i < n; i++)
-        {
-            Vector<T> col = QMatrix.GetColumn(i);
-            col = col.Divide(col.Norm());
-            QMatrix.SetColumn(i, col);
+            // Set tridiagonal elements
+            TMatrix[j, j] = alpha;
+            if (j > 0)
+            {
+                T prevBeta = NumOps.GreaterThan(NumOps.Abs(TMatrix[j - 1, j]), NumOps.FromDouble(1e-14))
+                    ? TMatrix[j - 1, j]
+                    : beta;
+                TMatrix[j, j - 1] = prevBeta;
+                TMatrix[j - 1, j] = prevBeta;
+            }
         }
     }
 

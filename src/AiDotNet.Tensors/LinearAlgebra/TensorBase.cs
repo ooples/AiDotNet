@@ -207,10 +207,9 @@ public abstract class TensorBase<T>
     public virtual TensorBase<T> Clone()
     {
         var result = CreateInstance(Shape);
-        for (int i = 0; i < Length; i++)
-        {
-            result._data[i] = _data[i];
-        }
+
+        // Use SIMD Copy for bulk transfer
+        _numOps.Copy(_data.AsSpan(), result._data.AsWritableSpan());
 
         return result;
     }

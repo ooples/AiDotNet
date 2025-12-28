@@ -101,22 +101,33 @@ public class GraphRAG<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+    private const double GraphBoostFactor = 1.5;
     private readonly IGenerator<T> _generator;
     private readonly RetrieverBase<T> _vectorRetriever;
     private readonly Dictionary<string, List<(string relation, string target)>> _knowledgeGraph;
+    private readonly Dictionary<string, string> _entityNormalizationMap;
+    private readonly int _maxHops;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GraphRAG{T}"/> class.
     /// </summary>
     /// <param name="generator">The LLM generator for entity extraction (use StubGenerator or real LLM).</param>
     /// <param name="vectorRetriever">Vector retriever for unstructured data.</param>
+    /// <param name="maxHops">Maximum number of hops to traverse in the knowledge graph (default: 2).</param>
     public GraphRAG(
         IGenerator<T> generator,
-        RetrieverBase<T> vectorRetriever)
+        RetrieverBase<T> vectorRetriever,
+        int maxHops = 2)
     {
         _generator = generator ?? throw new ArgumentNullException(nameof(generator));
         _vectorRetriever = vectorRetriever ?? throw new ArgumentNullException(nameof(vectorRetriever));
-        _knowledgeGraph = new Dictionary<string, List<(string relation, string target)>>();
+
+        if (maxHops < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxHops), "maxHops must be at least 1");
+
+        _maxHops = maxHops;
+        _knowledgeGraph = new Dictionary<string, List<(string relation, string target)>>(StringComparer.OrdinalIgnoreCase);
+        _entityNormalizationMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -151,13 +162,25 @@ public class GraphRAG<T>
         var normalizedRelation = relation.Trim().ToUpperInvariant();
         var normalizedTarget = target.Trim();
 
+        // Store the original casing for display purposes
+        if (!_entityNormalizationMap.ContainsKey(normalizedEntity))
+        {
+            _entityNormalizationMap[normalizedEntity] = normalizedEntity;
+        }
+        if (!_entityNormalizationMap.ContainsKey(normalizedTarget))
+        {
+            _entityNormalizationMap[normalizedTarget] = normalizedTarget;
+        }
+
         if (!_knowledgeGraph.ContainsKey(normalizedEntity))
         {
             _knowledgeGraph[normalizedEntity] = new List<(string, string)>();
         }
 
-        // Avoid duplicate relations
-        if (!_knowledgeGraph[normalizedEntity].Any(r => r.relation == normalizedRelation && r.target == normalizedTarget))
+        // Avoid duplicate relations (case-insensitive comparison via StringComparer.OrdinalIgnoreCase)
+        if (!_knowledgeGraph[normalizedEntity].Any(r =>
+            string.Equals(r.relation, normalizedRelation, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(r.target, normalizedTarget, StringComparison.OrdinalIgnoreCase)))
         {
             _knowledgeGraph[normalizedEntity].Add((normalizedRelation, normalizedTarget));
         }
@@ -207,20 +230,73 @@ public class GraphRAG<T>
         // Step 1: Extract entities from query using LLM
         var entities = ExtractEntities(query);
 
-        // Step 2: Traverse knowledge graph to find related entities
-        var relatedEntities = new HashSet<string>(entities);
+        // Step 2: Traverse knowledge graph to find related entities (multi-hop)
+        var relatedEntities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var relationships = new List<string>();
 
+        // Add initial entities
         foreach (var entity in entities)
         {
-            if (_knowledgeGraph.ContainsKey(entity))
+            relatedEntities.Add(entity);
+        }
+
+        // Multi-hop traversal using BFS
+        // Track hop distance for each entity to use in document metadata
+        var entityHopDistance = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var frontier = new Queue<string>(entities);
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var hopCount = 0;
+
+        // Initial entities are at hop distance 0
+        foreach (var entity in entities)
+        {
+            entityHopDistance[entity] = 0;
+        }
+
+        while (frontier.Count > 0 && hopCount < _maxHops)
+        {
+            var nextFrontier = new Queue<string>();
+            var currentLevelCount = frontier.Count;
+
+            for (int i = 0; i < currentLevelCount; i++)
             {
-                foreach (var (relation, target) in _knowledgeGraph[entity])
+                var currentEntity = frontier.Dequeue();
+
+                if (visited.Contains(currentEntity))
+                    continue;
+
+                visited.Add(currentEntity);
+
+                if (_knowledgeGraph.TryGetValue(currentEntity, out var relations))
                 {
-                    relatedEntities.Add(target);
-                    relationships.Add($"{entity} {relation} {target}");
+                    foreach (var (relation, target) in relations)
+                    {
+                        relatedEntities.Add(target);
+
+                        // Track hop distance for newly discovered entities
+                        if (!entityHopDistance.ContainsKey(target))
+                        {
+                            entityHopDistance[target] = hopCount + 1;
+                        }
+
+                        var displayEntity = _entityNormalizationMap.TryGetValue(currentEntity, out var originalEntity)
+                            ? originalEntity
+                            : currentEntity;
+                        var displayTarget = _entityNormalizationMap.TryGetValue(target, out var originalTarget)
+                            ? originalTarget
+                            : target;
+                        relationships.Add($"{displayEntity} {relation} {displayTarget}");
+
+                        if (!visited.Contains(target))
+                        {
+                            nextFrontier.Enqueue(target);
+                        }
+                    }
                 }
             }
+
+            frontier = nextFrontier;
+            hopCount++;
         }
 
         // Step 3: Use vector retriever for unstructured text (retrieve more than topK for better ranking after boost)
@@ -234,7 +310,7 @@ public class GraphRAG<T>
         {
             var enrichedContent = doc.Content;
 
-            // Check if document mentions any of our graph entities using word boundary matching
+            // Check if document mentions any of our graph entities using word boundary matching (case-insensitive)
             var mentionedEntities = relatedEntities
                 .Where(entity => Regex.IsMatch(
                     doc.Content,
@@ -249,12 +325,19 @@ public class GraphRAG<T>
                 var graphContext = $"\n\nRelated knowledge: {string.Join("; ", relationships)}";
                 enrichedContent = doc.Content + graphContext;
 
-                // Boost relevance score for documents that match graph entities
-                var boostFactor = 1.0 + (mentionedEntities.Count * 0.1);
+                // Boost relevance score by fixed 1.5x factor for documents that match graph entities
                 var originalScore = doc.HasRelevanceScore
                     ? Convert.ToDouble(doc.RelevanceScore)
                     : 0.5;
-                var boostedScore = Math.Min(1.0, originalScore * boostFactor);
+                var boostedScore = Math.Min(1.0, originalScore * GraphBoostFactor);
+
+                // Calculate the minimum hop distance among mentioned entities
+                // This represents how closely related this document is to the query via the knowledge graph
+                var minHopDistance = mentionedEntities
+                    .Where(e => entityHopDistance.ContainsKey(e))
+                    .Select(e => entityHopDistance[e])
+                    .DefaultIfEmpty(0)
+                    .Min();
 
                 enrichedResults.Add(new Document<T>
                 {
@@ -263,7 +346,8 @@ public class GraphRAG<T>
                     Metadata = new Dictionary<string, object>(doc.Metadata)
                     {
                         ["graph_entities"] = mentionedEntities,
-                        ["graph_boosted"] = true
+                        ["graph_boosted"] = true,
+                        ["graph_hop_count"] = minHopDistance
                     },
                     RelevanceScore = NumOps.FromDouble(boostedScore),
                     HasRelevanceScore = true

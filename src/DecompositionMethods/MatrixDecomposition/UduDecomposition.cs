@@ -109,39 +109,30 @@ public class UduDecomposition<T> : MatrixDecompositionBase<T>
     {
         int n = A.Rows;
 
-        for (int j = 0; j < n; j++)
+        // Work backwards from the last row for UDU^T decomposition
+        for (int j = n - 1; j >= 0; j--)
         {
-            // VECTORIZED: Calculate D[j] using dot product
+            // Set diagonal of U to 1
+            U[j, j] = NumOps.One;
+
+            // Calculate D[j] = A[j,j] - sum_{k=j+1}^{n-1} U[j,k]^2 * D[k]
             T sum = NumOps.Zero;
-            if (j > 0)
+            for (int k = j + 1; k < n; k++)
             {
-                var ujCol = new T[j];
-                var dSlice = new T[j];
-                for (int k = 0; k < j; k++)
-                {
-                    ujCol[k] = NumOps.Multiply(U[k, j], U[k, j]);
-                    dSlice[k] = D[k];
-                }
-                var ujVec = new Vector<T>(ujCol);
-                var dVec = new Vector<T>(dSlice);
-                sum = ujVec.DotProduct(dVec);
+                sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[j, k], U[j, k]), D[k]));
             }
             D[j] = NumOps.Subtract(A[j, j], sum);
 
-            U[j, j] = NumOps.One;
-
-            for (int i = j + 1; i < n; i++)
+            // Calculate U[i,j] for i < j
+            for (int i = 0; i < j; i++)
             {
-                // VECTORIZED: Calculate U[j,i] using element-wise product and sum
+                // U[i,j] = (A[i,j] - sum_{k=j+1}^{n-1} U[i,k]*U[j,k]*D[k]) / D[j]
                 sum = NumOps.Zero;
-                if (j > 0)
+                for (int k = j + 1; k < n; k++)
                 {
-                    for (int k = 0; k < j; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[k, i], U[k, j]), D[k]));
-                    }
+                    sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[i, k], U[j, k]), D[k]));
                 }
-                U[j, i] = NumOps.Divide(NumOps.Subtract(A[j, i], sum), D[j]);
+                U[i, j] = NumOps.Divide(NumOps.Subtract(A[i, j], sum), D[j]);
             }
         }
     }
@@ -160,39 +151,31 @@ public class UduDecomposition<T> : MatrixDecompositionBase<T>
     {
         int n = A.Rows;
 
-        for (int i = 0; i < n; i++)
+        // Doolittle variant - also works backwards for UDU^T
+        // Uses the same recurrence as Crout but with a different initialization strategy
+        for (int j = n - 1; j >= 0; j--)
         {
-            // VECTORIZED: Calculate D[i] using dot product
+            // Set diagonal of U to 1
+            U[j, j] = NumOps.One;
+
+            // Calculate D[j] = A[j,j] - sum_{k=j+1}^{n-1} U[j,k]^2 * D[k]
             T sum = NumOps.Zero;
-            if (i > 0)
+            for (int k = j + 1; k < n; k++)
             {
-                var uiCol = new T[i];
-                var dSlice = new T[i];
-                for (int k = 0; k < i; k++)
-                {
-                    uiCol[k] = NumOps.Multiply(U[k, i], U[k, i]);
-                    dSlice[k] = D[k];
-                }
-                var uiVec = new Vector<T>(uiCol);
-                var dVec = new Vector<T>(dSlice);
-                sum = uiVec.DotProduct(dVec);
+                sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[j, k], U[j, k]), D[k]));
             }
-            D[i] = NumOps.Subtract(A[i, i], sum);
+            D[j] = NumOps.Subtract(A[j, j], sum);
 
-            U[i, i] = NumOps.One;
-
-            for (int j = i + 1; j < n; j++)
+            // For each row i < j, calculate U[i,j]
+            for (int i = j - 1; i >= 0; i--)
             {
-                // VECTORIZED: Calculate U[i,j] using element-wise product and sum
+                // U[i,j] = (A[i,j] - sum_{k=j+1}^{n-1} U[i,k]*U[j,k]*D[k]) / D[j]
                 sum = NumOps.Zero;
-                if (i > 0)
+                for (int k = j + 1; k < n; k++)
                 {
-                    for (int k = 0; k < i; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[k, i], U[k, j]), D[k]));
-                    }
+                    sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[i, k], U[j, k]), D[k]));
                 }
-                U[i, j] = NumOps.Divide(NumOps.Subtract(A[i, j], sum), D[i]);
+                U[i, j] = NumOps.Divide(NumOps.Subtract(A[i, j], sum), D[j]);
             }
         }
     }

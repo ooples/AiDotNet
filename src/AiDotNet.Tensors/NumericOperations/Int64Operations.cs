@@ -1009,4 +1009,6 @@ public class Int64Operations : INumericOperations<long>
             destination[i] = (long)Math.Cos(x[i]);
     }
 
+    public void MultiplyAdd(ReadOnlySpan<long> x, ReadOnlySpan<long> y, long scalar, Span<long> destination)
+        => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
 }

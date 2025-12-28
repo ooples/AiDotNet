@@ -178,6 +178,64 @@ namespace AiDotNet.Tensors.Engines.Simd
             return sum;
         }
 
+        /// <summary>
+        /// Computes destination[i] = a[i] + b[i] * scalar for double-precision values using SIMD.
+        /// Uses FMA (Fused Multiply-Add) when available for better performance and precision.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void ScalarMultiplyAdd(ReadOnlySpan<double> a, ReadOnlySpan<double> b, double scalar, Span<double> result)
+        {
+            if (a.Length != b.Length || a.Length != result.Length)
+            {
+                throw new ArgumentException("Input and output spans must have the same length.");
+            }
+
+            int length = result.Length;
+            int i = 0;
+
+#if NET5_0_OR_GREATER
+            if (Avx.IsSupported && length >= 4)
+            {
+                var vscalar = Vector256.Create(scalar);
+                int simdLength = length & ~3;
+                for (; i < simdLength; i += 4)
+                {
+                    var va = ReadVector256Double(a, i);
+                    var vb = ReadVector256Double(b, i);
+                    var vr = Fma.IsSupported ? Fma.MultiplyAdd(vb, vscalar, va) : Avx.Add(va, Avx.Multiply(vb, vscalar));
+                    WriteVector256Double(result, i, vr);
+                }
+            }
+            else if (Sse2.IsSupported && length >= 2)
+            {
+                var vscalar = Vector128.Create(scalar);
+                int simdLength = length & ~1;
+                for (; i < simdLength; i += 2)
+                {
+                    var va = ReadVector128Double(a, i);
+                    var vb = ReadVector128Double(b, i);
+                    WriteVector128Double(result, i, Sse2.Add(va, Sse2.Multiply(vb, vscalar)));
+                }
+            }
+            else if (AdvSimd.Arm64.IsSupported && length >= 2)
+            {
+                var vscalar = Vector128.Create(scalar);
+                int simdLength = length & ~1;
+                for (; i < simdLength; i += 2)
+                {
+                    var va = ReadVector128Double(a, i);
+                    var vb = ReadVector128Double(b, i);
+                    WriteVector128Double(result, i, AdvSimd.Arm64.Add(va, AdvSimd.Arm64.Multiply(vb, vscalar)));
+                }
+            }
+#endif
+
+            for (; i < length; i++)
+            {
+                result[i] = a[i] + scalar * b[i];
+            }
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void ScalarMultiplyAdd(ReadOnlySpan<float> a, ReadOnlySpan<float> b, float scalar, Span<float> result)
         {

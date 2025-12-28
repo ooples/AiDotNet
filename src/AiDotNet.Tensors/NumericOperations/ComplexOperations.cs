@@ -1155,4 +1155,6 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
             destination[i] = Cos(x[i]);
     }
 
+    public void MultiplyAdd(ReadOnlySpan<Complex<T>> x, ReadOnlySpan<Complex<T>> y, Complex<T> scalar, Span<Complex<T>> destination)
+        => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
 }

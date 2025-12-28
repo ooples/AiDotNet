@@ -122,10 +122,27 @@ public class HeteroscedasticityFitDetector<T, TInput, TOutput> : FitDetectorBase
         var whiteTestStatistic = CalculateWhiteTestStatistic(evaluationData);
 
         var maxTestStatistic = NumOps.GreaterThan(breuschPaganTestStatistic, whiteTestStatistic) ? breuschPaganTestStatistic : whiteTestStatistic;
+
+        // Ensure the test statistic is non-negative
+        if (NumOps.LessThan(maxTestStatistic, NumOps.Zero))
+        {
+            maxTestStatistic = NumOps.Zero;
+        }
+
         var normalizedTestStatistic = NumOps.Divide(maxTestStatistic, NumOps.FromDouble(_options.HeteroscedasticityThreshold));
 
+        // Clamp normalized test statistic to [0, 1]
+        if (NumOps.LessThan(normalizedTestStatistic, NumOps.Zero))
+        {
+            normalizedTestStatistic = NumOps.Zero;
+        }
+        else if (NumOps.GreaterThan(normalizedTestStatistic, NumOps.One))
+        {
+            normalizedTestStatistic = NumOps.One;
+        }
+
         // Invert the normalized test statistic to get a confidence level (higher test statistic = lower confidence)
-        return NumOps.Subtract(NumOps.One, NumOps.LessThan(NumOps.One, normalizedTestStatistic) ? NumOps.One : normalizedTestStatistic);
+        return NumOps.Subtract(NumOps.One, normalizedTestStatistic);
     }
 
     /// <summary>
@@ -233,7 +250,9 @@ public class HeteroscedasticityFitDetector<T, TInput, TOutput> : FitDetectorBase
         }
         augmentedX.SetColumn(column, Vector<T>.CreateDefault(X.Rows, NumOps.One));
 
-        var auxiliaryRegression = new SimpleRegression<T>();
+        // Use MultipleRegression since the augmented matrix has multiple columns
+        // (original features + squared terms + cross-products + constant)
+        var auxiliaryRegression = new MultipleRegression<T>();
         auxiliaryRegression.Train(augmentedX, new Vector<T>(squaredResiduals));
         var predictionStatsInputs = new PredictionStatsInputs<T>
         {
