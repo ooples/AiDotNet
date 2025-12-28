@@ -721,10 +721,10 @@ public class LossFunctionsMathematicalTests
 
         var loss = poisson.CalculateLoss(predicted, actual);
 
-        // Poisson = (pred - actual*log(pred)) for each element
-        // = (2 - 1*log(2)) + (3 - 2*log(3)) / 2
-        // = (2 - 0.693) + (3 - 2.197) / 2
-        // = 1.307 + 0.803 / 2
+        // Poisson = (pred - actual*log(pred)) for each element, averaged
+        // = [(2 - 1*log(2)) + (3 - 2*log(3))] / 2
+        // = [(2 - 0.693) + (3 - 2.197)] / 2
+        // = [1.307 + 0.803] / 2
         // = 2.11 / 2 = 1.055
         double elem1 = 2.0 - 1.0 * Math.Log(2.0);
         double elem2 = 3.0 - 2.0 * Math.Log(3.0);
