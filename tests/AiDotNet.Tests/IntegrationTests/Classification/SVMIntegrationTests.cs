@@ -769,6 +769,389 @@ public class SVMIntegrationTests
 
     #endregion
 
+    #region NuSupportVectorClassifier Tests
+
+    [Fact]
+    public void NuSVC_BasicBinaryClassification_Works()
+    {
+        // Arrange: Well-separated data
+        var x = new Matrix<double>(16, 2);
+        var y = new Vector<double>(16);
+
+        for (int i = 0; i < 8; i++)
+        {
+            x[i, 0] = -2 - 0.2 * i; x[i, 1] = 0.1 * i; y[i] = 0;
+            x[8 + i, 0] = 2 + 0.2 * i; x[8 + i, 1] = 0.1 * i; y[8 + i] = 1;
+        }
+
+        var options = new SVMOptions<double>
+        {
+            Kernel = KernelType.Linear,
+            MaxIterations = 500,
+            RandomState = 42
+        };
+        var nuSvc = new NuSupportVectorClassifier<double>(options, null, nu: 0.5);
+
+        // Act
+        nuSvc.Train(x, y);
+        var predictions = nuSvc.Predict(x);
+
+        // Assert: Should classify most samples correctly
+        int correct = 0;
+        for (int i = 0; i < 16; i++)
+        {
+            if (Math.Abs(predictions[i] - y[i]) < 0.01) correct++;
+        }
+
+        Assert.True(correct >= 12, $"Nu-SVC should classify most samples correctly. Got {correct}/16");
+    }
+
+    [Fact]
+    public void NuSVC_NuParameterValidation_ThrowsOnInvalidNu()
+    {
+        // Arrange & Act & Assert: Nu must be in (0, 1]
+        Assert.Throws<ArgumentException>(() => new NuSupportVectorClassifier<double>(null, null, nu: 0.0));
+        Assert.Throws<ArgumentException>(() => new NuSupportVectorClassifier<double>(null, null, nu: -0.5));
+        Assert.Throws<ArgumentException>(() => new NuSupportVectorClassifier<double>(null, null, nu: 1.5));
+    }
+
+    [Fact]
+    public void NuSVC_NuBoundsEdgeCases_ValidValues()
+    {
+        // Arrange
+        var x = new Matrix<double>(10, 2);
+        var y = new Vector<double>(10);
+
+        for (int i = 0; i < 5; i++)
+        {
+            x[i, 0] = -2 - 0.1 * i; x[i, 1] = 0; y[i] = 0;
+            x[5 + i, 0] = 2 + 0.1 * i; x[5 + i, 1] = 0; y[5 + i] = 1;
+        }
+
+        // Act & Assert: nu = 1.0 is valid (edge case)
+        var nuSvc1 = new NuSupportVectorClassifier<double>(null, null, nu: 1.0);
+        nuSvc1.Train(x, y);
+        var pred1 = nuSvc1.Predict(x);
+        Assert.Equal(10, pred1.Length);
+
+        // nu = 0.01 is valid (edge case)
+        var nuSvc2 = new NuSupportVectorClassifier<double>(null, null, nu: 0.01);
+        nuSvc2.Train(x, y);
+        var pred2 = nuSvc2.Predict(x);
+        Assert.Equal(10, pred2.Length);
+    }
+
+    [Fact]
+    public void NuSVC_DifferentNuValues_AffectsSupportVectors()
+    {
+        // Arrange
+        var x = new Matrix<double>(20, 2);
+        var y = new Vector<double>(20);
+
+        for (int i = 0; i < 10; i++)
+        {
+            x[i, 0] = -1 - 0.1 * i; x[i, 1] = 0.05 * i; y[i] = 0;
+            x[10 + i, 0] = 1 + 0.1 * i; x[10 + i, 1] = 0.05 * i; y[10 + i] = 1;
+        }
+
+        var optionsLowNu = new SVMOptions<double> { Kernel = KernelType.Linear, MaxIterations = 300, RandomState = 42 };
+        var optionsHighNu = new SVMOptions<double> { Kernel = KernelType.Linear, MaxIterations = 300, RandomState = 42 };
+
+        var svcLowNu = new NuSupportVectorClassifier<double>(optionsLowNu, null, nu: 0.1);
+        var svcHighNu = new NuSupportVectorClassifier<double>(optionsHighNu, null, nu: 0.9);
+
+        // Act
+        svcLowNu.Train(x, y);
+        svcHighNu.Train(x, y);
+
+        // Assert: Both should train successfully
+        var predsLow = svcLowNu.Predict(x);
+        var predsHigh = svcHighNu.Predict(x);
+
+        Assert.Equal(20, predsLow.Length);
+        Assert.Equal(20, predsHigh.Length);
+    }
+
+    [Fact]
+    public void NuSVC_DecisionFunction_ReturnsValidValues()
+    {
+        // Arrange
+        var x = new Matrix<double>(10, 2);
+        var y = new Vector<double>(10);
+
+        for (int i = 0; i < 5; i++)
+        {
+            x[i, 0] = -2 - 0.1 * i; x[i, 1] = 0; y[i] = 0;
+            x[5 + i, 0] = 2 + 0.1 * i; x[5 + i, 1] = 0; y[5 + i] = 1;
+        }
+
+        var options = new SVMOptions<double>
+        {
+            Kernel = KernelType.Linear,
+            MaxIterations = 300,
+            RandomState = 42
+        };
+        var nuSvc = new NuSupportVectorClassifier<double>(options, null, nu: 0.5);
+        nuSvc.Train(x, y);
+
+        // Act
+        var decisions = nuSvc.DecisionFunction(x);
+
+        // Assert: Decision values should be finite
+        Assert.Equal(10, decisions.Rows);
+        Assert.Equal(1, decisions.Columns);
+
+        for (int i = 0; i < 10; i++)
+        {
+            Assert.False(double.IsNaN(decisions[i, 0]), $"Decision {i} should not be NaN");
+            Assert.False(double.IsInfinity(decisions[i, 0]), $"Decision {i} should not be infinite");
+        }
+    }
+
+    [Fact]
+    public void NuSVC_PredictProbabilities_SumToOne()
+    {
+        // Arrange
+        var x = new Matrix<double>(10, 2);
+        var y = new Vector<double>(10);
+
+        for (int i = 0; i < 5; i++)
+        {
+            x[i, 0] = -2 - 0.1 * i; x[i, 1] = 0; y[i] = 0;
+            x[5 + i, 0] = 2 + 0.1 * i; x[5 + i, 1] = 0; y[5 + i] = 1;
+        }
+
+        var options = new SVMOptions<double>
+        {
+            Kernel = KernelType.Linear,
+            MaxIterations = 300,
+            RandomState = 42
+        };
+        var nuSvc = new NuSupportVectorClassifier<double>(options, null, nu: 0.5);
+        nuSvc.Train(x, y);
+
+        // Act
+        var probs = nuSvc.PredictProbabilities(x);
+
+        // Assert: Probabilities should sum to 1 and be in [0, 1]
+        for (int i = 0; i < x.Rows; i++)
+        {
+            double sum = probs[i, 0] + probs[i, 1];
+            Assert.True(Math.Abs(sum - 1.0) < Tolerance,
+                $"Row {i} probabilities should sum to 1, got {sum}");
+            Assert.True(probs[i, 0] >= 0 && probs[i, 0] <= 1,
+                $"P(class 0) should be in [0,1], got {probs[i, 0]}");
+            Assert.True(probs[i, 1] >= 0 && probs[i, 1] <= 1,
+                $"P(class 1) should be in [0,1], got {probs[i, 1]}");
+        }
+    }
+
+    [Fact]
+    public void NuSVC_RBFKernel_Works()
+    {
+        // Arrange
+        var x = new Matrix<double>(12, 2);
+        var y = new Vector<double>(12);
+
+        for (int i = 0; i < 6; i++)
+        {
+            x[i, 0] = -1 - 0.2 * i; x[i, 1] = 0.1 * i; y[i] = 0;
+            x[6 + i, 0] = 1 + 0.2 * i; x[6 + i, 1] = 0.1 * i; y[6 + i] = 1;
+        }
+
+        var options = new SVMOptions<double>
+        {
+            Kernel = KernelType.RBF,
+            Gamma = 1.0,
+            MaxIterations = 500,
+            RandomState = 42
+        };
+        var nuSvc = new NuSupportVectorClassifier<double>(options, null, nu: 0.5);
+
+        // Act
+        nuSvc.Train(x, y);
+        var predictions = nuSvc.Predict(x);
+
+        // Assert
+        int correct = 0;
+        for (int i = 0; i < 12; i++)
+        {
+            if (Math.Abs(predictions[i] - y[i]) < 0.01) correct++;
+        }
+
+        Assert.True(correct >= 8, $"Nu-SVC with RBF kernel should work. Got {correct}/12");
+    }
+
+    [Fact]
+    public void NuSVC_Clone_ProducesSamePredictions()
+    {
+        // Arrange
+        var x = new Matrix<double>(8, 2);
+        var y = new Vector<double>(8);
+
+        x[0, 0] = -2; x[0, 1] = 0; y[0] = 0;
+        x[1, 0] = -1.5; x[1, 1] = 0; y[1] = 0;
+        x[2, 0] = -1; x[2, 1] = 0; y[2] = 0;
+        x[3, 0] = -0.5; x[3, 1] = 0; y[3] = 0;
+        x[4, 0] = 2; x[4, 1] = 0; y[4] = 1;
+        x[5, 0] = 1.5; x[5, 1] = 0; y[5] = 1;
+        x[6, 0] = 1; x[6, 1] = 0; y[6] = 1;
+        x[7, 0] = 0.5; x[7, 1] = 0; y[7] = 1;
+
+        var options = new SVMOptions<double>
+        {
+            Kernel = KernelType.Linear,
+            MaxIterations = 300,
+            RandomState = 42
+        };
+        var nuSvc = new NuSupportVectorClassifier<double>(options, null, nu: 0.5);
+        nuSvc.Train(x, y);
+
+        // Act
+        var clone = (NuSupportVectorClassifier<double>)nuSvc.Clone();
+
+        var testPoint = new Matrix<double>(1, 2);
+        testPoint[0, 0] = 0; testPoint[0, 1] = 0;
+
+        var originalPred = nuSvc.Predict(testPoint);
+        var clonePred = clone.Predict(testPoint);
+
+        // Assert
+        Assert.True(Math.Abs(originalPred[0] - clonePred[0]) < Tolerance);
+    }
+
+    [Fact]
+    public void NuSVC_ThrowsOnMismatchedDimensions()
+    {
+        // Arrange
+        var x = new Matrix<double>(5, 2);
+        var y = new Vector<double>(3);  // Mismatched
+
+        var nuSvc = new NuSupportVectorClassifier<double>();
+
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() => nuSvc.Train(x, y));
+    }
+
+    [Fact]
+    public void NuSVC_PredictBeforeTrain_Throws()
+    {
+        // Arrange
+        var nuSvc = new NuSupportVectorClassifier<double>();
+        var testPoint = new Matrix<double>(1, 2);
+        testPoint[0, 0] = 1; testPoint[0, 1] = 1;
+
+        // Act & Assert
+        Assert.Throws<InvalidOperationException>(() => nuSvc.Predict(testPoint));
+    }
+
+    [Fact]
+    public void NuSVC_GetModelMetadata_ContainsNuParameter()
+    {
+        // Arrange
+        var x = new Matrix<double>(6, 2);
+        var y = new Vector<double>(6);
+
+        x[0, 0] = -2; x[0, 1] = 0; y[0] = 0;
+        x[1, 0] = -1; x[1, 1] = 0; y[1] = 0;
+        x[2, 0] = -0.5; x[2, 1] = 0; y[2] = 0;
+        x[3, 0] = 2; x[3, 1] = 0; y[3] = 1;
+        x[4, 0] = 1; x[4, 1] = 0; y[4] = 1;
+        x[5, 0] = 0.5; x[5, 1] = 0; y[5] = 1;
+
+        var options = new SVMOptions<double>
+        {
+            Kernel = KernelType.Linear,
+            MaxIterations = 200,
+            RandomState = 42
+        };
+        var nuSvc = new NuSupportVectorClassifier<double>(options, null, nu: 0.3);
+        nuSvc.Train(x, y);
+
+        // Act
+        var metadata = nuSvc.GetModelMetadata();
+
+        // Assert
+        Assert.True(metadata.AdditionalInfo.ContainsKey("Nu"));
+        Assert.Equal(0.3, metadata.AdditionalInfo["Nu"]);
+        Assert.True(metadata.AdditionalInfo.ContainsKey("Rho"));
+    }
+
+    [Fact]
+    public void NuSVC_PolynomialKernel_Works()
+    {
+        // Arrange
+        var x = new Matrix<double>(10, 2);
+        var y = new Vector<double>(10);
+
+        for (int i = 0; i < 5; i++)
+        {
+            x[i, 0] = -1 - 0.1 * i; x[i, 1] = 0; y[i] = 0;
+            x[5 + i, 0] = 1 + 0.1 * i; x[5 + i, 1] = 0; y[5 + i] = 1;
+        }
+
+        var options = new SVMOptions<double>
+        {
+            Kernel = KernelType.Polynomial,
+            Degree = 2,
+            Coef0 = 1,
+            MaxIterations = 500,
+            RandomState = 42
+        };
+        var nuSvc = new NuSupportVectorClassifier<double>(options, null, nu: 0.5);
+
+        // Act
+        nuSvc.Train(x, y);
+        var predictions = nuSvc.Predict(x);
+
+        // Assert
+        int correct = 0;
+        for (int i = 0; i < 10; i++)
+        {
+            if (Math.Abs(predictions[i] - y[i]) < 0.01) correct++;
+        }
+
+        Assert.True(correct >= 6, $"Nu-SVC with polynomial kernel should work. Got {correct}/10");
+    }
+
+    [Fact]
+    public void NuSVC_NumericalStability_LargeFeatureValues()
+    {
+        // Arrange: Data with large feature values
+        var x = new Matrix<double>(8, 2);
+        var y = new Vector<double>(8);
+
+        x[0, 0] = -1e4; x[0, 1] = 0; y[0] = 0;
+        x[1, 0] = -2e4; x[1, 1] = 0; y[1] = 0;
+        x[2, 0] = -3e4; x[2, 1] = 0; y[2] = 0;
+        x[3, 0] = -4e4; x[3, 1] = 0; y[3] = 0;
+        x[4, 0] = 1e4; x[4, 1] = 0; y[4] = 1;
+        x[5, 0] = 2e4; x[5, 1] = 0; y[5] = 1;
+        x[6, 0] = 3e4; x[6, 1] = 0; y[6] = 1;
+        x[7, 0] = 4e4; x[7, 1] = 0; y[7] = 1;
+
+        var options = new SVMOptions<double>
+        {
+            Kernel = KernelType.Linear,
+            MaxIterations = 300,
+            RandomState = 42
+        };
+        var nuSvc = new NuSupportVectorClassifier<double>(options, null, nu: 0.5);
+
+        // Act
+        nuSvc.Train(x, y);
+        var decisions = nuSvc.DecisionFunction(x);
+
+        // Assert: Decisions should be finite
+        for (int i = 0; i < 8; i++)
+        {
+            Assert.False(double.IsNaN(decisions[i, 0]), $"Decision {i} should not be NaN");
+            Assert.False(double.IsInfinity(decisions[i, 0]), $"Decision {i} should not be infinite");
+        }
+    }
+
+    #endregion
+
     #region GetModelMetadata Tests
 
     [Fact]

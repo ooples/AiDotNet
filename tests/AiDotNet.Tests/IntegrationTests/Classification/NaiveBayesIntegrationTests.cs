@@ -810,4 +810,206 @@ public class NaiveBayesIntegrationTests
     }
 
     #endregion
+
+    #region CategoricalNaiveBayes Tests
+
+    [Fact]
+    public void CategoricalNB_BasicClassification_Works()
+    {
+        // Arrange: Categorical features (color=0/1/2, size=0/1/2)
+        // Class 0: tends to have color=0, size=0
+        // Class 1: tends to have color=2, size=2
+        var x = new Matrix<double>(8, 2);
+        var y = new Vector<double>(8);
+
+        // Class 0 samples
+        x[0, 0] = 0; x[0, 1] = 0; y[0] = 0;
+        x[1, 0] = 0; x[1, 1] = 1; y[1] = 0;
+        x[2, 0] = 1; x[2, 1] = 0; y[2] = 0;
+        x[3, 0] = 0; x[3, 1] = 0; y[3] = 0;
+
+        // Class 1 samples
+        x[4, 0] = 2; x[4, 1] = 2; y[4] = 1;
+        x[5, 0] = 2; x[5, 1] = 1; y[5] = 1;
+        x[6, 0] = 1; x[6, 1] = 2; y[6] = 1;
+        x[7, 0] = 2; x[7, 1] = 2; y[7] = 1;
+
+        var cnb = new CategoricalNaiveBayes<double>();
+
+        // Act
+        cnb.Train(x, y);
+
+        // Test: Sample with category values typical of class 0
+        var testClass0 = new Matrix<double>(1, 2);
+        testClass0[0, 0] = 0; testClass0[0, 1] = 0;
+        var pred0 = cnb.Predict(testClass0);
+        Assert.Equal(0.0, pred0[0], Tolerance);
+
+        // Test: Sample with category values typical of class 1
+        var testClass1 = new Matrix<double>(1, 2);
+        testClass1[0, 0] = 2; testClass1[0, 1] = 2;
+        var pred1 = cnb.Predict(testClass1);
+        Assert.Equal(1.0, pred1[0], Tolerance);
+    }
+
+    [Fact]
+    public void CategoricalNB_ProbabilitiesSumToOne()
+    {
+        // Arrange
+        var x = new Matrix<double>(6, 3);
+        var y = new Vector<double>(6);
+
+        // 3 categories per feature (0, 1, 2)
+        x[0, 0] = 0; x[0, 1] = 0; x[0, 2] = 0; y[0] = 0;
+        x[1, 0] = 0; x[1, 1] = 1; x[1, 2] = 0; y[1] = 0;
+        x[2, 0] = 1; x[2, 1] = 0; x[2, 2] = 1; y[2] = 0;
+        x[3, 0] = 2; x[3, 1] = 2; x[3, 2] = 2; y[3] = 1;
+        x[4, 0] = 2; x[4, 1] = 1; x[4, 2] = 2; y[4] = 1;
+        x[5, 0] = 1; x[5, 1] = 2; x[5, 2] = 1; y[5] = 1;
+
+        var cnb = new CategoricalNaiveBayes<double>();
+        cnb.Train(x, y);
+
+        // Act: Get probabilities for a test sample
+        var testPoint = new Matrix<double>(1, 3);
+        testPoint[0, 0] = 1; testPoint[0, 1] = 1; testPoint[0, 2] = 1;
+        var probs = cnb.PredictProbabilities(testPoint);
+
+        // Assert: Probabilities must sum to 1
+        double sum = probs[0, 0] + probs[0, 1];
+        Assert.Equal(1.0, sum, Tolerance);
+        Assert.True(probs[0, 0] >= 0 && probs[0, 0] <= 1);
+        Assert.True(probs[0, 1] >= 0 && probs[0, 1] <= 1);
+    }
+
+    [Fact]
+    public void CategoricalNB_LaplaceSmoothingWorks()
+    {
+        // Arrange: Data where not all categories appear in training
+        var x = new Matrix<double>(4, 2);
+        var y = new Vector<double>(4);
+
+        // Only categories 0 and 1 appear, but we'll test with category 2
+        x[0, 0] = 0; x[0, 1] = 0; y[0] = 0;
+        x[1, 0] = 1; x[1, 1] = 1; y[1] = 0;
+        x[2, 0] = 0; x[2, 1] = 1; y[2] = 1;
+        x[3, 0] = 1; x[3, 1] = 0; y[3] = 1;
+
+        var cnb = new CategoricalNaiveBayes<double>(new NaiveBayesOptions<double> { Alpha = 1.0 });
+        cnb.Train(x, y);
+
+        // Act: Test with unseen category value (2)
+        var testPoint = new Matrix<double>(1, 2);
+        testPoint[0, 0] = 2; testPoint[0, 1] = 2;
+
+        // Should not throw due to Laplace smoothing
+        var probs = cnb.PredictProbabilities(testPoint);
+
+        // Assert: Probabilities should still be valid
+        double sum = probs[0, 0] + probs[0, 1];
+        Assert.Equal(1.0, sum, Tolerance);
+    }
+
+    [Fact]
+    public void CategoricalNB_MultiClassClassification_Works()
+    {
+        // Arrange: 3 classes with distinct categorical patterns
+        var x = new Matrix<double>(9, 2);
+        var y = new Vector<double>(9);
+
+        // Class 0: category pattern (0, 0)
+        x[0, 0] = 0; x[0, 1] = 0; y[0] = 0;
+        x[1, 0] = 0; x[1, 1] = 1; y[1] = 0;
+        x[2, 0] = 1; x[2, 1] = 0; y[2] = 0;
+
+        // Class 1: category pattern (1, 1)
+        x[3, 0] = 1; x[3, 1] = 1; y[3] = 1;
+        x[4, 0] = 1; x[4, 1] = 2; y[4] = 1;
+        x[5, 0] = 2; x[5, 1] = 1; y[5] = 1;
+
+        // Class 2: category pattern (2, 2)
+        x[6, 0] = 2; x[6, 1] = 2; y[6] = 2;
+        x[7, 0] = 2; x[7, 1] = 2; y[7] = 2;
+        x[8, 0] = 2; x[8, 1] = 1; y[8] = 2;
+
+        var cnb = new CategoricalNaiveBayes<double>();
+        cnb.Train(x, y);
+
+        // Act & Assert: Test representative samples for each class
+        var testClass0 = new Matrix<double>(1, 2);
+        testClass0[0, 0] = 0; testClass0[0, 1] = 0;
+        var pred0 = cnb.Predict(testClass0);
+        Assert.Equal(0.0, pred0[0], Tolerance);
+
+        var testClass2 = new Matrix<double>(1, 2);
+        testClass2[0, 0] = 2; testClass2[0, 1] = 2;
+        var pred2 = cnb.Predict(testClass2);
+        Assert.Equal(2.0, pred2[0], Tolerance);
+    }
+
+    [Fact]
+    public void CategoricalNB_Clone_PreservesState()
+    {
+        // Arrange
+        var x = new Matrix<double>(6, 2);
+        var y = new Vector<double>(6);
+
+        x[0, 0] = 0; x[0, 1] = 0; y[0] = 0;
+        x[1, 0] = 0; x[1, 1] = 1; y[1] = 0;
+        x[2, 0] = 1; x[2, 1] = 0; y[2] = 0;
+        x[3, 0] = 2; x[3, 1] = 2; y[3] = 1;
+        x[4, 0] = 2; x[4, 1] = 1; y[4] = 1;
+        x[5, 0] = 1; x[5, 1] = 2; y[5] = 1;
+
+        var cnb = new CategoricalNaiveBayes<double>();
+        cnb.Train(x, y);
+
+        // Act
+        var clone = cnb.Clone() as CategoricalNaiveBayes<double>;
+
+        // Assert
+        Assert.NotNull(clone);
+
+        var testPoint = new Matrix<double>(1, 2);
+        testPoint[0, 0] = 0; testPoint[0, 1] = 0;
+
+        var origProbs = cnb.PredictProbabilities(testPoint);
+        var cloneProbs = clone!.PredictProbabilities(testPoint);
+
+        Assert.Equal(origProbs[0, 0], cloneProbs[0, 0], Tolerance);
+        Assert.Equal(origProbs[0, 1], cloneProbs[0, 1], Tolerance);
+    }
+
+    [Fact]
+    public void CategoricalNB_AlphaSmoothing_AffectsProbabilities()
+    {
+        // Arrange
+        var x = new Matrix<double>(4, 2);
+        var y = new Vector<double>(4);
+
+        x[0, 0] = 0; x[0, 1] = 0; y[0] = 0;
+        x[1, 0] = 0; x[1, 1] = 0; y[1] = 0;
+        x[2, 0] = 1; x[2, 1] = 1; y[2] = 1;
+        x[3, 0] = 1; x[3, 1] = 1; y[3] = 1;
+
+        var cnbLowAlpha = new CategoricalNaiveBayes<double>(new NaiveBayesOptions<double> { Alpha = 0.01 });
+        var cnbHighAlpha = new CategoricalNaiveBayes<double>(new NaiveBayesOptions<double> { Alpha = 10.0 });
+
+        cnbLowAlpha.Train(x, y);
+        cnbHighAlpha.Train(x, y);
+
+        // Act
+        var testPoint = new Matrix<double>(1, 2);
+        testPoint[0, 0] = 0; testPoint[0, 1] = 0;
+
+        var probsLow = cnbLowAlpha.PredictProbabilities(testPoint);
+        var probsHigh = cnbHighAlpha.PredictProbabilities(testPoint);
+
+        // Assert: Higher alpha should make predictions less extreme (closer to uniform)
+        // Low alpha should give higher probability to class 0 for sample (0,0)
+        Assert.True(probsLow[0, 0] > probsHigh[0, 0],
+            "Low alpha should give more extreme (higher) probability for class 0");
+    }
+
+    #endregion
 }
