@@ -150,37 +150,57 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
         U = Matrix<T>.CreateIdentity(m);
         V = Matrix<T>.CreateIdentity(n);
 
-        for (int k = 0; k < Math.Min(m - 1, n); k++)
+        int minDim = Math.Min(m, n);
+
+        for (int k = 0; k < minDim; k++)
         {
-            // Compute Householder vector for column
-            Vector<T> x = B.GetColumnSegment(k, k, m - k);
-            Vector<T> v = HouseholderVector(x);
+            // Column reflector: zero elements below the diagonal in column k
+            if (k < m - 1)
+            {
+                // Compute Householder vector for column
+                Vector<T> x = B.GetColumnSegment(k, k, m - k);
+                Vector<T> v = HouseholderVector(x);
 
-            // Apply Householder reflection to B
-            Matrix<T> P = Matrix<T>.CreateIdentity(m - k).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
-            Matrix<T> subB = B.GetSubMatrix(k, k, m - k, n - k);
-            B.SetSubMatrix(k, k, P.Multiply(subB));
+                // Only apply transformation if v is non-zero
+                T vNorm = v.Norm();
+                if (NumOps.GreaterThan(vNorm, NumOps.FromDouble(1e-14)))
+                {
+                    // Apply Householder reflection to B
+                    Matrix<T> P = Matrix<T>.CreateIdentity(m - k).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
+                    Matrix<T> subB = B.GetSubMatrix(k, k, m - k, n - k);
+                    B.SetSubMatrix(k, k, P.Multiply(subB));
 
-            // Update U
-            Matrix<T> subU = U.GetSubMatrix(0, k, m, m - k);
-            U.SetSubMatrix(0, k, subU.Multiply(P.Transpose()));
+                    // Update U
+                    Matrix<T> subU = U.GetSubMatrix(0, k, m, m - k);
+                    U.SetSubMatrix(0, k, subU.Multiply(P.Transpose()));
+                }
+            }
 
+            // Row reflector: zero elements to the right of the superdiagonal in row k
+            // For upper bidiagonal, we want B[k, k+2:n] = 0
             if (k < n - 2)
             {
-                // Compute Householder vector for row
-                x = B.GetRowSegment(k, k + 1, n - k - 1);
-                v = HouseholderVector(x);
+                // Compute Householder vector for row (elements after superdiagonal)
+                Vector<T> x = B.GetRowSegment(k, k + 1, n - k - 1);
+                Vector<T> v = HouseholderVector(x);
 
-                // Apply Householder reflection to B
-                P = Matrix<T>.CreateIdentity(n - k - 1).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
-                subB = B.GetSubMatrix(k, k + 1, m - k, n - k - 1);
-                B.SetSubMatrix(k, k + 1, subB.Multiply(P));
+                // Only apply transformation if v is non-zero
+                T vNorm = v.Norm();
+                if (NumOps.GreaterThan(vNorm, NumOps.FromDouble(1e-14)))
+                {
+                    // Apply Householder reflection to B from the right: B := B * P
+                    Matrix<T> P = Matrix<T>.CreateIdentity(n - k - 1).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
+                    Matrix<T> subB = B.GetSubMatrix(k, k + 1, m - k, n - k - 1);
+                    B.SetSubMatrix(k, k + 1, subB.Multiply(P));
 
-                // Update V
-                Matrix<T> subV = V.GetSubMatrix(k + 1, 0, n - k - 1, n);
-                V.SetSubMatrix(k + 1, 0, P.Multiply(subV));
+                    // Update V: V := V * P (right multiply on columns)
+                    // For A = U * B * V^T, when B := B * P, we need V := V * P
+                    Matrix<T> subV = V.GetSubMatrix(0, k + 1, n, n - k - 1);
+                    V.SetSubMatrix(0, k + 1, subV.Multiply(P));
+                }
             }
         }
+
     }
 
     /// <summary>
@@ -340,11 +360,30 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
     private Vector<T> HouseholderVector(Vector<T> x)
     {
         T norm = x.Norm();
+
+        // If the input vector has zero norm, return a zero vector
+        // (no Householder transformation needed)
+        if (NumOps.LessThan(norm, NumOps.FromDouble(1e-14)))
+        {
+            return new Vector<T>(x.Length);
+        }
+
         Vector<T> v = x.Clone();
-        v[0] = NumOps.Add(v[0], NumOps.Multiply(NumOps.SignOrZero(x[0]), norm));
+        // Use opposite sign to avoid cancellation
+        v[0] = NumOps.LessThan(x[0], NumOps.Zero)
+            ? NumOps.Subtract(v[0], norm)
+            : NumOps.Add(v[0], norm);
+
+        T vNorm = v.Norm();
+
+        // If the Householder vector has zero norm, return a zero vector
+        if (NumOps.LessThan(vNorm, NumOps.FromDouble(1e-14)))
+        {
+            return new Vector<T>(x.Length);
+        }
 
         // VECTORIZED: Normalize using Engine division
-        return (Vector<T>)Engine.Divide(v, v.Norm());
+        return (Vector<T>)Engine.Divide(v, vNorm);
     }
 
     /// <summary>
@@ -397,6 +436,7 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
         else
         {
             // VECTORIZED: Apply rotation to columns using vector operations
+            // M := M * G (right multiply)
             Vector<T> colJ = M.GetColumn(j);
             Vector<T> colL = M.GetColumn(l);
             Vector<T> newColJ = colJ.Multiply(c).Add(colL.Multiply(s));
@@ -404,13 +444,14 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
             M.SetColumn(j, newColJ);
             M.SetColumn(l, newColL);
 
-            // VECTORIZED: Update Q rows using vector operations
-            Vector<T> rowJ = Q.GetRow(j);
-            Vector<T> rowL = Q.GetRow(l);
-            Vector<T> newRowJ = rowJ.Multiply(c).Add(rowL.Multiply(s));
-            Vector<T> newRowL = rowJ.Multiply(NumOps.Negate(s)).Add(rowL.Multiply(c));
-            Q.SetRow(j, newRowJ);
-            Q.SetRow(l, newRowL);
+            // VECTORIZED: Update Q (which is V) columns using vector operations
+            // V := V * G (right multiply), so update columns j and l
+            Vector<T> qColJ = Q.GetColumn(j);
+            Vector<T> qColL = Q.GetColumn(l);
+            Vector<T> newQColJ = qColJ.Multiply(c).Add(qColL.Multiply(s));
+            Vector<T> newQColL = qColJ.Multiply(NumOps.Negate(s)).Add(qColL.Multiply(c));
+            Q.SetColumn(j, newQColJ);
+            Q.SetColumn(l, newQColL);
         }
     }
 
