@@ -342,6 +342,67 @@ public class ExpressionTreeIntegrationTests
         Assert.False(add.IsFeatureUsed(3)); // x[3] not used
     }
 
+    [Fact]
+    public void ExpressionTree_RequiredFeatureCount_ConstantOnly()
+    {
+        var tree = new ExpressionTree<double, Matrix<double>, Vector<double>>(
+            ExpressionNodeType.Constant, 5.0);
+
+        // No variables used, so no features required
+        Assert.Equal(0, tree.RequiredFeatureCount);
+    }
+
+    [Fact]
+    public void ExpressionTree_RequiredFeatureCount_SingleVariable()
+    {
+        // Uses x[0] - requires at least 1 column
+        var tree = new ExpressionTree<double, Matrix<double>, Vector<double>>(
+            ExpressionNodeType.Variable, 0.0);
+
+        Assert.Equal(1, tree.RequiredFeatureCount);
+    }
+
+    [Fact]
+    public void ExpressionTree_RequiredFeatureCount_SparseVariables()
+    {
+        // x[0] + x[5] - FeatureCount is 2 (unique variables), but RequiredFeatureCount is 6 (max index + 1)
+        var x0 = new ExpressionTree<double, Matrix<double>, Vector<double>>(
+            ExpressionNodeType.Variable, 0.0);
+        var x5 = new ExpressionTree<double, Matrix<double>, Vector<double>>(
+            ExpressionNodeType.Variable, 5.0);
+        var add = new ExpressionTree<double, Matrix<double>, Vector<double>>(
+            ExpressionNodeType.Add, 0.0, x0, x5);
+
+        // FeatureCount is number of unique variables used
+        Assert.Equal(2, add.FeatureCount);
+
+        // RequiredFeatureCount is max index + 1 (need columns 0-5)
+        Assert.Equal(6, add.RequiredFeatureCount);
+    }
+
+    [Fact]
+    public void ExpressionTree_RequiredFeatureCount_ValidatesInputCorrectly()
+    {
+        // Tree uses only x[5] - requires 6 columns (indices 0-5)
+        var x5 = new ExpressionTree<double, Matrix<double>, Vector<double>>(
+            ExpressionNodeType.Variable, 5.0);
+
+        // FeatureCount is 1 (one unique variable)
+        Assert.Equal(1, x5.FeatureCount);
+
+        // RequiredFeatureCount is 6 (max index 5 + 1)
+        Assert.Equal(6, x5.RequiredFeatureCount);
+
+        // Input with 5 columns should fail (needs 6)
+        var input5 = new Matrix<double>(new double[,] { { 1, 2, 3, 4, 5 } });
+        Assert.Throws<ArgumentException>(() => x5.Predict(input5));
+
+        // Input with 6 columns should succeed
+        var input6 = new Matrix<double>(new double[,] { { 1, 2, 3, 4, 5, 6 } });
+        var result = x5.Predict(input6);
+        Assert.Equal(6.0, result[0], Tolerance); // x[5] = 6
+    }
+
     #endregion
 
     #region ToString
@@ -585,14 +646,15 @@ public class ExpressionTreeIntegrationTests
     [Fact]
     public void ExpressionTree_Predict_InsufficientFeatures_Throws()
     {
-        // Tree uses x[2]
+        // Tree uses x[2] - requires at least 3 columns (indices 0, 1, 2)
         var x2 = new ExpressionTree<double, Matrix<double>, Vector<double>>(
             ExpressionNodeType.Variable, 2.0);
 
-        // Input only has 2 columns
+        // Input only has 2 columns (indices 0 and 1)
         var input = new Matrix<double>(new double[,] { { 1.0, 2.0 } });
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => x2.Predict(input));
+        // Now throws ArgumentException during validation with proper error message
+        Assert.Throws<ArgumentException>(() => x2.Predict(input));
     }
 
     #endregion
