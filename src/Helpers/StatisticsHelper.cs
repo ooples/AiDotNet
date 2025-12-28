@@ -63,25 +63,33 @@ public static class StatisticsHelper<T>
     }
 
     /// <summary>
-    /// Calculates the Mean Absolute Deviation (MAD) of a vector of values from a given median.
+    /// Calculates the Median Absolute Deviation (MAD) of a vector of values from a given median.
     /// </summary>
     /// <param name="values">The vector of values to calculate MAD for.</param>
     /// <param name="median">The median value to calculate deviations from.</param>
-    /// <returns>The Mean Absolute Deviation of the values.</returns>
+    /// <returns>The Median Absolute Deviation of the values.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Mean Absolute Deviation measures how spread out your data is from a central value (median).
-    /// It calculates the average of the absolute differences between each value and the median.
+    /// <b>For Beginners:</b> Median Absolute Deviation (MAD) measures how spread out your data is from
+    /// the central value (median). It calculates the median of the absolute differences between each
+    /// value and the median. MAD is a robust measure of statistical dispersion that is more resilient
+    /// to outliers than standard deviation.
     /// </para>
     /// <para>
-    /// For example, for values [2, 4, 6, 8] with median 5:
-    /// 1. Calculate absolute differences: |2-5|=3, |4-5|=1, |6-5|=1, |8-5|=3
-    /// 2. Calculate average: (3+1+1+3)/4 = 2
+    /// For example, for values [1, 2, 3, 4, 5] with median 3:
+    /// 1. Calculate absolute differences: |1-3|=2, |2-3|=1, |3-3|=0, |4-3|=1, |5-3|=2
+    /// 2. Calculate median of deviations: median([2, 1, 0, 1, 2]) = median(sorted: [0, 1, 1, 2, 2]) = 1
+    /// </para>
+    /// <para>
+    /// This matches scipy.stats.median_abs_deviation from Python's SciPy library.
     /// </para>
     /// </remarks>
     public static T CalculateMeanAbsoluteDeviation(Vector<T> values, T median)
     {
-        return _numOps.Divide(values.Select(x => _numOps.Abs(_numOps.Subtract(x, median))).Aggregate(_numOps.Zero, _numOps.Add), _numOps.FromDouble(values.Length));
+        // Calculate Median Absolute Deviation (MAD) to match scipy.stats.median_abs_deviation
+        var absoluteDeviations = values.Select(x => _numOps.Abs(_numOps.Subtract(x, median)));
+        var deviationsVector = new Vector<T>(absoluteDeviations.ToArray());
+        return CalculateMedian(deviationsVector);
     }
 
     /// <summary>
@@ -1640,6 +1648,14 @@ public static class StatisticsHelper<T>
         T residualSumSquares = actualValues.Zip(predictedValues, (a, p) => _numOps.Square(_numOps.Subtract(a, p)))
                                            .Aggregate(_numOps.Zero, _numOps.Add);
 
+        // Handle edge case where all actual values are constant (variance = 0)
+        if (_numOps.Equals(totalSumSquares, _numOps.Zero))
+        {
+            // If predictions also match (residuals = 0), return 1.0 (perfect prediction)
+            // If predictions don't match, return 0.0 (model explains nothing)
+            return _numOps.Equals(residualSumSquares, _numOps.Zero) ? _numOps.One : _numOps.Zero;
+        }
+
         return _numOps.Subtract(_numOps.One, _numOps.Divide(residualSumSquares, totalSumSquares));
     }
 
@@ -2484,15 +2500,18 @@ public static class StatisticsHelper<T>
         var sortedShapes = estimates.Select(e => e.Shape).OrderBy(s => s).ToList();
         var sortedScales = estimates.Select(e => e.Scale).OrderBy(s => s).ToList();
 
-        T halfConfidenceLevel = _numOps.Divide(confidenceLevel, _numOps.FromDouble(2));
-        T oneMinusHalfConfidenceLevel = _numOps.Subtract(_numOps.One, halfConfidenceLevel);
-        T onePlusHalfConfidenceLevel = _numOps.Add(_numOps.One, halfConfidenceLevel);
+        // For a confidence interval, we need the alpha/2 and 1 - alpha/2 percentiles
+        // where alpha = 1 - confidenceLevel
+        // e.g., for 95% confidence: alpha = 0.05, so we want 2.5th and 97.5th percentiles
+        T alpha = _numOps.Subtract(_numOps.One, confidenceLevel);
+        T halfAlpha = _numOps.Divide(alpha, _numOps.FromDouble(2));
+        T oneMinusHalfAlpha = _numOps.Subtract(_numOps.One, halfAlpha);
 
-        T lowerIndexT = _numOps.Multiply(_numOps.FromDouble(bootstrapSamples), oneMinusHalfConfidenceLevel);
-        int lowerIndex = Convert.ToInt32(_numOps.Round(lowerIndexT));
+        T lowerIndexT = _numOps.Multiply(_numOps.FromDouble(bootstrapSamples - 1), halfAlpha);
+        int lowerIndex = Math.Max(0, Convert.ToInt32(_numOps.Floor(lowerIndexT)));
 
-        T upperIndexT = _numOps.Multiply(_numOps.FromDouble(bootstrapSamples), onePlusHalfConfidenceLevel);
-        int upperIndex = Convert.ToInt32(_numOps.Round(upperIndexT));
+        T upperIndexT = _numOps.Multiply(_numOps.FromDouble(bootstrapSamples - 1), oneMinusHalfAlpha);
+        int upperIndex = Math.Min(bootstrapSamples - 1, Convert.ToInt32(_numOps.Ceiling(upperIndexT)));
 
         return (_numOps.Multiply(sortedShapes[lowerIndex], sortedScales[lowerIndex]),
                 _numOps.Multiply(sortedShapes[upperIndex], sortedScales[upperIndex]));
@@ -3278,7 +3297,8 @@ public static class StatisticsHelper<T>
     {
         int n = sortedData.Length;
         T position = _numOps.Multiply(_numOps.FromDouble(n - 1), quantile);
-        int index = Convert.ToInt32(_numOps.Round(position));
+        // Use Floor to match NumPy's linear interpolation (method='linear')
+        int index = Convert.ToInt32(_numOps.Floor(position));
         T fraction = _numOps.Subtract(position, _numOps.FromDouble(index));
 
         if (index + 1 < n)
@@ -3703,19 +3723,20 @@ public static class StatisticsHelper<T>
     /// <returns>The mean bias error.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> The mean bias error (MBE) measures the average direction of errors in your 
-    /// predictions. It's calculated by taking the average of the differences between actual and predicted 
-    /// values (actual - predicted). A positive MBE indicates that your model tends to underestimate values 
-    /// (predictions are too low on average), while a negative MBE indicates that your model tends to 
-    /// overestimate values (predictions are too high on average). An MBE close to zero suggests that your 
-    /// model's errors are balanced in both directions. This metric is useful for detecting systematic bias 
-    /// in your predictions, but it can mask the magnitude of errors since positive and negative errors 
+    /// <b>For Beginners:</b> The mean bias error (MBE) measures the average direction of errors in your
+    /// predictions. It's calculated by taking the average of the differences between predicted and actual
+    /// values (predicted - actual). A positive MBE indicates that your model tends to overestimate values
+    /// (predictions are too high on average), while a negative MBE indicates that your model tends to
+    /// underestimate values (predictions are too low on average). An MBE close to zero suggests that your
+    /// model's errors are balanced in both directions. This metric is useful for detecting systematic bias
+    /// in your predictions, but it can mask the magnitude of errors since positive and negative errors
     /// can cancel each other out.
     /// </para>
     /// </remarks>
     public static T CalculateMeanBiasError(Vector<T> actual, Vector<T> predicted)
     {
-        return _numOps.Divide(actual.Subtract(predicted).Aggregate(_numOps.Zero, _numOps.Add), _numOps.FromDouble(actual.Length));
+        // MBE = mean(predicted - actual): positive = overprediction, negative = underprediction
+        return _numOps.Divide(predicted.Subtract(actual).Aggregate(_numOps.Zero, _numOps.Add), _numOps.FromDouble(actual.Length));
     }
 
     /// <summary>
