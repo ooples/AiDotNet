@@ -3,7 +3,6 @@ using System.Runtime.CompilerServices;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
-using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.Operators;
 using TensorPrimitives = System.Numerics.Tensors.TensorPrimitives;
 
