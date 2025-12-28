@@ -400,6 +400,13 @@ public class ContinuousMexicanHatWavelet<T> : WaveletFunctionBase<T>
         int newLength = input.Length * factor;
         var result = new T[newLength];
 
+        // Initialize all elements to zero
+        for (int i = 0; i < newLength; i++)
+        {
+            result[i] = NumOps.Zero;
+        }
+
+        // Place input values at every factor-th position
         for (int i = 0; i < input.Length; i++)
         {
             result[i * factor] = input[i];

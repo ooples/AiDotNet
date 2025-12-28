@@ -160,16 +160,16 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
     {
-        var lowPass = GetDecompositionLowPassFilter();
-        var highPass = GetDecompositionHighPassFilter();
+        var lowPass = GetReconstructionLowPassFilter();
+        var highPass = GetReconstructionHighPassFilter();
 
         // Upsample by 2
         var upsampledApprox = Upsample(approximation, 2);
         var upsampledDetail = Upsample(detail, 2);
 
-        // Convolve with time-reversed filters
-        var reconLow = ConvolveReversed(upsampledApprox, lowPass);
-        var reconHigh = ConvolveReversed(upsampledDetail, highPass);
+        // Convolve with reconstruction filters
+        var reconLow = Convolve(upsampledApprox, lowPass);
+        var reconHigh = Convolve(upsampledDetail, highPass);
 
         // Add the results - ensure same length
         int outputLength = Math.Min(reconLow.Length, reconHigh.Length);
@@ -307,19 +307,19 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
     /// <para>
     /// <b>For Beginners:</b>
     /// This method provides the coefficients for the high-pass filter used during decomposition.
-    /// 
+    ///
     /// The high-pass filter:
     /// - Lets through the high-frequency components of the signal
     /// - Blocks the low-frequency components
     /// - Produces the detail coefficients
-    /// 
+    ///
     /// For B-spline wavelets, these coefficients are derived from the B-spline function
     /// of one order higher than the scaling function, with alternating signs. This creates
     /// a filter that responds to rapid changes in the signal.
-    /// 
+    ///
     /// The alternating signs (multiplying every other coefficient by -1) create the
     /// oscillating nature that allows the filter to detect high-frequency components.
-    /// 
+    ///
     /// The coefficients are normalized to ensure proper energy preservation during
     /// the decomposition process.
     /// </para>
@@ -333,6 +333,70 @@ public class BSplineWavelet<T> : WaveletFunctionBase<T>
         }
 
         return NormalizeAndConvert(coeffs);
+    }
+
+    /// <summary>
+    /// Gets the low-pass filter coefficients used for reconstruction (synthesis).
+    /// </summary>
+    /// <returns>A vector of low-pass reconstruction filter coefficients.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method provides the coefficients for the low-pass filter used during reconstruction.
+    ///
+    /// For biorthogonal wavelets like B-splines, reconstruction filters are different from
+    /// decomposition filters. The reconstruction low-pass filter is derived from the
+    /// decomposition high-pass filter using the quadrature mirror filter relationship.
+    ///
+    /// This ensures perfect reconstruction when combined with the decomposition filters.
+    /// </para>
+    /// </remarks>
+    private Vector<T> GetReconstructionLowPassFilter()
+    {
+        var highPassCoeffs = GetDecompositionHighPassFilter();
+        var result = new T[highPassCoeffs.Length];
+
+        // Quadrature mirror relationship: time-reverse and apply alternating signs
+        for (int i = 0; i < highPassCoeffs.Length; i++)
+        {
+            int reversedIndex = highPassCoeffs.Length - 1 - i;
+            T sign = NumOps.FromDouble(i % 2 == 0 ? 1.0 : -1.0);
+            result[i] = NumOps.Multiply(sign, highPassCoeffs[reversedIndex]);
+        }
+
+        return new Vector<T>(result);
+    }
+
+    /// <summary>
+    /// Gets the high-pass filter coefficients used for reconstruction (synthesis).
+    /// </summary>
+    /// <returns>A vector of high-pass reconstruction filter coefficients.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method provides the coefficients for the high-pass filter used during reconstruction.
+    ///
+    /// For biorthogonal wavelets like B-splines, reconstruction filters are different from
+    /// decomposition filters. The reconstruction high-pass filter is derived from the
+    /// decomposition low-pass filter using the quadrature mirror filter relationship.
+    ///
+    /// This ensures perfect reconstruction when combined with the decomposition filters.
+    /// </para>
+    /// </remarks>
+    private Vector<T> GetReconstructionHighPassFilter()
+    {
+        var lowPassCoeffs = GetDecompositionLowPassFilter();
+        var result = new T[lowPassCoeffs.Length];
+
+        // Quadrature mirror relationship: time-reverse and apply alternating signs
+        for (int i = 0; i < lowPassCoeffs.Length; i++)
+        {
+            int reversedIndex = lowPassCoeffs.Length - 1 - i;
+            T sign = NumOps.FromDouble(i % 2 == 0 ? 1.0 : -1.0);
+            result[i] = NumOps.Multiply(sign, lowPassCoeffs[reversedIndex]);
+        }
+
+        return new Vector<T>(result);
     }
 
     /// <summary>

@@ -141,7 +141,7 @@ public class MexicanHatWavelet<T> : WaveletFunctionBase<T>
         var detail = new Vector<T>(size);
         for (int i = 0; i < size; i++)
         {
-            T x = NumOps.FromDouble(i - size / 2);
+            T x = NumOps.FromDouble(i - size / 2.0);
             T waveletValue = Calculate(x);
             T derivativeValue = CalculateDerivative(x);
             approximation[i] = NumOps.Multiply(waveletValue, input[i]);
@@ -179,7 +179,7 @@ public class MexicanHatWavelet<T> : WaveletFunctionBase<T>
         var coefficients = new Vector<T>(size);
         for (int i = 0; i < size; i++)
         {
-            T x = NumOps.Divide(NumOps.FromDouble(i - size / 2), NumOps.FromDouble(size / 4));
+            T x = NumOps.Divide(NumOps.FromDouble(i - size / 2.0), NumOps.FromDouble(size / 4.0));
             coefficients[i] = Calculate(x);
         }
 
@@ -214,7 +214,7 @@ public class MexicanHatWavelet<T> : WaveletFunctionBase<T>
         var coefficients = new Vector<T>(size);
         for (int i = 0; i < size; i++)
         {
-            T x = NumOps.Divide(NumOps.FromDouble(i - size / 2), NumOps.FromDouble(size / 4));
+            T x = NumOps.Divide(NumOps.FromDouble(i - size / 2.0), NumOps.FromDouble(size / 4.0));
             coefficients[i] = CalculateDerivative(x);
         }
 
