@@ -477,7 +477,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         }
 
         [Fact]
-        public void Retrieve_ZeroDenseWeight_OnlyUsesSparseSCore()
+        public void Retrieve_ZeroDenseWeight_OnlyUsesSparseScore()
         {
             // Arrange
             var denseRetriever = CreateMockRetriever(

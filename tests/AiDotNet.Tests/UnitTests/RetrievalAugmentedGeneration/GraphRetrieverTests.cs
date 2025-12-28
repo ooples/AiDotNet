@@ -87,13 +87,15 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             public IEnumerable<Document<double>> GetSimilar(Vector<double> queryVector, int topK)
             {
+                // Clone documents before mutation to preserve test isolation
                 var scored = _documents.Select(d =>
                 {
-                    var docVector = _embeddingModel.Embed(d.Content);
+                    var docCopy = CloneDocument(d);
+                    var docVector = _embeddingModel.Embed(docCopy.Content);
                     var similarity = CalculateCosineSimilarity(queryVector, docVector);
-                    d.RelevanceScore = similarity;
-                    d.HasRelevanceScore = true;
-                    return d;
+                    docCopy.RelevanceScore = similarity;
+                    docCopy.HasRelevanceScore = true;
+                    return docCopy;
                 }).OrderByDescending(d => d.RelevanceScore);
 
                 return scored.Take(topK);
@@ -117,16 +119,28 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                     }
                 }
 
+                // Clone documents before mutation to preserve test isolation
                 var scored = filtered.Select(d =>
                 {
-                    var docVector = _embeddingModel.Embed(d.Content);
+                    var docCopy = CloneDocument(d);
+                    var docVector = _embeddingModel.Embed(docCopy.Content);
                     var similarity = CalculateCosineSimilarity(queryVector, docVector);
-                    d.RelevanceScore = similarity;
-                    d.HasRelevanceScore = true;
-                    return d;
+                    docCopy.RelevanceScore = similarity;
+                    docCopy.HasRelevanceScore = true;
+                    return docCopy;
                 }).OrderByDescending(d => d.RelevanceScore);
 
                 return scored.Take(topK);
+            }
+
+            private static Document<double> CloneDocument(Document<double> original)
+            {
+                return new Document<double>(original.Id, original.Content, new Dictionary<string, object>(original.Metadata))
+                {
+                    Embedding = original.Embedding,
+                    RelevanceScore = original.RelevanceScore,
+                    HasRelevanceScore = original.HasRelevanceScore
+                };
             }
 
             private static double CalculateCosineSimilarity(Vector<double> a, Vector<double> b)

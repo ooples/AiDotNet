@@ -241,9 +241,17 @@ public class GraphRAG<T>
         }
 
         // Multi-hop traversal using BFS
+        // Track hop distance for each entity to use in document metadata
+        var entityHopDistance = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var frontier = new Queue<string>(entities);
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var hopCount = 0;
+
+        // Initial entities are at hop distance 0
+        foreach (var entity in entities)
+        {
+            entityHopDistance[entity] = 0;
+        }
 
         while (frontier.Count > 0 && hopCount < _maxHops)
         {
@@ -264,6 +272,13 @@ public class GraphRAG<T>
                     foreach (var (relation, target) in relations)
                     {
                         relatedEntities.Add(target);
+
+                        // Track hop distance for newly discovered entities
+                        if (!entityHopDistance.ContainsKey(target))
+                        {
+                            entityHopDistance[target] = hopCount + 1;
+                        }
+
                         var displayEntity = _entityNormalizationMap.TryGetValue(currentEntity, out var originalEntity)
                             ? originalEntity
                             : currentEntity;
@@ -316,6 +331,14 @@ public class GraphRAG<T>
                     : 0.5;
                 var boostedScore = Math.Min(1.0, originalScore * GraphBoostFactor);
 
+                // Calculate the minimum hop distance among mentioned entities
+                // This represents how closely related this document is to the query via the knowledge graph
+                var minHopDistance = mentionedEntities
+                    .Where(e => entityHopDistance.ContainsKey(e))
+                    .Select(e => entityHopDistance[e])
+                    .DefaultIfEmpty(0)
+                    .Min();
+
                 enrichedResults.Add(new Document<T>
                 {
                     Id = doc.Id,
@@ -324,7 +347,7 @@ public class GraphRAG<T>
                     {
                         ["graph_entities"] = mentionedEntities,
                         ["graph_boosted"] = true,
-                        ["graph_hop_count"] = hopCount
+                        ["graph_hop_count"] = minHopDistance
                     },
                     RelevanceScore = NumOps.FromDouble(boostedScore),
                     HasRelevanceScore = true
