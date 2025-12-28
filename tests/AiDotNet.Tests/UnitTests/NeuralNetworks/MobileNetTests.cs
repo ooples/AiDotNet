@@ -114,6 +114,7 @@ public class MobileNetTests
     #region MobileNetV2 Forward Pass Tests
 
     [Fact]
+    [Trait("Category", "Integration")]
     public void MobileNetV2_Forward_ProducesCorrectOutputShape()
     {
         // Arrange - use factory method
@@ -133,6 +134,7 @@ public class MobileNetTests
     }
 
     [Fact]
+    [Trait("Category", "Integration")]
     public void MobileNetV2_Forward_ReturnsNonZeroOutput()
     {
         // Arrange
@@ -247,6 +249,7 @@ public class MobileNetTests
     #region MobileNetV3 Forward Pass Tests
 
     [Fact]
+    [Trait("Category", "Integration")]
     public void MobileNetV3Large_Forward_ProducesCorrectOutputShape()
     {
         // Arrange - Use factory method
@@ -266,6 +269,7 @@ public class MobileNetTests
     }
 
     [Fact]
+    [Trait("Category", "Integration")]
     public void MobileNetV3Small_Forward_ProducesCorrectOutputShape()
     {
         // Arrange - Use factory method

@@ -244,7 +244,11 @@ public class BattleLemarieWavelet<T> : WaveletFunctionBase<T>
         Complex<T> result = new Complex<T>(NumOps.One, NumOps.Zero);
         for (int i = 0; i < order; i++)
         {
-            T sinc = NumOps.Divide(MathHelper.Sin(NumOps.Divide(omega, NumOps.FromDouble(2))), NumOps.Divide(omega, NumOps.FromDouble(2)));
+            T halfOmega = NumOps.Divide(omega, NumOps.FromDouble(2));
+            // Handle the sinc function at omega=0 where sin(x)/x = 1
+            T sinc = Math.Abs(NumOps.ToDouble(halfOmega)) < 1e-10
+                ? NumOps.One
+                : NumOps.Divide(MathHelper.Sin(halfOmega), halfOmega);
             result = complexOps.Multiply(result, new Complex<T>(sinc, NumOps.Zero));
         }
 
@@ -419,5 +423,55 @@ public class BattleLemarieWavelet<T> : WaveletFunctionBase<T>
         }
 
         return NumOps.Zero;
+    }
+
+    /// <summary>
+    /// Reconstructs the original signal from approximation and detail coefficients.
+    /// </summary>
+    /// <param name="approximation">The approximation coefficients from decomposition.</param>
+    /// <param name="detail">The detail coefficients from decomposition.</param>
+    /// <returns>The reconstructed signal.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method reverses the decomposition process to get back the original signal.
+    ///
+    /// For Battle-Lemarie wavelets, reconstruction works by:
+    /// 1. Upsampling (inserting zeros between each coefficient)
+    /// 2. Convolving with time-reversed reconstruction filters
+    /// 3. Adding the approximation and detail contributions together
+    ///
+    /// This is the inverse of the Decompose method, so:
+    /// Reconstruct(Decompose(signal)) should equal the original signal.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
+    {
+        int outputLength = approximation.Length * 2;
+        var reconstructed = new Vector<T>(outputLength);
+
+        var scalingCoeffs = GetScalingCoefficients();
+        var waveletCoeffs = GetWaveletCoefficients();
+
+        // Upsample and convolve with time-reversed filters
+        for (int i = 0; i < outputLength; i++)
+        {
+            T sum = NumOps.Zero;
+
+            for (int j = 0; j < scalingCoeffs.Length; j++)
+            {
+                int approxIndex = (i - j + scalingCoeffs.Length * outputLength) / 2;
+                if (approxIndex >= 0 && approxIndex < approximation.Length && (i - j + scalingCoeffs.Length * outputLength) % 2 == 0)
+                {
+                    int revJ = scalingCoeffs.Length - 1 - j;
+                    sum = NumOps.Add(sum, NumOps.Multiply(scalingCoeffs[revJ], approximation[approxIndex]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(waveletCoeffs[revJ], detail[approxIndex]));
+                }
+            }
+
+            reconstructed[i] = sum;
+        }
+
+        return reconstructed;
     }
 }

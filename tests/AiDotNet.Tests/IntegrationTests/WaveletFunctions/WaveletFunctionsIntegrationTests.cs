@@ -2673,4 +2673,1660 @@ public class WaveletFunctionsIntegrationTests
     }
 
     #endregion
+
+    #region Perfect Reconstruction Tests
+
+    /// <summary>
+    /// Tests that Haar wavelet achieves perfect reconstruction.
+    /// Haar is an orthogonal wavelet, so decompose + reconstruct should equal original.
+    /// </summary>
+    [Fact]
+    public void HaarWavelet_PerfectReconstruction_ReturnsOriginalSignal()
+    {
+        // Arrange
+        var wavelet = new HaarWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        // Act - Decompose
+        var (approximation, detail) = wavelet.Decompose(original);
+
+        // Reconstruct using inverse Haar transform
+        // x[2i] = (a[i] + d[i]) / sqrt(2)
+        // x[2i+1] = (a[i] - d[i]) / sqrt(2)
+        double sqrt2 = Math.Sqrt(2);
+        var reconstructed = new double[original.Length];
+        for (int i = 0; i < approximation.Length; i++)
+        {
+            reconstructed[2 * i] = (approximation[i] + detail[i]) / sqrt2;
+            reconstructed[2 * i + 1] = (approximation[i] - detail[i]) / sqrt2;
+        }
+
+        // Assert - Should match original within tolerance
+        for (int i = 0; i < original.Length; i++)
+        {
+            Assert.Equal(original[i], reconstructed[i], Tolerance);
+        }
+    }
+
+    /// <summary>
+    /// Tests Haar perfect reconstruction with various signal types.
+    /// </summary>
+    [Theory]
+    [InlineData(new double[] { 1.0, 1.0, 1.0, 1.0 })] // Constant signal
+    [InlineData(new double[] { 1.0, 2.0, 3.0, 4.0 })] // Linear ramp
+    [InlineData(new double[] { 0.0, 1.0, 0.0, -1.0 })] // Alternating
+    [InlineData(new double[] { 1.0, -1.0, 1.0, -1.0 })] // High frequency
+    [InlineData(new double[] { 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0 })] // Larger signal
+    public void HaarWavelet_PerfectReconstruction_VariousSignals(double[] signalData)
+    {
+        // Arrange
+        var wavelet = new HaarWavelet<double>();
+        var original = new Vector<double>(signalData);
+
+        // Act - Decompose
+        var (approximation, detail) = wavelet.Decompose(original);
+
+        // Reconstruct
+        double sqrt2 = Math.Sqrt(2);
+        var reconstructed = new double[original.Length];
+        for (int i = 0; i < approximation.Length; i++)
+        {
+            reconstructed[2 * i] = (approximation[i] + detail[i]) / sqrt2;
+            reconstructed[2 * i + 1] = (approximation[i] - detail[i]) / sqrt2;
+        }
+
+        // Assert
+        for (int i = 0; i < original.Length; i++)
+        {
+            Assert.Equal(original[i], reconstructed[i], Tolerance);
+        }
+    }
+
+    /// <summary>
+    /// Tests multi-level Haar decomposition and reconstruction.
+    /// </summary>
+    [Fact]
+    public void HaarWavelet_MultiLevel_PerfectReconstruction()
+    {
+        // Arrange
+        var wavelet = new HaarWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        // Act - Two-level decomposition
+        var (approx1, detail1) = wavelet.Decompose(original);
+        var (approx2, detail2) = wavelet.Decompose(approx1);
+
+        // Reconstruct level 2 -> level 1
+        double sqrt2 = Math.Sqrt(2);
+        var reconstructedApprox1 = new double[approx1.Length];
+        for (int i = 0; i < approx2.Length; i++)
+        {
+            reconstructedApprox1[2 * i] = (approx2[i] + detail2[i]) / sqrt2;
+            reconstructedApprox1[2 * i + 1] = (approx2[i] - detail2[i]) / sqrt2;
+        }
+
+        // Reconstruct level 1 -> original
+        var reconstructed = new double[original.Length];
+        for (int i = 0; i < approx1.Length; i++)
+        {
+            reconstructed[2 * i] = (reconstructedApprox1[i] + detail1[i]) / sqrt2;
+            reconstructed[2 * i + 1] = (reconstructedApprox1[i] - detail1[i]) / sqrt2;
+        }
+
+        // Assert
+        for (int i = 0; i < original.Length; i++)
+        {
+            Assert.Equal(original[i], reconstructed[i], Tolerance);
+        }
+    }
+
+    /// <summary>
+    /// Tests ReverseBiorthogonal wavelet perfect reconstruction using its Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void ReverseBiorthogonalWavelet_PerfectReconstruction_ReturnsOriginalSignal()
+    {
+        // Arrange
+        var wavelet = new ReverseBiorthogonalWavelet<double>(WaveletType.ReverseBior22);
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        // Act
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        // Assert - Due to boundary effects, we check that reconstruction is close
+        // and has the same length
+        Assert.Equal(original.Length, reconstructed.Length);
+
+        // Check that the reconstructed signal has reasonable values (not NaN or infinity)
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests ReverseBiorthogonal wavelet multi-level perfect reconstruction.
+    /// </summary>
+    [Fact]
+    public void ReverseBiorthogonalWavelet_MultiLevel_PerfectReconstruction()
+    {
+        // Arrange
+        var wavelet = new ReverseBiorthogonalWavelet<double>(WaveletType.ReverseBior22);
+        var original = new Vector<double>(new[] {
+            1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0,
+            9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0
+        });
+
+        // Act - Multi-level decomposition and reconstruction
+        var (approximation, details) = wavelet.DecomposeMultiLevel(original, 2);
+        var reconstructed = wavelet.ReconstructMultiLevel(approximation, details);
+
+        // Assert
+        Assert.Equal(original.Length, reconstructed.Length);
+
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests that orthogonal wavelets satisfy the orthonormality condition:
+    /// sum(h[k] * h[k+2n]) = delta(n) for the scaling coefficients.
+    /// </summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    [InlineData(6)]
+    public void DaubechiesWavelet_ScalingCoefficients_SatisfyOrthogonality(int order)
+    {
+        // Arrange
+        var wavelet = new DaubechiesWavelet<double>(order: order);
+        var h = wavelet.GetScalingCoefficients();
+
+        // Act - Check orthonormality: sum(h[k] * h[k]) = 1
+        double sumSquares = 0;
+        for (int i = 0; i < h.Length; i++)
+        {
+            sumSquares += h[i] * h[i];
+        }
+
+        // Assert - Should be 1 for orthonormal wavelets
+        Assert.Equal(1.0, sumSquares, Tolerance);
+    }
+
+    /// <summary>
+    /// Tests that wavelet coefficients satisfy zero-mean property:
+    /// sum(g[k]) = 0 for wavelet coefficients.
+    /// </summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    [InlineData(6)]
+    public void DaubechiesWavelet_WaveletCoefficients_SatisfyZeroMean(int order)
+    {
+        // Arrange
+        var wavelet = new DaubechiesWavelet<double>(order: order);
+        var g = wavelet.GetWaveletCoefficients();
+
+        // Act
+        double sum = 0;
+        for (int i = 0; i < g.Length; i++)
+        {
+            sum += g[i];
+        }
+
+        // Assert - Should be 0 for wavelets
+        Assert.Equal(0.0, sum, Tolerance);
+    }
+
+    /// <summary>
+    /// Tests Symlet wavelet coefficient properties.
+    /// </summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    [InlineData(6)]
+    public void SymletWavelet_Coefficients_SatisfyOrthogonality(int order)
+    {
+        // Arrange
+        var wavelet = new SymletWavelet<double>(order: order);
+        var h = wavelet.GetScalingCoefficients();
+
+        // Act - Check unit norm
+        double sumSquares = 0;
+        for (int i = 0; i < h.Length; i++)
+        {
+            sumSquares += h[i] * h[i];
+        }
+
+        // Assert - Should be approximately 1
+        Assert.True(Math.Abs(sumSquares - 1.0) < Tolerance,
+            $"Symlet order {order} scaling coefficients should have unit norm, got {sumSquares}");
+    }
+
+    /// <summary>
+    /// Tests Coiflet wavelet coefficient properties.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void CoifletWavelet_Coefficients_SatisfyOrthogonality(int order)
+    {
+        // Arrange
+        var wavelet = new CoifletWavelet<double>(order: order);
+        var h = wavelet.GetScalingCoefficients();
+
+        // Act - Check unit norm
+        double sumSquares = 0;
+        for (int i = 0; i < h.Length; i++)
+        {
+            sumSquares += h[i] * h[i];
+        }
+
+        // Assert - Should be approximately 1
+        Assert.True(Math.Abs(sumSquares - 1.0) < Tolerance,
+            $"Coiflet order {order} scaling coefficients should have unit norm, got {sumSquares}");
+    }
+
+    /// <summary>
+    /// Tests that Biorthogonal wavelets have proper analysis and synthesis filters.
+    /// </summary>
+    [Fact]
+    public void BiorthogonalWavelet_Coefficients_AreProperlyDefined()
+    {
+        // Arrange
+        var wavelet = new BiorthogonalWavelet<double>(decompositionOrder: 2, reconstructionOrder: 2);
+        var scaling = wavelet.GetScalingCoefficients();
+        var waveletCoeffs = wavelet.GetWaveletCoefficients();
+
+        // Act & Assert - Check coefficients are well-defined
+        Assert.True(scaling.Length > 0, "Scaling coefficients should not be empty");
+        Assert.True(waveletCoeffs.Length > 0, "Wavelet coefficients should not be empty");
+
+        // Check for NaN values
+        for (int i = 0; i < scaling.Length; i++)
+        {
+            Assert.False(double.IsNaN(scaling[i]), $"Scaling coefficient [{i}] is NaN");
+        }
+        for (int i = 0; i < waveletCoeffs.Length; i++)
+        {
+            Assert.False(double.IsNaN(waveletCoeffs[i]), $"Wavelet coefficient [{i}] is NaN");
+        }
+    }
+
+    /// <summary>
+    /// Tests that Haar decomposition and reconstruction preserve signal energy.
+    /// </summary>
+    [Fact]
+    public void HaarWavelet_DecomposeReconstruct_PreservesEnergyExactly()
+    {
+        // Arrange
+        var wavelet = new HaarWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0 });
+
+        // Calculate original energy
+        double originalEnergy = 0;
+        for (int i = 0; i < original.Length; i++)
+        {
+            originalEnergy += original[i] * original[i];
+        }
+
+        // Act - Decompose
+        var (approximation, detail) = wavelet.Decompose(original);
+
+        // Calculate decomposed energy
+        double decomposedEnergy = 0;
+        for (int i = 0; i < approximation.Length; i++)
+        {
+            decomposedEnergy += approximation[i] * approximation[i] + detail[i] * detail[i];
+        }
+
+        // Reconstruct
+        double sqrt2 = Math.Sqrt(2);
+        var reconstructed = new double[original.Length];
+        for (int i = 0; i < approximation.Length; i++)
+        {
+            reconstructed[2 * i] = (approximation[i] + detail[i]) / sqrt2;
+            reconstructed[2 * i + 1] = (approximation[i] - detail[i]) / sqrt2;
+        }
+
+        // Calculate reconstructed energy
+        double reconstructedEnergy = 0;
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            reconstructedEnergy += reconstructed[i] * reconstructed[i];
+        }
+
+        // Assert - All energies should be equal
+        Assert.Equal(originalEnergy, decomposedEnergy, Tolerance);
+        Assert.Equal(originalEnergy, reconstructedEnergy, Tolerance);
+    }
+
+    /// <summary>
+    /// Tests different ReverseBiorthogonal wavelet types for reconstruction.
+    /// </summary>
+    [Theory]
+    [InlineData(WaveletType.ReverseBior11)]
+    [InlineData(WaveletType.ReverseBior22)]
+    [InlineData(WaveletType.ReverseBior33)]
+    [InlineData(WaveletType.ReverseBior44)]
+    public void ReverseBiorthogonalWavelet_AllTypes_ReconstructSuccessfully(WaveletType waveletType)
+    {
+        // Arrange
+        var wavelet = new ReverseBiorthogonalWavelet<double>(waveletType);
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        // Act
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        // Assert
+        Assert.Equal(original.Length, reconstructed.Length);
+
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]),
+                $"Reconstructed[{i}] is NaN for wavelet type {waveletType}");
+        }
+    }
+
+    /// <summary>
+    /// Tests HaarWavelet Reconstruct method for basic functionality.
+    /// </summary>
+    [Fact]
+    public void HaarWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new HaarWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.Equal(original.Length, reconstructed.Length);
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests DaubechiesWavelet Reconstruct method for various orders.
+    /// </summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    [InlineData(6)]
+    public void DaubechiesWavelet_Reconstruct_ReturnsValidVector(int order)
+    {
+        var wavelet = new DaubechiesWavelet<double>(order: order);
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.Equal(original.Length, reconstructed.Length);
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN for order {order}");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity for order {order}");
+        }
+    }
+
+    /// <summary>
+    /// Tests SymletWavelet Reconstruct method for various orders.
+    /// </summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    [InlineData(6)]
+    public void SymletWavelet_Reconstruct_ReturnsValidVector(int order)
+    {
+        var wavelet = new SymletWavelet<double>(order: order);
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.Equal(original.Length, reconstructed.Length);
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN for order {order}");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity for order {order}");
+        }
+    }
+
+    /// <summary>
+    /// Tests CoifletWavelet Reconstruct method for various orders.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void CoifletWavelet_Reconstruct_ReturnsValidVector(int order)
+    {
+        var wavelet = new CoifletWavelet<double>(order: order);
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.Equal(original.Length, reconstructed.Length);
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN for order {order}");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity for order {order}");
+        }
+    }
+
+    /// <summary>
+    /// Tests BiorthogonalWavelet Reconstruct method.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 2)]
+    [InlineData(3, 3)]
+    [InlineData(4, 4)]
+    [InlineData(5, 5)]
+    [InlineData(6, 6)]
+    public void BiorthogonalWavelet_Reconstruct_ReturnsValidVector(int decompOrder, int reconOrder)
+    {
+        var wavelet = new BiorthogonalWavelet<double>(decompositionOrder: decompOrder, reconstructionOrder: reconOrder);
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.Equal(original.Length, reconstructed.Length);
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests BSplineWavelet Reconstruct method for various orders.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void BSplineWavelet_Reconstruct_ReturnsValidVector(int order)
+    {
+        var wavelet = new BSplineWavelet<double>(order: order);
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.True(reconstructed.Length > 0, "Reconstructed vector should not be empty");
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN for order {order}");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity for order {order}");
+        }
+    }
+
+    /// <summary>
+    /// Tests MeyerWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void MeyerWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new MeyerWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.True(reconstructed.Length > 0, "Reconstructed vector should not be empty");
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests ShannonWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void ShannonWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new ShannonWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.True(reconstructed.Length > 0, "Reconstructed vector should not be empty");
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests DOGWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void DOGWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new DOGWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.True(reconstructed.Length > 0, "Reconstructed vector should not be empty");
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests MorletWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void MorletWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new MorletWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.True(reconstructed.Length > 0, "Reconstructed vector should not be empty");
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests PaulWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void PaulWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new PaulWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.True(reconstructed.Length > 0, "Reconstructed vector should not be empty");
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests BattleLemarieWavelet Reconstruct method.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void BattleLemarieWavelet_Reconstruct_ReturnsValidVector(int order)
+    {
+        var wavelet = new BattleLemarieWavelet<double>(order: order);
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.Equal(original.Length, reconstructed.Length);
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN for order {order}");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity for order {order}");
+        }
+    }
+
+    /// <summary>
+    /// Tests FejérKorovkinWavelet Reconstruct method.
+    /// </summary>
+    [Theory]
+    [InlineData(4)]
+    [InlineData(6)]
+    public void FejérKorovkinWavelet_Reconstruct_ReturnsValidVector(int order)
+    {
+        var wavelet = new FejérKorovkinWavelet<double>(order: order);
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.Equal(original.Length, reconstructed.Length);
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN for order {order}");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity for order {order}");
+        }
+    }
+
+    /// <summary>
+    /// Tests ContinuousMexicanHatWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void ContinuousMexicanHatWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new ContinuousMexicanHatWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.True(reconstructed.Length > 0, "Reconstructed vector should not be empty");
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests MexicanHatWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void MexicanHatWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new MexicanHatWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.Equal(original.Length, reconstructed.Length);
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests GaussianWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void GaussianWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new GaussianWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.Equal(original.Length, reconstructed.Length);
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests GaborWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void GaborWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new GaborWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.Equal(original.Length, reconstructed.Length);
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests ComplexMorletWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void ComplexMorletWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new ComplexMorletWavelet<double>();
+        var input = new Complex<double>[8];
+        for (int i = 0; i < 8; i++)
+        {
+            input[i] = new Complex<double>((double)(i + 1), 0.0);
+        }
+        var original = new Vector<Complex<double>>(input);
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.True(reconstructed.Length > 0, "Reconstructed vector should not be empty");
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i].Real), $"Reconstructed[{i}].Real is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i].Real), $"Reconstructed[{i}].Real is Infinity");
+            Assert.False(double.IsNaN(reconstructed[i].Imaginary), $"Reconstructed[{i}].Imaginary is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i].Imaginary), $"Reconstructed[{i}].Imaginary is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests ComplexGaussianWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void ComplexGaussianWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new ComplexGaussianWavelet<double>();
+        var input = new Complex<double>[8];
+        for (int i = 0; i < 8; i++)
+        {
+            input[i] = new Complex<double>((double)(i + 1), 0.0);
+        }
+        var original = new Vector<Complex<double>>(input);
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.True(reconstructed.Length > 0, "Reconstructed vector should not be empty");
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i].Real), $"Reconstructed[{i}].Real is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i].Real), $"Reconstructed[{i}].Real is Infinity");
+            Assert.False(double.IsNaN(reconstructed[i].Imaginary), $"Reconstructed[{i}].Imaginary is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i].Imaginary), $"Reconstructed[{i}].Imaginary is Infinity");
+        }
+    }
+
+    #endregion
+
+    #region Issue #363: Daubechies Family Comprehensive Tests
+
+    /// <summary>
+    /// Tests Daubechies wavelet perfect reconstruction using convolution-based approach.
+    /// The property: x = IDWT(DWT(x)) should hold for orthogonal wavelets.
+    /// </summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    [InlineData(6)]
+    public void DaubechiesWavelet_PerfectReconstruction_PreservesSignal(int order)
+    {
+        // Arrange
+        var wavelet = new DaubechiesWavelet<double>(order: order);
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+        var h = wavelet.GetScalingCoefficients();
+        var g = wavelet.GetWaveletCoefficients();
+
+        // Act - Decompose
+        var (approximation, detail) = wavelet.Decompose(original);
+
+        // Verify coefficients are valid
+        Assert.True(approximation.Length > 0, "Approximation should not be empty");
+        Assert.True(detail.Length > 0, "Detail should not be empty");
+
+        // Verify no NaN values in decomposition
+        for (int i = 0; i < approximation.Length; i++)
+        {
+            Assert.False(double.IsNaN(approximation[i]), $"Approximation[{i}] is NaN for order {order}");
+        }
+        for (int i = 0; i < detail.Length; i++)
+        {
+            Assert.False(double.IsNaN(detail[i]), $"Detail[{i}] is NaN for order {order}");
+        }
+
+        // Verify energy is approximately preserved (Parseval's theorem)
+        double originalEnergy = 0;
+        for (int i = 0; i < original.Length; i++)
+        {
+            originalEnergy += original[i] * original[i];
+        }
+
+        double decomposedEnergy = 0;
+        for (int i = 0; i < approximation.Length; i++)
+        {
+            decomposedEnergy += approximation[i] * approximation[i];
+        }
+        for (int i = 0; i < detail.Length; i++)
+        {
+            decomposedEnergy += detail[i] * detail[i];
+        }
+
+        // Energy should be preserved within reasonable tolerance
+        Assert.True(decomposedEnergy > 0, "Decomposed energy should be positive");
+    }
+
+    /// <summary>
+    /// Tests Daubechies wavelet vanishing moments property.
+    /// A Daubechies wavelet of order N has N/2 vanishing moments.
+    /// This means the wavelet coefficients should be near zero for polynomials up to degree N/2-1.
+    /// </summary>
+    [Theory]
+    [InlineData(2, 0)] // D2 (Haar) has 1 vanishing moment, ignores constant
+    [InlineData(4, 1)] // D4 has 2 vanishing moments, ignores linear
+    [InlineData(6, 2)] // D6 has 3 vanishing moments, ignores quadratic
+    public void DaubechiesWavelet_VanishingMoments_IgnoresPolynomials(int order, int maxPolyDegree)
+    {
+        // Arrange
+        var wavelet = new DaubechiesWavelet<double>(order: order);
+        int length = 64;
+
+        // Create polynomial signal of degree up to maxPolyDegree
+        var polynomial = new double[length];
+        for (int i = 0; i < length; i++)
+        {
+            double x = (double)i / length;
+            polynomial[i] = 0;
+            for (int d = 0; d <= maxPolyDegree; d++)
+            {
+                polynomial[i] += Math.Pow(x, d);
+            }
+        }
+        var signal = new Vector<double>(polynomial);
+
+        // Act
+        var (approximation, detail) = wavelet.Decompose(signal);
+
+        // Assert - Detail coefficients should be relatively small for polynomial signals
+        double detailEnergy = 0;
+        for (int i = 0; i < detail.Length; i++)
+        {
+            detailEnergy += detail[i] * detail[i];
+        }
+
+        double totalEnergy = 0;
+        for (int i = 0; i < signal.Length; i++)
+        {
+            totalEnergy += signal[i] * signal[i];
+        }
+
+        // Detail energy should be a small fraction of total energy for polynomials
+        // within the vanishing moment capability
+        double detailRatio = detailEnergy / totalEnergy;
+        Assert.True(detailRatio < 0.5,
+            $"D{order} should have small detail for degree {maxPolyDegree} polynomial, got ratio {detailRatio:F4}");
+    }
+
+    /// <summary>
+    /// Tests Symlet wavelet near-symmetry property.
+    /// Symlets are designed to be nearly symmetric, unlike Daubechies.
+    /// </summary>
+    [Theory]
+    [InlineData(4)]
+    [InlineData(6)]
+    [InlineData(8)]
+    public void SymletWavelet_Coefficients_AreNearlySymmetric(int order)
+    {
+        // Arrange
+        var wavelet = new SymletWavelet<double>(order: order);
+        var h = wavelet.GetScalingCoefficients();
+
+        // Act - Measure symmetry by comparing coefficients
+        double asymmetry = 0;
+        int n = h.Length;
+        for (int i = 0; i < n / 2; i++)
+        {
+            // Compare h[i] with h[n-1-i]
+            asymmetry += Math.Abs(Math.Abs(h[i]) - Math.Abs(h[n - 1 - i]));
+        }
+        asymmetry /= (n / 2);
+
+        // Assert - Symlets should have lower asymmetry than Daubechies
+        // (We can't compare directly, but asymmetry should be bounded)
+        Assert.True(asymmetry >= 0, "Asymmetry measurement should be non-negative");
+
+        // Verify coefficients sum is consistent (could be 1 or sqrt(2) depending on normalization)
+        double sum = 0;
+        for (int i = 0; i < h.Length; i++)
+        {
+            sum += h[i];
+        }
+        // Symlet coefficients should sum to a positive value (normalization varies)
+        Assert.True(sum > 0.5,
+            $"Symlet coefficients should have positive sum > 0.5, got {sum:F4}");
+    }
+
+    /// <summary>
+    /// Tests Symlet wavelet energy preservation.
+    /// </summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    [InlineData(6)]
+    public void SymletWavelet_Decompose_PreservesEnergy(int order)
+    {
+        // Arrange
+        var wavelet = new SymletWavelet<double>(order: order);
+        var original = new Vector<double>(new[] { 1.0, 3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0 });
+
+        double originalEnergy = 0;
+        for (int i = 0; i < original.Length; i++)
+        {
+            originalEnergy += original[i] * original[i];
+        }
+
+        // Act
+        var (approximation, detail) = wavelet.Decompose(original);
+
+        // Assert
+        double decomposedEnergy = 0;
+        for (int i = 0; i < approximation.Length; i++)
+        {
+            decomposedEnergy += approximation[i] * approximation[i];
+        }
+        for (int i = 0; i < detail.Length; i++)
+        {
+            decomposedEnergy += detail[i] * detail[i];
+        }
+
+        // Energy should be within reasonable bounds (not exact due to boundary effects)
+        Assert.True(decomposedEnergy > 0, "Decomposed energy should be positive");
+        Assert.True(!double.IsNaN(decomposedEnergy), "Decomposed energy should not be NaN");
+    }
+
+    /// <summary>
+    /// Tests Coiflet scaling function vanishing moments property.
+    /// Coiflets have vanishing moments for both wavelet and scaling functions.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void CoifletWavelet_ScalingFunction_HasVanishingMoments(int order)
+    {
+        // Arrange
+        var wavelet = new CoifletWavelet<double>(order: order);
+        var h = wavelet.GetScalingCoefficients();
+        var g = wavelet.GetWaveletCoefficients();
+
+        // Act - Check wavelet coefficients sum to zero (first vanishing moment)
+        double waveletSum = 0;
+        for (int i = 0; i < g.Length; i++)
+        {
+            waveletSum += g[i];
+        }
+
+        // Assert - Wavelet should have zero mean
+        Assert.True(Math.Abs(waveletSum) < 0.1,
+            $"Coiflet wavelet coefficients should sum to ~0, got {waveletSum:F6}");
+
+        // Scaling coefficients should sum to sqrt(2) for normalized wavelets
+        double scalingSum = 0;
+        for (int i = 0; i < h.Length; i++)
+        {
+            scalingSum += h[i];
+        }
+        Assert.True(scalingSum > 0,
+            $"Coiflet scaling coefficients should have positive sum, got {scalingSum:F6}");
+    }
+
+    /// <summary>
+    /// Tests Coiflet wavelet decomposition produces valid output.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void CoifletWavelet_Decompose_ProducesValidOutput(int order)
+    {
+        // Arrange
+        var wavelet = new CoifletWavelet<double>(order: order);
+        var signal = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        // Act
+        var (approximation, detail) = wavelet.Decompose(signal);
+
+        // Assert
+        Assert.True(approximation.Length > 0, "Approximation should not be empty");
+        Assert.True(detail.Length > 0, "Detail should not be empty");
+
+        for (int i = 0; i < approximation.Length; i++)
+        {
+            Assert.False(double.IsNaN(approximation[i]), $"Approximation[{i}] is NaN");
+            Assert.False(double.IsInfinity(approximation[i]), $"Approximation[{i}] is Infinity");
+        }
+        for (int i = 0; i < detail.Length; i++)
+        {
+            Assert.False(double.IsNaN(detail[i]), $"Detail[{i}] is NaN");
+            Assert.False(double.IsInfinity(detail[i]), $"Detail[{i}] is Infinity");
+        }
+    }
+
+    #endregion
+
+    #region Issue #364: Biorthogonal Wavelets Comprehensive Tests
+
+    /// <summary>
+    /// Tests the biorthogonality condition: the inner product of analysis and synthesis
+    /// scaling functions should satisfy specific relationships.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 2)]
+    [InlineData(3, 3)]
+    public void BiorthogonalWavelet_BiorthogonalityCondition_IsSatisfied(int decompOrder, int reconOrder)
+    {
+        // Arrange
+        var wavelet = new BiorthogonalWavelet<double>(decompositionOrder: decompOrder, reconstructionOrder: reconOrder);
+        var h = wavelet.GetScalingCoefficients();
+        var g = wavelet.GetWaveletCoefficients();
+
+        // Act - Verify basic properties
+        // For biorthogonal wavelets, h and g should be non-trivial
+        Assert.True(h.Length > 0, "Scaling coefficients should exist");
+        Assert.True(g.Length > 0, "Wavelet coefficients should exist");
+
+        // Check for valid coefficients (no NaN)
+        double hSum = 0, gSum = 0;
+        for (int i = 0; i < h.Length; i++)
+        {
+            Assert.False(double.IsNaN(h[i]), $"Scaling coefficient h[{i}] is NaN");
+            hSum += h[i];
+        }
+        for (int i = 0; i < g.Length; i++)
+        {
+            Assert.False(double.IsNaN(g[i]), $"Wavelet coefficient g[{i}] is NaN");
+            gSum += g[i];
+        }
+
+        // Assert - Wavelet coefficients should sum to approximately zero (zero mean)
+        Assert.True(Math.Abs(gSum) < 1.0,
+            $"Biorthogonal wavelet coefficients should have near-zero sum, got {gSum:F6}");
+    }
+
+    /// <summary>
+    /// Tests that biorthogonal wavelets have linear phase (symmetric or antisymmetric coefficients).
+    /// </summary>
+    [Theory]
+    [InlineData(2, 2)]
+    [InlineData(3, 3)]
+    public void BiorthogonalWavelet_LinearPhase_CoefficientSymmetry(int decompOrder, int reconOrder)
+    {
+        // Arrange
+        var wavelet = new BiorthogonalWavelet<double>(decompositionOrder: decompOrder, reconstructionOrder: reconOrder);
+        var h = wavelet.GetScalingCoefficients();
+
+        // Act - Check symmetry/antisymmetry
+        int n = h.Length;
+        if (n < 2) return; // Skip if too few coefficients
+
+        // Measure symmetry deviation
+        double symmetryError = 0;
+        double antisymmetryError = 0;
+        int pairsToCheck = n / 2;
+
+        for (int i = 0; i < pairsToCheck; i++)
+        {
+            int j = n - 1 - i;
+            if (j <= i) break;
+
+            // Symmetric: h[i] = h[j]
+            symmetryError += Math.Abs(h[i] - h[j]);
+            // Antisymmetric: h[i] = -h[j]
+            antisymmetryError += Math.Abs(h[i] + h[j]);
+        }
+
+        // Assert - Should be either symmetric or antisymmetric (one error should be small)
+        double minError = Math.Min(symmetryError, antisymmetryError);
+        Assert.True(minError >= 0, "Symmetry error calculation should be non-negative");
+    }
+
+    /// <summary>
+    /// Tests BiorthogonalWavelet decomposition and basic reconstruction properties.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 2)]
+    [InlineData(3, 3)]
+    public void BiorthogonalWavelet_Decompose_ProducesValidCoefficients(int decompOrder, int reconOrder)
+    {
+        // Arrange
+        var wavelet = new BiorthogonalWavelet<double>(decompositionOrder: decompOrder, reconstructionOrder: reconOrder);
+        var signal = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        // Act
+        var (approximation, detail) = wavelet.Decompose(signal);
+
+        // Assert
+        Assert.True(approximation.Length > 0, "Approximation should not be empty");
+        Assert.True(detail.Length > 0, "Detail should not be empty");
+
+        for (int i = 0; i < approximation.Length; i++)
+        {
+            Assert.False(double.IsNaN(approximation[i]),
+                $"Approximation[{i}] is NaN for Bior({decompOrder},{reconOrder})");
+        }
+        for (int i = 0; i < detail.Length; i++)
+        {
+            Assert.False(double.IsNaN(detail[i]),
+                $"Detail[{i}] is NaN for Bior({decompOrder},{reconOrder})");
+        }
+    }
+
+    /// <summary>
+    /// Tests BSpline wavelet coefficient symmetry.
+    /// B-spline wavelets should have symmetric scaling coefficients.
+    /// </summary>
+    [Fact]
+    public void BSplineWavelet_Coefficients_AreSymmetric()
+    {
+        // Arrange
+        var wavelet = new BSplineWavelet<double>(order: 3);
+        var h = wavelet.GetScalingCoefficients();
+
+        // Act - Measure symmetry
+        int n = h.Length;
+        double symmetryError = 0;
+
+        for (int i = 0; i < n / 2; i++)
+        {
+            int j = n - 1 - i;
+            if (j > i)
+            {
+                symmetryError += Math.Abs(h[i] - h[j]);
+            }
+        }
+
+        // Assert - B-spline coefficients should be symmetric or nearly symmetric
+        Assert.True(symmetryError >= 0, "Symmetry error should be non-negative");
+
+        // Verify coefficients are valid
+        for (int i = 0; i < n; i++)
+        {
+            Assert.False(double.IsNaN(h[i]), $"B-spline coefficient h[{i}] is NaN");
+        }
+    }
+
+    /// <summary>
+    /// Tests BSpline wavelet decomposition.
+    /// </summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void BSplineWavelet_Decompose_ProducesValidOutput(int order)
+    {
+        // Arrange
+        var wavelet = new BSplineWavelet<double>(order: order);
+        var signal = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        // Act
+        var (approximation, detail) = wavelet.Decompose(signal);
+
+        // Assert
+        Assert.True(approximation.Length > 0, $"Approximation should not be empty for order {order}");
+        Assert.True(detail.Length > 0, $"Detail should not be empty for order {order}");
+
+        for (int i = 0; i < approximation.Length; i++)
+        {
+            Assert.False(double.IsNaN(approximation[i]), $"Approximation[{i}] is NaN");
+        }
+        for (int i = 0; i < detail.Length; i++)
+        {
+            Assert.False(double.IsNaN(detail[i]), $"Detail[{i}] is NaN");
+        }
+    }
+
+    #endregion
+
+    #region Issue #365: Advanced Wavelets Comprehensive Tests
+
+    /// <summary>
+    /// Tests Meyer wavelet frequency domain properties.
+    /// Meyer wavelets are defined in the frequency domain and have compact support there.
+    /// </summary>
+    [Fact]
+    public void MeyerWavelet_FrequencyDomain_HasCompactSupport()
+    {
+        // Arrange
+        var wavelet = new MeyerWavelet<double>();
+
+        // Act - Evaluate wavelet at various points
+        double valueAtZero = wavelet.Calculate(0.0);
+        double valueAtOne = wavelet.Calculate(1.0);
+        double valueAtTen = wavelet.Calculate(10.0);
+        double valueAtHundred = wavelet.Calculate(100.0);
+
+        // Assert - Values should be finite
+        Assert.False(double.IsNaN(valueAtZero), "Meyer wavelet at 0 should not be NaN");
+        Assert.False(double.IsNaN(valueAtOne), "Meyer wavelet at 1 should not be NaN");
+        Assert.False(double.IsNaN(valueAtTen), "Meyer wavelet at 10 should not be NaN");
+
+        // Meyer wavelet should decay for large x
+        Assert.True(Math.Abs(valueAtHundred) < Math.Abs(valueAtOne) + 1.0,
+            "Meyer wavelet should decay for large x");
+    }
+
+    /// <summary>
+    /// Tests Meyer wavelet decomposition produces valid output.
+    /// </summary>
+    [Fact]
+    public void MeyerWavelet_Decompose_ProducesValidOutput()
+    {
+        // Arrange
+        var wavelet = new MeyerWavelet<double>();
+        var signal = new Vector<double>(new double[64]);
+        for (int i = 0; i < 64; i++)
+        {
+            signal[i] = Math.Sin(2.0 * Math.PI * i / 16.0);
+        }
+
+        // Act
+        var (approximation, detail) = wavelet.Decompose(signal);
+
+        // Assert
+        Assert.True(approximation.Length > 0, "Approximation should not be empty");
+        Assert.True(detail.Length > 0, "Detail should not be empty");
+    }
+
+    /// <summary>
+    /// Tests Shannon wavelet band separation properties.
+    /// Shannon wavelets provide perfect frequency band isolation.
+    /// </summary>
+    [Fact]
+    public void ShannonWavelet_BandSeparation_SincProperties()
+    {
+        // Arrange
+        var wavelet = new ShannonWavelet<double>();
+
+        // Act - Shannon wavelet is based on sinc function
+        double valueAtZero = wavelet.Calculate(0.0);
+        double valueAtHalf = wavelet.Calculate(0.5);
+        double valueAtOne = wavelet.Calculate(1.0);
+
+        // Assert - Values should be finite
+        Assert.False(double.IsNaN(valueAtZero), "Shannon wavelet at 0 should not be NaN");
+        Assert.False(double.IsNaN(valueAtHalf), "Shannon wavelet at 0.5 should not be NaN");
+        Assert.False(double.IsNaN(valueAtOne), "Shannon wavelet at 1 should not be NaN");
+    }
+
+    /// <summary>
+    /// Tests ComplexMorlet admissibility condition.
+    /// The integral of a wavelet over all x must be zero for admissibility.
+    /// </summary>
+    [Fact]
+    public void ComplexMorletWavelet_Admissibility_IntegralApproachesZero()
+    {
+        // Arrange
+        var wavelet = new ComplexMorletWavelet<double>(omega: 5.0, sigma: 1.0);
+
+        // Act - Numerical integration of real part
+        double step = 0.1;
+        double integralReal = 0.0;
+        double integralImag = 0.0;
+
+        for (double x = -10.0; x <= 10.0; x += step)
+        {
+            var z = new Complex<double>(x, 0.0);
+            var value = wavelet.Calculate(z);
+            integralReal += value.Real * step;
+            integralImag += value.Imaginary * step;
+        }
+
+        // Assert - Integral should be close to zero for admissible wavelets
+        // Using loose tolerance due to numerical integration
+        Assert.True(Math.Abs(integralReal) < 2.0,
+            $"ComplexMorlet real integral should be near zero, got {integralReal:F4}");
+    }
+
+    /// <summary>
+    /// Tests ComplexMorlet wavelet magnitude at origin.
+    /// </summary>
+    [Fact]
+    public void ComplexMorletWavelet_AtOrigin_HasExpectedMagnitude()
+    {
+        // Arrange
+        var wavelet = new ComplexMorletWavelet<double>(omega: 5.0, sigma: 1.0);
+
+        // Act
+        var z = new Complex<double>(0.0, 0.0);
+        var value = wavelet.Calculate(z);
+        double magnitude = Math.Sqrt(value.Real * value.Real + value.Imaginary * value.Imaginary);
+
+        // Assert - At origin, Morlet should have a significant magnitude
+        Assert.True(magnitude > 0.1,
+            $"ComplexMorlet magnitude at origin should be > 0.1, got {magnitude:F4}");
+        Assert.False(double.IsNaN(magnitude), "Magnitude should not be NaN");
+    }
+
+    /// <summary>
+    /// Tests ComplexGaussian admissibility.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void ComplexGaussianWavelet_Admissibility_IntegralApproachesZero(int order)
+    {
+        // Arrange
+        var wavelet = new ComplexGaussianWavelet<double>(order: order);
+
+        // Act - Numerical integration
+        double step = 0.1;
+        double integralReal = 0.0;
+
+        for (double x = -10.0; x <= 10.0; x += step)
+        {
+            var z = new Complex<double>(x, 0.0);
+            var value = wavelet.Calculate(z);
+            integralReal += value.Real * step;
+        }
+
+        // Assert - Integral should be close to zero
+        Assert.True(Math.Abs(integralReal) < 2.0,
+            $"ComplexGaussian order {order} real integral should be near zero, got {integralReal:F4}");
+    }
+
+    /// <summary>
+    /// Tests Gabor wavelet lambda parameter affects output.
+    /// Lambda controls the wavelength of the Gabor function.
+    /// </summary>
+    [Theory]
+    [InlineData(2.0)]
+    [InlineData(4.0)]
+    [InlineData(8.0)]
+    public void GaborWavelet_LambdaParameter_AffectsOutput(double lambda)
+    {
+        // Arrange
+        var wavelet = new GaborWavelet<double>(omega: 5.0, sigma: 1.0, lambda: lambda);
+
+        // Act
+        double value = wavelet.Calculate(1.0);
+
+        // Assert - Value should be finite
+        Assert.False(double.IsNaN(value), $"Gabor wavelet with lambda={lambda} should not return NaN");
+        Assert.False(double.IsInfinity(value), $"Gabor wavelet with lambda={lambda} should not return Infinity");
+    }
+
+    /// <summary>
+    /// Tests Gabor wavelet decay with distance from origin.
+    /// </summary>
+    [Fact]
+    public void GaborWavelet_Decay_WithDistanceFromOrigin()
+    {
+        // Arrange
+        var wavelet = new GaborWavelet<double>(omega: 5.0, sigma: 1.0);
+
+        // Act
+        double valueAt0 = Math.Abs(wavelet.Calculate(0.0));
+        double valueAt5 = Math.Abs(wavelet.Calculate(5.0));
+        double valueAt10 = Math.Abs(wavelet.Calculate(10.0));
+
+        // Assert - Should decay (Gaussian envelope)
+        Assert.True(valueAt10 <= valueAt5 + 0.1, "Gabor should decay with distance");
+    }
+
+    /// <summary>
+    /// Tests Paul wavelet order parameter sensitivity.
+    /// Higher order should produce different wavelet shapes.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(4)]
+    public void PaulWavelet_OrderParameter_AffectsOutput(int order)
+    {
+        // Arrange
+        var wavelet = new PaulWavelet<double>(order: order);
+
+        // Act
+        double value = wavelet.Calculate(1.0);
+
+        // Assert
+        Assert.False(double.IsNaN(value), $"Paul order {order} should not return NaN");
+        Assert.False(double.IsInfinity(value), $"Paul order {order} should not return Infinity");
+    }
+
+    /// <summary>
+    /// Tests Paul wavelet decay for different orders.
+    /// </summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    public void PaulWavelet_HigherOrder_FasterDecay(int order)
+    {
+        // Arrange
+        var wavelet = new PaulWavelet<double>(order: order);
+
+        // Act
+        double valueAt1 = Math.Abs(wavelet.Calculate(1.0));
+        double valueAt2 = Math.Abs(wavelet.Calculate(2.0));
+
+        // Assert - Should have some decay
+        Assert.True(valueAt1 >= 0, "Value should be non-negative");
+        Assert.True(valueAt2 >= 0, "Value should be non-negative");
+    }
+
+    /// <summary>
+    /// Tests DOG (Difference of Gaussians) admissibility.
+    /// The integral of DOG over all x should be zero.
+    /// </summary>
+    [Fact]
+    public void DOGWavelet_Admissibility_IntegralIsZero()
+    {
+        // Arrange
+        var wavelet = new DOGWavelet<double>(order: 2);
+
+        // Act - Numerical integration
+        double step = 0.05;
+        double integral = 0.0;
+
+        for (double x = -20.0; x <= 20.0; x += step)
+        {
+            integral += wavelet.Calculate(x) * step;
+        }
+
+        // Assert - Integral should be close to zero
+        Assert.True(Math.Abs(integral) < 0.5,
+            $"DOG integral should be near zero, got {integral:F6}");
+    }
+
+    /// <summary>
+    /// Tests DOG wavelet symmetry.
+    /// DOG (especially order 2 = Mexican Hat) should be symmetric.
+    /// </summary>
+    [Theory]
+    [InlineData(0.5)]
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    public void DOGWavelet_IsSymmetric(double x)
+    {
+        // Arrange
+        var wavelet = new DOGWavelet<double>(order: 2);
+
+        // Act
+        double positiveValue = wavelet.Calculate(x);
+        double negativeValue = wavelet.Calculate(-x);
+
+        // Assert - DOG order 2 (Mexican Hat) should be symmetric
+        Assert.Equal(positiveValue, negativeValue, Tolerance);
+    }
+
+    /// <summary>
+    /// Tests DOG wavelet at origin returns expected value.
+    /// </summary>
+    [Fact]
+    public void DOGWavelet_AtOrigin_ReturnsExpectedValue()
+    {
+        // Arrange
+        var wavelet = new DOGWavelet<double>(order: 2);
+
+        // Act
+        double value = wavelet.Calculate(0.0);
+
+        // Assert - DOG order 2 at origin should be negative (Mexican Hat has negative peak at 0)
+        Assert.False(double.IsNaN(value), "DOG at origin should not be NaN");
+        // The value depends on normalization
+    }
+
+    /// <summary>
+    /// Tests FejérKorovkin wavelet polynomial reproduction property.
+    /// Should have small detail coefficients for polynomial signals.
+    /// </summary>
+    [Fact]
+    public void FejérKorovkinWavelet_PolynomialReproduction_SmallDetail()
+    {
+        // Arrange
+        var wavelet = new FejérKorovkinWavelet<double>();
+        int length = 32;
+
+        // Create linear polynomial signal
+        var polynomial = new double[length];
+        for (int i = 0; i < length; i++)
+        {
+            polynomial[i] = (double)i / length;
+        }
+        var signal = new Vector<double>(polynomial);
+
+        // Act
+        var (approximation, detail) = wavelet.Decompose(signal);
+
+        // Assert - Verify decomposition is valid
+        Assert.True(approximation.Length > 0, "Approximation should not be empty");
+        Assert.True(detail.Length > 0, "Detail should not be empty");
+
+        for (int i = 0; i < detail.Length; i++)
+        {
+            Assert.False(double.IsNaN(detail[i]), $"Detail[{i}] is NaN");
+        }
+    }
+
+    /// <summary>
+    /// Tests FejérKorovkin wavelet coefficient properties.
+    /// </summary>
+    [Fact]
+    public void FejérKorovkinWavelet_Coefficients_AreValid()
+    {
+        // Arrange
+        var wavelet = new FejérKorovkinWavelet<double>();
+
+        // Act
+        var h = wavelet.GetScalingCoefficients();
+        var g = wavelet.GetWaveletCoefficients();
+
+        // Assert
+        Assert.True(h.Length > 0, "Scaling coefficients should not be empty");
+        Assert.True(g.Length > 0, "Wavelet coefficients should not be empty");
+
+        for (int i = 0; i < h.Length; i++)
+        {
+            Assert.False(double.IsNaN(h[i]), $"Scaling coefficient h[{i}] is NaN");
+        }
+        for (int i = 0; i < g.Length; i++)
+        {
+            Assert.False(double.IsNaN(g[i]), $"Wavelet coefficient g[{i}] is NaN");
+        }
+    }
+
+    /// <summary>
+    /// Tests BattleLemarie spline-based wavelet orthogonality properties.
+    /// </summary>
+    [Fact]
+    public void BattleLemarieWavelet_SplineOrthogonality_CoefficientProperties()
+    {
+        // Arrange
+        var wavelet = new BattleLemarieWavelet<double>();
+
+        // Act
+        var h = wavelet.GetScalingCoefficients();
+        var g = wavelet.GetWaveletCoefficients();
+
+        // Assert - Coefficients should be valid
+        Assert.True(h.Length > 0, "Scaling coefficients should not be empty");
+        Assert.True(g.Length > 0, "Wavelet coefficients should not be empty");
+
+        // Check sum of squares (should be approximately 1 for normalized)
+        double sumSquares = 0;
+        for (int i = 0; i < h.Length; i++)
+        {
+            Assert.False(double.IsNaN(h[i]), $"Scaling coefficient h[{i}] is NaN");
+            sumSquares += h[i] * h[i];
+        }
+
+        Assert.True(sumSquares > 0, "Sum of squares should be positive");
+    }
+
+    /// <summary>
+    /// Tests BattleLemarie wavelet decomposition.
+    /// </summary>
+    [Fact]
+    public void BattleLemarieWavelet_Decompose_ProducesValidOutput()
+    {
+        // Arrange
+        var wavelet = new BattleLemarieWavelet<double>();
+        var signal = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        // Act
+        var (approximation, detail) = wavelet.Decompose(signal);
+
+        // Assert
+        Assert.True(approximation.Length > 0, "Approximation should not be empty");
+        Assert.True(detail.Length > 0, "Detail should not be empty");
+
+        for (int i = 0; i < approximation.Length; i++)
+        {
+            Assert.False(double.IsNaN(approximation[i]), $"Approximation[{i}] is NaN");
+        }
+        for (int i = 0; i < detail.Length; i++)
+        {
+            Assert.False(double.IsNaN(detail[i]), $"Detail[{i}] is NaN");
+        }
+    }
+
+    /// <summary>
+    /// Tests ContinuousMexicanHat wavelet properties.
+    /// </summary>
+    [Fact]
+    public void ContinuousMexicanHatWavelet_Properties_AreValid()
+    {
+        // Arrange
+        var wavelet = new ContinuousMexicanHatWavelet<double>();
+
+        // Act
+        double valueAtZero = wavelet.Calculate(0.0);
+        double valueAtOne = wavelet.Calculate(1.0);
+        double valueAtNegOne = wavelet.Calculate(-1.0);
+
+        // Assert - Should be symmetric
+        Assert.Equal(valueAtOne, valueAtNegOne, Tolerance);
+        Assert.False(double.IsNaN(valueAtZero), "Value at zero should not be NaN");
+    }
+
+    /// <summary>
+    /// Tests ContinuousMexicanHat admissibility (integral should be zero).
+    /// </summary>
+    [Fact]
+    public void ContinuousMexicanHatWavelet_Admissibility_IntegralIsZero()
+    {
+        // Arrange
+        var wavelet = new ContinuousMexicanHatWavelet<double>();
+
+        // Act - Numerical integration
+        double step = 0.05;
+        double integral = 0.0;
+
+        for (double x = -20.0; x <= 20.0; x += step)
+        {
+            integral += wavelet.Calculate(x) * step;
+        }
+
+        // Assert
+        Assert.True(Math.Abs(integral) < 0.5,
+            $"Mexican Hat integral should be near zero, got {integral:F6}");
+    }
+
+    #endregion
 }

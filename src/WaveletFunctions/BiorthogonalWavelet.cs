@@ -60,35 +60,38 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// </summary>
     /// <param name="decompositionOrder">The order of the wavelet used for decomposition. Default is 2.</param>
     /// <param name="reconstructionOrder">The order of the wavelet used for reconstruction. Default is 2.</param>
-    /// <exception cref="ArgumentException">Thrown when either order is less than 1 or greater than 3.</exception>
+    /// <exception cref="ArgumentException">Thrown when either order is less than 1 or greater than 6.</exception>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b>
     /// When creating a biorthogonal wavelet, you specify two orders:
-    /// 
+    ///
     /// 1. Decomposition order: Controls the wavelet used to analyze the signal
     /// 2. Reconstruction order: Controls the wavelet used to rebuild the signal
-    /// 
+    ///
     /// The order affects the properties of the wavelet:
     /// - Higher orders create smoother wavelets
     /// - Lower orders create more compact wavelets (affecting fewer neighboring points)
-    /// 
+    ///
     /// Common combinations include:
     /// - 1,3: Good for detecting sharp transitions with smooth reconstruction
     /// - 2,2: Balanced between decomposition and reconstruction
     /// - 3,1: Smooth analysis with compact reconstruction
-    /// 
-    /// This implementation supports orders 1 through 3 for both decomposition and reconstruction.
+    /// - 4,4: Used in JPEG2000 (CDF 9/7 wavelet)
+    /// - 5,5: Higher smoothness
+    /// - 6,8: Also used in JPEG2000
+    ///
+    /// This implementation supports orders 1 through 6 for both decomposition and reconstruction.
     /// The constructor initializes the appropriate coefficient sets based on these orders.
     /// </para>
     /// </remarks>
     public BiorthogonalWavelet(int decompositionOrder = 2, int reconstructionOrder = 2)
     {
-        if (decompositionOrder < 1 || decompositionOrder > 3)
-            throw new ArgumentException("Order must be between 1 and 3.", nameof(decompositionOrder));
+        if (decompositionOrder < 1 || decompositionOrder > 6)
+            throw new ArgumentException("Order must be between 1 and 6.", nameof(decompositionOrder));
 
-        if (reconstructionOrder < 1 || reconstructionOrder > 3)
-            throw new ArgumentException("Order must be between 1 and 3.", nameof(reconstructionOrder));
+        if (reconstructionOrder < 1 || reconstructionOrder > 6)
+            throw new ArgumentException("Order must be between 1 and 6.", nameof(reconstructionOrder));
 
         _decompositionOrder = decompositionOrder;
         _reconstructionOrder = reconstructionOrder;
@@ -202,6 +205,29 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
                                              NumOps.FromDouble(-0.1350110200102546), NumOps.FromDouble(0.4598775021184914),
                                              NumOps.FromDouble(0.8068915093110924), NumOps.FromDouble(0.3326705529500826),
                                              NumOps.FromDouble(-0.0279837694169839) ]),
+            // CDF 9/7 wavelet coefficients (bior4.4) - used in JPEG2000
+            4 => new Vector<T>([ NumOps.FromDouble(0.026748757411),  NumOps.FromDouble(-0.016864118443),
+                                             NumOps.FromDouble(-0.078223266529), NumOps.FromDouble(0.266864118443),
+                                             NumOps.FromDouble(0.602949018236),  NumOps.FromDouble(0.266864118443),
+                                             NumOps.FromDouble(-0.078223266529), NumOps.FromDouble(-0.016864118443),
+                                             NumOps.FromDouble(0.026748757411) ]),
+            // bior5.5 coefficients
+            5 => new Vector<T>([ NumOps.FromDouble(0.01345671), NumOps.FromDouble(-0.00269497),
+                                             NumOps.FromDouble(-0.13670658), NumOps.FromDouble(0.09350469),
+                                             NumOps.FromDouble(0.47680327), NumOps.FromDouble(0.89950611),
+                                             NumOps.FromDouble(0.47680327), NumOps.FromDouble(0.09350469),
+                                             NumOps.FromDouble(-0.13670658), NumOps.FromDouble(-0.00269497),
+                                             NumOps.FromDouble(0.01345671) ]),
+            // bior6.8 coefficients
+            6 => new Vector<T>([ NumOps.FromDouble(0.0019088317),  NumOps.FromDouble(-0.0019142862),
+                                             NumOps.FromDouble(-0.0170080345), NumOps.FromDouble(0.0119509435),
+                                             NumOps.FromDouble(0.0498175178),  NumOps.FromDouble(-0.0771721906),
+                                             NumOps.FromDouble(-0.0940779761), NumOps.FromDouble(0.4207962846),
+                                             NumOps.FromDouble(0.8259229975),  NumOps.FromDouble(0.4207962846),
+                                             NumOps.FromDouble(-0.0940779761), NumOps.FromDouble(-0.0771721906),
+                                             NumOps.FromDouble(0.0498175178),  NumOps.FromDouble(0.0119509435),
+                                             NumOps.FromDouble(-0.0170080345), NumOps.FromDouble(-0.0019142862),
+                                             NumOps.FromDouble(0.0019088317) ]),
             _ => throw new ArgumentException($"Biorthogonal wavelet of order {order} is not implemented."),
         };
     }
@@ -242,6 +268,28 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
                                              NumOps.FromDouble(0.8068915093110924), NumOps.FromDouble(0.4598775021184914),
                                              NumOps.FromDouble(-0.1350110200102546), NumOps.FromDouble(-0.0854412738820267),
                                              NumOps.FromDouble(0.0352262918857095) ]),
+            // CDF 9/7 reconstruction coefficients (bior4.4)
+            4 => new Vector<T>([ NumOps.FromDouble(-0.045635881557),  NumOps.FromDouble(-0.028771763114),
+                                             NumOps.FromDouble(0.295635881557),  NumOps.FromDouble(0.557543526229),
+                                             NumOps.FromDouble(0.295635881557),  NumOps.FromDouble(-0.028771763114),
+                                             NumOps.FromDouble(-0.045635881557) ]),
+            // bior5.5 reconstruction coefficients
+            5 => new Vector<T>([ NumOps.FromDouble(-0.01345671), NumOps.FromDouble(-0.00269497),
+                                             NumOps.FromDouble(0.13670658), NumOps.FromDouble(0.09350469),
+                                             NumOps.FromDouble(-0.47680327), NumOps.FromDouble(0.89950611),
+                                             NumOps.FromDouble(-0.47680327), NumOps.FromDouble(0.09350469),
+                                             NumOps.FromDouble(0.13670658), NumOps.FromDouble(-0.00269497),
+                                             NumOps.FromDouble(-0.01345671) ]),
+            // bior6.8 reconstruction coefficients
+            6 => new Vector<T>([ NumOps.FromDouble(0.0019088317),  NumOps.FromDouble(0.0019142862),
+                                             NumOps.FromDouble(-0.0170080345), NumOps.FromDouble(-0.0119509435),
+                                             NumOps.FromDouble(0.0498175178),  NumOps.FromDouble(0.0771721906),
+                                             NumOps.FromDouble(-0.0940779761), NumOps.FromDouble(-0.4207962846),
+                                             NumOps.FromDouble(0.8259229975),  NumOps.FromDouble(-0.4207962846),
+                                             NumOps.FromDouble(-0.0940779761), NumOps.FromDouble(0.0771721906),
+                                             NumOps.FromDouble(0.0498175178),  NumOps.FromDouble(-0.0119509435),
+                                             NumOps.FromDouble(-0.0170080345), NumOps.FromDouble(0.0019142862),
+                                             NumOps.FromDouble(0.0019088317) ]),
             _ => throw new ArgumentException($"Biorthogonal wavelet of order {order} is not implemented."),
         };
     }
@@ -306,6 +354,59 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     }
 
     /// <summary>
+    /// Reconstructs the original signal from approximation and detail coefficients.
+    /// </summary>
+    /// <param name="approximation">The approximation coefficients from decomposition.</param>
+    /// <param name="detail">The detail coefficients from decomposition.</param>
+    /// <returns>The reconstructed signal.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method reverses the decomposition process to get back the original signal.
+    ///
+    /// For biorthogonal wavelets, the reconstruction uses different filters than decomposition:
+    /// 1. Upsample the approximation and detail coefficients by inserting zeros
+    /// 2. Convolve with the reconstruction low-pass and high-pass filters
+    /// 3. Add the results together
+    ///
+    /// This is the inverse of the Decompose method, so:
+    /// Reconstruct(Decompose(signal)) should equal the original signal.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
+    {
+        int outputLength = approximation.Length * 2;
+        var reconstructed = new Vector<T>(outputLength);
+
+        var reconLowPass = GetReconstructionLowPassFilter();
+        var reconHighPass = GetReconstructionHighPassFilter();
+        int filterLength = reconLowPass.Length;
+
+        for (int i = 0; i < outputLength; i++)
+        {
+            T sum = NumOps.Zero;
+
+            for (int j = 0; j < filterLength; j++)
+            {
+                int k = i - j;
+                if (k >= 0 && k % 2 == 0)
+                {
+                    int coeffIndex = k / 2;
+                    if (coeffIndex < approximation.Length)
+                    {
+                        sum = NumOps.Add(sum, NumOps.Multiply(reconLowPass[j], approximation[coeffIndex]));
+                        sum = NumOps.Add(sum, NumOps.Multiply(reconHighPass[j], detail[coeffIndex]));
+                    }
+                }
+            }
+
+            reconstructed[i] = sum;
+        }
+
+        return reconstructed;
+    }
+
+    /// <summary>
     /// Gets the scaling function coefficients for the biorthogonal wavelet.
     /// </summary>
     /// <returns>A vector of scaling function coefficients.</returns>
@@ -314,7 +415,7 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// <b>For Beginners:</b>
     /// The scaling function coefficients are the filter weights used to extract the low-frequency
     /// components (approximation) during reconstruction.
-    /// 
+    ///
     /// In biorthogonal wavelets, these coefficients:
     /// - Are used during the reconstruction phase
     /// - Are different from the decomposition coefficients
@@ -387,16 +488,20 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Vector<T> GetDecompositionLowPassFilter()
     {
-        double[] coeffs = {
-            0.026748757410810,
-            -0.016864118442875,
-            -0.078223266528990,
-            0.266864118442872,
-            0.602949018236360,
-            0.266864118442872,
-            -0.078223266528990,
-            -0.016864118442875,
-            0.026748757410810
+        double[] coeffs = _decompositionOrder switch
+        {
+            1 => new[] { 0.7071067811865476, 0.7071067811865476 },
+            2 => new[] { -0.1767766952966369, 0.3535533905932738, 1.0606601717798214, 0.3535533905932738, -0.1767766952966369 },
+            3 => new[] { 0.0352262918857095, -0.0854412738820267, -0.1350110200102546, 0.4598775021184914,
+                         0.8068915093110924, 0.3326705529500826, -0.0279837694169839 },
+            4 => new[] { 0.026748757410810, -0.016864118442875, -0.078223266528990, 0.266864118442872,
+                         0.602949018236360, 0.266864118442872, -0.078223266528990, -0.016864118442875, 0.026748757410810 },
+            5 => new[] { 0.01345671, -0.00269497, -0.13670658, 0.09350469, 0.47680327, 0.89950611,
+                         0.47680327, 0.09350469, -0.13670658, -0.00269497, 0.01345671 },
+            6 => new[] { 0.0019088317, -0.0019142862, -0.0170080345, 0.0119509435, 0.0498175178, -0.0771721906,
+                         -0.0940779761, 0.4207962846, 0.8259229975, 0.4207962846, -0.0940779761, -0.0771721906,
+                         0.0498175178, 0.0119509435, -0.0170080345, -0.0019142862, 0.0019088317 },
+            _ => throw new ArgumentException($"Order {_decompositionOrder} not supported")
         };
 
         return NormalizeAndConvert(coeffs);
@@ -428,16 +533,22 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Vector<T> GetDecompositionHighPassFilter()
     {
-        double[] coeffs = {
-            0.0,
-            0.091271763114250,
-            -0.057543526228500,
-            -0.591271763114250,
-            1.115087052456994,
-            -0.591271763114250,
-            -0.057543526228500,
-            0.091271763114250,
-            0.0
+        // High-pass filter derived from low-pass using quadrature mirror filter relationship
+        // Must have same length as low-pass filter
+        double[] coeffs = _decompositionOrder switch
+        {
+            1 => new[] { -0.7071067811865476, 0.7071067811865476 },
+            2 => new[] { 0.1767766952966369, -0.3535533905932738, 1.0606601717798214, -0.3535533905932738, 0.1767766952966369 },
+            3 => new[] { -0.0279837694169839, -0.3326705529500826, 0.8068915093110924, -0.4598775021184914,
+                         -0.1350110200102546, 0.0854412738820267, 0.0352262918857095 },
+            4 => new[] { 0.0, 0.091271763114250, -0.057543526228500, -0.591271763114250,
+                         1.115087052456994, -0.591271763114250, -0.057543526228500, 0.091271763114250, 0.0 },
+            5 => new[] { 0.01345671, 0.00269497, -0.13670658, -0.09350469, 0.47680327, -0.89950611,
+                         0.47680327, -0.09350469, -0.13670658, 0.00269497, 0.01345671 },
+            6 => new[] { -0.0019088317, -0.0019142862, 0.0170080345, 0.0119509435, -0.0498175178, -0.0771721906,
+                         0.0940779761, 0.4207962846, -0.8259229975, 0.4207962846, 0.0940779761, -0.0771721906,
+                         -0.0498175178, 0.0119509435, 0.0170080345, -0.0019142862, -0.0019088317 },
+            _ => throw new ArgumentException($"Order {_decompositionOrder} not supported")
         };
 
         return NormalizeAndConvert(coeffs);
@@ -467,16 +578,21 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Vector<T> GetReconstructionLowPassFilter()
     {
-        double[] coeffs = {
-            0.0,
-            -0.091271763114250,
-            -0.057543526228500,
-            0.591271763114250,
-            1.115087052456994,
-            0.591271763114250,
-            -0.057543526228500,
-            -0.091271763114250,
-            0.0
+        // Reconstruction low-pass filter - time-reversed version of decomposition low-pass
+        double[] coeffs = _reconstructionOrder switch
+        {
+            1 => new[] { 0.7071067811865476, 0.7071067811865476 },
+            2 => new[] { -0.1767766952966369, 0.3535533905932738, 1.0606601717798214, 0.3535533905932738, -0.1767766952966369 },
+            3 => new[] { -0.0279837694169839, 0.3326705529500826, 0.8068915093110924, 0.4598775021184914,
+                         -0.1350110200102546, -0.0854412738820267, 0.0352262918857095 },
+            4 => new[] { 0.0, -0.091271763114250, -0.057543526228500, 0.591271763114250,
+                         1.115087052456994, 0.591271763114250, -0.057543526228500, -0.091271763114250, 0.0 },
+            5 => new[] { -0.01345671, -0.00269497, 0.13670658, 0.09350469, -0.47680327, 0.89950611,
+                         -0.47680327, 0.09350469, 0.13670658, -0.00269497, -0.01345671 },
+            6 => new[] { 0.0019088317, 0.0019142862, -0.0170080345, -0.0119509435, 0.0498175178, 0.0771721906,
+                         -0.0940779761, -0.4207962846, 0.8259229975, -0.4207962846, -0.0940779761, 0.0771721906,
+                         0.0498175178, -0.0119509435, -0.0170080345, 0.0019142862, 0.0019088317 },
+            _ => throw new ArgumentException($"Order {_reconstructionOrder} not supported")
         };
 
         return NormalizeAndConvert(coeffs);
@@ -506,16 +622,21 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Vector<T> GetReconstructionHighPassFilter()
     {
-        double[] coeffs = {
-            0.026748757410810,
-            0.016864118442875,
-            -0.078223266528990,
-            -0.266864118442872,
-            0.602949018236360,
-            -0.266864118442872,
-            -0.078223266528990,
-            0.016864118442875,
-            0.026748757410810
+        // Reconstruction high-pass filter - must have same length as reconstruction low-pass
+        double[] coeffs = _reconstructionOrder switch
+        {
+            1 => new[] { 0.7071067811865476, -0.7071067811865476 },
+            2 => new[] { 0.1767766952966369, 0.3535533905932738, -1.0606601717798214, 0.3535533905932738, 0.1767766952966369 },
+            3 => new[] { 0.0352262918857095, 0.0854412738820267, -0.1350110200102546, -0.4598775021184914,
+                         0.8068915093110924, -0.3326705529500826, -0.0279837694169839 },
+            4 => new[] { 0.026748757410810, 0.016864118442875, -0.078223266528990, -0.266864118442872,
+                         0.602949018236360, -0.266864118442872, -0.078223266528990, 0.016864118442875, 0.026748757410810 },
+            5 => new[] { 0.01345671, -0.00269497, -0.13670658, 0.09350469, 0.47680327, -0.89950611,
+                         0.47680327, 0.09350469, -0.13670658, -0.00269497, 0.01345671 },
+            6 => new[] { 0.0019088317, -0.0019142862, -0.0170080345, 0.0119509435, 0.0498175178, -0.0771721906,
+                         -0.0940779761, 0.4207962846, 0.8259229975, 0.4207962846, -0.0940779761, -0.0771721906,
+                         0.0498175178, 0.0119509435, -0.0170080345, -0.0019142862, 0.0019088317 },
+            _ => throw new ArgumentException($"Order {_reconstructionOrder} not supported")
         };
 
         return NormalizeAndConvert(coeffs);

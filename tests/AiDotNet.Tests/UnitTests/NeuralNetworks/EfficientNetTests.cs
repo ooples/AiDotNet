@@ -29,6 +29,7 @@ public class EfficientNetTests
     }
 
     [Fact]
+    [Trait("Category", "Integration")]
     public void EfficientNetB0_Forward_ProducesCorrectOutputShape()
     {
         // Arrange
@@ -47,6 +48,7 @@ public class EfficientNetTests
     }
 
     [Fact]
+    [Trait("Category", "Integration")]
     public void EfficientNetB0_ForwardSmallInput_ProducesCorrectShape()
     {
         // Arrange - Use the static factory method

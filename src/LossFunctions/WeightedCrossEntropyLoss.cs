@@ -38,7 +38,17 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
     /// <param name="weights">The weights vector for each sample. If null, all samples will have weight 1.</param>
     public WeightedCrossEntropyLoss(Vector<T>? weights = null)
     {
-        _weights = weights ?? new Vector<T>(1) { NumOps.One };
+        if (weights != null)
+        {
+            _weights = weights;
+        }
+        else
+        {
+            // Create a default single-element vector with weight 1
+            // Note: The actual weights will be recreated in CalculateLoss if the length doesn't match
+            _weights = new Vector<T>(1);
+            _weights[0] = NumOps.One;
+        }
     }
 
     /// <summary>
@@ -77,7 +87,8 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
             ));
         }
 
-        return NumOps.Negate(loss);
+        // Return the average loss (consistent with BinaryCrossEntropyLoss)
+        return NumOps.Negate(NumOps.Divide(loss, NumOps.FromDouble(predicted.Length)));
     }
 
     /// <summary>
@@ -116,6 +127,7 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
             );
         }
 
-        return derivative;
+        // Return the average derivative (consistent with BinaryCrossEntropyLoss)
+        return derivative.Divide(NumOps.FromDouble(predicted.Length));
     }
 }
