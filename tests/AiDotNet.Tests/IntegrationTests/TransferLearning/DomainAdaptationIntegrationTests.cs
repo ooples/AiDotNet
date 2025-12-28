@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.TransferLearning.DomainAdaptation;
 using Xunit;
 
@@ -20,14 +21,14 @@ public class DomainAdaptationIntegrationTests
     {
         // Arrange
         var adapter = new CORALDomainAdapter<double>();
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 },
             { 4.0, 5.0, 6.0 },
             { 7.0, 8.0, 9.0 },
             { 10.0, 11.0, 12.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 },
             { 4.0, 5.0, 6.0 },
@@ -49,13 +50,13 @@ public class DomainAdaptationIntegrationTests
     {
         // Arrange
         var adapter = new CORALDomainAdapter<double>();
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0 },
             { 3.0, 4.0 },
             { 5.0, 6.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0 },
             { 3.0, 4.0 },
@@ -74,13 +75,13 @@ public class DomainAdaptationIntegrationTests
     {
         // Arrange
         var adapter = new CORALDomainAdapter<double>();
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0 },
             { 3.0, 4.0 },
             { 5.0, 6.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 10.0, 20.0 },
             { 30.0, 40.0 },
@@ -99,13 +100,13 @@ public class DomainAdaptationIntegrationTests
     {
         // Arrange
         var adapter = new CORALDomainAdapter<double>();
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 },
             { 4.0, 5.0, 6.0 },
             { 7.0, 8.0, 9.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 10.0, 20.0, 30.0 },
             { 40.0, 50.0, 60.0 },
@@ -127,13 +128,13 @@ public class DomainAdaptationIntegrationTests
     {
         // Arrange
         var adapter = new CORALDomainAdapter<double>();
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0 },
             { 3.0, 4.0 },
             { 5.0, 6.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 10.0, 20.0 },
             { 30.0, 40.0 },
@@ -182,11 +183,11 @@ public class DomainAdaptationIntegrationTests
     {
         // Arrange
         var adapter = new CORALDomainAdapter<double>();
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 4.0, 5.0, 6.0 }
         });
@@ -206,7 +207,7 @@ public class DomainAdaptationIntegrationTests
         // Arrange
         var adapter = new CORALDomainAdapter<double>();
         // Low variance source
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 1.1 },
             { 1.0, 1.2 },
@@ -214,7 +215,7 @@ public class DomainAdaptationIntegrationTests
             { 1.0, 0.9 }
         });
         // High variance target
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 0.0, 10.0 },
             { 5.0, 0.0 },
@@ -244,7 +245,7 @@ public class DomainAdaptationIntegrationTests
     {
         // Arrange
         var adapter = new MMDDomainAdapter<double>(sigma: 1.0);
-        var data = CreateMatrix(new double[,]
+        var data = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0 },
             { 3.0, 4.0 },
@@ -263,13 +264,13 @@ public class DomainAdaptationIntegrationTests
     {
         // Arrange
         var adapter = new MMDDomainAdapter<double>(sigma: 1.0);
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 0.0, 0.0 },
             { 0.1, 0.1 },
             { 0.2, 0.2 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 10.0, 10.0 },
             { 10.1, 10.1 },
@@ -288,12 +289,12 @@ public class DomainAdaptationIntegrationTests
     {
         // Arrange
         var adapter = new MMDDomainAdapter<double>(sigma: 1.0);
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0 },
             { 3.0, 4.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 5.0, 6.0 },
             { 7.0, 8.0 }
@@ -312,13 +313,13 @@ public class DomainAdaptationIntegrationTests
     {
         // Arrange
         var adapter = new MMDDomainAdapter<double>(sigma: 1.0);
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 0.0, 0.0 },
             { 1.0, 1.0 },
             { 2.0, 2.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 10.0, 10.0 },
             { 11.0, 11.0 },
@@ -363,13 +364,13 @@ public class DomainAdaptationIntegrationTests
     {
         // Arrange
         var adapter = new MMDDomainAdapter<double>(sigma: 1.0);
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 0.0, 0.0 },
             { 10.0, 10.0 },
             { 20.0, 20.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 5.0, 5.0 },
             { 15.0, 15.0 },
@@ -392,12 +393,12 @@ public class DomainAdaptationIntegrationTests
     {
         // Arrange
         var adapter = new MMDDomainAdapter<double>(sigma: 1.0);
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0 },
             { 3.0, 4.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 5.0, 6.0 },
             { 7.0, 8.0 }
@@ -423,12 +424,12 @@ public class DomainAdaptationIntegrationTests
     public void MMDDomainAdapter_DifferentSigmaValues_AffectDiscrepancy()
     {
         // Arrange
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 0.0, 0.0 },
             { 1.0, 1.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 5.0, 5.0 },
             { 6.0, 6.0 }
@@ -454,13 +455,13 @@ public class DomainAdaptationIntegrationTests
     {
         // Arrange - One column has zero variance
         var adapter = new CORALDomainAdapter<double>();
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 5.0 },
             { 2.0, 5.0 },
             { 3.0, 5.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 4.0, 10.0 },
             { 5.0, 10.0 },
@@ -481,11 +482,11 @@ public class DomainAdaptationIntegrationTests
     {
         // Arrange
         var adapter = new MMDDomainAdapter<double>(sigma: 1.0);
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 3.0, 4.0 }
         });
@@ -527,21 +528,10 @@ public class DomainAdaptationIntegrationTests
 
     #region Helper Methods
 
-    private static Matrix<double> CreateMatrix(double[,] data)
-    {
-        int rows = data.GetLength(0);
-        int cols = data.GetLength(1);
-        var matrix = new Matrix<double>(rows, cols);
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                matrix[i, j] = data[i, j];
-            }
-        }
-        return matrix;
-    }
-
+    /// <summary>
+    /// Creates a matrix with normally distributed random values.
+    /// Uses MathHelper.GetNormalRandom for Box-Muller transform.
+    /// </summary>
     private static Matrix<double> CreateRandomMatrix(int rows, int cols, Random random, double mean, double stdDev)
     {
         var matrix = new Matrix<double>(rows, cols);
@@ -549,11 +539,7 @@ public class DomainAdaptationIntegrationTests
         {
             for (int j = 0; j < cols; j++)
             {
-                // Box-Muller transform for normal distribution
-                double u1 = 1.0 - random.NextDouble();
-                double u2 = 1.0 - random.NextDouble();
-                double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-                matrix[i, j] = mean + stdDev * normal;
+                matrix[i, j] = MathHelper.GetNormalRandom(mean, stdDev, random);
             }
         }
         return matrix;

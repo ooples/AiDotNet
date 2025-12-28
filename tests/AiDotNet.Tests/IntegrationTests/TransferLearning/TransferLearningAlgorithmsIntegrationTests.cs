@@ -27,26 +27,26 @@ public class TransferLearningAlgorithmsIntegrationTests
         // Arrange
         var transfer = new TransferNeuralNetwork<double>();
         var sourceModel = new MockFullModel<double>(featureCount: 3);
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 },
             { 4.0, 5.0, 6.0 },
             { 7.0, 8.0, 9.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 2.0, 3.0, 4.0 },
             { 5.0, 6.0, 7.0 },
             { 8.0, 9.0, 10.0 }
         });
-        var targetLabels = CreateVector(new double[] { 1.0, 2.0, 3.0 });
+        var targetLabels = Vector<double>.FromArray(new double[] { 1.0, 2.0, 3.0 });
 
         // Act
         var result = transfer.Transfer(sourceModel, sourceData, targetData, targetLabels);
 
         // Assert
         Assert.NotNull(result);
-        Assert.True(sourceModel.TrainCallCount >= 0, "Model should have been trained or cloned");
+        Assert.True(sourceModel.TrainCallCount > 0, "Model should have been trained at least once during transfer");
     }
 
     [Fact]
@@ -58,19 +58,19 @@ public class TransferLearningAlgorithmsIntegrationTests
         var featureMapper = new LinearFeatureMapper<double>();
 
         // Source has 3 features, target has 5 features (different dimensions)
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 },
             { 4.0, 5.0, 6.0 },
             { 7.0, 8.0, 9.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0, 4.0, 5.0 },
             { 2.0, 3.0, 4.0, 5.0, 6.0 },
             { 3.0, 4.0, 5.0, 6.0, 7.0 }
         });
-        var targetLabels = CreateVector(new double[] { 1.0, 2.0, 3.0 });
+        var targetLabels = Vector<double>.FromArray(new double[] { 1.0, 2.0, 3.0 });
 
         transfer.SetFeatureMapper(featureMapper);
 
@@ -90,17 +90,17 @@ public class TransferLearningAlgorithmsIntegrationTests
         var sourceModel = new MockFullModel<double>(featureCount: 3);
 
         // Different dimensions without feature mapper
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 },
             { 4.0, 5.0, 6.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0, 4.0, 5.0 },
             { 2.0, 3.0, 4.0, 5.0, 6.0 }
         });
-        var targetLabels = CreateVector(new double[] { 1.0, 2.0 });
+        var targetLabels = Vector<double>.FromArray(new double[] { 1.0, 2.0 });
 
         // Act & Assert
         Assert.Throws<InvalidOperationException>(() =>
@@ -119,36 +119,34 @@ public class TransferLearningAlgorithmsIntegrationTests
 
         // Assert - Can use the mapper in transfer (indirectly tests it was stored)
         var sourceModel = new MockFullModel<double>(featureCount: 3);
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 },
             { 4.0, 5.0, 6.0 },
             { 7.0, 8.0, 9.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0, 4.0 },
             { 2.0, 3.0, 4.0, 5.0 },
             { 3.0, 4.0, 5.0, 6.0 }
         });
-        var targetLabels = CreateVector(new double[] { 1.0, 2.0, 3.0 });
+        var targetLabels = Vector<double>.FromArray(new double[] { 1.0, 2.0, 3.0 });
 
         var result = transfer.Transfer(sourceModel, sourceData, targetData, targetLabels);
         Assert.NotNull(result);
     }
 
     [Fact]
-    public void TransferNeuralNetwork_SetDomainAdapter_StoresAdapter()
+    public void TransferNeuralNetwork_SetDomainAdapter_DoesNotThrow()
     {
         // Arrange
         var transfer = new TransferNeuralNetwork<double>();
         var adapter = new AiDotNet.TransferLearning.DomainAdaptation.CORALDomainAdapter<double>();
 
-        // Act
-        transfer.SetDomainAdapter(adapter);
-
-        // Assert - No exception thrown
-        Assert.True(true, "Domain adapter was set successfully");
+        // Act & Assert - Verify method completes without exception
+        var exception = Record.Exception(() => transfer.SetDomainAdapter(adapter));
+        Assert.Null(exception);
     }
 
     #endregion
@@ -167,21 +165,21 @@ public class TransferLearningAlgorithmsIntegrationTests
         };
         var transfer = new TransferRandomForest<double>(options);
         var sourceModel = new MockFullModel<double>(featureCount: 3);
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 },
             { 4.0, 5.0, 6.0 },
             { 7.0, 8.0, 9.0 },
             { 10.0, 11.0, 12.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 2.0, 3.0, 4.0 },
             { 5.0, 6.0, 7.0 },
             { 8.0, 9.0, 10.0 },
             { 11.0, 12.0, 13.0 }
         });
-        var targetLabels = CreateVector(new double[] { 1.0, 2.0, 3.0, 4.0 });
+        var targetLabels = Vector<double>.FromArray(new double[] { 1.0, 2.0, 3.0, 4.0 });
 
         // Act
         var result = transfer.Transfer(sourceModel, sourceData, targetData, targetLabels);
@@ -205,21 +203,21 @@ public class TransferLearningAlgorithmsIntegrationTests
         var featureMapper = new LinearFeatureMapper<double>();
 
         // Source has 3 features, target has 5 features
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 },
             { 4.0, 5.0, 6.0 },
             { 7.0, 8.0, 9.0 },
             { 10.0, 11.0, 12.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0, 4.0, 5.0 },
             { 2.0, 3.0, 4.0, 5.0, 6.0 },
             { 3.0, 4.0, 5.0, 6.0, 7.0 },
             { 4.0, 5.0, 6.0, 7.0, 8.0 }
         });
-        var targetLabels = CreateVector(new double[] { 1.0, 2.0, 3.0, 4.0 });
+        var targetLabels = Vector<double>.FromArray(new double[] { 1.0, 2.0, 3.0, 4.0 });
 
         transfer.SetFeatureMapper(featureMapper);
 
@@ -244,17 +242,17 @@ public class TransferLearningAlgorithmsIntegrationTests
         var sourceModel = new MockFullModel<double>(featureCount: 3);
 
         // Different dimensions without feature mapper
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 },
             { 4.0, 5.0, 6.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0, 4.0, 5.0 },
             { 2.0, 3.0, 4.0, 5.0, 6.0 }
         });
-        var targetLabels = CreateVector(new double[] { 1.0, 2.0 });
+        var targetLabels = Vector<double>.FromArray(new double[] { 1.0, 2.0 });
 
         // Act & Assert
         Assert.Throws<InvalidOperationException>(() =>
@@ -276,21 +274,21 @@ public class TransferLearningAlgorithmsIntegrationTests
         var transfer = new TransferRandomForest<double>(options, regularization);
         var sourceModel = new MockFullModel<double>(featureCount: 3);
 
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 },
             { 4.0, 5.0, 6.0 },
             { 7.0, 8.0, 9.0 },
             { 10.0, 11.0, 12.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 2.0, 3.0, 4.0 },
             { 5.0, 6.0, 7.0 },
             { 8.0, 9.0, 10.0 },
             { 11.0, 12.0, 13.0 }
         });
-        var targetLabels = CreateVector(new double[] { 1.0, 2.0, 3.0, 4.0 });
+        var targetLabels = Vector<double>.FromArray(new double[] { 1.0, 2.0, 3.0, 4.0 });
 
         // Act
         var result = transfer.Transfer(sourceModel, sourceData, targetData, targetLabels);
@@ -309,17 +307,17 @@ public class TransferLearningAlgorithmsIntegrationTests
         // Arrange
         var transfer = new TransferNeuralNetwork<double>();
         var sourceModel = new MockFullModel<double>(featureCount: 2);
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0 },
             { 3.0, 4.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0 },
             { 3.0, 4.0 }
         });
-        var targetLabels = CreateVector(new double[] { 1.0, 2.0 });
+        var targetLabels = Vector<double>.FromArray(new double[] { 1.0, 2.0 });
 
         // Act
         var result = transfer.Transfer(sourceModel, sourceData, targetData, targetLabels);
@@ -329,9 +327,9 @@ public class TransferLearningAlgorithmsIntegrationTests
     }
 
     [Fact]
-    public void TransferRandomForest_Transfer_SingleRow_HandlesGracefully()
+    public void TransferRandomForest_Transfer_MinimalData_HandlesGracefully()
     {
-        // Arrange - Random Forest typically needs multiple samples for tree building
+        // Arrange - Random Forest needs at least 2 samples for tree building (MinSamplesSplit=2)
         var options = new RandomForestRegressionOptions
         {
             NumberOfTrees = 1,
@@ -340,17 +338,17 @@ public class TransferLearningAlgorithmsIntegrationTests
         };
         var transfer = new TransferRandomForest<double>(options);
         var sourceModel = new MockFullModel<double>(featureCount: 3);
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 },
             { 4.0, 5.0, 6.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 },
             { 4.0, 5.0, 6.0 }
         });
-        var targetLabels = CreateVector(new double[] { 1.0, 2.0 });
+        var targetLabels = Vector<double>.FromArray(new double[] { 1.0, 2.0 });
 
         // Act
         var result = transfer.Transfer(sourceModel, sourceData, targetData, targetLabels);
@@ -368,14 +366,14 @@ public class TransferLearningAlgorithmsIntegrationTests
         var featureMapper = new LinearFeatureMapper<double>();
 
         // Source: 2 features, Target: 10 features (5x expansion)
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0 },
             { 3.0, 4.0 },
             { 5.0, 6.0 }
         });
-        var targetData = CreateRandomMatrix(3, 10, new Random(42));
-        var targetLabels = CreateVector(new double[] { 1.0, 2.0, 3.0 });
+        var targetData = Matrix<double>.CreateRandom(3, 10, 0, 10);
+        var targetLabels = Vector<double>.FromArray(new double[] { 1.0, 2.0, 3.0 });
 
         transfer.SetFeatureMapper(featureMapper);
 
@@ -388,48 +386,6 @@ public class TransferLearningAlgorithmsIntegrationTests
 
     #endregion
 
-    #region Helper Methods
-
-    private static Matrix<double> CreateMatrix(double[,] data)
-    {
-        int rows = data.GetLength(0);
-        int cols = data.GetLength(1);
-        var matrix = new Matrix<double>(rows, cols);
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                matrix[i, j] = data[i, j];
-            }
-        }
-        return matrix;
-    }
-
-    private static Vector<double> CreateVector(double[] data)
-    {
-        var vector = new Vector<double>(data.Length);
-        for (int i = 0; i < data.Length; i++)
-        {
-            vector[i] = data[i];
-        }
-        return vector;
-    }
-
-    private static Matrix<double> CreateRandomMatrix(int rows, int cols, Random random)
-    {
-        var matrix = new Matrix<double>(rows, cols);
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                matrix[i, j] = random.NextDouble() * 10;
-            }
-        }
-        return matrix;
-    }
-
-    #endregion
-
     #region Mock Classes
 
     /// <summary>
@@ -438,7 +394,7 @@ public class TransferLearningAlgorithmsIntegrationTests
     private class MockFullModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     {
         private readonly int _featureCount;
-        private Vector<T>? _parameters;
+        private Vector<T> _parameters;
         private HashSet<int> _activeFeatures;
         private readonly INumericOperations<T> _numOps;
 
@@ -524,6 +480,11 @@ public class TransferLearningAlgorithmsIntegrationTests
             return copy;
         }
 
+        /// <summary>
+        /// Clone delegates to DeepCopy because this mock has no reference-type fields
+        /// that would require distinguishing between shallow and deep copies.
+        /// Both IFullModel methods are implemented identically for simplicity.
+        /// </summary>
         public IFullModel<T, Matrix<T>, Vector<T>> Clone()
         {
             return DeepCopy();

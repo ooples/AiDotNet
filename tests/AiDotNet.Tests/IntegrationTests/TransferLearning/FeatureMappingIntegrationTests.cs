@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.TransferLearning.FeatureMapping;
 using Xunit;
 
@@ -20,13 +21,13 @@ public class FeatureMappingIntegrationTests
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 },
             { 4.0, 5.0, 6.0 },
             { 7.0, 8.0, 9.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0 },
             { 3.0, 4.0 },
@@ -45,7 +46,7 @@ public class FeatureMappingIntegrationTests
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
-        var sourceFeatures = CreateMatrix(new double[,]
+        var sourceFeatures = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 },
             { 4.0, 5.0, 6.0 }
@@ -60,7 +61,7 @@ public class FeatureMappingIntegrationTests
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
-        var targetFeatures = CreateMatrix(new double[,]
+        var targetFeatures = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0 },
             { 3.0, 4.0 }
@@ -75,13 +76,13 @@ public class FeatureMappingIntegrationTests
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0, 4.0 },
             { 5.0, 6.0, 7.0, 8.0 },
             { 9.0, 10.0, 11.0, 12.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0 },
             { 3.0, 4.0 },
@@ -90,7 +91,7 @@ public class FeatureMappingIntegrationTests
 
         mapper.Train(sourceData, targetData);
 
-        var newSourceData = CreateMatrix(new double[,]
+        var newSourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0, 4.0 },
             { 2.0, 3.0, 4.0, 5.0 }
@@ -109,13 +110,13 @@ public class FeatureMappingIntegrationTests
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 },
             { 4.0, 5.0, 6.0 },
             { 7.0, 8.0, 9.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0, 4.0, 5.0 },
             { 6.0, 7.0, 8.0, 9.0, 10.0 },
@@ -124,7 +125,7 @@ public class FeatureMappingIntegrationTests
 
         mapper.Train(sourceData, targetData);
 
-        var newTargetData = CreateMatrix(new double[,]
+        var newTargetData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0, 4.0, 5.0 },
             { 2.0, 3.0, 4.0, 5.0, 6.0 }
@@ -143,14 +144,14 @@ public class FeatureMappingIntegrationTests
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 },
             { 4.0, 5.0, 6.0 },
             { 7.0, 8.0, 9.0 },
             { 10.0, 11.0, 12.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0 },
             { 3.0, 4.0 },
@@ -190,14 +191,14 @@ public class FeatureMappingIntegrationTests
     {
         // Arrange - Map from 5D to 2D
         var mapper = new LinearFeatureMapper<double>();
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0, 4.0, 5.0 },
             { 2.0, 4.0, 6.0, 8.0, 10.0 },
             { 3.0, 6.0, 9.0, 12.0, 15.0 },
             { 4.0, 8.0, 12.0, 16.0, 20.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0 },
             { 2.0, 4.0 },
@@ -226,14 +227,14 @@ public class FeatureMappingIntegrationTests
     {
         // Arrange - Map from 2D to 5D
         var mapper = new LinearFeatureMapper<double>();
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0 },
             { 3.0, 4.0 },
             { 5.0, 6.0 },
             { 7.0, 8.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0, 4.0, 5.0 },
             { 2.0, 4.0, 6.0, 8.0, 10.0 },
@@ -264,13 +265,13 @@ public class FeatureMappingIntegrationTests
     {
         // Arrange - Map from 3D to 3D
         var mapper = new LinearFeatureMapper<double>();
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 },
             { 4.0, 5.0, 6.0 },
             { 7.0, 8.0, 9.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 10.0, 20.0, 30.0 },
             { 40.0, 50.0, 60.0 },
@@ -296,14 +297,14 @@ public class FeatureMappingIntegrationTests
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 },
             { 4.0, 5.0, 6.0 },
             { 7.0, 8.0, 9.0 },
             { 10.0, 11.0, 12.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 },
             { 4.0, 5.0, 6.0 },
@@ -340,11 +341,11 @@ public class FeatureMappingIntegrationTests
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0, 3.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0 }
         });
@@ -363,13 +364,13 @@ public class FeatureMappingIntegrationTests
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0 },
             { 2.0 },
             { 3.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 10.0 },
             { 20.0 },
@@ -422,13 +423,13 @@ public class FeatureMappingIntegrationTests
     {
         // Arrange - Column 1 has zero variance
         var mapper = new LinearFeatureMapper<double>();
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1.0, 5.0, 3.0 },
             { 2.0, 5.0, 4.0 },
             { 3.0, 5.0, 5.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 1.0, 2.0 },
             { 2.0, 3.0 },
@@ -449,14 +450,14 @@ public class FeatureMappingIntegrationTests
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { -1.0, -2.0, -3.0 },
             { -4.0, -5.0, -6.0 },
             { 0.0, 0.0, 0.0 },
             { 4.0, 5.0, 6.0 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { -10.0, -20.0 },
             { -40.0, -50.0 },
@@ -485,13 +486,13 @@ public class FeatureMappingIntegrationTests
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1e-10, 2e-10, 3e-10 },
             { 4e-10, 5e-10, 6e-10 },
             { 7e-10, 8e-10, 9e-10 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 1e-10, 2e-10 },
             { 3e-10, 4e-10 },
@@ -518,13 +519,13 @@ public class FeatureMappingIntegrationTests
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
-        var sourceData = CreateMatrix(new double[,]
+        var sourceData = new Matrix<double>(new double[,]
         {
             { 1e8, 2e8, 3e8 },
             { 4e8, 5e8, 6e8 },
             { 7e8, 8e8, 9e8 }
         });
-        var targetData = CreateMatrix(new double[,]
+        var targetData = new Matrix<double>(new double[,]
         {
             { 1e8, 2e8 },
             { 3e8, 4e8 },
@@ -550,21 +551,10 @@ public class FeatureMappingIntegrationTests
 
     #region Helper Methods
 
-    private static Matrix<double> CreateMatrix(double[,] data)
-    {
-        int rows = data.GetLength(0);
-        int cols = data.GetLength(1);
-        var matrix = new Matrix<double>(rows, cols);
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                matrix[i, j] = data[i, j];
-            }
-        }
-        return matrix;
-    }
-
+    /// <summary>
+    /// Creates a matrix with normally distributed random values.
+    /// Uses MathHelper.GetNormalRandom for Box-Muller transform.
+    /// </summary>
     private static Matrix<double> CreateRandomMatrix(int rows, int cols, Random random, double mean, double stdDev)
     {
         var matrix = new Matrix<double>(rows, cols);
@@ -572,11 +562,7 @@ public class FeatureMappingIntegrationTests
         {
             for (int j = 0; j < cols; j++)
             {
-                // Box-Muller transform for normal distribution
-                double u1 = 1.0 - random.NextDouble();
-                double u2 = 1.0 - random.NextDouble();
-                double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-                matrix[i, j] = mean + stdDev * normal;
+                matrix[i, j] = MathHelper.GetNormalRandom(mean, stdDev, random);
             }
         }
         return matrix;
