@@ -117,17 +117,19 @@ public static class MatrixExtensions
     /// </remarks>
     public static Vector<T> SumColumns<T>(this Matrix<T> matrix)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
+        var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++)
-        {
-            T sum = ops.Zero;
-            for (int i = 0; i < matrix.Rows; i++)
-            {
-                sum = ops.Add(sum, matrix[i, j]);
-            }
+        var resultSpan = result.AsWritableSpan();
 
-            result[j] = sum;
+        // Initialize to zero
+        numOps.Fill(resultSpan, numOps.Zero);
+
+        // Row-oriented accumulation: result += row[i] for each row
+        // This has better cache locality since rows are contiguous
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            var rowSpan = matrix.GetRowReadOnlySpan(i);
+            numOps.Add(resultSpan, rowSpan, resultSpan);
         }
 
         return result;
@@ -547,13 +549,15 @@ public static class MatrixExtensions
     /// </remarks>
     public static Matrix<T> GetBlock<T>(this Matrix<T> matrix, int startRow, int startCol, int blockRows, int blockCols)
     {
+        var numOps = MathHelper.GetNumericOperations<T>();
         var block = new Matrix<T>(blockRows, blockCols);
+
+        // Use SIMD Copy for each row - much faster than element-by-element
         for (int i = 0; i < blockRows; i++)
         {
-            for (int j = 0; j < blockCols; j++)
-            {
-                block[i, j] = matrix[startRow + i, startCol + j];
-            }
+            var sourceRow = matrix.GetRowReadOnlySpan(startRow + i).Slice(startCol, blockCols);
+            var destRow = block.GetRowSpan(i);
+            numOps.Copy(sourceRow, destRow);
         }
 
         return block;
