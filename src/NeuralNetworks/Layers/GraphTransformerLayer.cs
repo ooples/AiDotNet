@@ -1,3 +1,5 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Autodiff;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -1334,12 +1336,141 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     }
 
     /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
+    public override bool SupportsJitCompilation => true;
 
     /// <inheritdoc/>
+    /// <summary>
+    /// Exports the layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the graph transformer layer.</returns>
+    /// <remarks>
+    /// <para>
+    /// The computation graph implements a simplified Graph Transformer with:
+    /// 1. Multi-head self-attention with Q, K, V projections
+    /// 2. Output projection and residual connection
+    /// 3. Feed-forward network with residual connection
+    /// 4. Final activation function
+    /// </para>
+    /// </remarks>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
-        throw new NotSupportedException(
-            "GraphTransformerLayer does not support computation graph export due to dynamic self-attention mechanisms.");
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create symbolic input for node features [batch, nodes, features]
+        int numNodes = InputShape[0];
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "node_features");
+        inputNodes.Add(inputNode);
+
+        // Export learnable parameters as constants
+        var outputWeightsNode = TensorOperations<T>.Constant(_outputWeights, "output_weights");
+        var outputBiasNode = TensorOperations<T>.Constant(_outputBias, "output_bias");
+        var ffnWeights1Node = TensorOperations<T>.Constant(_ffnWeights1, "ffn_weights1");
+        var ffnWeights2Node = TensorOperations<T>.Constant(_ffnWeights2, "ffn_weights2");
+        var ffnBias1Node = TensorOperations<T>.Constant(_ffnBias1, "ffn_bias1");
+        var ffnBias2Node = TensorOperations<T>.Constant(_ffnBias2, "ffn_bias2");
+
+        // Build multi-head attention computation graph
+        var headOutputNodes = new List<ComputationNode<T>>();
+
+        for (int h = 0; h < _numHeads; h++)
+        {
+            // Extract weight matrices for this head
+            var qWeightSlice = ExtractHeadWeights(_queryWeights, h);
+            var kWeightSlice = ExtractHeadWeights(_keyWeights, h);
+            var vWeightSlice = ExtractHeadWeights(_valueWeights, h);
+
+            var qWeightNode = TensorOperations<T>.Constant(qWeightSlice, $"query_weights_{h}");
+            var kWeightNode = TensorOperations<T>.Constant(kWeightSlice, $"key_weights_{h}");
+            var vWeightNode = TensorOperations<T>.Constant(vWeightSlice, $"value_weights_{h}");
+
+            // Q = input @ W_q, K = input @ W_k, V = input @ W_v
+            var queries = TensorOperations<T>.MatrixMultiply(inputNode, qWeightNode);
+            var keys = TensorOperations<T>.MatrixMultiply(inputNode, kWeightNode);
+            var values = TensorOperations<T>.MatrixMultiply(inputNode, vWeightNode);
+
+            // Transpose keys for attention score computation
+            var keysT = TensorOperations<T>.Transpose(keys);
+
+            // Attention scores = Q @ K^T / sqrt(d_k)
+            var scores = TensorOperations<T>.MatrixMultiply(queries, keysT);
+            var scaleFactor = NumOps.Sqrt(NumOps.FromDouble(_headDim));
+            var scaleNode = TensorOperations<T>.Constant(new Tensor<T>(new T[] { scaleFactor }, new int[] { 1 }), $"scale_{h}");
+            scores = TensorOperations<T>.Divide(scores, scaleNode);
+
+            // Apply softmax to get attention weights
+            var attentionWeights = TensorOperations<T>.Softmax(scores, axis: -1);
+
+            // Apply attention to values
+            var headOutput = TensorOperations<T>.MatrixMultiply(attentionWeights, values);
+            headOutputNodes.Add(headOutput);
+        }
+
+        // Concatenate head outputs
+        ComputationNode<T> concatenated;
+        if (_numHeads == 1)
+        {
+            concatenated = headOutputNodes[0];
+        }
+        else
+        {
+            concatenated = TensorOperations<T>.Concat(headOutputNodes, axis: -1);
+        }
+
+        // Output projection: concatenated @ W_out + b_out
+        var attnOutput = TensorOperations<T>.MatrixMultiply(concatenated, outputWeightsNode);
+        attnOutput = TensorOperations<T>.Add(attnOutput, outputBiasNode);
+
+        // Residual connection (if dimensions match)
+        ComputationNode<T> residual1;
+        if (_inputFeatures == _outputFeatures)
+        {
+            residual1 = TensorOperations<T>.Add(attnOutput, inputNode);
+        }
+        else
+        {
+            residual1 = attnOutput;
+        }
+
+        // Feed-forward network: FFN(x) = W2 * activation(W1 * x + b1) + b2
+        var ffnHidden = TensorOperations<T>.MatrixMultiply(residual1, ffnWeights1Node);
+        ffnHidden = TensorOperations<T>.Add(ffnHidden, ffnBias1Node);
+
+        // Apply FFN activation (GELU by default)
+        if (_ffnActivation.SupportsJitCompilation)
+        {
+            ffnHidden = _ffnActivation.ApplyToGraph(ffnHidden);
+        }
+        else
+        {
+            ffnHidden = TensorOperations<T>.GELU(ffnHidden);
+        }
+
+        var ffnOutput = TensorOperations<T>.MatrixMultiply(ffnHidden, ffnWeights2Node);
+        ffnOutput = TensorOperations<T>.Add(ffnOutput, ffnBias2Node);
+
+        // Second residual connection
+        var output = TensorOperations<T>.Add(residual1, ffnOutput);
+
+        // Apply output activation function if needed
+        if (ScalarActivation is not null && ScalarActivation is not IdentityActivation<T>)
+        {
+            if (ScalarActivation.SupportsJitCompilation)
+            {
+                output = ScalarActivation.ApplyToGraph(output);
+            }
+            else
+            {
+                var activated = ScalarActivation.Activate(output.Value);
+                output = TensorOperations<T>.Constant(activated, "activated_output");
+            }
+        }
+
+        return output;
     }
 }

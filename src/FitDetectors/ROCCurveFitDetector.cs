@@ -159,7 +159,10 @@ public class ROCCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// </remarks>
     protected override T CalculateConfidenceLevel(ModelEvaluationData<T, TInput, TOutput> evaluationData)
     {
-        return NumOps.Multiply(Auc, NumOps.FromDouble(_options.ConfidenceScalingFactor));
+        var rawConfidence = NumOps.Multiply(Auc, NumOps.FromDouble(_options.ConfidenceScalingFactor));
+
+        // Clamp confidence level to valid [0, 1] range
+        return MathHelper.Clamp(rawConfidence, NumOps.Zero, NumOps.One);
     }
 
     /// <summary>

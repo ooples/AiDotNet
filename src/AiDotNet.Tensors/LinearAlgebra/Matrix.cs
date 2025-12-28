@@ -690,7 +690,13 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     /// </remarks>
     public Vector<T> GetColumnSegment(int columnIndex, int startRow, int length)
     {
-        return new Vector<T>(Enumerable.Range(startRow, length).Select(i => this[i, columnIndex]));
+        var result = new Vector<T>(length);
+        var destSpan = result.AsWritableSpan();
+        for (int i = 0; i < length; i++)
+        {
+            destSpan[i] = _data[(startRow + i) * _cols + columnIndex];
+        }
+        return result;
     }
 
     /// <summary>
@@ -704,10 +710,14 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     /// <para><b>For Beginners:</b> This method extracts a portion of a row from the matrix.
     /// It's like taking a slice from a specific row, starting at a particular column and
     /// continuing for a specified number of elements.</para>
+    /// <para><b>Performance:</b> Uses SIMD-accelerated Copy since row segments are contiguous.</para>
     /// </remarks>
     public Vector<T> GetRowSegment(int rowIndex, int startColumn, int length)
     {
-        return new Vector<T>(Enumerable.Range(startColumn, length).Select(j => this[rowIndex, j]));
+        var result = new Vector<T>(length);
+        var sourceSpan = new ReadOnlySpan<T>(_data, rowIndex * _cols + startColumn, length);
+        _numOps.Copy(sourceSpan, result.AsWritableSpan());
+        return result;
     }
 
     /// <summary>
@@ -1025,13 +1035,25 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method divides every value in the matrix by the same number (scalar).
     /// For example, dividing a matrix by 2 would halve all values in the matrix.</para>
-    /// <para><b>Performance:</b> Uses vectorized DivideScalar operation for SIMD acceleration (5-15x faster with AVX2).</para>
+    /// <para><b>Performance:</b> Uses SIMD-accelerated operations (5-15x faster with AVX2).</para>
     /// </remarks>
     public Matrix<T> Divide(T scalar)
     {
         Matrix<T> result = new(Rows, Columns);
         _numOps.DivideScalar(new ReadOnlySpan<T>(_data), scalar, result.AsWritableSpan());
         return result;
+    }
+
+    /// <summary>
+    /// Divides each element of the matrix by a scalar value in-place.
+    /// </summary>
+    /// <param name="scalar">The scalar value to divide by.</param>
+    /// <remarks>
+    /// <para><b>Performance:</b> Zero-allocation SIMD-accelerated division.</para>
+    /// </remarks>
+    public void DivideInPlace(T scalar)
+    {
+        _numOps.DivideScalar(new ReadOnlySpan<T>(_data), scalar, new Span<T>(_data));
     }
 
     /// <summary>
@@ -1104,7 +1126,24 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     /// </remarks>
     public byte[] Serialize()
     {
-        throw new NotImplementedException("Serialization requires AI-specific SerializationHelper class");
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Write dimensions
+        writer.Write(Rows);
+        writer.Write(Columns);
+
+        // Write each element as bytes (row-major order)
+        for (int i = 0; i < Rows; i++)
+        {
+            for (int j = 0; j < Columns; j++)
+            {
+                double value = _numOps.ToDouble(this[i, j]);
+                writer.Write(value);
+            }
+        }
+
+        return ms.ToArray();
     }
 
     /// <summary>
@@ -1118,7 +1157,25 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     /// </remarks>
     public static Matrix<T> Deserialize(byte[] data)
     {
-        throw new NotImplementedException("Deserialization requires AI-specific SerializationHelper class");
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        // Read dimensions
+        int rows = reader.ReadInt32();
+        int columns = reader.ReadInt32();
+
+        // Read each element
+        var result = new Matrix<T>(rows, columns);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < columns; j++)
+            {
+                double value = reader.ReadDouble();
+                result[i, j] = _numOps.FromDouble(value);
+            }
+        }
+
+        return result;
     }
 
     /// <summary>

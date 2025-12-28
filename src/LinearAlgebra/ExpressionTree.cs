@@ -163,6 +163,11 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     private int _featureCount;
 
     /// <summary>
+    /// Cached required feature count (max feature index + 1) for validation.
+    /// </summary>
+    private int _requiredFeatureCount;
+
+    /// <summary>
     /// The default loss function used by this model for gradient computation.
     /// </summary>
     private readonly ILossFunction<T> _defaultLossFunction;
@@ -200,6 +205,31 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Gets the minimum number of features required for input data to this expression tree.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This tells you the minimum number of columns your input data must have.
+    /// It equals the maximum variable index used plus one. For example, if your formula uses x[5],
+    /// the required feature count is 6 (indices 0 through 5).
+    /// <para>
+    /// Note: This is different from FeatureCount which counts unique variables used.
+    /// A tree using only x[5] has FeatureCount=1 but RequiredFeatureCount=6.
+    /// </para>
+    /// </remarks>
+    public int RequiredFeatureCount
+    {
+        get
+        {
+            if (_requiredFeatureCount == 0)
+            {
+                _requiredFeatureCount = CalculateRequiredFeatureCount();
+            }
+
+            return _requiredFeatureCount;
+        }
+    }
+
+    /// <summary>
     /// Checks if a specific feature (variable) is used in this expression tree.
     /// </summary>
     /// <param name="featureIndex">The index of the feature to check.</param>
@@ -227,6 +257,51 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         HashSet<int> uniqueFeatures = new HashSet<int>();
         CollectUniqueFeatures(this, uniqueFeatures);
         return uniqueFeatures.Count;
+    }
+
+    /// <summary>
+    /// Calculates the minimum number of features required for input data.
+    /// </summary>
+    /// <returns>The maximum feature index used plus one, or 0 if no variables are used.</returns>
+    /// <remarks>
+    /// This method finds the maximum feature index in the tree and adds 1.
+    /// For example, if the tree uses x[0] and x[5], this returns 6 (max index 5 + 1).
+    /// This represents the minimum number of columns input data must have.
+    /// </remarks>
+    private int CalculateRequiredFeatureCount()
+    {
+        int maxIndex = -1;
+        FindMaxFeatureIndex(this, ref maxIndex);
+        return maxIndex + 1;
+    }
+
+    /// <summary>
+    /// Recursively finds the maximum feature index used in a node and its children.
+    /// </summary>
+    /// <param name="node">The node to check.</param>
+    /// <param name="maxIndex">Reference to track the maximum index found.</param>
+    private void FindMaxFeatureIndex(ExpressionTree<T, TInput, TOutput> node, ref int maxIndex)
+    {
+        if (node == null) return;
+
+        if (node.Type == ExpressionNodeType.Variable)
+        {
+            int featureIndex = _numOps.ToInt32(node.Value);
+            if (featureIndex > maxIndex)
+            {
+                maxIndex = featureIndex;
+            }
+        }
+
+        if (node.Left != null)
+        {
+            FindMaxFeatureIndex(node.Left, ref maxIndex);
+        }
+
+        if (node.Right != null)
+        {
+            FindMaxFeatureIndex(node.Right, ref maxIndex);
+        }
     }
 
     /// <summary>
@@ -562,9 +637,9 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         // For ExpressionTree, we don't actually train the model
         // The structure is defined by the tree, and we don't adjust it based on data
         // However, we can use this method to validate that our tree can process the input
-        if (x.Columns < FeatureCount)
+        if (x.Columns < RequiredFeatureCount)
         {
-            throw new ArgumentException($"Input matrix has {x.Columns} columns, but the model expects at least {FeatureCount} features.");
+            throw new ArgumentException($"Input matrix has {x.Columns} columns, but the model expects at least {RequiredFeatureCount} features.");
         }
     }
 
@@ -580,14 +655,14 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// For example, if your tree represents "2x + y", and your input has values [3,4], the prediction would be 2*3 + 4 = 10.
     ///
     /// <b>Note:</b> If the input has more features than the model requires, the extra features are allowed but ignored.
-    /// Only the first FeatureCount features are used in predictions. This flexibility supports transfer learning scenarios
+    /// Only the features up to RequiredFeatureCount are used in predictions. This flexibility supports transfer learning scenarios
     /// where input data may contain additional features not used by this particular model.
     /// </remarks>
     public Vector<T> Predict(Matrix<T> input)
     {
-        if (input.Columns < FeatureCount)
+        if (input.Columns < RequiredFeatureCount)
         {
-            throw new ArgumentException($"Input matrix has {input.Columns} columns, but the model expects at least {FeatureCount} features.");
+            throw new ArgumentException($"Input matrix has {input.Columns} columns, but the model expects at least {RequiredFeatureCount} features.");
         }
 
         Vector<T> predictions = new(input.Rows);
@@ -973,8 +1048,9 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
         DeactivateInactiveFeatures(this);
 
-        // Clear the cached feature count since we've modified the tree
+        // Clear the cached feature counts since we've modified the tree
         _featureCount = 0;
+        _requiredFeatureCount = 0;
     }
 
     /// <summary>
@@ -1183,9 +1259,9 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <param name="matrix">The matrix to validate.</param>
     private void ValidateMatrixFeatures(Matrix<T> matrix)
     {
-        if (matrix.Columns < FeatureCount)
+        if (matrix.Columns < RequiredFeatureCount)
         {
-            throw new ArgumentException($"Input matrix has {matrix.Columns} columns, but the model requires at least {FeatureCount} features.");
+            throw new ArgumentException($"Input matrix has {matrix.Columns} columns, but the model requires at least {RequiredFeatureCount} features.");
         }
     }
 
@@ -1195,9 +1271,9 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <param name="vector">The vector to validate.</param>
     private void ValidateVectorFeatures(Vector<T> vector)
     {
-        if (vector.Length < FeatureCount)
+        if (vector.Length < RequiredFeatureCount)
         {
-            throw new ArgumentException($"Input vector has {vector.Length} elements, but the model requires at least {FeatureCount} features.");
+            throw new ArgumentException($"Input vector has {vector.Length} elements, but the model requires at least {RequiredFeatureCount} features.");
         }
     }
 
@@ -1207,10 +1283,10 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <param name="tensor">The tensor to validate.</param>
     private void ValidateTensorFeatures(Tensor<T> tensor)
     {
-        if (tensor.Shape.Length < 1 || tensor.Shape[tensor.Shape.Length - 1] < FeatureCount)
+        if (tensor.Shape.Length < 1 || tensor.Shape[tensor.Shape.Length - 1] < RequiredFeatureCount)
         {
             throw new ArgumentException($"Input tensor's last dimension is {(tensor.Shape.Length > 0 ? tensor.Shape[tensor.Shape.Length - 1] : 0)}, " +
-                $"but the model requires at least {FeatureCount} features.");
+                $"but the model requires at least {RequiredFeatureCount} features.");
         }
     }
 

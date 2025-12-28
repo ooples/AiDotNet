@@ -16,12 +16,24 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
         /// <param name="windowSize">The size of the sliding window.</param>
         /// <param name="stride">The stride (step size) of the window.</param>
         public SlidingWindowChunkingStrategy(int windowSize = 1000, int stride = 500)
-            : base(windowSize, Math.Max(0, windowSize - stride))
+            : base(windowSize, ValidateAndCalculateOverlap(windowSize, stride))
         {
-            if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
+            _stride = stride;
+        }
+
+        /// <summary>
+        /// Validates parameters and calculates overlap before base constructor is called.
+        /// </summary>
+        private static int ValidateAndCalculateOverlap(int windowSize, int stride)
+        {
+            // Validate windowSize first (it's the more fundamental parameter)
+            if (windowSize <= 0)
+                throw new ArgumentException("Window size must be greater than zero.", nameof(windowSize));
+            if (stride <= 0)
+                throw new ArgumentOutOfRangeException(nameof(stride), "Stride must be greater than zero.");
             if (stride > windowSize)
                 throw new ArgumentOutOfRangeException(nameof(stride), "Stride cannot exceed the window size because chunk overlap must stay non-negative.");
-            _stride = stride;
+            return windowSize - stride;
         }
 
         /// <summary>

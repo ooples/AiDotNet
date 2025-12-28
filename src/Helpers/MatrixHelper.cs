@@ -456,7 +456,23 @@ public static class MatrixHelper<T>
         }
         norm = _numOps.Sqrt(norm);
 
-        result[0] = _numOps.Add(xVector[0], _numOps.Multiply(_numOps.SignOrZero(xVector[0]), norm));
+        // If the input vector is near-zero, return a zero vector (identity transformation)
+        // This works because: P = I - 2*v*v^T, and if v = 0, then P = I
+        if (_numOps.LessThan(norm, _numOps.FromDouble(1e-14)))
+        {
+            for (int i = 0; i < result.Length; i++)
+            {
+                result[i] = _numOps.Zero;
+            }
+            return result;
+        }
+
+        // Use OPPOSITE sign for numerical stability (avoid cancellation)
+        T alpha = _numOps.LessThan(xVector[0], _numOps.Zero)
+            ? norm
+            : _numOps.Negate(norm);
+
+        result[0] = _numOps.Subtract(xVector[0], alpha);
         for (int i = 1; i < xVector.Length; i++)
         {
             result[i] = xVector[i];
@@ -468,6 +484,16 @@ public static class MatrixHelper<T>
             vNorm = _numOps.Add(vNorm, _numOps.Multiply(result[i], result[i]));
         }
         vNorm = _numOps.Sqrt(vNorm);
+
+        // Handle the case where vNorm is near-zero (return zero vector for identity)
+        if (_numOps.LessThan(vNorm, _numOps.FromDouble(1e-14)))
+        {
+            for (int i = 0; i < result.Length; i++)
+            {
+                result[i] = _numOps.Zero;
+            }
+            return result;
+        }
 
         for (int i = 0; i < result.Length; i++)
         {

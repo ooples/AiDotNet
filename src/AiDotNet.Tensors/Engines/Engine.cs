@@ -5,7 +5,7 @@ using System;
 using System.Numerics;
 using System.Runtime.Intrinsics;
 using System.Text;
-#if NET471_OR_GREATER
+#if !NET462
 using ILGPU;
 using ILGPU.Algorithms;
 using ILGPU.Runtime;
@@ -111,8 +111,9 @@ namespace AiDotNet.Tensors.Engines
         /// <returns>GPU engine if available, otherwise CPU engine.</returns>
         private static IEngine CreateOptimalEngine()
         {
-#if NET471_OR_GREATER
+#if !NET462
             // Try GPU first (highest performance potential)
+            // Note: Use !NET462 to include both .NET Framework 4.7.1+ and .NET 8.0+
             try
             {
                 var gpuEngine = new GpuEngine();
@@ -190,7 +191,7 @@ namespace AiDotNet.Tensors.Engines
         /// </summary>
         public string GpuName { get; set; } = string.Empty;
 
-#if NET471_OR_GREATER
+#if !NET462
         /// <summary>
         /// Gets the GPU accelerator type (Cuda, OpenCL, Velocity, CPU).
         /// </summary>
@@ -237,8 +238,8 @@ namespace AiDotNet.Tensors.Engines
             // Detect SIMD capabilities
             caps = DetectSimd(caps);
 
-#if NET471_OR_GREATER
-            // Detect GPU capabilities (available on net471+)
+#if !NET462
+            // Detect GPU capabilities (available on net471+ and net8.0+)
             caps = DetectGpu(caps);
 #else
             // GPU detection not available on .NET Framework 4.6.2
@@ -295,7 +296,7 @@ namespace AiDotNet.Tensors.Engines
             return caps;
         }
 
-#if NET471_OR_GREATER
+#if !NET462
         private static HardwareCapabilities DetectGpu(HardwareCapabilities caps)
         {
             try

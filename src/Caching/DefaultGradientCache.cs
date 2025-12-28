@@ -49,6 +49,8 @@ public class DefaultGradientCache<T> : IGradientCache<T>
     /// </remarks>
     public IGradientModel<T>? GetCachedGradient(string key)
     {
+        if (key == null) throw new ArgumentNullException(nameof(key), "Cache key cannot be null.");
+
         _cache.TryGetValue(key, out var gradient);
         return gradient;
     }
@@ -70,6 +72,9 @@ public class DefaultGradientCache<T> : IGradientCache<T>
     /// </remarks>
     public void CacheGradient(string key, IGradientModel<T> gradient)
     {
+        if (key == null) throw new ArgumentNullException(nameof(key), "Cache key cannot be null.");
+        if (gradient == null) throw new ArgumentNullException(nameof(gradient), "Gradient cannot be null.");
+
         _cache[key] = gradient;
     }
 
