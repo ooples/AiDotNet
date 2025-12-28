@@ -113,7 +113,7 @@ public class BottleneckBlock<T> : LayerBase<T>
             kernelSize: 1,
             stride: 1,
             padding: 0,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         _bn1 = new BatchNormalizationLayer<T>(baseChannels);
 
@@ -126,7 +126,7 @@ public class BottleneckBlock<T> : LayerBase<T>
             kernelSize: 3,
             stride: stride,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         int outHeight = inputHeight / stride;
         int outWidth = inputWidth / stride;
@@ -142,7 +142,7 @@ public class BottleneckBlock<T> : LayerBase<T>
             kernelSize: 1,
             stride: 1,
             padding: 0,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         _bn3 = new BatchNormalizationLayer<T>(outChannels);
 
@@ -165,7 +165,7 @@ public class BottleneckBlock<T> : LayerBase<T>
                 kernelSize: 1,
                 stride: stride,
                 padding: 0,
-                activation: new IdentityActivation<T>());
+                activationFunction: new IdentityActivation<T>());
 
             _downsampleBn = new BatchNormalizationLayer<T>(outChannels);
         }

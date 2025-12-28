@@ -372,7 +372,7 @@ internal class DenseBlockLayer<T> : LayerBase<T>
             inputWidth: width,
             stride: 1,
             padding: 0,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         _bn2 = new BatchNormalizationLayer<T>(bottleneckChannels);
         _conv3x3 = new ConvolutionalLayer<T>(
@@ -383,7 +383,7 @@ internal class DenseBlockLayer<T> : LayerBase<T>
             inputWidth: width,
             stride: 1,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
     }
 
     public override Tensor<T> Forward(Tensor<T> input)

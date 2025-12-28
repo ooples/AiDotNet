@@ -1327,7 +1327,7 @@ public class GradientCorrectnessTests
         var layer = new ConvolutionalLayer<float>(
             inputDepth: 1, outputDepth: 2, kernelSize: 3,
             inputHeight: 4, inputWidth: 4, stride: 1, padding: 0,
-            activation: (IActivationFunction<float>)new ReLUActivation<float>());
+            activationFunction: (IActivationFunction<float>)new ReLUActivation<float>());
 
         var input = CreateRandomTensor(new[] { 1, 1, 4, 4 });
         var outputGradient = CreateRandomTensor(new[] { 1, 2, 2, 2 }); // Output: 2x2 with 2 channels
@@ -1360,7 +1360,7 @@ public class GradientCorrectnessTests
     {
         // Arrange - 2x2 max pooling on 4x4 input (no batch dimension, just [channels, height, width])
         var inputShape = new[] { 1, 4, 4 }; // [channels=1, height=4, width=4]
-        var layer = new MaxPoolingLayer<float>(inputShape, poolSize: 2, strides: 2);
+        var layer = new MaxPoolingLayer<float>(inputShape, poolSize: 2, stride: 2);
 
         var input = CreateRandomTensor(inputShape);
         var outputGradient = CreateRandomTensor(new[] { 1, 2, 2 }); // [channels=1, height=2, width=2]
@@ -1393,7 +1393,7 @@ public class GradientCorrectnessTests
     {
         // Arrange - 2x2 avg pooling on 4x4 input (no batch dimension, just [channels, height, width])
         var inputShape = new[] { 1, 4, 4 }; // [channels=1, height=4, width=4]
-        var layer = new AvgPoolingLayer<float>(inputShape, 2, 2);
+        var layer = new AveragePoolingLayer<float>(inputShape, 2, 2);
 
         var input = CreateRandomTensor(inputShape);
         var outputGradient = CreateRandomTensor(new[] { 1, 2, 2 }); // [channels=1, height=2, width=2]

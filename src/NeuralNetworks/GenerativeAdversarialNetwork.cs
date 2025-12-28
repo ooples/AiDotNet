@@ -744,7 +744,8 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
 
             for (int i = 0; i < batchSize; i++)
             {
-                var noiseVector = results[i];
+                // Get noise vector from input batch (not from empty results list)
+                var noiseVector = input.GetSlice(i);
                 var generatedImage = Generator.Predict(noiseVector);
                 results.Add(generatedImage);
             }

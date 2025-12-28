@@ -195,7 +195,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputShape">The shape of the input tensor (typically [batchSize, height, width, channels]).</param>
     /// <param name="poolingType">The type of pooling operation to apply (Max or Average).</param>
-    /// <param name="vectorActivationFunction">The vector activation function to apply after pooling. Defaults to Identity if not specified.</param>
+    /// <param name="vectorActivationFunction">The vector activation function to apply after pooling (required to disambiguate from IActivationFunction overload).</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new global pooling layer with the specified input shape,
@@ -205,20 +205,20 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// entire vectors rather than individual scalar values.
     /// </para>
     /// <para><b>For Beginners:</b> This is an alternative setup that uses a different kind of activation function.
-    /// 
+    ///
     /// This constructor is almost identical to the first one, but with one key difference:
     /// - Regular activation: processes each pooled value separately
     /// - Vector activation: processes groups of pooled values together
-    /// 
+    ///
     /// Vector activation functions are useful when the relationship between
     /// different channels needs to be considered. For example, softmax might
     /// be applied across all channels to normalize them into a probability distribution.
-    /// 
+    ///
     /// For most cases, the standard constructor with regular activation functions is sufficient.
     /// </para>
     /// </remarks>
-    public GlobalPoolingLayer(int[] inputShape, PoolingType poolingType, IVectorActivationFunction<T>? vectorActivationFunction = null)
-        : base(inputShape, CalculateOutputShape(inputShape), vectorActivationFunction ?? new IdentityActivation<T>())
+    public GlobalPoolingLayer(int[] inputShape, PoolingType poolingType, IVectorActivationFunction<T> vectorActivationFunction)
+        : base(inputShape, CalculateOutputShape(inputShape), vectorActivationFunction)
     {
         _poolingType = poolingType;
     }

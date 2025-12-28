@@ -112,12 +112,12 @@ public static class LayerHelper<T>
                 kernelSize: kernelSize,
                 stride: 1,
                 padding: 1,
-                activation: new ReLUActivation<T>()
+                activationFunction: new ReLUActivation<T>()
             );
             yield return new MaxPoolingLayer<T>(
                 inputShape: [filterCount, inputShape[1], inputShape[2]],
                 poolSize: 2,
-                strides: 2
+                stride: 2
             );
 
             // Update input shape for next layer
@@ -202,7 +202,7 @@ public static class LayerHelper<T>
                     kernelSize: 3,
                     stride: 1,
                     padding: 1,  // Same padding to preserve spatial dimensions
-                    activation: new ReLUActivation<T>()
+                    activationFunction: new ReLUActivation<T>()
                 );
 
                 // Optional batch normalization (per-channel normalization)
@@ -220,7 +220,7 @@ public static class LayerHelper<T>
             yield return new MaxPoolingLayer<T>(
                 inputShape: [currentChannels, currentHeight, currentWidth],
                 poolSize: 2,
-                strides: 2
+                stride: 2
             );
 
             currentHeight /= 2;
@@ -488,13 +488,13 @@ public static class LayerHelper<T>
             kernelSize: 7,
             stride: 2,
             padding: 3,
-            activation: new ReLUActivation<T>()
+            activationFunction: new ReLUActivation<T>()
         );
 
         yield return new MaxPoolingLayer<T>(
             inputShape: [64, inputShape[1] / 2, inputShape[2] / 2],
             poolSize: 3,
-            strides: 2
+            stride: 2
         );
 
         // Residual blocks
@@ -518,7 +518,7 @@ public static class LayerHelper<T>
                 yield return new MaxPoolingLayer<T>(
                     inputShape: [currentDepth, currentHeight, currentWidth],
                     poolSize: 2,
-                    strides: 2
+                    stride: 2
                 );
                 currentHeight /= 2;
                 currentWidth /= 2;
@@ -567,14 +567,14 @@ public static class LayerHelper<T>
                 inputWidth: width,
                 stride: 1,
                 padding: 0,
-                activation: new IdentityActivation<T>()
+                activationFunction: new IdentityActivation<T>()
             );
         }
 
         yield return new ResidualLayer<T>(
              inputShape: [outputDepth, height, width],
              innerLayer: innerLayer,
-             activation: new IdentityActivation<T>()
+             activationFunction: new IdentityActivation<T>()
          );
 
         yield return new ConvolutionalLayer<T>(
@@ -585,7 +585,7 @@ public static class LayerHelper<T>
             inputWidth: width,
             stride: 1,
             padding: 1,
-            activation: new ReLUActivation<T>()
+            activationFunction: new ReLUActivation<T>()
         );
 
         yield return new ConvolutionalLayer<T>(
@@ -596,7 +596,7 @@ public static class LayerHelper<T>
             inputWidth: width,
             stride: 1,
             padding: 1,
-            activation: new ReLUActivation<T>()
+            activationFunction: new ReLUActivation<T>()
         );
 
         // Use IdentityActivation for the AddLayer
@@ -751,7 +751,7 @@ public static class LayerHelper<T>
             inputWidth: inputWidth,
             stride: 1,
             padding: 0,
-            activation: new ReLUActivation<T>()
+            activationFunction: new ReLUActivation<T>()
         );
 
         // Add PrimaryCapsules layer
@@ -1155,6 +1155,19 @@ public static class LayerHelper<T>
                     yield return new DropoutLayer<T>(dropoutRate);
                 }
             }
+        }
+
+        // For classification tasks, add global pooling to reduce 3D [batch, seq, dim] to 2D [batch, dim]
+        // This is required because transformer encoder outputs are 3D, but classification heads expect 2D
+        if (taskType == NeuralNetworkTaskType.BinaryClassification ||
+            taskType == NeuralNetworkTaskType.MultiClassClassification ||
+            taskType == NeuralNetworkTaskType.MultiLabelClassification ||
+            taskType == NeuralNetworkTaskType.SequenceClassification ||
+            taskType == NeuralNetworkTaskType.ImageClassification)
+        {
+            // Global average pooling over sequence dimension
+            // Input: [batch, seq, dim] -> Output: [batch, dim]
+            yield return new GlobalPoolingLayer<T>([maxSequenceLength, modelDimension], PoolingType.Average, (IActivationFunction<T>?)null);
         }
 
         // Add the final projection layer
@@ -3412,7 +3425,7 @@ public static class LayerHelper<T>
                 inputWidth: currentResolution,
                 stride: 1,
                 padding: 1,
-                activation: new ReLUActivation<T>());
+                activationFunction: new ReLUActivation<T>());
 
             // MaxPool3D layer to downsample by factor of 2
             if (currentResolution >= 2)
@@ -3524,7 +3537,7 @@ public static class LayerHelper<T>
                 inputWidth: currentResolution,
                 stride: 1,
                 padding: 1,
-                activation: new ReLUActivation<T>());
+                activationFunction: new ReLUActivation<T>());
 
             // Second Conv3D in block
             yield return new Conv3DLayer<T>(
@@ -3536,7 +3549,7 @@ public static class LayerHelper<T>
                 inputWidth: currentResolution,
                 stride: 1,
                 padding: 1,
-                activation: new ReLUActivation<T>());
+                activationFunction: new ReLUActivation<T>());
 
             // MaxPool3D to downsample (except last encoder block)
             if (block < numEncoderBlocks - 1)
@@ -3561,7 +3574,7 @@ public static class LayerHelper<T>
             inputWidth: currentResolution,
             stride: 1,
             padding: 1,
-            activation: new ReLUActivation<T>());
+            activationFunction: new ReLUActivation<T>());
 
         // ============== DECODER PATH ==============
         // Each decoder block: Upsample3D -> Conv3D -> Conv3D
@@ -3588,7 +3601,7 @@ public static class LayerHelper<T>
                 inputWidth: currentResolution,
                 stride: 1,
                 padding: 1,
-                activation: new ReLUActivation<T>());
+                activationFunction: new ReLUActivation<T>());
 
             // Second Conv3D in decoder block
             yield return new Conv3DLayer<T>(
@@ -3600,7 +3613,7 @@ public static class LayerHelper<T>
                 inputWidth: currentResolution,
                 stride: 1,
                 padding: 1,
-                activation: new ReLUActivation<T>());
+                activationFunction: new ReLUActivation<T>());
         }
 
         // ============== OUTPUT LAYER ==============
@@ -3614,7 +3627,7 @@ public static class LayerHelper<T>
             inputWidth: currentResolution,
             stride: 1,
             padding: 0,
-            activation: numClasses > 1 ? new SoftmaxActivation<T>() : new SigmoidActivation<T>());
+            activationFunction: numClasses > 1 ? new SoftmaxActivation<T>() : new SigmoidActivation<T>());
     }
 
     /// <summary>
@@ -3687,7 +3700,7 @@ public static class LayerHelper<T>
                 inputChannels: currentChannels,
                 outputChannels: outChannels,
                 numNeighbors: numNeighbors,
-                activation: new ReLUActivation<T>());
+                activationFunction: new ReLUActivation<T>());
 
             currentChannels = outChannels;
 
@@ -3809,7 +3822,7 @@ public static class LayerHelper<T>
                 inputChannels: currentChannels,
                 outputChannels: outChannels,
                 spiralLength: spiralLength,
-                activation: new ReLUActivation<T>());
+                activationFunction: new ReLUActivation<T>());
 
             currentChannels = outChannels;
 
@@ -3901,7 +3914,7 @@ public static class LayerHelper<T>
             inputWidth: currentWidth,
             stride: 2,
             padding: 3,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         currentHeight = (currentHeight + 2 * 3 - 7) / 2 + 1;
         currentWidth = (currentWidth + 2 * 3 - 7) / 2 + 1;
@@ -3914,7 +3927,7 @@ public static class LayerHelper<T>
         yield return new MaxPoolingLayer<T>(
             inputShape: [stemChannels, currentHeight, currentWidth],
             poolSize: 3,
-            strides: 2);
+            stride: 2);
 
         currentHeight = (currentHeight + 2 * 1 - 3) / 2 + 1;
         currentWidth = (currentWidth + 2 * 1 - 3) / 2 + 1;
@@ -3959,7 +3972,7 @@ public static class LayerHelper<T>
             activationFunction: new ReLUActivation<T>());
 
         // Global average pooling
-        yield return new AdaptiveAvgPoolingLayer<T>(currentChannels, currentHeight, currentWidth, 1, 1);
+        yield return new AdaptiveAveragePoolingLayer<T>(currentChannels, currentHeight, currentWidth, 1, 1);
 
         // Flatten
         yield return new FlattenLayer<T>([currentChannels, 1, 1]);
@@ -4008,7 +4021,7 @@ public static class LayerHelper<T>
             inputWidth: currentWidth,
             stride: 2,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         currentHeight = (currentHeight + 2 * 1 - 3) / 2 + 1;
         currentWidth = (currentWidth + 2 * 1 - 3) / 2 + 1;
@@ -4048,7 +4061,7 @@ public static class LayerHelper<T>
                 stride: stride,
                 useSE: true,
                 seRatio: 4,
-                activation: new SwishActivation<T>());
+                activationFunction: new SwishActivation<T>());
 
             // Update dimensions after first block
             currentHeight = (currentHeight + stride - 1) / stride;
@@ -4067,7 +4080,7 @@ public static class LayerHelper<T>
                     stride: 1,
                     useSE: true,
                     seRatio: 4,
-                    activation: new SwishActivation<T>());
+                    activationFunction: new SwishActivation<T>());
             }
         }
 
@@ -4081,14 +4094,14 @@ public static class LayerHelper<T>
             inputWidth: currentWidth,
             stride: 1,
             padding: 0,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         yield return new BatchNormalizationLayer<T>(headChannels);
         yield return new ActivationLayer<T>([headChannels, currentHeight, currentWidth],
             activationFunction: new SwishActivation<T>());
 
         // Global average pooling
-        yield return new AdaptiveAvgPoolingLayer<T>(headChannels, currentHeight, currentWidth, 1, 1);
+        yield return new AdaptiveAveragePoolingLayer<T>(headChannels, currentHeight, currentWidth, 1, 1);
 
         // Flatten
         yield return new FlattenLayer<T>([headChannels, 1, 1]);
@@ -4134,7 +4147,7 @@ public static class LayerHelper<T>
             inputWidth: currentWidth,
             stride: 2,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         currentHeight = (currentHeight + 2 * 1 - 3) / 2 + 1;
         currentWidth = (currentWidth + 2 * 1 - 3) / 2 + 1;
@@ -4172,7 +4185,7 @@ public static class LayerHelper<T>
                 expansionRatio: expansion,
                 stride: stride,
                 useSE: false,
-                activation: new ReLU6Activation<T>());
+                activationFunction: new ReLU6Activation<T>());
 
             // Update dimensions after first block
             currentHeight = (currentHeight + stride - 1) / stride;
@@ -4190,7 +4203,7 @@ public static class LayerHelper<T>
                     expansionRatio: expansion,
                     stride: 1,
                     useSE: false,
-                    activation: new ReLU6Activation<T>());
+                    activationFunction: new ReLU6Activation<T>());
             }
         }
 
@@ -4211,14 +4224,14 @@ public static class LayerHelper<T>
             inputWidth: currentWidth,
             stride: 1,
             padding: 0,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         yield return new BatchNormalizationLayer<T>(finalConvChannels);
         yield return new ActivationLayer<T>([finalConvChannels, currentHeight, currentWidth],
             activationFunction: new ReLU6Activation<T>());
 
         // Global average pooling
-        yield return new AdaptiveAvgPoolingLayer<T>(finalConvChannels, currentHeight, currentWidth, 1, 1);
+        yield return new AdaptiveAveragePoolingLayer<T>(finalConvChannels, currentHeight, currentWidth, 1, 1);
 
         // Flatten
         yield return new FlattenLayer<T>([finalConvChannels, 1, 1]);
@@ -4265,7 +4278,7 @@ public static class LayerHelper<T>
             inputWidth: currentWidth,
             stride: 2,
             padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         currentHeight = (currentHeight + 2 * 1 - 3) / 2 + 1;
         currentWidth = (currentWidth + 2 * 1 - 3) / 2 + 1;
@@ -4293,7 +4306,7 @@ public static class LayerHelper<T>
                 stride: block.stride,
                 useSE: block.useSE,
                 seRatio: 4,
-                activation: block.useHardSwish ? new HardSwishActivation<T>() : new ReLUActivation<T>());
+                activationFunction: block.useHardSwish ? new HardSwishActivation<T>() : new ReLUActivation<T>());
 
             // Update dimensions after block
             currentHeight = (currentHeight + block.stride - 1) / block.stride;
@@ -4311,14 +4324,14 @@ public static class LayerHelper<T>
             inputWidth: currentWidth,
             stride: 1,
             padding: 0,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         yield return new BatchNormalizationLayer<T>(penultimateChannels);
         yield return new ActivationLayer<T>([penultimateChannels, currentHeight, currentWidth],
             activationFunction: new HardSwishActivation<T>());
 
         // Global average pooling
-        yield return new AdaptiveAvgPoolingLayer<T>(penultimateChannels, currentHeight, currentWidth, 1, 1);
+        yield return new AdaptiveAveragePoolingLayer<T>(penultimateChannels, currentHeight, currentWidth, 1, 1);
 
         // Final classification layers
         int finalChannels = isLarge ? 1280 : 1024;
@@ -4330,7 +4343,7 @@ public static class LayerHelper<T>
             inputWidth: 1,
             stride: 1,
             padding: 0,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>());
 
         yield return new ActivationLayer<T>([finalChannels, 1, 1],
             activationFunction: new HardSwishActivation<T>());
