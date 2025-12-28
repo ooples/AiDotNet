@@ -19,8 +19,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// - It's like stretching an image without adding any new information
 /// 
 /// For example, with a scale factor of 2:
-/// - A 4×4 image becomes an 8×8 image
-/// - Each pixel in the original image is copied to a 2×2 block in the output
+/// - A 4Ã—4 image becomes an 8Ã—8 image
+/// - Each pixel in the original image is copied to a 2Ã—2 block in the output
 /// - This creates a larger image that preserves the original content but with more pixels
 /// 
 /// This is useful for tasks like image generation or upscaling, where you need to increase
@@ -41,9 +41,9 @@ public class UpsamplingLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This determines how much larger the output will be compared to the input.
     /// 
     /// For example:
-    /// - With a scale factor of 2: A 10×10 image becomes 20×20
-    /// - With a scale factor of 3: A 10×10 image becomes 30×30
-    /// - With a scale factor of 4: A 10×10 image becomes 40×40
+    /// - With a scale factor of 2: A 10Ã—10 image becomes 20Ã—20
+    /// - With a scale factor of 3: A 10Ã—10 image becomes 30Ã—30
+    /// - With a scale factor of 4: A 10Ã—10 image becomes 40Ã—40
     /// 
     /// The scale factor applies equally to both height and width, so the total number of pixels
     /// increases by the square of the scale factor (e.g., a scale factor of 2 means 4 times more pixels).
@@ -112,7 +112,7 @@ public class UpsamplingLayer<T> : LayerBase<T>
     /// - inputShape: The dimensions of the data coming into this layer
     /// - scaleFactor: How much larger the output should be compared to the input
     /// 
-    /// For example, if inputShape is [3, 32, 32] (representing 3 channels of a 32×32 image)
+    /// For example, if inputShape is [3, 32, 32] (representing 3 channels of a 32Ã—32 image)
     /// and scaleFactor is 2, the output shape will be [3, 64, 64] - the same number of
     /// channels but twice the height and width.
     /// </para>
@@ -147,12 +147,24 @@ public class UpsamplingLayer<T> : LayerBase<T>
     /// </remarks>
     private static int[] CalculateOutputShape(int[] inputShape, int scaleFactor)
     {
-        return
-        [
-            inputShape[0],
-            inputShape[1] * scaleFactor,
-            inputShape[2] * scaleFactor
-        ];
+        if (inputShape.Length < 2)
+            throw new ArgumentException("Input shape must have at least 2 dimensions for upsampling.");
+
+        var outputShape = new int[inputShape.Length];
+
+        // Copy all dimensions except the last two
+        for (int i = 0; i < inputShape.Length - 2; i++)
+        {
+            outputShape[i] = inputShape[i];
+        }
+
+        // Scale the last two dimensions (height and width)
+        int heightIdx = inputShape.Length - 2;
+        int widthIdx = inputShape.Length - 1;
+        outputShape[heightIdx] = inputShape[heightIdx] * scaleFactor;
+        outputShape[widthIdx] = inputShape[widthIdx] * scaleFactor;
+
+        return outputShape;
     }
 
     /// <summary>
@@ -174,7 +186,7 @@ public class UpsamplingLayer<T> : LayerBase<T>
     ///    - These copies form a block in the output tensor
     /// 3. This creates an output that is larger but contains the same information
     /// 
-    /// For example, with a scale factor of 2, each pixel becomes a 2×2 block of identical pixels.
+    /// For example, with a scale factor of 2, each pixel becomes a 2Ã—2 block of identical pixels.
     /// This is the simplest form of upsampling, which preserves the original content
     /// but increases the spatial dimensions.
     /// </para>
@@ -196,7 +208,7 @@ public class UpsamplingLayer<T> : LayerBase<T>
     /// <para>
     /// This method implements the backward pass of the upsampling layer, which is used during training to propagate
     /// error gradients back through the network. For each position in the input gradient, it sums up the corresponding
-    /// gradients from the scale factor × scale factor region in the output gradient.
+    /// gradients from the scale factor Ã— scale factor region in the output gradient.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the layer's input should change to reduce errors.
     /// 
