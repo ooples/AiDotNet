@@ -143,6 +143,54 @@ public class ShannonWavelet<T> : WaveletFunctionBase<T>
     }
 
     /// <summary>
+    /// Reconstructs the original signal from approximation and detail coefficients.
+    /// </summary>
+    /// <param name="approximation">The approximation coefficients from decomposition.</param>
+    /// <param name="detail">The detail coefficients from decomposition.</param>
+    /// <returns>The reconstructed signal.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method reverses the decomposition process to get back the original signal.
+    ///
+    /// For Shannon wavelets, reconstruction combines the frequency bands:
+    /// 1. Transform both approximation and detail to frequency domain using FFT
+    /// 2. Place approximation spectrum in the low frequency half
+    /// 3. Place detail spectrum in the high frequency half
+    /// 4. Transform the combined spectrum back to time domain
+    ///
+    /// This is the inverse of the Decompose method, so:
+    /// Reconstruct(Decompose(signal)) should equal the original signal.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
+    {
+        var fft = new FastFourierTransform<T>();
+        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
+
+        // Transform both to frequency domain
+        Vector<Complex<T>> approxSpectrum = fft.Forward(approximation);
+        Vector<Complex<T>> detailSpectrum = fft.Forward(detail);
+
+        // Combine spectrums: approximation in low frequencies, detail in high frequencies
+        int outputLength = approximation.Length + detail.Length;
+        var combined = new Vector<Complex<T>>(outputLength);
+
+        int halfN = outputLength / 2;
+        for (int i = 0; i < approxSpectrum.Length && i < halfN; i++)
+        {
+            combined[i] = approxSpectrum[i];
+        }
+        for (int i = 0; i < detailSpectrum.Length && halfN + i < outputLength; i++)
+        {
+            combined[halfN + i] = detailSpectrum[i];
+        }
+
+        // Transform back to time domain
+        return fft.Inverse(combined);
+    }
+
+    /// <summary>
     /// Gets the scaling coefficients used in the Shannon wavelet transform.
     /// </summary>
     /// <returns>A vector containing the scaling coefficients in the frequency domain.</returns>

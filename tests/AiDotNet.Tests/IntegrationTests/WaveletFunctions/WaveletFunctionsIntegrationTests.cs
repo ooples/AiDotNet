@@ -3035,6 +3035,419 @@ public class WaveletFunctionsIntegrationTests
         }
     }
 
+    /// <summary>
+    /// Tests HaarWavelet Reconstruct method for basic functionality.
+    /// </summary>
+    [Fact]
+    public void HaarWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new HaarWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.Equal(original.Length, reconstructed.Length);
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests DaubechiesWavelet Reconstruct method for various orders.
+    /// </summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    [InlineData(6)]
+    public void DaubechiesWavelet_Reconstruct_ReturnsValidVector(int order)
+    {
+        var wavelet = new DaubechiesWavelet<double>(order: order);
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.Equal(original.Length, reconstructed.Length);
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN for order {order}");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity for order {order}");
+        }
+    }
+
+    /// <summary>
+    /// Tests SymletWavelet Reconstruct method for various orders.
+    /// </summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    [InlineData(6)]
+    public void SymletWavelet_Reconstruct_ReturnsValidVector(int order)
+    {
+        var wavelet = new SymletWavelet<double>(order: order);
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.Equal(original.Length, reconstructed.Length);
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN for order {order}");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity for order {order}");
+        }
+    }
+
+    /// <summary>
+    /// Tests CoifletWavelet Reconstruct method for various orders.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void CoifletWavelet_Reconstruct_ReturnsValidVector(int order)
+    {
+        var wavelet = new CoifletWavelet<double>(order: order);
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.Equal(original.Length, reconstructed.Length);
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN for order {order}");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity for order {order}");
+        }
+    }
+
+    /// <summary>
+    /// Tests BiorthogonalWavelet Reconstruct method.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 2)]
+    [InlineData(3, 3)]
+    public void BiorthogonalWavelet_Reconstruct_ReturnsValidVector(int decompOrder, int reconOrder)
+    {
+        var wavelet = new BiorthogonalWavelet<double>(decompositionOrder: decompOrder, reconstructionOrder: reconOrder);
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.Equal(original.Length, reconstructed.Length);
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests BSplineWavelet Reconstruct method for various orders.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void BSplineWavelet_Reconstruct_ReturnsValidVector(int order)
+    {
+        var wavelet = new BSplineWavelet<double>(order: order);
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.True(reconstructed.Length > 0, "Reconstructed vector should not be empty");
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN for order {order}");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity for order {order}");
+        }
+    }
+
+    /// <summary>
+    /// Tests MeyerWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void MeyerWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new MeyerWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.True(reconstructed.Length > 0, "Reconstructed vector should not be empty");
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests ShannonWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void ShannonWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new ShannonWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.True(reconstructed.Length > 0, "Reconstructed vector should not be empty");
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests DOGWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void DOGWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new DOGWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.True(reconstructed.Length > 0, "Reconstructed vector should not be empty");
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests MorletWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void MorletWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new MorletWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.True(reconstructed.Length > 0, "Reconstructed vector should not be empty");
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests PaulWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void PaulWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new PaulWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.True(reconstructed.Length > 0, "Reconstructed vector should not be empty");
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests BattleLemarieWavelet Reconstruct method.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void BattleLemarieWavelet_Reconstruct_ReturnsValidVector(int order)
+    {
+        var wavelet = new BattleLemarieWavelet<double>(order: order);
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.Equal(original.Length, reconstructed.Length);
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN for order {order}");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity for order {order}");
+        }
+    }
+
+    /// <summary>
+    /// Tests FejérKorovkinWavelet Reconstruct method.
+    /// </summary>
+    [Theory]
+    [InlineData(4)]
+    [InlineData(6)]
+    public void FejérKorovkinWavelet_Reconstruct_ReturnsValidVector(int order)
+    {
+        var wavelet = new FejérKorovkinWavelet<double>(order: order);
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.Equal(original.Length, reconstructed.Length);
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN for order {order}");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity for order {order}");
+        }
+    }
+
+    /// <summary>
+    /// Tests ContinuousMexicanHatWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void ContinuousMexicanHatWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new ContinuousMexicanHatWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.True(reconstructed.Length > 0, "Reconstructed vector should not be empty");
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests MexicanHatWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void MexicanHatWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new MexicanHatWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.Equal(original.Length, reconstructed.Length);
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests GaussianWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void GaussianWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new GaussianWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.Equal(original.Length, reconstructed.Length);
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests GaborWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void GaborWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new GaborWavelet<double>();
+        var original = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.Equal(original.Length, reconstructed.Length);
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i]), $"Reconstructed[{i}] is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i]), $"Reconstructed[{i}] is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests ComplexMorletWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void ComplexMorletWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new ComplexMorletWavelet<double>();
+        var input = new Complex<double>[8];
+        for (int i = 0; i < 8; i++)
+        {
+            input[i] = new Complex<double>((double)(i + 1), 0.0);
+        }
+        var original = new Vector<Complex<double>>(input);
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.True(reconstructed.Length > 0, "Reconstructed vector should not be empty");
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i].Real), $"Reconstructed[{i}].Real is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i].Real), $"Reconstructed[{i}].Real is Infinity");
+            Assert.False(double.IsNaN(reconstructed[i].Imaginary), $"Reconstructed[{i}].Imaginary is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i].Imaginary), $"Reconstructed[{i}].Imaginary is Infinity");
+        }
+    }
+
+    /// <summary>
+    /// Tests ComplexGaussianWavelet Reconstruct method.
+    /// </summary>
+    [Fact]
+    public void ComplexGaussianWavelet_Reconstruct_ReturnsValidVector()
+    {
+        var wavelet = new ComplexGaussianWavelet<double>();
+        var input = new Complex<double>[8];
+        for (int i = 0; i < 8; i++)
+        {
+            input[i] = new Complex<double>((double)(i + 1), 0.0);
+        }
+        var original = new Vector<Complex<double>>(input);
+
+        var (approximation, detail) = wavelet.Decompose(original);
+        var reconstructed = wavelet.Reconstruct(approximation, detail);
+
+        Assert.True(reconstructed.Length > 0, "Reconstructed vector should not be empty");
+        for (int i = 0; i < reconstructed.Length; i++)
+        {
+            Assert.False(double.IsNaN(reconstructed[i].Real), $"Reconstructed[{i}].Real is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i].Real), $"Reconstructed[{i}].Real is Infinity");
+            Assert.False(double.IsNaN(reconstructed[i].Imaginary), $"Reconstructed[{i}].Imaginary is NaN");
+            Assert.False(double.IsInfinity(reconstructed[i].Imaginary), $"Reconstructed[{i}].Imaginary is Infinity");
+        }
+    }
+
     #endregion
 
     #region Issue #363: Daubechies Family Comprehensive Tests

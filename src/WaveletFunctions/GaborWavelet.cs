@@ -314,4 +314,56 @@ public class GaborWavelet<T> : WaveletFunctionBase<T>
         T trigTerm = real ? MathHelper.Cos(angle) : MathHelper.Sin(angle);
         return NumOps.Multiply(expTerm, trigTerm);
     }
+
+    /// <summary>
+    /// Reconstructs the original signal from approximation and detail coefficients.
+    /// </summary>
+    /// <param name="approximation">The approximation coefficients from decomposition.</param>
+    /// <param name="detail">The detail coefficients from decomposition.</param>
+    /// <returns>The reconstructed signal.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method reverses the decomposition process to get back the original signal.
+    ///
+    /// For Gabor wavelets, decomposition uses real and imaginary Gabor functions,
+    /// so reconstruction uses a weighted combination of the coefficients based on
+    /// the original Gabor values at each position.
+    ///
+    /// This is the inverse of the Decompose method, so:
+    /// Reconstruct(Decompose(signal)) should approximate the original signal.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
+    {
+        int size = approximation.Length;
+        var reconstructed = new Vector<T>(size);
+
+        for (int x = 0; x < size; x++)
+        {
+            T gaborReal = GaborFunction(x, true);
+            T gaborImag = GaborFunction(x, false);
+
+            // Use weighted least-squares approach to recover original
+            T realSq = NumOps.Square(gaborReal);
+            T imagSq = NumOps.Square(gaborImag);
+            T denominator = NumOps.Add(realSq, imagSq);
+
+            if (NumOps.GreaterThan(NumOps.Abs(denominator), NumOps.FromDouble(1e-10)))
+            {
+                T numerator = NumOps.Add(
+                    NumOps.Multiply(approximation[x], gaborReal),
+                    NumOps.Multiply(detail[x], gaborImag)
+                );
+                reconstructed[x] = NumOps.Divide(numerator, denominator);
+            }
+            else
+            {
+                // When both Gabor values are near zero, use sum of coefficients
+                reconstructed[x] = NumOps.Add(approximation[x], detail[x]);
+            }
+        }
+
+        return reconstructed;
+    }
 }

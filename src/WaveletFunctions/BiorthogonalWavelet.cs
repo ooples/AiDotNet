@@ -306,6 +306,59 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     }
 
     /// <summary>
+    /// Reconstructs the original signal from approximation and detail coefficients.
+    /// </summary>
+    /// <param name="approximation">The approximation coefficients from decomposition.</param>
+    /// <param name="detail">The detail coefficients from decomposition.</param>
+    /// <returns>The reconstructed signal.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method reverses the decomposition process to get back the original signal.
+    ///
+    /// For biorthogonal wavelets, the reconstruction uses different filters than decomposition:
+    /// 1. Upsample the approximation and detail coefficients by inserting zeros
+    /// 2. Convolve with the reconstruction low-pass and high-pass filters
+    /// 3. Add the results together
+    ///
+    /// This is the inverse of the Decompose method, so:
+    /// Reconstruct(Decompose(signal)) should equal the original signal.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
+    {
+        int outputLength = approximation.Length * 2;
+        var reconstructed = new Vector<T>(outputLength);
+
+        var reconLowPass = GetReconstructionLowPassFilter();
+        var reconHighPass = GetReconstructionHighPassFilter();
+        int filterLength = reconLowPass.Length;
+
+        for (int i = 0; i < outputLength; i++)
+        {
+            T sum = NumOps.Zero;
+
+            for (int j = 0; j < filterLength; j++)
+            {
+                int k = i - j;
+                if (k >= 0 && k % 2 == 0)
+                {
+                    int coeffIndex = k / 2;
+                    if (coeffIndex < approximation.Length)
+                    {
+                        sum = NumOps.Add(sum, NumOps.Multiply(reconLowPass[j], approximation[coeffIndex]));
+                        sum = NumOps.Add(sum, NumOps.Multiply(reconHighPass[j], detail[coeffIndex]));
+                    }
+                }
+            }
+
+            reconstructed[i] = sum;
+        }
+
+        return reconstructed;
+    }
+
+    /// <summary>
     /// Gets the scaling function coefficients for the biorthogonal wavelet.
     /// </summary>
     /// <returns>A vector of scaling function coefficients.</returns>
@@ -314,7 +367,7 @@ public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
     /// <b>For Beginners:</b>
     /// The scaling function coefficients are the filter weights used to extract the low-frequency
     /// components (approximation) during reconstruction.
-    /// 
+    ///
     /// In biorthogonal wavelets, these coefficients:
     /// - Are used during the reconstruction phase
     /// - Are different from the decomposition coefficients

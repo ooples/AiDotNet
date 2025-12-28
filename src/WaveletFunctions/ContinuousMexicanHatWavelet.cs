@@ -347,4 +347,90 @@ public class ContinuousMexicanHatWavelet<T> : WaveletFunctionBase<T>
 
         return new Vector<T>(result);
     }
+
+    /// <summary>
+    /// Reconstructs the original signal from approximation and detail coefficients.
+    /// </summary>
+    /// <param name="approximation">The approximation coefficients from decomposition.</param>
+    /// <param name="detail">The detail coefficients from decomposition.</param>
+    /// <returns>The reconstructed signal.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method reverses the decomposition process to get back the original signal.
+    ///
+    /// For Continuous Mexican Hat wavelets, reconstruction works by:
+    /// 1. Upsampling (inserting zeros between each coefficient)
+    /// 2. Convolving with time-reversed reconstruction filters
+    /// 3. Adding the approximation and detail contributions together
+    ///
+    /// This is the inverse of the Decompose method, so:
+    /// Reconstruct(Decompose(signal)) should equal the original signal.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
+    {
+        // Upsample by 2
+        var approxUpsampled = Upsample(approximation, 2);
+        var detailUpsampled = Upsample(detail, 2);
+
+        // Convolve with time-reversed filters
+        var scalingCoeffs = GetScalingCoefficients();
+        var waveletCoeffs = GetWaveletCoefficients();
+
+        var approxRecon = ConvolveReversed(approxUpsampled, scalingCoeffs);
+        var detailRecon = ConvolveReversed(detailUpsampled, waveletCoeffs);
+
+        // Add contributions
+        int outputLength = Math.Min(approxRecon.Length, detailRecon.Length);
+        var reconstructed = new Vector<T>(outputLength);
+        for (int i = 0; i < outputLength; i++)
+        {
+            reconstructed[i] = NumOps.Add(approxRecon[i], detailRecon[i]);
+        }
+
+        return reconstructed;
+    }
+
+    /// <summary>
+    /// Upsamples a signal by inserting zeros between samples.
+    /// </summary>
+    private Vector<T> Upsample(Vector<T> input, int factor)
+    {
+        int newLength = input.Length * factor;
+        var result = new T[newLength];
+
+        for (int i = 0; i < input.Length; i++)
+        {
+            result[i * factor] = input[i];
+        }
+
+        return new Vector<T>(result);
+    }
+
+    /// <summary>
+    /// Convolves a signal with a time-reversed kernel.
+    /// </summary>
+    private Vector<T> ConvolveReversed(Vector<T> input, Vector<T> kernel)
+    {
+        int resultLength = input.Length;
+        var result = new T[resultLength];
+
+        for (int i = 0; i < resultLength; i++)
+        {
+            T sum = NumOps.Zero;
+            for (int j = 0; j < kernel.Length; j++)
+            {
+                int inputIndex = i - j + kernel.Length / 2;
+                if (inputIndex >= 0 && inputIndex < input.Length)
+                {
+                    int revJ = kernel.Length - 1 - j;
+                    sum = NumOps.Add(sum, NumOps.Multiply(input[inputIndex], kernel[revJ]));
+                }
+            }
+            result[i] = sum;
+        }
+
+        return new Vector<T>(result);
+    }
 }

@@ -254,6 +254,66 @@ public class DaubechiesWavelet<T> : WaveletFunctionBase<T>
     }
 
     /// <summary>
+    /// Reconstructs the original signal from approximation and detail coefficients.
+    /// </summary>
+    /// <param name="approximation">The approximation coefficients from decomposition.</param>
+    /// <param name="detail">The detail coefficients from decomposition.</param>
+    /// <returns>The reconstructed signal.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method reverses the decomposition process to get back the original signal.
+    ///
+    /// The reconstruction process for orthogonal wavelets like Daubechies:
+    /// 1. Upsample the approximation and detail coefficients by inserting zeros
+    /// 2. Convolve with the time-reversed reconstruction filters
+    /// 3. Add the results together
+    ///
+    /// For orthogonal wavelets, perfect reconstruction is guaranteed when:
+    /// - The filters satisfy the orthogonality conditions
+    /// - The signal length is compatible with the filter length
+    ///
+    /// This is the inverse of the Decompose method, so:
+    /// Reconstruct(Decompose(signal)) should equal the original signal.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
+    {
+        int outputLength = approximation.Length * 2;
+        var reconstructed = new Vector<T>(outputLength);
+        int filterLength = _scalingCoefficients.Length;
+
+        // For orthogonal wavelets, reconstruction filters are time-reversed analysis filters
+        var h = _scalingCoefficients.ToArray();
+        var g = _waveletCoefficients.ToArray();
+
+        for (int i = 0; i < outputLength; i++)
+        {
+            T sum = NumOps.Zero;
+
+            for (int j = 0; j < filterLength; j++)
+            {
+                // Upsampling: only even indices contribute
+                int approxIndex = (i - j + filterLength * outputLength) / 2 % approximation.Length;
+                int detailIndex = approxIndex;
+
+                // Check if this index corresponds to an even position (after upsampling)
+                if ((i - j + filterLength * outputLength) % 2 == 0)
+                {
+                    // Use time-reversed filters for reconstruction
+                    int revJ = filterLength - 1 - j;
+                    sum = NumOps.Add(sum, NumOps.Multiply(h[revJ], approximation[approxIndex]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(g[revJ], detail[detailIndex]));
+                }
+            }
+
+            reconstructed[i] = sum;
+        }
+
+        return reconstructed;
+    }
+
+    /// <summary>
     /// Gets the scaling function coefficients for the Daubechies wavelet.
     /// </summary>
     /// <returns>A vector of scaling function coefficients.</returns>
