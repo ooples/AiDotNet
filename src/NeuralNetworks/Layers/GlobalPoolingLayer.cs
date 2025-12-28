@@ -250,8 +250,43 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// </remarks>
     private static int[] CalculateOutputShape(int[] inputShape)
     {
-        // Global pooling reduces spatial dimensions to 1x1
-        return [inputShape[0], 1, 1, inputShape[3]];
+        // Industry-standard: support tensors of any rank
+        return inputShape.Length switch
+        {
+            // 4D CNN format: [batch, height, width, channels] -> [batch, 1, 1, channels]
+            4 => [inputShape[0], 1, 1, inputShape[3]],
+
+            // 3D sequence/transformer format: [batch, seq_len, features] -> [batch, features]
+            // This is the critical fix for transformer classification pipelines
+            3 => [inputShape[0], inputShape[2]],
+
+            // 2D format: [batch, features] -> [batch, features] (nothing to pool)
+            2 => [inputShape[0], inputShape[1]],
+
+            // 1D format: [features] -> [1] (pool all features to single value)
+            1 => [1],
+
+            // 5D+ format: reduce all spatial dimensions except batch and last (channels/features)
+            _ when inputShape.Length > 4 => CreateHighDimensionalOutputShape(inputShape),
+
+            // 0D (scalar): return as-is
+            _ => inputShape
+        };
+    }
+
+    /// <summary>
+    /// Creates output shape for tensors with more than 4 dimensions.
+    /// </summary>
+    private static int[] CreateHighDimensionalOutputShape(int[] inputShape)
+    {
+        var result = new int[inputShape.Length];
+        result[0] = inputShape[0]; // Keep batch dimension
+        for (int i = 1; i < inputShape.Length - 1; i++)
+        {
+            result[i] = 1; // Reduce all spatial dimensions to 1
+        }
+        result[^1] = inputShape[^1]; // Keep channel/feature dimension
+        return result;
     }
 
     /// <summary>
@@ -286,24 +321,53 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     {
         _lastInput = input;
 
-        // Global pooling reduces spatial dimensions (height=1, width=2)
-        var axes = new int[] { 1, 2 };
+        // Industry-standard: dynamically determine axes based on input rank
+        // For any rank, reduce all dimensions except first (batch) and last (features/channels)
+        var axes = GetReductionAxes(input.Shape.Length);
 
         Tensor<T> output;
-        if (_poolingType == PoolingType.Average)
+        if (axes.Length == 0)
+        {
+            // No dimensions to reduce (1D or 2D input)
+            output = input;
+            _maxIndices = null;
+        }
+        else if (_poolingType == PoolingType.Average)
         {
             // Use GPU-accelerated ReduceMean
-            output = Engine.ReduceMean(input, axes, keepDims: true);
+            output = Engine.ReduceMean(input, axes, keepDims: input.Shape.Length == 4);
             _maxIndices = null;
         }
         else // Max pooling
         {
             // Use GPU-accelerated ReduceMax
-            output = Engine.ReduceMax(input, axes, keepDims: true, out _maxIndices);
+            output = Engine.ReduceMax(input, axes, keepDims: input.Shape.Length == 4, out _maxIndices);
         }
 
         _lastOutput = ApplyActivation(output);
         return _lastOutput;
+    }
+
+    /// <summary>
+    /// Gets the axes to reduce over based on input tensor rank.
+    /// </summary>
+    private static int[] GetReductionAxes(int rank)
+    {
+        return rank switch
+        {
+            // 4D: [batch, height, width, channels] -> reduce height (1) and width (2)
+            4 => [1, 2],
+            // 3D: [batch, seq_len, features] -> reduce seq_len (1)
+            3 => [1],
+            // 2D: [batch, features] -> nothing to reduce
+            2 => [],
+            // 1D: [features] -> reduce all to single value
+            1 => [0],
+            // 5D+: reduce all middle dimensions
+            _ when rank > 4 => Enumerable.Range(1, rank - 2).ToArray(),
+            // 0D: nothing to reduce
+            _ => []
+        };
     }
 
     /// <summary>
@@ -361,7 +425,14 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         // Apply activation derivative
         outputGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
 
-        var axes = new int[] { 1, 2 };
+        // Industry-standard: dynamically determine axes based on input rank
+        var axes = GetReductionAxes(_lastInput.Shape.Length);
+
+        // If no axes to reduce, just return the gradient as-is
+        if (axes.Length == 0)
+        {
+            return outputGradient;
+        }
 
         if (_poolingType == PoolingType.Average)
         {
@@ -413,16 +484,16 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         // Global pooling reduces over spatial dimensions (height and width), keeping channels
         // Input format is NHWC: [batch, height, width, channels]
         // So we reduce over dimensions 1 (height) and 2 (width), not 2 and 3
-        var axes = new int[] { 1, 2 }; // Reduce over height and width dimensions (corrected from {2, 3})
+        var axes = GetReductionAxes(_lastInput.Shape.Length); // Industry-standard: dynamic axes based on input rank
 
         Autodiff.ComputationNode<T> outputNode;
         if (_poolingType == PoolingType.Max)
         {
-            outputNode = Autodiff.TensorOperations<T>.ReduceMax(inputNode, axes, keepDims: true);
+            outputNode = Autodiff.TensorOperations<T>.ReduceMax(inputNode, axes, keepDims: _lastInput.Shape.Length == 4);
         }
         else // Average pooling
         {
-            outputNode = Autodiff.TensorOperations<T>.ReduceMean(inputNode, axes, keepDims: true);
+            outputNode = Autodiff.TensorOperations<T>.ReduceMean(inputNode, axes, keepDims: _lastInput.Shape.Length == 4);
         }
 
         // Remove the spatial dimensions to match expected output shape

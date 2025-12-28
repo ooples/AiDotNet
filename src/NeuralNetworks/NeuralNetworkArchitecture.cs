@@ -137,7 +137,7 @@ public class NeuralNetworkArchitecture<T>
     /// For simple lists of values, you'd use InputSize instead.
     /// </para>
     /// </remarks>
-    public int InputHeight { get; }
+    public int InputHeight { get; private set; }
 
     /// <summary>
     /// Gets the width dimension for 2D or 3D inputs.
@@ -156,7 +156,7 @@ public class NeuralNetworkArchitecture<T>
     /// For simple lists of values, you'd use InputSize instead.
     /// </para>
     /// </remarks>
-    public int InputWidth { get; }
+    public int InputWidth { get; private set; }
 
     /// <summary>
     /// Gets the depth dimension for 3D inputs.
@@ -824,14 +824,7 @@ public class NeuralNetworkArchitecture<T>
     /// </remarks>
     private void ValidateInputDimensions()
     {
-        int calculatedSize = InputType switch
-        {
-            InputType.OneDimensional => InputSize,
-            InputType.TwoDimensional => InputHeight * InputWidth,
-            InputType.ThreeDimensional => InputHeight * InputWidth * InputDepth,
-            _ => throw new InvalidOperationException("Invalid InputDimensionality"),
-        };
-
+        // First, validate and infer dimensions based on InputType
         switch (InputType)
         {
             case InputType.OneDimensional:
@@ -846,9 +839,30 @@ public class NeuralNetworkArchitecture<T>
                 break;
 
             case InputType.TwoDimensional:
+                // Support both explicit dimensions and inferred dimensions from InputSize
                 if (InputHeight <= 0 || InputWidth <= 0)
                 {
-                    throw new ArgumentException("Both InputHeight and InputWidth must be greater than 0 for TwoDimensional input.");
+                    // Try to infer dimensions from InputSize for fully-connected architectures (e.g., GANs)
+                    if (InputSize > 0)
+                    {
+                        // Try to infer square dimensions (e.g., 784 = 28x28)
+                        int sqrtSize = (int)Math.Sqrt(InputSize);
+                        if (sqrtSize * sqrtSize == InputSize)
+                        {
+                            InputHeight = sqrtSize;
+                            InputWidth = sqrtSize;
+                        }
+                        else
+                        {
+                            // For non-square sizes, use 1 x InputSize (flattened representation)
+                            InputHeight = 1;
+                            InputWidth = InputSize;
+                        }
+                    }
+                    else
+                    {
+                        throw new ArgumentException("For TwoDimensional input, provide either (InputHeight and InputWidth) or InputSize. At least one dimension specification is required.");
+                    }
                 }
                 if (InputDepth != 1)
                 {
@@ -866,6 +880,15 @@ public class NeuralNetworkArchitecture<T>
             default:
                 throw new ArgumentException("Invalid InputDimensionality specified.");
         }
+
+        // Calculate size AFTER dimension inference (important for TwoDimensional with inferred dimensions)
+        int calculatedSize = InputType switch
+        {
+            InputType.OneDimensional => InputSize,
+            InputType.TwoDimensional => InputHeight * InputWidth,
+            InputType.ThreeDimensional => InputHeight * InputWidth * InputDepth,
+            _ => throw new InvalidOperationException("Invalid InputDimensionality"),
+        };
 
         if (InputSize > 0 && InputSize != calculatedSize)
         {
