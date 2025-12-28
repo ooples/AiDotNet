@@ -757,6 +757,852 @@ public class LossFunctionsMathematicalTests
 
     #endregion
 
+    #region Categorical Cross Entropy - Mathematical Verification
+
+    /// <summary>
+    /// CCE = -Σ(actual * log(predicted))
+    /// For one-hot [1, 0, 0] vs softmax [0.7, 0.2, 0.1]:
+    /// = -[1*log(0.7) + 0*log(0.2) + 0*log(0.1)]
+    /// = -log(0.7)
+    /// </summary>
+    [Fact]
+    public void CategoricalCrossEntropy_OneHotEncoded_MatchesExpected()
+    {
+        var cce = new CategoricalCrossEntropyLoss<double>();
+        var predicted = new Vector<double>(new[] { 0.7, 0.2, 0.1 });
+        var actual = new Vector<double>(new[] { 1.0, 0.0, 0.0 });
+
+        var loss = cce.CalculateLoss(predicted, actual);
+
+        // CCE = -[1*log(0.7)] = -log(0.7)
+        double expected = -Math.Log(0.7);
+        Assert.Equal(expected, loss, Tolerance);
+    }
+
+    [Fact]
+    public void CategoricalCrossEntropy_PerfectPrediction_MinimalLoss()
+    {
+        var cce = new CategoricalCrossEntropyLoss<double>();
+        var predicted = new Vector<double>(new[] { 0.999, 0.0005, 0.0005 });
+        var actual = new Vector<double>(new[] { 1.0, 0.0, 0.0 });
+
+        var loss = cce.CalculateLoss(predicted, actual);
+
+        // Near-perfect prediction should have minimal loss
+        Assert.True(loss < 0.01);
+    }
+
+    [Fact]
+    public void CategoricalCrossEntropy_Derivative_MatchesSoftmaxCombinedFormula()
+    {
+        // CCE derivative when used with softmax simplifies to (predicted - actual)
+        var cce = new CategoricalCrossEntropyLoss<double>();
+        var predicted = new Vector<double>(new[] { 0.5, 0.3, 0.2 });
+        var actual = new Vector<double>(new[] { 1.0, 0.0, 0.0 });
+
+        var gradient = cce.CalculateDerivative(predicted, actual);
+
+        // Expected: (predicted - actual) - not averaged for CCE
+        Assert.Equal(0.5 - 1.0, gradient[0], Tolerance);
+        Assert.Equal(0.3 - 0.0, gradient[1], Tolerance);
+        Assert.Equal(0.2 - 0.0, gradient[2], Tolerance);
+    }
+
+    [Fact]
+    public void CategoricalCrossEntropy_WrongClass_HighLoss()
+    {
+        var cce = new CategoricalCrossEntropyLoss<double>();
+        // Confidently predicting wrong class
+        var predicted = new Vector<double>(new[] { 0.1, 0.8, 0.1 }); // Predicts class 1
+        var actual = new Vector<double>(new[] { 1.0, 0.0, 0.0 });    // Actual class 0
+
+        var loss = cce.CalculateLoss(predicted, actual);
+
+        // CCE = -log(0.1) which is high
+        double expected = -Math.Log(0.1);
+        Assert.Equal(expected, loss, Tolerance);
+    }
+
+    #endregion
+
+    #region Squared Hinge Loss - Mathematical Verification
+
+    /// <summary>
+    /// Squared Hinge: L = max(0, 1 - y*f(x))²
+    /// For y=1, f(x)=2: L = max(0, 1-2)² = max(0,-1)² = 0
+    /// For y=1, f(x)=0.5: L = max(0, 1-0.5)² = 0.5² = 0.25
+    /// For y=1, f(x)=-1: L = max(0, 1-(-1))² = 2² = 4
+    /// </summary>
+    [Fact]
+    public void SquaredHinge_LargeMargin_ReturnsZero()
+    {
+        var sqHinge = new SquaredHingeLoss<double>();
+        var predicted = new Vector<double>(new[] { 2.0 });
+        var actual = new Vector<double>(new[] { 1.0 });
+
+        var loss = sqHinge.CalculateLoss(predicted, actual);
+
+        // max(0, 1 - 1*2)² = max(0, -1)² = 0
+        Assert.Equal(0.0, loss, Tolerance);
+    }
+
+    [Fact]
+    public void SquaredHinge_SmallMargin_ReturnsSquared()
+    {
+        var sqHinge = new SquaredHingeLoss<double>();
+        var predicted = new Vector<double>(new[] { 0.5 });
+        var actual = new Vector<double>(new[] { 1.0 });
+
+        var loss = sqHinge.CalculateLoss(predicted, actual);
+
+        // max(0, 1 - 1*0.5)² = max(0, 0.5)² = 0.25
+        Assert.Equal(0.25, loss, Tolerance);
+    }
+
+    [Fact]
+    public void SquaredHinge_WrongPrediction_ReturnsLargeSquared()
+    {
+        var sqHinge = new SquaredHingeLoss<double>();
+        var predicted = new Vector<double>(new[] { -1.0 });
+        var actual = new Vector<double>(new[] { 1.0 });
+
+        var loss = sqHinge.CalculateLoss(predicted, actual);
+
+        // max(0, 1 - 1*(-1))² = max(0, 2)² = 4
+        Assert.Equal(4.0, loss, Tolerance);
+    }
+
+    [Fact]
+    public void SquaredHinge_GradientCheck_NumericalVsAnalytical()
+    {
+        var sqHinge = new SquaredHingeLoss<double>();
+        var predicted = new Vector<double>(new[] { 0.3, 1.5, -0.5 });
+        var actual = new Vector<double>(new[] { 1.0, 1.0, -1.0 });
+
+        var analyticalGradient = sqHinge.CalculateDerivative(predicted, actual);
+
+        for (int i = 0; i < predicted.Length; i++)
+        {
+            var predictedPlus = predicted.Clone();
+            var predictedMinus = predicted.Clone();
+            predictedPlus[i] += NumericalEpsilon;
+            predictedMinus[i] -= NumericalEpsilon;
+
+            double lossPlus = sqHinge.CalculateLoss(predictedPlus, actual);
+            double lossMinus = sqHinge.CalculateLoss(predictedMinus, actual);
+
+            double numericalGradient = (lossPlus - lossMinus) / (2 * NumericalEpsilon);
+            Assert.Equal(numericalGradient, analyticalGradient[i], GradientTolerance);
+        }
+    }
+
+    #endregion
+
+    #region Exponential Loss - Mathematical Verification
+
+    /// <summary>
+    /// Exponential: L = (1/n) * Σ exp(-y * f(x))
+    /// For y=1, f(x)=1: exp(-1) ≈ 0.368
+    /// For y=1, f(x)=-1: exp(1) ≈ 2.718
+    /// </summary>
+    [Fact]
+    public void Exponential_CorrectPrediction_SmallLoss()
+    {
+        var exp = new ExponentialLoss<double>();
+        var predicted = new Vector<double>(new[] { 1.0 });
+        var actual = new Vector<double>(new[] { 1.0 });
+
+        var loss = exp.CalculateLoss(predicted, actual);
+
+        // exp(-1*1) = exp(-1) ≈ 0.368
+        double expected = Math.Exp(-1);
+        Assert.Equal(expected, loss, Tolerance);
+    }
+
+    [Fact]
+    public void Exponential_WrongPrediction_LargeLoss()
+    {
+        var exp = new ExponentialLoss<double>();
+        var predicted = new Vector<double>(new[] { -1.0 });
+        var actual = new Vector<double>(new[] { 1.0 });
+
+        var loss = exp.CalculateLoss(predicted, actual);
+
+        // exp(-1*(-1)) = exp(1) ≈ 2.718
+        double expected = Math.Exp(1);
+        Assert.Equal(expected, loss, Tolerance);
+    }
+
+    [Fact]
+    public void Exponential_HandCalculated_MatchesExpected()
+    {
+        var exp = new ExponentialLoss<double>();
+        var predicted = new Vector<double>(new[] { 2.0, -1.0 });
+        var actual = new Vector<double>(new[] { 1.0, -1.0 });
+
+        var loss = exp.CalculateLoss(predicted, actual);
+
+        // (exp(-1*2) + exp(-(-1)*(-1))) / 2
+        // = (exp(-2) + exp(-1)) / 2
+        double expected = (Math.Exp(-2) + Math.Exp(-1)) / 2.0;
+        Assert.Equal(expected, loss, Tolerance);
+    }
+
+    [Fact]
+    public void Exponential_GradientCheck_NumericalVsAnalytical()
+    {
+        var exp = new ExponentialLoss<double>();
+        var predicted = new Vector<double>(new[] { 0.5, -0.5 });
+        var actual = new Vector<double>(new[] { 1.0, -1.0 });
+
+        var analyticalGradient = exp.CalculateDerivative(predicted, actual);
+
+        for (int i = 0; i < predicted.Length; i++)
+        {
+            var predictedPlus = predicted.Clone();
+            var predictedMinus = predicted.Clone();
+            predictedPlus[i] += NumericalEpsilon;
+            predictedMinus[i] -= NumericalEpsilon;
+
+            double lossPlus = exp.CalculateLoss(predictedPlus, actual);
+            double lossMinus = exp.CalculateLoss(predictedMinus, actual);
+
+            double numericalGradient = (lossPlus - lossMinus) / (2 * NumericalEpsilon);
+            Assert.Equal(numericalGradient, analyticalGradient[i], GradientTolerance);
+        }
+    }
+
+    #endregion
+
+    #region Margin Loss - Mathematical Verification
+
+    /// <summary>
+    /// Margin Loss (Capsule Networks):
+    /// L = T_c * max(0, m+ - v)² + λ * (1-T_c) * max(0, v - m-)²
+    /// Default: m+ = 0.9, m- = 0.1, λ = 0.5
+    /// </summary>
+    [Fact]
+    public void Margin_ClassPresent_HighOutput_NoLoss()
+    {
+        var margin = new MarginLoss<double>(mPlus: 0.9, mMinus: 0.1, lambda: 0.5);
+        var predicted = new Vector<double>(new[] { 0.95 });
+        var actual = new Vector<double>(new[] { 1.0 }); // Class present
+
+        var loss = margin.CalculateLoss(predicted, actual);
+
+        // T_c=1, v=0.95 >= m+=0.9, so term1 = 0
+        // (1-T_c)=0, so term2 = 0
+        Assert.Equal(0.0, loss, Tolerance);
+    }
+
+    [Fact]
+    public void Margin_ClassPresent_LowOutput_HasLoss()
+    {
+        var margin = new MarginLoss<double>(mPlus: 0.9, mMinus: 0.1, lambda: 0.5);
+        var predicted = new Vector<double>(new[] { 0.5 });
+        var actual = new Vector<double>(new[] { 1.0 }); // Class present
+
+        var loss = margin.CalculateLoss(predicted, actual);
+
+        // T_c=1, v=0.5 < m+=0.9
+        // term1 = 1 * max(0, 0.9-0.5)² = 0.4² = 0.16
+        double expected = 0.16;
+        Assert.Equal(expected, loss, Tolerance);
+    }
+
+    [Fact]
+    public void Margin_ClassAbsent_HighOutput_HasLoss()
+    {
+        var margin = new MarginLoss<double>(mPlus: 0.9, mMinus: 0.1, lambda: 0.5);
+        var predicted = new Vector<double>(new[] { 0.5 });
+        var actual = new Vector<double>(new[] { 0.0 }); // Class absent
+
+        var loss = margin.CalculateLoss(predicted, actual);
+
+        // T_c=0, so term1 = 0
+        // (1-T_c)=1, v=0.5 > m-=0.1
+        // term2 = 0.5 * max(0, 0.5-0.1)² = 0.5 * 0.4² = 0.5 * 0.16 = 0.08
+        double expected = 0.08;
+        Assert.Equal(expected, loss, Tolerance);
+    }
+
+    [Fact]
+    public void Margin_ClassAbsent_LowOutput_NoLoss()
+    {
+        var margin = new MarginLoss<double>(mPlus: 0.9, mMinus: 0.1, lambda: 0.5);
+        var predicted = new Vector<double>(new[] { 0.05 });
+        var actual = new Vector<double>(new[] { 0.0 }); // Class absent
+
+        var loss = margin.CalculateLoss(predicted, actual);
+
+        // T_c=0, so term1 = 0
+        // (1-T_c)=1, v=0.05 < m-=0.1
+        // term2 = 0.5 * max(0, 0.05-0.1)² = 0.5 * 0 = 0
+        Assert.Equal(0.0, loss, Tolerance);
+    }
+
+    #endregion
+
+    #region Mean Bias Error - Mathematical Verification
+
+    /// <summary>
+    /// MBE = (1/n) * Σ(actual - predicted)
+    /// Positive MBE = under-prediction, Negative MBE = over-prediction
+    /// </summary>
+    [Fact]
+    public void MeanBiasError_UnderPrediction_ReturnsPositive()
+    {
+        var mbe = new MeanBiasErrorLoss<double>();
+        var predicted = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
+        var actual = new Vector<double>(new[] { 2.0, 3.0, 4.0 }); // All actual > predicted
+
+        var loss = mbe.CalculateLoss(predicted, actual);
+
+        // MBE = mean(actual - predicted) = mean([1, 1, 1]) = 1
+        Assert.Equal(1.0, loss, Tolerance);
+    }
+
+    [Fact]
+    public void MeanBiasError_OverPrediction_ReturnsNegative()
+    {
+        var mbe = new MeanBiasErrorLoss<double>();
+        var predicted = new Vector<double>(new[] { 3.0, 4.0, 5.0 });
+        var actual = new Vector<double>(new[] { 2.0, 3.0, 4.0 }); // All actual < predicted
+
+        var loss = mbe.CalculateLoss(predicted, actual);
+
+        // MBE = mean(actual - predicted) = mean([-1, -1, -1]) = -1
+        Assert.Equal(-1.0, loss, Tolerance);
+    }
+
+    [Fact]
+    public void MeanBiasError_Balanced_ReturnsZero()
+    {
+        var mbe = new MeanBiasErrorLoss<double>();
+        var predicted = new Vector<double>(new[] { 1.0, 3.0 });
+        var actual = new Vector<double>(new[] { 2.0, 2.0 }); // Errors cancel out
+
+        var loss = mbe.CalculateLoss(predicted, actual);
+
+        // MBE = mean([1, -1]) = 0
+        Assert.Equal(0.0, loss, Tolerance);
+    }
+
+    [Fact]
+    public void MeanBiasError_Derivative_IsConstant()
+    {
+        var mbe = new MeanBiasErrorLoss<double>();
+        var predicted = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
+        var actual = new Vector<double>(new[] { 5.0, 10.0, 15.0 });
+
+        var derivative = mbe.CalculateDerivative(predicted, actual);
+
+        // Derivative of MBE w.r.t. predicted is -1/n for all elements
+        double expected = -1.0 / 3.0;
+        for (int i = 0; i < derivative.Length; i++)
+        {
+            Assert.Equal(expected, derivative[i], Tolerance);
+        }
+    }
+
+    #endregion
+
+    #region Modified Huber Loss - Mathematical Verification
+
+    /// <summary>
+    /// Modified Huber:
+    /// z = y * f(x)
+    /// For z >= -1: max(0, 1-z)²
+    /// For z < -1: -4*z
+    /// </summary>
+    [Fact]
+    public void ModifiedHuber_CorrectWithMargin_ReturnsZero()
+    {
+        var mh = new ModifiedHuberLoss<double>();
+        var predicted = new Vector<double>(new[] { 2.0 });
+        var actual = new Vector<double>(new[] { 1.0 });
+
+        var loss = mh.CalculateLoss(predicted, actual);
+
+        // z = 1*2 = 2 >= 1, so loss = max(0, 1-2)² = 0
+        Assert.Equal(0.0, loss, Tolerance);
+    }
+
+    [Fact]
+    public void ModifiedHuber_SmallMargin_ReturnsQuadratic()
+    {
+        var mh = new ModifiedHuberLoss<double>();
+        var predicted = new Vector<double>(new[] { 0.5 });
+        var actual = new Vector<double>(new[] { 1.0 });
+
+        var loss = mh.CalculateLoss(predicted, actual);
+
+        // z = 1*0.5 = 0.5, -1 <= z < 1
+        // loss = max(0, 1-0.5)² = 0.5² = 0.25
+        Assert.Equal(0.25, loss, Tolerance);
+    }
+
+    [Fact]
+    public void ModifiedHuber_VeryWrong_ReturnsLinear()
+    {
+        var mh = new ModifiedHuberLoss<double>();
+        var predicted = new Vector<double>(new[] { -2.0 });
+        var actual = new Vector<double>(new[] { 1.0 });
+
+        var loss = mh.CalculateLoss(predicted, actual);
+
+        // z = 1*(-2) = -2 < -1
+        // loss = -4*z = -4*(-2) = 8
+        Assert.Equal(8.0, loss, Tolerance);
+    }
+
+    [Fact]
+    public void ModifiedHuber_BoundaryCase_ReturnsQuadratic()
+    {
+        var mh = new ModifiedHuberLoss<double>();
+        var predicted = new Vector<double>(new[] { -1.0 });
+        var actual = new Vector<double>(new[] { 1.0 });
+
+        var loss = mh.CalculateLoss(predicted, actual);
+
+        // z = 1*(-1) = -1 (boundary case, z >= -1)
+        // loss = max(0, 1-(-1))² = 2² = 4
+        Assert.Equal(4.0, loss, Tolerance);
+    }
+
+    #endregion
+
+    #region Wasserstein Loss - Mathematical Verification
+
+    /// <summary>
+    /// Wasserstein: L = -mean(predicted * actual)
+    /// Labels are +1 for real, -1 for fake
+    /// </summary>
+    [Fact]
+    public void Wasserstein_RealSamplesHighScore_LowLoss()
+    {
+        var wass = new WassersteinLoss<double>();
+        var predicted = new Vector<double>(new[] { 5.0, 3.0 }); // High scores
+        var actual = new Vector<double>(new[] { 1.0, 1.0 });    // Real samples
+
+        var loss = wass.CalculateLoss(predicted, actual);
+
+        // L = -mean([5*1, 3*1]) = -mean([5, 3]) = -4
+        Assert.Equal(-4.0, loss, Tolerance);
+    }
+
+    [Fact]
+    public void Wasserstein_FakeSamplesLowScore_LowLoss()
+    {
+        var wass = new WassersteinLoss<double>();
+        var predicted = new Vector<double>(new[] { -5.0, -3.0 }); // Low (negative) scores
+        var actual = new Vector<double>(new[] { -1.0, -1.0 });    // Fake samples
+
+        var loss = wass.CalculateLoss(predicted, actual);
+
+        // L = -mean([(-5)*(-1), (-3)*(-1)]) = -mean([5, 3]) = -4
+        Assert.Equal(-4.0, loss, Tolerance);
+    }
+
+    [Fact]
+    public void Wasserstein_MixedSamples_HandCalculated()
+    {
+        var wass = new WassersteinLoss<double>();
+        var predicted = new Vector<double>(new[] { 3.0, -2.0 }); // Real high, Fake low
+        var actual = new Vector<double>(new[] { 1.0, -1.0 });    // Real, Fake
+
+        var loss = wass.CalculateLoss(predicted, actual);
+
+        // L = -mean([3*1, (-2)*(-1)]) = -mean([3, 2]) = -2.5
+        Assert.Equal(-2.5, loss, Tolerance);
+    }
+
+    [Fact]
+    public void Wasserstein_GradientCheck_NumericalVsAnalytical()
+    {
+        var wass = new WassersteinLoss<double>();
+        var predicted = new Vector<double>(new[] { 1.0, -1.0 });
+        var actual = new Vector<double>(new[] { 1.0, -1.0 });
+
+        var analyticalGradient = wass.CalculateDerivative(predicted, actual);
+
+        for (int i = 0; i < predicted.Length; i++)
+        {
+            var predictedPlus = predicted.Clone();
+            var predictedMinus = predicted.Clone();
+            predictedPlus[i] += NumericalEpsilon;
+            predictedMinus[i] -= NumericalEpsilon;
+
+            double lossPlus = wass.CalculateLoss(predictedPlus, actual);
+            double lossMinus = wass.CalculateLoss(predictedMinus, actual);
+
+            double numericalGradient = (lossPlus - lossMinus) / (2 * NumericalEpsilon);
+            Assert.Equal(numericalGradient, analyticalGradient[i], GradientTolerance);
+        }
+    }
+
+    #endregion
+
+    #region Weighted Cross Entropy - Mathematical Verification
+
+    /// <summary>
+    /// Weighted BCE = -(1/n) Σ weight * [y*log(p) + (1-y)*log(1-p)]
+    /// With uniform weights of 1, this should match standard BCE
+    /// </summary>
+    [Fact]
+    public void WeightedCrossEntropy_HandCalculated_MatchesExpected()
+    {
+        var wce = new WeightedCrossEntropyLoss<double>(); // Default uniform weights
+
+        var predicted = new Vector<double>(new[] { 0.9 });
+        var actual = new Vector<double>(new[] { 1.0 });
+
+        var loss = wce.CalculateLoss(predicted, actual);
+
+        // WCE = -(1/1) * [1*log(0.9) + 0*log(0.1)] = -log(0.9)
+        double expected = -Math.Log(0.9);
+        Assert.Equal(expected, loss, Tolerance);
+    }
+
+    [Fact]
+    public void WeightedCrossEntropy_UniformWeights_MatchesBCE()
+    {
+        var bce = new BinaryCrossEntropyLoss<double>();
+        var wce = new WeightedCrossEntropyLoss<double>(); // Default uniform weights
+
+        var predicted = new Vector<double>(new[] { 0.9, 0.3 });
+        var actual = new Vector<double>(new[] { 1.0, 0.0 });
+
+        var bceLoss = bce.CalculateLoss(predicted, actual);
+        var wceLoss = wce.CalculateLoss(predicted, actual);
+
+        // With uniform weights of 1, WCE should equal BCE
+        Assert.Equal(bceLoss, wceLoss, Tolerance);
+    }
+
+    [Fact]
+    public void WeightedCrossEntropy_WithCustomWeights_ScalesCorrectly()
+    {
+        var weights1 = new Vector<double>(new[] { 1.0 });
+        var weights2 = new Vector<double>(new[] { 2.0 });
+        var wce1 = new WeightedCrossEntropyLoss<double>(weights1);
+        var wce2 = new WeightedCrossEntropyLoss<double>(weights2);
+
+        var predicted = new Vector<double>(new[] { 0.9 });
+        var actual = new Vector<double>(new[] { 1.0 });
+
+        var loss1 = wce1.CalculateLoss(predicted, actual);
+        var loss2 = wce2.CalculateLoss(predicted, actual);
+
+        // With double weight, loss should be doubled
+        Assert.Equal(2 * loss1, loss2, Tolerance);
+    }
+
+    [Fact]
+    public void WeightedCrossEntropy_ZeroWeight_ZeroLoss()
+    {
+        var weights = new Vector<double>(new[] { 0.0 });
+        var wce = new WeightedCrossEntropyLoss<double>(weights);
+
+        var predicted = new Vector<double>(new[] { 0.5 });
+        var actual = new Vector<double>(new[] { 1.0 });
+
+        var loss = wce.CalculateLoss(predicted, actual);
+
+        // With zero weight, loss should be zero
+        Assert.Equal(0.0, loss, Tolerance);
+    }
+
+    #endregion
+
+    #region Contrastive Loss - Mathematical Verification
+
+    /// <summary>
+    /// Contrastive Loss for similar pairs: distance²
+    /// Contrastive Loss for dissimilar pairs: max(0, margin - distance)²
+    /// </summary>
+    [Fact]
+    public void Contrastive_SimilarPairs_PenalizesDistance()
+    {
+        var contrastive = new ContrastiveLoss<double>(margin: 1.0);
+        var output1 = new Vector<double>(new[] { 1.0, 0.0, 0.0 });
+        var output2 = new Vector<double>(new[] { 2.0, 0.0, 0.0 });
+
+        var loss = contrastive.CalculateLoss(output1, output2, 1.0); // Similar pair
+
+        // Distance = sqrt((2-1)² + 0 + 0) = 1
+        // Loss = 1 * distance² = 1² = 1
+        Assert.Equal(1.0, loss, Tolerance);
+    }
+
+    [Fact]
+    public void Contrastive_DissimilarPairs_BelowMargin_PenalizesProximity()
+    {
+        var contrastive = new ContrastiveLoss<double>(margin: 2.0);
+        var output1 = new Vector<double>(new[] { 0.0, 0.0 });
+        var output2 = new Vector<double>(new[] { 1.0, 0.0 }); // Distance = 1 < margin = 2
+
+        var loss = contrastive.CalculateLoss(output1, output2, 0.0); // Dissimilar pair
+
+        // Distance = 1 < margin = 2
+        // Loss = (1-0) * max(0, 2 - 1)² = 1² = 1
+        Assert.Equal(1.0, loss, Tolerance);
+    }
+
+    [Fact]
+    public void Contrastive_DissimilarPairs_AboveMargin_NoLoss()
+    {
+        var contrastive = new ContrastiveLoss<double>(margin: 1.0);
+        var output1 = new Vector<double>(new[] { 0.0, 0.0 });
+        var output2 = new Vector<double>(new[] { 2.0, 0.0 }); // Distance = 2 > margin = 1
+
+        var loss = contrastive.CalculateLoss(output1, output2, 0.0); // Dissimilar pair
+
+        // Distance = 2 > margin = 1
+        // Loss = (1-0) * max(0, 1 - 2)² = 0
+        Assert.Equal(0.0, loss, Tolerance);
+    }
+
+    [Fact]
+    public void Contrastive_StandardAPI_ThrowsNotSupported()
+    {
+        var contrastive = new ContrastiveLoss<double>();
+        var predicted = new Vector<double>(new[] { 1.0, 2.0 });
+        var actual = new Vector<double>(new[] { 1.0, 2.0 });
+
+        Assert.Throws<NotSupportedException>(() => contrastive.CalculateLoss(predicted, actual));
+    }
+
+    #endregion
+
+    #region Triplet Loss - Mathematical Verification
+
+    /// <summary>
+    /// Triplet Loss = max(0, d(anchor, positive) - d(anchor, negative) + margin)
+    /// </summary>
+    [Fact]
+    public void Triplet_GoodEmbedding_NoLoss()
+    {
+        var triplet = new TripletLoss<double>(margin: 1.0);
+        var anchor = new Matrix<double>(new double[,] { { 0.0, 0.0 } });
+        var positive = new Matrix<double>(new double[,] { { 1.0, 0.0 } }); // Distance = 1
+        var negative = new Matrix<double>(new double[,] { { 5.0, 0.0 } }); // Distance = 5
+
+        var loss = triplet.CalculateLoss(anchor, positive, negative);
+
+        // d_pos = 1, d_neg = 5
+        // loss = max(0, 1 - 5 + 1) = max(0, -3) = 0
+        Assert.Equal(0.0, loss, Tolerance);
+    }
+
+    [Fact]
+    public void Triplet_BadEmbedding_HasLoss()
+    {
+        var triplet = new TripletLoss<double>(margin: 1.0);
+        var anchor = new Matrix<double>(new double[,] { { 0.0, 0.0 } });
+        var positive = new Matrix<double>(new double[,] { { 3.0, 0.0 } }); // Distance = 3
+        var negative = new Matrix<double>(new double[,] { { 1.0, 0.0 } }); // Distance = 1
+
+        var loss = triplet.CalculateLoss(anchor, positive, negative);
+
+        // d_pos = 3, d_neg = 1
+        // loss = max(0, 3 - 1 + 1) = max(0, 3) = 3
+        Assert.Equal(3.0, loss, Tolerance);
+    }
+
+    [Fact]
+    public void Triplet_BatchedSamples_AveragesLoss()
+    {
+        var triplet = new TripletLoss<double>(margin: 1.0);
+        var anchor = new Matrix<double>(new double[,] {
+            { 0.0, 0.0 },
+            { 0.0, 0.0 }
+        });
+        var positive = new Matrix<double>(new double[,] {
+            { 1.0, 0.0 },  // d_pos = 1
+            { 2.0, 0.0 }   // d_pos = 2
+        });
+        var negative = new Matrix<double>(new double[,] {
+            { 5.0, 0.0 },  // d_neg = 5 -> loss = max(0, 1-5+1) = 0
+            { 2.5, 0.0 }   // d_neg = 2.5 -> loss = max(0, 2-2.5+1) = 0.5
+        });
+
+        var loss = triplet.CalculateLoss(anchor, positive, negative);
+
+        // Average of [0, 0.5] = 0.25
+        Assert.Equal(0.25, loss, Tolerance);
+    }
+
+    [Fact]
+    public void Triplet_StandardAPI_ThrowsNotSupported()
+    {
+        var triplet = new TripletLoss<double>();
+        var predicted = new Vector<double>(new[] { 1.0, 2.0 });
+        var actual = new Vector<double>(new[] { 1.0, 2.0 });
+
+        Assert.Throws<NotSupportedException>(() => triplet.CalculateLoss(predicted, actual));
+    }
+
+    #endregion
+
+    #region Ordinal Regression Loss - Mathematical Verification
+
+    /// <summary>
+    /// Ordinal Regression Loss uses binary logistic loss at each threshold.
+    /// For K classes, there are K-1 thresholds.
+    /// L = Σ log(1 + exp(-indicator * predicted)) for each threshold
+    /// </summary>
+    [Fact]
+    public void OrdinalRegression_ConstructionWithValidClasses()
+    {
+        var ordinal = new OrdinalRegressionLoss<double>(numClasses: 5);
+        Assert.NotNull(ordinal);
+    }
+
+    [Fact]
+    public void OrdinalRegression_InvalidClassesThrows()
+    {
+        Assert.Throws<ArgumentException>(() => new OrdinalRegressionLoss<double>(numClasses: 1));
+    }
+
+    [Fact]
+    public void OrdinalRegression_HandCalculated_ThreeClasses()
+    {
+        // 3 classes: 0, 1, 2 with 2 thresholds
+        var ordinal = new OrdinalRegressionLoss<double>(numClasses: 3);
+        var predicted = new Vector<double>(new[] { 1.0 });
+        var actual = new Vector<double>(new[] { 1.0 }); // Class 1 (middle)
+
+        // For actual=1, threshold j=0: indicator=1 (1>0), j=1: indicator=0 (1>1 is false)
+        // Loss = log(1 + exp(-1*1)) + log(1 + exp(-0*1))
+        //      = log(1 + exp(-1)) + log(2)
+        double threshold0Loss = Math.Log(1 + Math.Exp(-1));
+        double threshold1Loss = Math.Log(2); // exp(-0) = 1
+        double expected = threshold0Loss + threshold1Loss;
+
+        var loss = ordinal.CalculateLoss(predicted, actual);
+        Assert.Equal(expected, loss, Tolerance);
+    }
+
+    [Fact]
+    public void OrdinalRegression_LowestClass_OnlyNegativeIndicators()
+    {
+        // 3 classes: for actual=0, all indicators are 0 (0>j is false for all j>=0)
+        var ordinal = new OrdinalRegressionLoss<double>(numClasses: 3);
+        var predicted = new Vector<double>(new[] { 1.0 });
+        var actual = new Vector<double>(new[] { 0.0 }); // Lowest class
+
+        // Both thresholds: indicator=0
+        // Loss = 2 * log(1 + exp(0)) = 2 * log(2)
+        double expected = 2 * Math.Log(2);
+
+        var loss = ordinal.CalculateLoss(predicted, actual);
+        Assert.Equal(expected, loss, Tolerance);
+    }
+
+    [Fact]
+    public void OrdinalRegression_HighestClass_AllPositiveIndicators()
+    {
+        // 3 classes: for actual=2, all indicators are 1 (2>0 and 2>1 are true)
+        var ordinal = new OrdinalRegressionLoss<double>(numClasses: 3);
+        var predicted = new Vector<double>(new[] { 2.0 });
+        var actual = new Vector<double>(new[] { 2.0 }); // Highest class
+
+        // Both thresholds: indicator=1
+        // Loss = 2 * log(1 + exp(-2))
+        double expected = 2 * Math.Log(1 + Math.Exp(-2));
+
+        var loss = ordinal.CalculateLoss(predicted, actual);
+        Assert.Equal(expected, loss, Tolerance);
+    }
+
+    #endregion
+
+    #region Sparse Categorical Cross Entropy - Mathematical Verification
+
+    /// <summary>
+    /// SCCE = -log(predicted[class_index])
+    /// predicted = class probabilities, actual = class indices
+    /// </summary>
+    [Fact]
+    public void SparseCategoricalCrossEntropy_SingleSample_MatchesExpected()
+    {
+        var scce = new SparseCategoricalCrossEntropyLoss<double>();
+        var predicted = new Vector<double>(new[] { 0.1, 0.2, 0.7 }); // 3 class probabilities
+        var actual = new Vector<double>(new[] { 2.0 }); // Class index 2
+
+        var loss = scce.CalculateLoss(predicted, actual);
+
+        // Loss = -log(predicted[2]) = -log(0.7)
+        double expected = -Math.Log(0.7);
+        Assert.Equal(expected, loss, Tolerance);
+    }
+
+    [Fact]
+    public void SparseCategoricalCrossEntropy_FirstClass_MatchesExpected()
+    {
+        var scce = new SparseCategoricalCrossEntropyLoss<double>();
+        var predicted = new Vector<double>(new[] { 0.8, 0.1, 0.1 }); // 3 class probabilities
+        var actual = new Vector<double>(new[] { 0.0 }); // Class index 0
+
+        var loss = scce.CalculateLoss(predicted, actual);
+
+        // Loss = -log(predicted[0]) = -log(0.8)
+        double expected = -Math.Log(0.8);
+        Assert.Equal(expected, loss, Tolerance);
+    }
+
+    [Fact]
+    public void SparseCategoricalCrossEntropy_PerfectPrediction_MinimalLoss()
+    {
+        var scce = new SparseCategoricalCrossEntropyLoss<double>();
+        var predicted = new Vector<double>(new[] { 0.001, 0.001, 0.998 });
+        var actual = new Vector<double>(new[] { 2.0 }); // Class index 2
+
+        var loss = scce.CalculateLoss(predicted, actual);
+
+        // Loss should be very small for near-perfect prediction
+        Assert.True(loss < 0.01);
+    }
+
+    [Fact]
+    public void SparseCategoricalCrossEntropy_InvalidClassIndex_Throws()
+    {
+        var scce = new SparseCategoricalCrossEntropyLoss<double>();
+        var predicted = new Vector<double>(new[] { 0.5, 0.5 }); // 2 classes (0, 1)
+        var actual = new Vector<double>(new[] { 5.0 }); // Invalid class index
+
+        Assert.Throws<ArgumentException>(() => scce.CalculateLoss(predicted, actual));
+    }
+
+    [Fact]
+    public void SparseCategoricalCrossEntropy_NegativeClassIndex_Throws()
+    {
+        var scce = new SparseCategoricalCrossEntropyLoss<double>();
+        var predicted = new Vector<double>(new[] { 0.5, 0.5 });
+        var actual = new Vector<double>(new[] { -1.0 }); // Negative class index
+
+        Assert.Throws<ArgumentException>(() => scce.CalculateLoss(predicted, actual));
+    }
+
+    [Fact]
+    public void SparseCategoricalCrossEntropy_GradientCheck_CorrectClass()
+    {
+        var scce = new SparseCategoricalCrossEntropyLoss<double>();
+        var predicted = new Vector<double>(new[] { 0.3, 0.5, 0.2 });
+        var actual = new Vector<double>(new[] { 1.0 }); // Class index 1
+
+        var gradient = scce.CalculateDerivative(predicted, actual);
+
+        // Gradient should be -1/p for the correct class, 0 for others
+        // For class 1 (index 1): gradient = -1 / 0.5 = -2
+        Assert.Equal(-2.0, gradient[1], Tolerance);
+        Assert.Equal(0.0, gradient[0], Tolerance);
+        Assert.Equal(0.0, gradient[2], Tolerance);
+    }
+
+    #endregion
+
     #region Numerical Stability Tests
 
     [Fact]
