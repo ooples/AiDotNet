@@ -359,6 +359,14 @@ public class IRBuilder
                 HasBias = GetParam<bool>(node, "HasBias", true)
             },
 
+            // Octonion operations
+            OperationType.OctonionMatMul => new OctonionMatMulOp
+            {
+                BatchSize = GetParam<int>(node, "BatchSize", 1),
+                InputFeatures = GetParam<int>(node, "InputFeatures", 1),
+                OutputFeatures = GetParam<int>(node, "OutputFeatures", 1)
+            },
+
             _ => throw new InvalidOperationException($"Unsupported operation type: {node.OperationType}")
         };
 
