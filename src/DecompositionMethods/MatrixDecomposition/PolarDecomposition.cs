@@ -50,6 +50,10 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
     public PolarDecomposition(Matrix<T> matrix, PolarAlgorithmType algorithm = PolarAlgorithmType.SVD)
         : base(matrix)
     {
+        if (matrix.Rows != matrix.Columns)
+        {
+            throw new ArgumentException("Polar decomposition requires a square matrix.", nameof(matrix));
+        }
         _algorithm = algorithm;
         Decompose();
     }
@@ -144,48 +148,46 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private void DecomposeNewtonSchulz()
     {
-        Matrix<T> X = A.Clone();
-        Matrix<T> Y = Matrix<T>.CreateIdentity(A.Rows);
-        T tolerance = NumOps.FromDouble(1e-12);
+        int n = A.Rows;
+
+        // Scale the matrix to have spectral norm close to 1 for convergence
+        T norm = MatrixHelper<T>.SpectralNorm(A);
+        Matrix<T> X = A.Multiply(NumOps.Divide(NumOps.One, norm));
+
+        T tolerance = NumOps.FromDouble(1e-10);
         int maxIterations = 100;
 
         for (int i = 0; i < maxIterations; i++)
         {
+            // Standard Newton-Schulz iteration: X_{k+1} = (1/2) * X_k * (3*I - X_k^T * X_k)
             Matrix<T> XtX = X.Transpose().Multiply(X);
-            Matrix<T> YtY = Y.Transpose().Multiply(Y);
+            Matrix<T> I = Matrix<T>.CreateIdentityMatrix(n);
 
-            // Check for numerical stability
-            if (!MatrixHelper<T>.IsInvertible(XtX) || !MatrixHelper<T>.IsInvertible(YtY))
+            // Compute 3*I - X^T * X
+            Matrix<T> term = I.Multiply(NumOps.FromDouble(3.0)).Subtract(XtX);
+
+            // X_{k+1} = (1/2) * X * term
+            Matrix<T> nextX = X.Multiply(term).Multiply(NumOps.FromDouble(0.5));
+
+            T error = nextX.Subtract(X).FrobeniusNorm();
+
+            if (NumOps.LessThan(error, tolerance))
             {
-                throw new InvalidOperationException("Matrix became singular during Newton-Schulz iteration.");
-            }
-
-            Matrix<T> nextX = X.Multiply(NumOps.FromDouble(0.5)).Add(Y.Transpose().Multiply(NumOps.FromDouble(0.5)));
-            Matrix<T> nextY = Y.Multiply(NumOps.FromDouble(0.5)).Add(XtX.Inverse().Multiply(X.Transpose()).Multiply(NumOps.FromDouble(0.5)));
-
-            T errorX = nextX.Subtract(X).FrobeniusNorm();
-            T errorY = nextY.Subtract(Y).FrobeniusNorm();
-
-            if (NumOps.LessThan(errorX, tolerance) && NumOps.LessThan(errorY, tolerance))
-            {
+                X = nextX;
                 break;
             }
 
             X = nextX;
-            Y = nextY;
 
             // Check for divergence
-            if (NumOps.GreaterThan(errorX, NumOps.FromDouble(1e6)) || NumOps.GreaterThan(errorY, NumOps.FromDouble(1e6)))
+            if (NumOps.GreaterThan(error, NumOps.FromDouble(1e6)))
             {
                 throw new InvalidOperationException("Newton-Schulz iteration diverged.");
             }
         }
 
         U = X;
-        P = X.Transpose().Multiply(A);
-
-        // Ensure orthogonality of U
-        U = MatrixHelper<T>.OrthogonalizeColumns(U);
+        P = U.Transpose().Multiply(A);
     }
 
     /// <summary>
@@ -205,26 +207,40 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private void DecomposeHalleyIteration()
     {
-        Matrix<T> X = A.Clone();
-        T tolerance = NumOps.FromDouble(1e-12);
+        int n = A.Rows;
+
+        // Scale the matrix to have spectral norm close to 1 for convergence
+        T norm = MatrixHelper<T>.SpectralNorm(A);
+        Matrix<T> X = A.Multiply(NumOps.Divide(NumOps.One, norm));
+
+        T tolerance = NumOps.FromDouble(1e-10);
         int maxIterations = 100;
+        Matrix<T> I = Matrix<T>.CreateIdentityMatrix(n);
 
         for (int i = 0; i < maxIterations; i++)
         {
-            if (!MatrixHelper<T>.IsInvertible(X))
+            // Halley iteration: X_{k+1} = X_k * (3*I + X_k^T * X_k)^{-1} * (I + 3*X_k^T * X_k)
+            Matrix<T> XtX = X.Transpose().Multiply(X);
+
+            // Compute (3*I + X^T * X)
+            Matrix<T> term1 = I.Multiply(NumOps.FromDouble(3.0)).Add(XtX);
+
+            if (!MatrixHelper<T>.IsInvertible(term1))
             {
                 throw new InvalidOperationException("Matrix became singular during Halley iteration.");
             }
 
-            Matrix<T> Y = X.Inverse();
-            Matrix<T> Z = Y.Transpose();
-            Matrix<T> nextX = X.Multiply(NumOps.FromDouble(3)).Add(Z).Multiply(NumOps.FromDouble(0.25))
-                .Add(X.Multiply(NumOps.FromDouble(3)).Multiply(Y).Multiply(Z).Multiply(NumOps.FromDouble(0.25)));
+            // Compute (I + 3*X^T * X)
+            Matrix<T> term2 = I.Add(XtX.Multiply(NumOps.FromDouble(3.0)));
+
+            // X_{k+1} = X * term1^{-1} * term2
+            Matrix<T> nextX = X.Multiply(term1.Inverse()).Multiply(term2);
 
             T error = nextX.Subtract(X).FrobeniusNorm();
 
             if (NumOps.LessThan(error, tolerance))
             {
+                X = nextX;
                 break;
             }
 
@@ -238,10 +254,7 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
         }
 
         U = X;
-        P = X.Transpose().Multiply(A);
-
-        // Ensure orthogonality of U
-        U = MatrixHelper<T>.OrthogonalizeColumns(U);
+        P = U.Transpose().Multiply(A);
     }
 
     /// <summary>
@@ -260,39 +273,37 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private void DecomposeQRIteration()
     {
+        // QR-based polar iteration: X_{k+1} = Q_k where X_k = Q_k * R_k
+        // This converges to U such that A = U * P
         Matrix<T> X = A.Clone();
-        T tolerance = NumOps.FromDouble(1e-12);
+        T tolerance = NumOps.FromDouble(1e-10);
         int maxIterations = 100;
 
         for (int i = 0; i < maxIterations; i++)
         {
             var qr = new QrDecomposition<T>(X);
             Matrix<T> Q = qr.Q;
-            Matrix<T> R = qr.R;
 
-            Matrix<T> nextX = Q.Multiply(R.Add(R.Transpose())).Multiply(NumOps.FromDouble(0.5));
-
-            T error = nextX.Subtract(X).FrobeniusNorm();
+            T error = Q.Subtract(X).FrobeniusNorm();
 
             if (NumOps.LessThan(error, tolerance))
             {
+                X = Q;
                 break;
             }
 
-            X = nextX;
+            X = Q;
 
-            // Check for divergence
-            if (NumOps.GreaterThan(error, NumOps.FromDouble(1e6)))
+            // Check for divergence (Q should always be bounded)
+            T xNorm = X.FrobeniusNorm();
+            if (NumOps.GreaterThan(xNorm, NumOps.FromDouble(1e6)))
             {
                 throw new InvalidOperationException("QR iteration diverged.");
             }
         }
 
         U = X;
-        P = X.Transpose().Multiply(A);
-
-        // Ensure orthogonality of U
-        U = MatrixHelper<T>.OrthogonalizeColumns(U);
+        P = U.Transpose().Multiply(A);
     }
 
     /// <summary>

@@ -203,8 +203,9 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
     {
         int m = A.Rows;
         int n = A.Columns;
+        int minDim = Math.Min(m, n);
 
-        for (int k = 0; k < n; k++)
+        for (int k = 0; k < minDim; k++)
         {
             // Compute the Householder vector for the kth column
             Vector<T> x = A.GetColumn(k).Slice(k, m - k);
