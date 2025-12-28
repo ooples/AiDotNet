@@ -325,39 +325,48 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         _originalInputShape = input.Shape;
         int rank = input.Shape.Length;
 
-        // Handle any-rank tensor: collapse leading dims for rank > 3
+        // PrimaryCapsule expects 4D NHWC input [B, H, W, C], normalize to 4D
         Tensor<T> processInput;
         int batchSize;
 
-        if (rank == 2)
+        if (rank < 4)
         {
-            // 2D: add batch dim
-            batchSize = 1;
-            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
+            // Add leading dimensions to make 4D
+            // 3D [H, W, C] -> [1, H, W, C]
+            // 2D [W, C] -> [1, 1, W, C]
+            // 1D [C] -> [1, 1, 1, C]
+            var shape4D = new int[4];
+            int offset = 4 - rank;
+            for (int i = 0; i < offset; i++)
+                shape4D[i] = 1;
+            for (int i = 0; i < rank; i++)
+                shape4D[offset + i] = input.Shape[i];
+            processInput = input.Reshape(shape4D);
+            batchSize = shape4D[0];
         }
-        else if (rank == 3)
+        else if (rank == 4)
         {
-            // Standard 3D
+            // Standard 4D NHWC
             batchSize = input.Shape[0];
             processInput = input;
         }
-        else if (rank > 3)
-        {
-            // Higher-rank: collapse leading dims into batch
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 2; d++)
-                flatBatch *= input.Shape[d];
-            batchSize = flatBatch;
-            processInput = input.Reshape([flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
-        }
         else
         {
-            throw new ArgumentException($"Layer requires at least 2D input, got {rank}D");
+            // Higher-rank: collapse leading dims into batch
+            // e.g., 5D [B1, B2, H, W, C] -> [B1*B2, H, W, C]
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 3; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            int height = input.Shape[rank - 3];
+            int width = input.Shape[rank - 2];
+            int channels = input.Shape[rank - 1];
+            processInput = input.Reshape([flatBatch, height, width, channels]);
         }
 
         _lastInput = processInput;
-        int inputHeight = input.Shape[1];
-        int inputWidth = input.Shape[2];
+        int inputHeight = processInput.Shape[1];
+        int inputWidth = processInput.Shape[2];
 
         int outputHeight = (inputHeight - _kernelSize) / _stride + 1;
         int outputWidth = (inputWidth - _kernelSize) / _stride + 1;
@@ -367,7 +376,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         var kernelNCHW = _convWeights.Reshape([outputChannels, _inputChannels, _kernelSize, _kernelSize]);
 
         // Convert input to NCHW for Conv2D
-        var inputNCHW = input.Transpose([0, 3, 1, 2]);
+        var inputNCHW = processInput.Transpose([0, 3, 1, 2]);
 
         // Convolution
         var convNCHW = Engine.Conv2D(inputNCHW, kernelNCHW, new[] { _stride, _stride }, new[] { 0, 0 }, new[] { 1, 1 });
@@ -381,6 +390,32 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         var output = convNHWC.Reshape([batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
 
         _lastOutput = ApplyActivation(output);
+
+        // Restore output shape to match original input rank
+        // Output is 5D [B, OH, OW, capsuleChannels, capsuleDim]
+        if (_originalInputShape != null && _originalInputShape.Length != 4)
+        {
+            if (_originalInputShape.Length < 4)
+            {
+                // Lower-rank: remove batch dimension
+                // 3D input -> 4D output [OH, OW, capsuleChannels, capsuleDim]
+                return _lastOutput.Reshape([outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
+            }
+            else
+            {
+                // Higher-rank: restore leading dimensions
+                // e.g., 5D input [B1, B2, H, W, C] -> 6D output [B1, B2, OH, OW, capsuleChannels, capsuleDim]
+                var outShape = new int[_originalInputShape.Length + 1];
+                for (int d = 0; d < _originalInputShape.Length - 3; d++)
+                    outShape[d] = _originalInputShape[d];
+                outShape[_originalInputShape.Length - 3] = outputHeight;
+                outShape[_originalInputShape.Length - 2] = outputWidth;
+                outShape[_originalInputShape.Length - 1] = _capsuleChannels;
+                outShape[_originalInputShape.Length] = _capsuleDimension;
+                return _lastOutput.Reshape(outShape);
+            }
+        }
+
         return _lastOutput;
     }
 
@@ -509,7 +544,15 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         _convWeightsGradient = kernelGrad.Reshape([outputChannels, _inputChannels * _kernelSize * _kernelSize]);
 
         // Input gradient back to NHWC
-        return inputGradNCHW.Transpose([0, 2, 3, 1]);
+        var inputGradient = inputGradNCHW.Transpose([0, 2, 3, 1]);
+
+        // Restore gradient shape to match original input shape
+        if (_originalInputShape != null && _originalInputShape.Length != 4)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     /// <summary>
@@ -618,7 +661,15 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         _convWeightsGradient = weightsNode.Gradient;
         _convBiasGradient = biasNode.Gradient;
 
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+
+        // Restore gradient shape to match original input shape
+        if (_originalInputShape != null && _originalInputShape.Length != 4)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
 

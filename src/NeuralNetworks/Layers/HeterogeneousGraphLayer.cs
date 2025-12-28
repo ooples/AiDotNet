@@ -327,33 +327,44 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
         _originalInputShape = input.Shape;
         int rank = input.Shape.Length;
 
-        // Handle any-rank tensor: collapse to 2D for processing
+        // Handle any-rank tensor: normalize to 3D [batchSize, numNodes, features] for graph processing
         Tensor<T> processInput;
         int batchSize;
 
         if (rank == 1)
         {
+            // 1D: treat as single sample, single node
             batchSize = 1;
-            processInput = input.Reshape([1, input.Shape[0]]);
+            processInput = input.Reshape([1, 1, input.Shape[0]]);
         }
         else if (rank == 2)
         {
+            // 2D [numNodes, features]: add batch dimension
+            batchSize = 1;
+            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
+        }
+        else if (rank == 3)
+        {
+            // Already 3D [batchSize, numNodes, features]
             batchSize = input.Shape[0];
             processInput = input;
         }
         else
         {
+            // Higher rank: collapse leading dimensions into batch
             int flatBatch = 1;
-            for (int d = 0; d < rank - 1; d++)
+            for (int d = 0; d < rank - 2; d++)
                 flatBatch *= input.Shape[d];
             batchSize = flatBatch;
-            processInput = input.Reshape([flatBatch, input.Shape[rank - 1]]);
+            int numNodes = input.Shape[rank - 2];
+            int features = input.Shape[rank - 1];
+            processInput = input.Reshape([flatBatch, numNodes, features]);
         }
 
         _lastInput = processInput;
-        int numNodes = input.Shape[1];
+        int processNumNodes = processInput.Shape[1];
 
-        var output = new Tensor<T>([batchSize, numNodes, _outputFeatures]);
+        var output = new Tensor<T>([batchSize, processNumNodes, _outputFeatures]);
         output.Fill(NumOps.Zero);
 
         // Process each edge type
@@ -392,14 +403,14 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
             int inFeatures = _metadata.NodeTypeFeatures[sourceType];
 
             // Extract relevant input features [batch, nodes, inFeatures]
-            var inputSlice = input.Shape[2] == inFeatures ? input :
-                ExtractInputFeatures(input, batchSize, numNodes, inFeatures);
+            var inputSlice = processInput.Shape[2] == inFeatures ? processInput :
+                ExtractInputFeatures(processInput, batchSize, processNumNodes, inFeatures);
 
             // Compute normalization factor from adjacency matrix
-            var normalizedAdj = NormalizeAdjacency(adjacency, batchSize, numNodes);
+            var normalizedAdj = NormalizeAdjacency(adjacency, batchSize, processNumNodes);
 
             // Perform graph convolution: normalizedAdj @ inputSlice @ weights
-            var xw = BatchedMatMul3Dx2D(inputSlice, weights, batchSize, numNodes, inFeatures, _outputFeatures);
+            var xw = BatchedMatMul3Dx2D(inputSlice, weights, batchSize, processNumNodes, inFeatures, _outputFeatures);
             var convOutput = Engine.BatchMatMul(normalizedAdj, xw);
 
             // Accumulate to output
@@ -407,7 +418,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
         }
 
         // Add self-loops and biases
-        for (int i = 0; i < numNodes; i++)
+        for (int i = 0; i < processNumNodes; i++)
         {
             string nodeType = _nodeTypeMap[i];
             var selfWeights = _selfLoopWeights[nodeType];
@@ -415,7 +426,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
             int inFeatures = _metadata.NodeTypeFeatures[nodeType];
 
             // Extract input for this node across all batches
-            var nodeInput = ExtractNodeInput(input, batchSize, i, inFeatures);
+            var nodeInput = ExtractNodeInput(processInput, batchSize, i, inFeatures);
 
             // Apply self-loop transformation: nodeInput @ selfWeights
             var selfOutput = Engine.TensorMatMul(nodeInput, selfWeights); // [batch, outputFeatures]
@@ -428,6 +439,32 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
         }
 
         _lastOutput = ApplyActivation(output);
+
+        // Restore output shape to match input rank
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            if (_originalInputShape.Length == 2)
+            {
+                // 2D input [numNodes, features] -> 2D output [numNodes, outputFeatures]
+                return _lastOutput.Reshape([processNumNodes, _outputFeatures]);
+            }
+            else if (_originalInputShape.Length == 1)
+            {
+                // 1D input -> 1D output
+                return _lastOutput.Reshape([_outputFeatures]);
+            }
+            else
+            {
+                // Higher rank: restore leading dimensions
+                var outShape = new int[_originalInputShape.Length];
+                for (int d = 0; d < _originalInputShape.Length - 2; d++)
+                    outShape[d] = _originalInputShape[d];
+                outShape[_originalInputShape.Length - 2] = processNumNodes;
+                outShape[_originalInputShape.Length - 1] = _outputFeatures;
+                return _lastOutput.Reshape(outShape);
+            }
+        }
+
         return _lastOutput;
     }
 
@@ -738,6 +775,12 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
 
             _selfLoopWeightsGradients[nodeType] = selfWeightGradient;
             _biasesGradients[nodeType] = biasGradient;
+        }
+
+        // Restore gradient shape to match original input shape
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            return inputGradient.Reshape(_originalInputShape);
         }
 
         return inputGradient;
