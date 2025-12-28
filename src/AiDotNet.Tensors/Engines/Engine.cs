@@ -7,8 +7,10 @@ using System.Runtime.Intrinsics;
 using System.Text;
 #if NET471_OR_GREATER
 using ILGPU;
+using ILGPU.Algorithms;
 using ILGPU.Runtime;
 using ILGPU.Runtime.Cuda;
+using ILGPU.Runtime.OpenCL;
 #endif
 
 namespace AiDotNet.Tensors.Engines
@@ -298,7 +300,7 @@ namespace AiDotNet.Tensors.Engines
         {
             try
             {
-                using var context = Context.CreateDefault();
+                using var context = Context.Create(builder => builder.Default().EnableAlgorithms());
                 var device = context.GetPreferredDevice(preferCPU: false);
 
                 if (device.AcceleratorType != AcceleratorType.CPU)
