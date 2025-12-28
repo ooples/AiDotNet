@@ -101,12 +101,10 @@ public class AveragePoolingLayer<T> : LayerBase<T>
     /// </remarks>
     private static int[] CalculateOutputShape(int[] inputShape, int poolSize, int strides)
     {
-        // Industry-standard: support tensors of any rank
-        // The last two dimensions are always height and width for pooling
-        // Supports: 2D [H, W], 3D [C, H, W], 4D [B, C, H, W], etc.
-        if (inputShape.Length < 2)
+        // Supports 3D [C, H, W] and 4D [B, C, H, W] inputs
+        if (inputShape.Length != 3 && inputShape.Length != 4)
         {
-            throw new ArgumentException("Input shape must have at least 2 dimensions for pooling.");
+            throw new ArgumentException("Input shape must have 3 dimensions (channels, height, width) or 4 dimensions (batch, channels, height, width).");
         }
 
         int heightIdx = inputShape.Length - 2;
