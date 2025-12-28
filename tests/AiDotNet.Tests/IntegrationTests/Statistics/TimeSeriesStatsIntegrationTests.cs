@@ -17,16 +17,14 @@ public class TimeSeriesStatsIntegrationTests
     [Fact]
     public void DurbinWatson_NoAutocorrelation_ReturnsTwo()
     {
-        // Random residuals with no autocorrelation should give DW ≈ 2
-        // Using residuals that alternate in sign
-        var actual = Vector<double>.FromArray([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
-        var predicted = Vector<double>.FromArray([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]); // Perfect prediction
+        // Random-ish residuals with minimal autocorrelation should give DW ≈ 2
+        var actual = Vector<double>.FromArray([1.2, 2.3, 2.9, 4.4, 5.1, 5.8, 7.2, 7.9]);
+        var predicted = Vector<double>.FromArray([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
 
         var result = StatisticsHelper<double>.CalculateDurbinWatsonStatistic(actual, predicted);
 
-        // Perfect prediction means residuals are all zero, but this causes 0/0
-        // Let me use slightly different values
-        Assert.True(double.IsNaN(result) || result >= 0);
+        // DW ≈ 2 indicates no autocorrelation
+        Assert.True(result >= 1.5 && result <= 2.5, $"Expected DW ≈ 2 for no autocorrelation, got {result}");
     }
 
     [Fact]
@@ -247,9 +245,13 @@ public class TimeSeriesStatsIntegrationTests
 
         var acf = StatisticsHelper<double>.CalculateAutoCorrelationFunction(series, 5);
 
+        // ACF is mathematically bounded by [-1, 1] (Cauchy-Schwarz inequality)
+        // Allow small epsilon for floating-point tolerance
+        const double epsilon = 1e-3;
         for (int i = 0; i < acf.Length; i++)
         {
-            Assert.True(acf[i] >= -1.5 && acf[i] <= 1.5, $"ACF[{i}] = {acf[i]} should be near [-1, 1]");
+            Assert.True(acf[i] >= -1.0 - epsilon && acf[i] <= 1.0 + epsilon,
+                $"ACF[{i}] = {acf[i]} should be in [-1, 1] (with small tolerance)");
         }
     }
 
@@ -260,8 +262,8 @@ public class TimeSeriesStatsIntegrationTests
 
         var acf = StatisticsHelper<double>.CalculateAutoCorrelationFunction(series, 2);
 
-        // Constant series has variance = 0, so ACF is undefined (NaN) or 1 at lag 0
-        Assert.True(acf[0] == 1.0 || double.IsNaN(acf[0]) || double.IsInfinity(acf[0]));
+        // Constant series has variance = 0, so ACF is undefined (NaN) for all lags
+        Assert.True(double.IsNaN(acf[0]), "ACF for constant series should be NaN due to zero variance");
     }
 
     #endregion
@@ -301,8 +303,9 @@ public class TimeSeriesStatsIntegrationTests
 
         var pacf = StatisticsHelper<double>.CalculatePartialAutoCorrelationFunction(series, 5);
 
-        // Just verify it computes without NaN for the shorter lags
-        Assert.True(!double.IsNaN(pacf[0]) || pacf[0] == 1.0, "PACF[0] should be 1 or computed");
+        // PACF at lag 0 should always be 1.0
+        Assert.False(double.IsNaN(pacf[0]), "PACF[0] should not be NaN");
+        Assert.Equal(1.0, pacf[0], Tolerance);
         Assert.Equal(6, pacf.Length);
     }
 
