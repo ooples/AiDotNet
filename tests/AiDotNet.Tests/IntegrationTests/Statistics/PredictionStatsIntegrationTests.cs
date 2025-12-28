@@ -782,7 +782,7 @@ public class PredictionStatsIntegrationTests
         var predicted = new[] { 0.0, 0.0, 1.0, 1.0, 1.0 };
 
         // Act
-        var stats = CreatePredictionStats(actual, predicted, predictionType: PredictionType.Binary);
+        var stats = CreatePredictionStats(actual, predicted, predictionType: PredictionType.BinaryClassification);
 
         // Assert
         Assert.Equal(1.0, stats.Accuracy, Tolerance);
@@ -799,7 +799,7 @@ public class PredictionStatsIntegrationTests
         var predicted = new[] { 1.0, 1.0, 0.0, 0.0, 1.0 };
 
         // Act
-        var stats = CreatePredictionStats(actual, predicted, predictionType: PredictionType.Binary);
+        var stats = CreatePredictionStats(actual, predicted, predictionType: PredictionType.BinaryClassification);
 
         // Assert
         Assert.Equal(1.0, stats.Precision, Tolerance);
@@ -816,7 +816,7 @@ public class PredictionStatsIntegrationTests
         var predicted = new[] { 1.0, 1.0, 0.0, 0.0, 1.0 };
 
         // Act
-        var stats = CreatePredictionStats(actual, predicted, predictionType: PredictionType.Binary);
+        var stats = CreatePredictionStats(actual, predicted, predictionType: PredictionType.BinaryClassification);
 
         // Assert
         Assert.Equal(1.0, stats.Recall, Tolerance);
@@ -834,7 +834,7 @@ public class PredictionStatsIntegrationTests
         var predicted = new[] { 1.0, 1.0, 0.0, 0.0, 1.0 };
 
         // Act
-        var stats = CreatePredictionStats(actual, predicted, predictionType: PredictionType.Binary);
+        var stats = CreatePredictionStats(actual, predicted, predictionType: PredictionType.BinaryClassification);
 
         // Assert
         Assert.Equal(1.0, stats.F1Score, Tolerance);
@@ -851,7 +851,7 @@ public class PredictionStatsIntegrationTests
         var predicted = new[] { 1.0, 1.0, 0.0, 0.0, 1.0 };
 
         // Act
-        var stats = CreatePredictionStats(actual, predicted, predictionType: PredictionType.Binary);
+        var stats = CreatePredictionStats(actual, predicted, predictionType: PredictionType.BinaryClassification);
 
         // Assert - F1 = 2 * (P * R) / (P + R)
         var expectedF1 = 2.0 * (stats.Precision * stats.Recall) / (stats.Precision + stats.Recall);

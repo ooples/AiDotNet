@@ -511,8 +511,8 @@ public static class StatisticsHelper<T>
         // Calculate degrees of freedom
         int _degreesOfFreedom = _categoryCount - 1;
 
-        // Calculate p-value using chi-square distribution
-        T _pValue = ChiSquareCDF(_chiSquare, _degreesOfFreedom);
+        // Calculate p-value using chi-square distribution (upper tail probability)
+        T _pValue = _numOps.Subtract(_numOps.One, ChiSquareCDF(_chiSquare, _degreesOfFreedom));
 
         // Calculate critical value
         T _criticalValue = InverseChiSquareCDF(_numOps.Subtract(_numOps.FromDouble(1), significanceLevel), _degreesOfFreedom);
@@ -691,7 +691,8 @@ public static class StatisticsHelper<T>
     /// </remarks>
     private static T ChiSquareCDF(T x, int df)
     {
-        return _numOps.Subtract(_numOps.FromDouble(1), GammaRegularized(_numOps.Divide(_numOps.FromDouble(df), _numOps.FromDouble(2)), _numOps.Divide(x, _numOps.FromDouble(2))));
+        // Chi-Square CDF = P(X <= x) = regularized lower incomplete gamma P(k/2, x/2)
+        return GammaRegularized(_numOps.Divide(_numOps.FromDouble(df), _numOps.FromDouble(2)), _numOps.Divide(x, _numOps.FromDouble(2)));
     }
 
     /// <summary>
@@ -4008,7 +4009,7 @@ public static class StatisticsHelper<T>
 
         for (int i = 0; i < actual.Length; i++)
         {
-            if (predictionType == PredictionType.Binary)
+            if (predictionType == PredictionType.BinaryClassification)
             {
                 var actualLabel = _numOps.GreaterThanOrEquals(actual[i], classificationThreshold) ? _numOps.One : _numOps.Zero;
                 var predictedLabel = _numOps.GreaterThanOrEquals(predicted[i], classificationThreshold) ? _numOps.One : _numOps.Zero;
@@ -4096,7 +4097,7 @@ public static class StatisticsHelper<T>
 
         for (int i = 0; i < actual.Length; i++)
         {
-            if (predictionType == PredictionType.Binary)
+            if (predictionType == PredictionType.BinaryClassification)
             {
                 var actualLabel = _numOps.GreaterThanOrEquals(actual[i], classificationThreshold) ? _numOps.One : _numOps.Zero;
                 var predictedLabel = _numOps.GreaterThanOrEquals(predicted[i], classificationThreshold) ? _numOps.One : _numOps.Zero;
@@ -5363,11 +5364,11 @@ public static class StatisticsHelper<T>
     public static Vector<T> GenerateThresholds(Vector<T> predictedValues)
     {
         var uniqueValues = new HashSet<T>(predictedValues);
-        var thresholds = new Vector<T>(uniqueValues.Count);
-        int index = 0;
-        foreach (var value in uniqueValues)
+        var sortedValues = uniqueValues.OrderByDescending(v => _numOps.ToDouble(v)).ToList();
+        var thresholds = new Vector<T>(sortedValues.Count);
+        for (int i = 0; i < sortedValues.Count; i++)
         {
-            thresholds[index++] = value;
+            thresholds[i] = sortedValues[i];
         }
 
         return thresholds;
@@ -5395,14 +5396,46 @@ public static class StatisticsHelper<T>
     public static (Vector<T> fpr, Vector<T> tpr) CalculateROCCurve(Vector<T> actualValues, Vector<T> predictedValues)
     {
         var thresholds = GenerateThresholds(predictedValues);
-        var fpr = new Vector<T>(thresholds.Length);
-        var tpr = new Vector<T>(thresholds.Length);
+
+        // Build list of (FPR, TPR) points including endpoints
+        var points = new List<(double fpr, double tpr)>();
+
+        // Add endpoint (0, 0) - threshold above all predictions (nothing predicted positive)
+        points.Add((0.0, 0.0));
 
         for (int i = 0; i < thresholds.Length; i++)
         {
             var confusionMatrix = StatisticsHelper<T>.CalculateConfusionMatrix(actualValues, predictedValues, thresholds[i]);
-            fpr[i] = _numOps.Divide(confusionMatrix.FalsePositives, _numOps.Add(confusionMatrix.FalsePositives, confusionMatrix.TrueNegatives));
-            tpr[i] = _numOps.Divide(confusionMatrix.TruePositives, _numOps.Add(confusionMatrix.TruePositives, confusionMatrix.FalseNegatives));
+            var totalNegatives = _numOps.Add(confusionMatrix.FalsePositives, confusionMatrix.TrueNegatives);
+            var totalPositives = _numOps.Add(confusionMatrix.TruePositives, confusionMatrix.FalseNegatives);
+
+            double fprVal = _numOps.Equals(totalNegatives, _numOps.Zero)
+                ? 0.0
+                : _numOps.ToDouble(_numOps.Divide(confusionMatrix.FalsePositives, totalNegatives));
+            double tprVal = _numOps.Equals(totalPositives, _numOps.Zero)
+                ? 0.0
+                : _numOps.ToDouble(_numOps.Divide(confusionMatrix.TruePositives, totalPositives));
+
+            points.Add((fprVal, tprVal));
+        }
+
+        // Add endpoint (1, 1) - threshold below all predictions (everything predicted positive)
+        points.Add((1.0, 1.0));
+
+        // For proper ROC curve, we need the upper envelope: for each FPR, take the max TPR
+        var upperEnvelope = points
+            .GroupBy(p => p.fpr)
+            .Select(g => (fpr: g.Key, tpr: g.Max(p => p.tpr)))
+            .OrderBy(p => p.fpr)
+            .ToList();
+
+        var fpr = new Vector<T>(upperEnvelope.Count);
+        var tpr = new Vector<T>(upperEnvelope.Count);
+
+        for (int i = 0; i < upperEnvelope.Count; i++)
+        {
+            fpr[i] = _numOps.FromDouble(upperEnvelope[i].fpr);
+            tpr[i] = _numOps.FromDouble(upperEnvelope[i].tpr);
         }
 
         return (fpr, tpr);

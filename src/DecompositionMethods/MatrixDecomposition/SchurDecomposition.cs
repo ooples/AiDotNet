@@ -349,17 +349,27 @@ public class SchurDecomposition<T> : MatrixDecompositionBase<T>
     /// <para>
     /// <b>For Beginners:</b> This method finds the solution to a system of equations represented by Ax = b,
     /// where A is the original matrix, x is the unknown vector we're solving for, and b is a known vector.
-    /// It uses the Schur decomposition to break this problem into simpler steps that are easier to solve.
+    /// It uses the Schur decomposition A = Q*T*Q^H to break this problem into simpler steps.
     /// </para>
     /// <para>
-    /// The method works by first applying forward substitution (solving from top to bottom) and then
-    /// backward substitution (solving from bottom to top) to find the answer efficiently.
+    /// The method works by:
+    /// 1. Transforming b to Schur coordinates: b' = Q^H * b
+    /// 2. Solving the system T*y = b' using LU decomposition (robust for general Schur forms)
+    /// 3. Transforming back to original coordinates: x = Q * y
     /// </para>
     /// </remarks>
     public override Vector<T> Solve(Vector<T> b)
     {
-        var y = UnitaryMatrix.ForwardSubstitution(b);
-        return SchurMatrix.BackwardSubstitution(y);
+        // Step 1: Transform b to Schur coordinates: b' = Q^H * b = Q^T * b (for real matrices)
+        var bPrime = UnitaryMatrix.Transpose().Multiply(b);
+
+        // Step 2: Solve T*y = b' using LU decomposition
+        // This is more robust than assuming T is strictly quasi-upper triangular
+        var luDecomp = new LuDecomposition<T>(SchurMatrix);
+        var y = luDecomp.Solve(bPrime);
+
+        // Step 3: Transform back to original coordinates: x = Q * y
+        return UnitaryMatrix.Multiply(y);
     }
 
     /// <summary>

@@ -311,7 +311,7 @@ internal static class SyntheticTabularFederatedBenchmarkSuiteRunner
         }
 
         var predictionType = taskType == SyntheticTabularTaskType.BinaryClassification
-            ? PredictionType.Binary
+            ? PredictionType.BinaryClassification
             : PredictionType.MultiClass;
 
         return (trainX, trainY, testX, testY, predictionType);

@@ -404,7 +404,9 @@ public static class MatrixHelper<T>
     {
         var rows = matrix.Rows;
 
-        for (int i = k + 1; i < rows; i++)
+        // Apply Householder reflector from the left: H * A
+        // This modifies columns k to n-1 (must include column k to zero out elements below subdiagonal!)
+        for (int i = k; i < rows; i++)  // Start from column k, not k+1
         {
             T sum = _numOps.Zero;
             for (int j = k + 1; j < rows; j++)
@@ -417,6 +419,8 @@ public static class MatrixHelper<T>
             }
         }
 
+        // Apply Householder reflector from the right: A * H
+        // This modifies all rows to preserve similarity transformation
         for (int i = 0; i < rows; i++)
         {
             T sum = _numOps.Zero;

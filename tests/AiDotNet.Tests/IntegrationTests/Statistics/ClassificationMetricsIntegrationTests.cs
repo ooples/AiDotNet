@@ -17,7 +17,7 @@ public class ClassificationMetricsIntegrationTests
         var predicted = new Vector<double>(new[] { 0.1, 0.9, 0.7, 0.2 });
 
         // Act
-        var accuracy = StatisticsHelper<double>.CalculateAccuracy(actual, predicted, PredictionType.Binary);
+        var accuracy = StatisticsHelper<double>.CalculateAccuracy(actual, predicted, PredictionType.BinaryClassification);
 
         // Assert
         Assert.Equal(1.0, accuracy, Tolerance);
@@ -31,7 +31,7 @@ public class ClassificationMetricsIntegrationTests
         var predicted = new Vector<double>(new[] { 0.6, 0.7, 0.4, 0.1 }); // labels -> [1,1,0,0]
 
         // Act
-        var (precision, recall, f1) = StatisticsHelper<double>.CalculatePrecisionRecallF1(actual, predicted, PredictionType.Binary);
+        var (precision, recall, f1) = StatisticsHelper<double>.CalculatePrecisionRecallF1(actual, predicted, PredictionType.BinaryClassification);
 
         // Assert
         Assert.Equal(0.5, precision, Tolerance);

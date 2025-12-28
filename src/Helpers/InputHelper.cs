@@ -495,41 +495,70 @@ public static class InputHelper<T, TInput>
                 return (TInput)(object)tensor;
             }
 
-            // Create a new tensor with first dimension of size 1
-            int[] newShape = new int[Math.Max(1, tensor.Shape.Length)];
-            newShape[0] = 1;
-
-            for (int i = 1; i < newShape.Length; i++)
-            {
-                newShape[i] = i < tensor.Shape.Length ? tensor.Shape[i] : tensor.Shape[i - 1];
-            }
-
-            var batchTensor = new Tensor<T>(newShape);
-
-            // Handle different tensor ranks efficiently
+            // Handle different tensor ranks
             if (tensor.Shape.Length == 0)
             {
-                // Scalar tensor - special case
+                // Scalar tensor - create 1D tensor with single element
+                var batchTensor = new Tensor<T>(new[] { 1 });
                 batchTensor[0] = tensor.GetFlatIndexValue(0);
+                // Cast through object is required for unconstrained generic TInput conversion
+                return (TInput)(object)batchTensor;
             }
             else if (tensor.Shape.Length == 1)
             {
-                // 1D tensor - map to first slice of batch
+                // 1D tensor with shape [n] - create 2D tensor with shape [1, n]
+                int[] newShape = new[] { 1, tensor.Shape[0] };
+                var batchTensor = new Tensor<T>(newShape);
                 for (int i = 0; i < tensor.Shape[0]; i++)
                 {
                     batchTensor[0, i] = tensor[i];
                 }
+                // Cast through object is required for unconstrained generic TInput conversion
+                return (TInput)(object)batchTensor;
             }
             else
             {
-                batchTensor.SetSlice(0, tensor);
-            }
+                // 2D or higher tensor - prepend batch dimension of 1
+                int[] newShape = new int[tensor.Shape.Length + 1];
+                newShape[0] = 1;
+                for (int i = 0; i < tensor.Shape.Length; i++)
+                {
+                    newShape[i + 1] = tensor.Shape[i];
+                }
 
-            return (TInput)(object)batchTensor;
+                var batchTensor = new Tensor<T>(newShape);
+
+                // Copy all data - the tensor becomes the single item in the batch
+                // For a tensor of shape [h, w, c], the batch tensor is [1, h, w, c]
+                // We need to copy all elements preserving their relative positions
+                CopyTensorData(tensor, batchTensor, 0);
+
+                // Cast through object is required for unconstrained generic TInput conversion
+                return (TInput)(object)batchTensor;
+            }
         }
         catch (Exception ex) when (ex is not ArgumentException and not InvalidCastException)
         {
             throw new InvalidOperationException("Failed to create batch from tensor.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Copies tensor data into a batch tensor at the specified batch index.
+    /// </summary>
+    private static void CopyTensorData(Tensor<T> source, Tensor<T> destination, int batchIndex)
+    {
+        // Calculate the number of elements in the source tensor
+        int sourceLength = source.Length;
+
+        // Calculate the starting flat index in the destination
+        int destStride = sourceLength;
+        int destStart = batchIndex * destStride;
+
+        // Copy element by element using flat indexing
+        for (int i = 0; i < sourceLength; i++)
+        {
+            destination.SetFlatIndexValue(destStart + i, source.GetFlatIndexValue(i));
         }
     }
 

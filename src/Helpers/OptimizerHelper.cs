@@ -244,19 +244,40 @@ public static class OptimizerHelper<T, TInput, TOutput>
                 int featureIndex = selectedFeatures[j];
                 oldIndices[1] = featureIndex;
                 newIndices[1] = j;
-                for (int k = 2; k < X.Shape.Length; k++)
+
+                // For 2D tensors, copy directly
+                if (X.Shape.Length == 2)
                 {
-                    for (int l = 0; l < X.Shape[k]; l++)
-                    {
-                        oldIndices[k] = l;
-                        newIndices[k] = l;
-                        selectedX[newIndices] = X[oldIndices];
-                    }
+                    selectedX[newIndices] = X[oldIndices];
+                }
+                else
+                {
+                    // For tensors with 3+ dimensions, iterate over additional dimensions
+                    CopyTensorSlice(X, selectedX, oldIndices, newIndices, 2);
                 }
             }
         }
 
         return selectedX;
+    }
+
+    /// <summary>
+    /// Recursively copies tensor slices for higher-dimensional tensors.
+    /// </summary>
+    private static void CopyTensorSlice(Tensor<T> source, Tensor<T> dest, int[] srcIndices, int[] destIndices, int dim)
+    {
+        if (dim >= source.Shape.Length)
+        {
+            dest[destIndices] = source[srcIndices];
+            return;
+        }
+
+        for (int l = 0; l < source.Shape[dim]; l++)
+        {
+            srcIndices[dim] = l;
+            destIndices[dim] = l;
+            CopyTensorSlice(source, dest, srcIndices, destIndices, dim + 1);
+        }
     }
 
     /// <summary>
