@@ -1068,6 +1068,23 @@ public class LSTMLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Backward pass called before forward pass.");
         }
 
+        // Normalize outputGradient to 3D to match canonical _lastInput shape
+        var outGrad3D = outputGradient;
+        int origRank = _originalInputShape?.Length ?? 3;
+        if (_originalInputShape != null && origRank == 2)
+        {
+            // 2D output gradient -> 3D (add batch dim)
+            outGrad3D = outputGradient.Reshape([1, outputGradient.Shape[0], outputGradient.Shape[1]]);
+        }
+        else if (_originalInputShape != null && origRank > 3)
+        {
+            // Higher-rank output gradient -> 3D (flatten leading dims)
+            int flatBatch = 1;
+            for (int d = 0; d < origRank - 2; d++)
+                flatBatch *= _originalInputShape[d];
+            outGrad3D = outputGradient.Reshape([flatBatch, outputGradient.Shape[origRank - 2], outputGradient.Shape[origRank - 1]]);
+        }
+
         int batchSize = _lastInput.Shape[0];
         int timeSteps = _lastInput.Shape[1];
         var inputGradient = new Tensor<T>(_lastInput.Shape);
@@ -1089,7 +1106,7 @@ public class LSTMLayer<T> : LayerBase<T>
 
         for (int t = timeSteps - 1; t >= 0; t--)
         {
-            var dh = outputGradient.GetSlice(t).Add(dNextH);
+            var dh = outGrad3D.GetSlice(t).Add(dNextH);
             var xt = _lastInput.GetSlice(t);
             // Use cached states
             var prevH = t > 0 ? _cachedHiddenStates.GetSlice(t - 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
@@ -1124,6 +1141,12 @@ public class LSTMLayer<T> : LayerBase<T>
             {"biasF", dBiasF}, {"biasI", dBiasI}, {"biasC", dBiasC}, {"biasO", dBiasO}
         };
 
+        // Restore higher-rank gradients to their original shape
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
         return inputGradient;
     }
 
@@ -1153,6 +1176,23 @@ public class LSTMLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Backward pass called before forward pass.");
         }
 
+        // Normalize outputGradient to 3D to match canonical _lastInput shape
+        var outGrad3D = outputGradient;
+        int origRank = _originalInputShape?.Length ?? 3;
+        if (_originalInputShape != null && origRank == 2)
+        {
+            // 2D output gradient -> 3D (add batch dim)
+            outGrad3D = outputGradient.Reshape([1, outputGradient.Shape[0], outputGradient.Shape[1]]);
+        }
+        else if (_originalInputShape != null && origRank > 3)
+        {
+            // Higher-rank output gradient -> 3D (flatten leading dims)
+            int flatBatch = 1;
+            for (int d = 0; d < origRank - 2; d++)
+                flatBatch *= _originalInputShape[d];
+            outGrad3D = outputGradient.Reshape([flatBatch, outputGradient.Shape[origRank - 2], outputGradient.Shape[origRank - 1]]);
+        }
+
         int batchSize = _lastInput.Shape[0];
         int timeSteps = _lastInput.Shape[1];
 
@@ -1179,7 +1219,7 @@ public class LSTMLayer<T> : LayerBase<T>
             var xt = _lastInput.GetSlice(t);
             var prevH = t > 0 ? _lastHiddenState.GetSlice(t - 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
             var prevC = t > 0 ? _lastCellState.GetSlice(t - 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
-            var gradSlice = outputGradient.GetSlice(t);
+            var gradSlice = outGrad3D.GetSlice(t);
 
             // Convert parameters to computation nodes with gradient tracking
             var inputNode = Autodiff.TensorOperations<T>.Variable(xt, "input", requiresGradient: true);
@@ -1303,6 +1343,12 @@ public class LSTMLayer<T> : LayerBase<T>
             {"weightsFh", dWeightsFh}, {"weightsIh", dWeightsIh}, {"weightsCh", dWeightsCh}, {"weightsOh", dWeightsOh},
             {"biasF", dBiasF}, {"biasI", dBiasI}, {"biasC", dBiasC}, {"biasO", dBiasO}
         };
+
+        // Restore higher-rank gradients to their original shape
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
 
         return inputGradient;
     }

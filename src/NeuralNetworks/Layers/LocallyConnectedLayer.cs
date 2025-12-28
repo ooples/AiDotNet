@@ -485,18 +485,15 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
 
         // Handle any-rank tensor: collapse to 2D for processing
         Tensor<T> processInput;
-        int batchSize;
 
         if (rank == 1)
         {
             // 1D: add batch dim
-            batchSize = 1;
             processInput = input.Reshape([1, input.Shape[0]]);
         }
         else if (rank == 2)
         {
             // Standard 2D
-            batchSize = input.Shape[0];
             processInput = input;
         }
         else
@@ -505,7 +502,6 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
             int flatBatch = 1;
             for (int d = 0; d < rank - 1; d++)
                 flatBatch *= input.Shape[d];
-            batchSize = flatBatch;
             processInput = input.Reshape([flatBatch, input.Shape[rank - 1]]);
         }
 

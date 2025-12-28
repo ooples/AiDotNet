@@ -418,6 +418,31 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         _lastOutput = output;
         _lastCouplings = couplings;
 
+        // Restore output to match input rank pattern for any-rank tensor support
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            if (_originalInputShape.Length == 1)
+            {
+                // Was 1D, return [numClasses * outputCapsuleDimension]
+                return output.Reshape([_numClasses * _outputCapsuleDimension]);
+            }
+            else if (_originalInputShape.Length == 2)
+            {
+                // Was 2D [batch, features], return [batch, numClasses * outputCapsuleDimension]
+                int origBatch = _originalInputShape[0];
+                return output.Reshape([origBatch, _numClasses * _outputCapsuleDimension]);
+            }
+            else
+            {
+                // Higher-rank: restore leading dimensions
+                var newShape = new int[_originalInputShape.Length];
+                for (int d = 0; d < _originalInputShape.Length - 1; d++)
+                    newShape[d] = _originalInputShape[d];
+                newShape[_originalInputShape.Length - 1] = _numClasses * _outputCapsuleDimension;
+                return output.Reshape(newShape);
+            }
+        }
+
         return output;
     }
 
@@ -542,6 +567,12 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
             }
         }
 
+        // Restore gradient to original input shape for any-rank support
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
         return inputGradient;
     }
 
@@ -640,7 +671,15 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         // 6. Store Gradients
         _weightsGradient = weightsNode.Gradient;
 
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+
+        // Restore gradient to original input shape for any-rank support
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
 

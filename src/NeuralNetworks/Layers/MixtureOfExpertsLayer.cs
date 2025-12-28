@@ -496,20 +496,18 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Handle any-rank tensor: collapse to 2D for processing
         Tensor<T> input2D;
         int batchSize;
-        int featureSize;
 
         if (rank == 1)
         {
             // 1D: [features] -> add batch dim
             batchSize = 1;
-            featureSize = input.Shape[0];
+            int featureSize = input.Shape[0];
             input2D = input.Reshape(new[] { 1, featureSize });
         }
         else if (rank == 2)
         {
             // Standard 2D: [batch, features]
             batchSize = input.Shape[0];
-            featureSize = input.Shape[1];
             input2D = input;
         }
         else
@@ -519,7 +517,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             for (int d = 0; d < rank - 1; d++)
                 flatBatch *= input.Shape[d];
             batchSize = flatBatch;
-            featureSize = input.Shape[rank - 1];
+            int featureSize = input.Shape[rank - 1];
             input2D = input.Reshape(new[] { flatBatch, featureSize });
         }
 

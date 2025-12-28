@@ -588,6 +588,35 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         if (_lastQuery == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Normalize outputGradient to 3D to match canonical _lastQuery shape
+        var outGrad3D = outputGradient;
+        int origRank = _originalQueryShape?.Length ?? 3;
+        int height = 0, width = 0;
+        bool is4D = origRank == 4;
+        bool isHigherRank = origRank > 4;
+
+        if (_originalQueryShape != null && origRank == 2)
+        {
+            // 2D output gradient -> 3D (add batch dim)
+            outGrad3D = outputGradient.Reshape(new[] { 1, outputGradient.Shape[0], outputGradient.Shape[1] });
+        }
+        else if (_originalQueryShape != null && is4D)
+        {
+            // 4D NCHW -> 3D [B, H*W, C]
+            height = _originalQueryShape[2];
+            width = _originalQueryShape[3];
+            outGrad3D = ReshapeNCHWToNLC(outputGradient);
+        }
+        else if (_originalQueryShape != null && isHigherRank)
+        {
+            // Higher-rank output gradient -> 3D (flatten leading dims)
+            int flatBatch = 1;
+            for (int d = 0; d < origRank - 2; d++)
+                flatBatch *= _originalQueryShape[d];
+            int seqLenHigh = _originalQueryShape[origRank - 2];
+            outGrad3D = outputGradient.Reshape(new[] { flatBatch, seqLenHigh, _queryDim });
+        }
+
         // Compute weight gradients (simplified)
         var queryShape = _lastQuery.Shape;
         int batch = queryShape[0];
@@ -601,7 +630,29 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         _outputBiasGradient = new Tensor<T>(_outputBias.Shape);
 
         // Return input gradient (backprop through output projection)
-        return ProjectTensor(outputGradient, TransposeWeights(_outputWeights));
+        var inputGradient = ProjectTensor(outGrad3D, TransposeWeights(_outputWeights));
+
+        // Restore higher-rank gradients to their original shape
+        if (_originalQueryShape != null && origRank != 3)
+        {
+            if (origRank == 2)
+            {
+                // 3D -> 2D (remove batch dim)
+                inputGradient = inputGradient.Reshape(new[] { seqLen, _queryDim });
+            }
+            else if (is4D)
+            {
+                // 3D -> 4D NCHW
+                inputGradient = ReshapeNLCToNCHW(inputGradient, batch, _queryDim, height, width);
+            }
+            else if (isHigherRank)
+            {
+                // 3D -> higher-rank (restore original leading dims)
+                inputGradient = inputGradient.Reshape(_originalQueryShape);
+            }
+        }
+
+        return inputGradient;
     }
 
     private Tensor<T> TransposeWeights(Tensor<T> weights)

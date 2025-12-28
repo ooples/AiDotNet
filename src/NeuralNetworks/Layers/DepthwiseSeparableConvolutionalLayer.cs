@@ -683,18 +683,15 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
 
         // Handle any-rank tensor: need at least 3D [H, W, channels]
         Tensor<T> input4D;
-        int batchSize;
 
         if (rank == 3)
         {
             // 3D: [H, W, channels] -> add batch dim
-            batchSize = 1;
             input4D = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
         }
         else if (rank == 4)
         {
             // Standard 4D: [batch, H, W, channels]
-            batchSize = input.Shape[0];
             input4D = input;
         }
         else if (rank > 4)
@@ -703,7 +700,6 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
             int flatBatch = 1;
             for (int d = 0; d < rank - 3; d++)
                 flatBatch *= input.Shape[d];
-            batchSize = flatBatch;
             input4D = input.Reshape([flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
         else
@@ -934,8 +930,25 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastDepthwiseOutput == null || _lastOutput == null || _lastPreActivation == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Normalize outputGradient to 4D to match canonical _lastInput shape
+        var outGrad4D = outputGradient;
+        int origRank = _originalInputShape?.Length ?? 4;
+        if (_originalInputShape != null && origRank == 3)
+        {
+            // 3D output gradient -> 4D (add batch dim)
+            outGrad4D = outputGradient.Reshape([1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]]);
+        }
+        else if (_originalInputShape != null && origRank > 4)
+        {
+            // Higher-rank output gradient -> 4D (flatten leading dims)
+            int flatBatch = 1;
+            for (int d = 0; d < origRank - 3; d++)
+                flatBatch *= _originalInputShape[d];
+            outGrad4D = outputGradient.Reshape([flatBatch, outputGradient.Shape[origRank - 3], outputGradient.Shape[origRank - 2], outputGradient.Shape[origRank - 1]]);
+        }
+
         // Apply activation derivative using pre-activation value for correctness
-        var delta = ApplyActivationDerivative(_lastPreActivation, outputGradient);
+        var delta = ApplyActivationDerivative(_lastPreActivation, outGrad4D);
 
         // Convert gradients from NHWC to NCHW for Engine operations
         var deltaNCHW = delta.Transpose([0, 3, 1, 2]);
@@ -961,7 +974,15 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         var inputGradientNCHW = Engine.DepthwiseConv2DBackwardInput(depthwiseGradNCHW, _depthwiseKernels, inputNCHW.Shape, strideArr, paddingArr);
 
         // Convert input gradient from NCHW back to NHWC
-        return inputGradientNCHW.Transpose([0, 2, 3, 1]);
+        var inputGradient = inputGradientNCHW.Transpose([0, 2, 3, 1]);
+
+        // Restore higher-rank gradients to their original shape
+        if (_originalInputShape != null && _originalInputShape.Length != 4)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     /// <summary>
@@ -981,23 +1002,40 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastOutput == null || _lastPreActivation == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Normalize outputGradient to 4D to match canonical _lastInput shape
+        var outGrad4D = outputGradient;
+        int origRank = _originalInputShape?.Length ?? 4;
+        if (_originalInputShape != null && origRank == 3)
+        {
+            // 3D output gradient -> 4D (add batch dim)
+            outGrad4D = outputGradient.Reshape([1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]]);
+        }
+        else if (_originalInputShape != null && origRank > 4)
+        {
+            // Higher-rank output gradient -> 4D (flatten leading dims)
+            int flatBatch = 1;
+            for (int d = 0; d < origRank - 3; d++)
+                flatBatch *= _originalInputShape[d];
+            outGrad4D = outputGradient.Reshape([flatBatch, outputGradient.Shape[origRank - 3], outputGradient.Shape[origRank - 2], outputGradient.Shape[origRank - 1]]);
+        }
+
         // Production-grade: Compute activation derivative using cached pre-activation
         // Some activations (Sigmoid, Tanh) require pre-activation value for correct derivative
         Tensor<T> preActivationGradient;
         if (VectorActivation != null)
         {
             var actDeriv = VectorActivation.Derivative(_lastPreActivation);
-            preActivationGradient = Engine.TensorMultiply(outputGradient, actDeriv);
+            preActivationGradient = Engine.TensorMultiply(outGrad4D, actDeriv);
         }
         else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
         {
             var activation = ScalarActivation;
             var activationDerivative = _lastPreActivation.Transform((x, _) => activation.Derivative(x));
-            preActivationGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
+            preActivationGradient = Engine.TensorMultiply(outGrad4D, activationDerivative);
         }
         else
         {
-            preActivationGradient = outputGradient;
+            preActivationGradient = outGrad4D;
         }
 
         // Convert from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W] using Tensor.Transpose
@@ -1081,7 +1119,15 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
 
         // Convert input gradient from NCHW back to NHWC using Transpose
         var inputGradientNCHW = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-        return inputGradientNCHW.Transpose([0, 2, 3, 1]);
+        var inputGradient = inputGradientNCHW.Transpose([0, 2, 3, 1]);
+
+        // Restore higher-rank gradients to their original shape
+        if (_originalInputShape != null && _originalInputShape.Length != 4)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     /// <summary>

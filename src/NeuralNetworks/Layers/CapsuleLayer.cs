@@ -694,6 +694,12 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Sum over numCapsules and capsuleDimension: [batchSize, inputCapsules, inputDimension]
         var inputGradient = Engine.ReduceSum(inputGradProduct, new[] { 3, 4 }, keepDims: false);
 
+        // Restore higher-rank gradients to their original shape
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
         return inputGradient;
     }
 
@@ -836,7 +842,15 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _transformationMatrixGradient = Tensor<T>.CreateDefault(_transformationMatrix.Shape, NumOps.Zero);
         }
 
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+
+        // Restore higher-rank gradients to their original shape
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     /// <summary>

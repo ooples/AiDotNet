@@ -255,49 +255,57 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         _originalInputShape = input.Shape;
         int rank = input.Shape.Length;
 
-        // Handle any-rank tensor: collapse to 2D for processing
-        Tensor<T> processInput;
+        // CRF expects 3D input: [batchSize, sequenceLength, numClasses]
+        // Handle any-rank tensor: normalize to 3D for processing
+        Tensor<T> input3D;
         int batchSize;
 
-        if (rank == 1)
+        if (rank == 2)
         {
-            // 1D: add batch dim
+            // 2D [sequenceLength, numClasses]: add batch dim
             batchSize = 1;
-            processInput = input.Reshape([1, input.Shape[0]]);
+            input3D = input.Reshape([1, input.Shape[0], input.Shape[1]]);
         }
-        else if (rank == 2)
+        else if (rank == 3)
         {
-            // Standard 2D
+            // Standard 3D [batchSize, sequenceLength, numClasses]
             batchSize = input.Shape[0];
-            processInput = input;
+            input3D = input;
+        }
+        else if (rank > 3)
+        {
+            // Higher-rank: collapse leading dims into batch
+            // Input shape: [...batch dims..., sequenceLength, numClasses]
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            input3D = input.Reshape([flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
         else
         {
-            // Higher-rank: collapse leading dims into batch
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 1; d++)
-                flatBatch *= input.Shape[d];
-            batchSize = flatBatch;
-            processInput = input.Reshape([flatBatch, input.Shape[rank - 1]]);
+            // 1D: treat as [1, 1, features] - single batch, single timestep
+            batchSize = 1;
+            input3D = input.Reshape([1, 1, input.Shape[0]]);
         }
 
-        _lastInput = processInput;
+        _lastInput = input3D;
 
         var output = new Tensor<T>([batchSize, _sequenceLength, _numClasses]);
 
-        // === VECTORIZED: Apply activation to entire input ===
+        // === VECTORIZED: Apply activation to entire normalized input ===
         Tensor<T> sequenceScores;
         if (UsingVectorActivation)
         {
-            sequenceScores = ApplyActivation(input);
+            sequenceScores = ApplyActivation(input3D);
         }
         else if (ScalarActivation != null && !(ScalarActivation is IdentityActivation<T>))
         {
-            sequenceScores = ApplyActivation(input);
+            sequenceScores = ApplyActivation(input3D);
         }
         else
         {
-            sequenceScores = input;
+            sequenceScores = input3D;
         }
 
         // Process each batch item (Viterbi requires sequential time processing)
@@ -387,6 +395,32 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         }
 
         _lastOutput = output;
+
+        // Restore original rank if needed for any-rank tensor support
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            if (_originalInputShape.Length == 1)
+            {
+                // Was 1D, return [_sequenceLength * _numClasses]
+                return output.Reshape([_sequenceLength * _numClasses]);
+            }
+            else if (_originalInputShape.Length == 2)
+            {
+                // Was 2D [batch, features], return [batch, _sequenceLength * _numClasses]
+                int origBatch = _originalInputShape[0];
+                return output.Reshape([origBatch, _sequenceLength * _numClasses]);
+            }
+            else
+            {
+                // Higher-rank: restore leading dimensions
+                var newShape = new int[_originalInputShape.Length];
+                for (int d = 0; d < _originalInputShape.Length - 1; d++)
+                    newShape[d] = _originalInputShape[d];
+                newShape[_originalInputShape.Length - 1] = _sequenceLength * _numClasses;
+                return output.Reshape(newShape);
+            }
+        }
+
         return output;
     }
 
@@ -478,6 +512,12 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
             inputGradient = ApplyActivationDerivative(_lastInput, inputGradient);
         }
 
+        // Restore original input rank if needed
+        if (_originalInputShape != null && _originalInputShape.Length != inputGradient.Shape.Length)
+        {
+            inputGradient = inputGradient.Reshape(_originalInputShape);
+        }
+
         return inputGradient;
     }
 
@@ -561,6 +601,12 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         if (UsingVectorActivation || (ScalarActivation != null && !(ScalarActivation is IdentityActivation<T>)))
         {
             inputGradient = ApplyActivationDerivative(_lastInput, inputGradient);
+        }
+
+        // Restore original input rank if needed
+        if (_originalInputShape != null && _originalInputShape.Length != inputGradient.Shape.Length)
+        {
+            inputGradient = inputGradient.Reshape(_originalInputShape);
         }
 
         return inputGradient;
