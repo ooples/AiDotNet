@@ -840,9 +840,9 @@ public class NeuralNetworkArchitecture<T>
 
             case InputType.TwoDimensional:
                 // Support both explicit dimensions and inferred dimensions from InputSize
-                if (InputHeight <= 0 || InputWidth <= 0)
+                if (InputHeight <= 0 && InputWidth <= 0)
                 {
-                    // Try to infer dimensions from InputSize for fully-connected architectures (e.g., GANs)
+                    // Both dimensions missing - try to infer from InputSize
                     if (InputSize > 0)
                     {
                         // Try to infer square dimensions (e.g., 784 = 28x28)
@@ -862,6 +862,30 @@ public class NeuralNetworkArchitecture<T>
                     else
                     {
                         throw new ArgumentException("For TwoDimensional input, provide either (InputHeight and InputWidth) or InputSize. At least one dimension specification is required.");
+                    }
+                }
+                else if (InputHeight <= 0 && InputWidth > 0)
+                {
+                    // Only InputHeight missing - infer from InputSize and InputWidth
+                    if (InputSize > 0 && InputSize % InputWidth == 0)
+                    {
+                        InputHeight = InputSize / InputWidth;
+                    }
+                    else
+                    {
+                        throw new ArgumentException($"Cannot infer InputHeight: InputSize ({InputSize}) must be divisible by InputWidth ({InputWidth}).");
+                    }
+                }
+                else if (InputWidth <= 0 && InputHeight > 0)
+                {
+                    // Only InputWidth missing - infer from InputSize and InputHeight
+                    if (InputSize > 0 && InputSize % InputHeight == 0)
+                    {
+                        InputWidth = InputSize / InputHeight;
+                    }
+                    else
+                    {
+                        throw new ArgumentException($"Cannot infer InputWidth: InputSize ({InputSize}) must be divisible by InputHeight ({InputHeight}).");
                     }
                 }
                 if (InputDepth != 1)

@@ -335,13 +335,15 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         else if (_poolingType == PoolingType.Average)
         {
             // Use GPU-accelerated ReduceMean
-            output = Engine.ReduceMean(input, axes, keepDims: input.Shape.Length == 4);
+            // keepDims=true for rank >= 4 to preserve dimension structure for subsequent reshape
+            output = Engine.ReduceMean(input, axes, keepDims: input.Shape.Length >= 4);
             _maxIndices = null;
         }
         else // Max pooling
         {
             // Use GPU-accelerated ReduceMax
-            output = Engine.ReduceMax(input, axes, keepDims: input.Shape.Length == 4, out _maxIndices);
+            // keepDims=true for rank >= 4 to preserve dimension structure for subsequent reshape
+            output = Engine.ReduceMax(input, axes, keepDims: input.Shape.Length >= 4, out _maxIndices);
         }
 
         _lastOutput = ApplyActivation(output);
@@ -481,22 +483,30 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
 
         // Apply global pooling using reduce operations
-        // Global pooling reduces over spatial dimensions (height and width), keeping channels
-        // Input format is NHWC: [batch, height, width, channels]
-        // So we reduce over dimensions 1 (height) and 2 (width), not 2 and 3
+        // Global pooling reduces over spatial dimensions (all non-batch, non-channel axes), keeping channels.
+        // The reduction axes are determined dynamically from the input rank. For a 4D NHWC tensor
+        // [batch, height, width, channels], this corresponds to reducing over height (1) and width (2).
         var axes = GetReductionAxes(_lastInput.Shape.Length); // Industry-standard: dynamic axes based on input rank
+
+        // If no axes to reduce (1D or 2D input), just return the gradient as-is
+        if (axes.Length == 0)
+        {
+            return outputGradient;
+        }
 
         Autodiff.ComputationNode<T> outputNode;
         if (_poolingType == PoolingType.Max)
         {
-            outputNode = Autodiff.TensorOperations<T>.ReduceMax(inputNode, axes, keepDims: _lastInput.Shape.Length == 4);
+            // keepDims=true for rank >= 4 to preserve dimension structure for subsequent reshape
+            outputNode = Autodiff.TensorOperations<T>.ReduceMax(inputNode, axes, keepDims: _lastInput.Shape.Length >= 4);
         }
         else // Average pooling
         {
-            outputNode = Autodiff.TensorOperations<T>.ReduceMean(inputNode, axes, keepDims: _lastInput.Shape.Length == 4);
+            // keepDims=true for rank >= 4 to preserve dimension structure for subsequent reshape
+            outputNode = Autodiff.TensorOperations<T>.ReduceMean(inputNode, axes, keepDims: _lastInput.Shape.Length >= 4);
         }
 
-        // Remove the spatial dimensions to match expected output shape
+        // Reshape the reduction result to match this layer's OutputShape (may add/remove dimensions or just validate shape)
         var squeezed = Autodiff.TensorOperations<T>.Reshape(outputNode, OutputShape);
 
         // Apply activation if present
