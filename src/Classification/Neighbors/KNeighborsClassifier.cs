@@ -460,4 +460,143 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
         metadata.AdditionalInfo["TrainingSamples"] = _xTrain?.Rows ?? 0;
         return metadata;
     }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        var modelData = new Dictionary<string, object>
+        {
+            { "NumClasses", NumClasses },
+            { "NumFeatures", NumFeatures },
+            { "TaskType", (int)TaskType },
+            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
+            { "RegularizationOptions", Regularization.GetOptions() },
+            // KNN-specific options
+            { "NNeighbors", Options.NNeighbors },
+            { "Metric", (int)Options.Metric },
+            { "Weights", (int)Options.Weights },
+            { "P", Options.P },
+            { "Algorithm", (int)Options.Algorithm },
+            { "LeafSize", Options.LeafSize }
+        };
+
+        // Serialize _xTrain matrix
+        if (_xTrain is not null)
+        {
+            var xTrainArray = new double[_xTrain.Rows * _xTrain.Columns];
+            int idx = 0;
+            for (int i = 0; i < _xTrain.Rows; i++)
+            {
+                for (int j = 0; j < _xTrain.Columns; j++)
+                {
+                    xTrainArray[idx++] = NumOps.ToDouble(_xTrain[i, j]);
+                }
+            }
+            modelData["XTrain"] = xTrainArray;
+            modelData["XTrainRows"] = _xTrain.Rows;
+            modelData["XTrainCols"] = _xTrain.Columns;
+        }
+
+        // Serialize _yTrain vector
+        if (_yTrain is not null)
+        {
+            var yTrainArray = new double[_yTrain.Length];
+            for (int i = 0; i < _yTrain.Length; i++)
+            {
+                yTrainArray[i] = NumOps.ToDouble(_yTrain[i]);
+            }
+            modelData["YTrain"] = yTrainArray;
+        }
+
+        var modelMetadata = GetModelMetadata();
+        modelMetadata.ModelData = System.Text.Encoding.UTF8.GetBytes(
+            Newtonsoft.Json.JsonConvert.SerializeObject(modelData));
+
+        return System.Text.Encoding.UTF8.GetBytes(
+            Newtonsoft.Json.JsonConvert.SerializeObject(modelMetadata));
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = System.Text.Encoding.UTF8.GetString(modelData);
+        var modelMetadata = Newtonsoft.Json.JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+
+        if (modelMetadata == null || modelMetadata.ModelData == null)
+        {
+            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+        }
+
+        var modelDataString = System.Text.Encoding.UTF8.GetString(modelMetadata.ModelData);
+        var modelDataObj = Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(modelDataString);
+
+        if (modelDataObj == null)
+        {
+            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+        }
+
+        // Deserialize base properties
+        NumClasses = modelDataObj["NumClasses"]?.ToObject<int>() ?? 0;
+        NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
+
+        // Deserialize KNN-specific options
+        Options.NNeighbors = modelDataObj["NNeighbors"]?.ToObject<int>() ?? 5;
+        Options.Metric = (DistanceMetric)(modelDataObj["Metric"]?.ToObject<int>() ?? 0);
+        Options.Weights = (WeightingScheme)(modelDataObj["Weights"]?.ToObject<int>() ?? 0);
+        Options.P = modelDataObj["P"]?.ToObject<double>() ?? 2.0;
+        Options.Algorithm = (KNNAlgorithm)(modelDataObj["Algorithm"]?.ToObject<int>() ?? 0);
+        Options.LeafSize = modelDataObj["LeafSize"]?.ToObject<int>() ?? 30;
+
+        var classLabelsToken = modelDataObj["ClassLabels"];
+        if (classLabelsToken is not null)
+        {
+            var classLabelsAsDoubles = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (classLabelsAsDoubles.Length > 0)
+            {
+                ClassLabels = new Vector<T>(classLabelsAsDoubles.Length);
+                for (int i = 0; i < classLabelsAsDoubles.Length; i++)
+                {
+                    ClassLabels[i] = NumOps.FromDouble(classLabelsAsDoubles[i]);
+                }
+            }
+        }
+
+        // Deserialize _xTrain matrix
+        var xTrainToken = modelDataObj["XTrain"];
+        if (xTrainToken is not null)
+        {
+            var xTrainArray = xTrainToken.ToObject<double[]>() ?? Array.Empty<double>();
+            int rows = modelDataObj["XTrainRows"]?.ToObject<int>() ?? 0;
+            int cols = modelDataObj["XTrainCols"]?.ToObject<int>() ?? 0;
+
+            if (rows > 0 && cols > 0)
+            {
+                _xTrain = new Matrix<T>(rows, cols);
+                int idx = 0;
+                for (int i = 0; i < rows; i++)
+                {
+                    for (int j = 0; j < cols; j++)
+                    {
+                        _xTrain[i, j] = NumOps.FromDouble(xTrainArray[idx++]);
+                    }
+                }
+            }
+        }
+
+        // Deserialize _yTrain vector
+        var yTrainToken = modelDataObj["YTrain"];
+        if (yTrainToken is not null)
+        {
+            var yTrainArray = yTrainToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (yTrainArray.Length > 0)
+            {
+                _yTrain = new Vector<T>(yTrainArray.Length);
+                for (int i = 0; i < yTrainArray.Length; i++)
+                {
+                    _yTrain[i] = NumOps.FromDouble(yTrainArray[i]);
+                }
+            }
+        }
+    }
 }

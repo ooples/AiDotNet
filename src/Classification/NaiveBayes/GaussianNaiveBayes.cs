@@ -285,4 +285,172 @@ public class GaussianNaiveBayes<T> : NaiveBayesBase<T>
         metadata.AdditionalInfo["MinVariance"] = Options.MinVariance;
         return metadata;
     }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        var modelData = new Dictionary<string, object>
+        {
+            { "NumClasses", NumClasses },
+            { "NumFeatures", NumFeatures },
+            { "TaskType", (int)TaskType },
+            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
+            { "RegularizationOptions", Regularization.GetOptions() },
+            { "ClassCounts", ClassCounts ?? Array.Empty<int>() }
+        };
+
+        // Serialize LogPriors
+        if (LogPriors is not null)
+        {
+            var logPriorsArray = new double[LogPriors.Length];
+            for (int i = 0; i < LogPriors.Length; i++)
+            {
+                logPriorsArray[i] = NumOps.ToDouble(LogPriors[i]);
+            }
+            modelData["LogPriors"] = logPriorsArray;
+        }
+
+        // Serialize _means matrix
+        if (_means is not null)
+        {
+            var meansArray = new double[_means.Rows * _means.Columns];
+            int idx = 0;
+            for (int i = 0; i < _means.Rows; i++)
+            {
+                for (int j = 0; j < _means.Columns; j++)
+                {
+                    meansArray[idx++] = NumOps.ToDouble(_means[i, j]);
+                }
+            }
+            modelData["Means"] = meansArray;
+            modelData["MeansRows"] = _means.Rows;
+            modelData["MeansCols"] = _means.Columns;
+        }
+
+        // Serialize _variances matrix
+        if (_variances is not null)
+        {
+            var variancesArray = new double[_variances.Rows * _variances.Columns];
+            int idx = 0;
+            for (int i = 0; i < _variances.Rows; i++)
+            {
+                for (int j = 0; j < _variances.Columns; j++)
+                {
+                    variancesArray[idx++] = NumOps.ToDouble(_variances[i, j]);
+                }
+            }
+            modelData["Variances"] = variancesArray;
+            modelData["VariancesRows"] = _variances.Rows;
+            modelData["VariancesCols"] = _variances.Columns;
+        }
+
+        var modelMetadata = GetModelMetadata();
+        modelMetadata.ModelData = System.Text.Encoding.UTF8.GetBytes(
+            Newtonsoft.Json.JsonConvert.SerializeObject(modelData));
+
+        return System.Text.Encoding.UTF8.GetBytes(
+            Newtonsoft.Json.JsonConvert.SerializeObject(modelMetadata));
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = System.Text.Encoding.UTF8.GetString(modelData);
+        var modelMetadata = Newtonsoft.Json.JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+
+        if (modelMetadata == null || modelMetadata.ModelData == null)
+        {
+            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+        }
+
+        var modelDataString = System.Text.Encoding.UTF8.GetString(modelMetadata.ModelData);
+        var modelDataObj = Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(modelDataString);
+
+        if (modelDataObj == null)
+        {
+            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+        }
+
+        // Deserialize base properties
+        NumClasses = modelDataObj["NumClasses"]?.ToObject<int>() ?? 0;
+        NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
+
+        var classLabelsToken = modelDataObj["ClassLabels"];
+        if (classLabelsToken is not null)
+        {
+            var classLabelsAsDoubles = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (classLabelsAsDoubles.Length > 0)
+            {
+                ClassLabels = new Vector<T>(classLabelsAsDoubles.Length);
+                for (int i = 0; i < classLabelsAsDoubles.Length; i++)
+                {
+                    ClassLabels[i] = NumOps.FromDouble(classLabelsAsDoubles[i]);
+                }
+            }
+        }
+
+        // Deserialize ClassCounts
+        var classCountsToken = modelDataObj["ClassCounts"];
+        if (classCountsToken is not null)
+        {
+            ClassCounts = classCountsToken.ToObject<int[]>();
+        }
+
+        // Deserialize LogPriors
+        var logPriorsToken = modelDataObj["LogPriors"];
+        if (logPriorsToken is not null)
+        {
+            var logPriorsArray = logPriorsToken.ToObject<double[]>() ?? Array.Empty<double>();
+            LogPriors = new Vector<T>(logPriorsArray.Length);
+            for (int i = 0; i < logPriorsArray.Length; i++)
+            {
+                LogPriors[i] = NumOps.FromDouble(logPriorsArray[i]);
+            }
+        }
+
+        // Deserialize _means matrix
+        var meansToken = modelDataObj["Means"];
+        if (meansToken is not null)
+        {
+            var meansArray = meansToken.ToObject<double[]>() ?? Array.Empty<double>();
+            int rows = modelDataObj["MeansRows"]?.ToObject<int>() ?? 0;
+            int cols = modelDataObj["MeansCols"]?.ToObject<int>() ?? 0;
+
+            if (rows > 0 && cols > 0)
+            {
+                _means = new Matrix<T>(rows, cols);
+                int idx = 0;
+                for (int i = 0; i < rows; i++)
+                {
+                    for (int j = 0; j < cols; j++)
+                    {
+                        _means[i, j] = NumOps.FromDouble(meansArray[idx++]);
+                    }
+                }
+            }
+        }
+
+        // Deserialize _variances matrix
+        var variancesToken = modelDataObj["Variances"];
+        if (variancesToken is not null)
+        {
+            var variancesArray = variancesToken.ToObject<double[]>() ?? Array.Empty<double>();
+            int rows = modelDataObj["VariancesRows"]?.ToObject<int>() ?? 0;
+            int cols = modelDataObj["VariancesCols"]?.ToObject<int>() ?? 0;
+
+            if (rows > 0 && cols > 0)
+            {
+                _variances = new Matrix<T>(rows, cols);
+                int idx = 0;
+                for (int i = 0; i < rows; i++)
+                {
+                    for (int j = 0; j < cols; j++)
+                    {
+                        _variances[i, j] = NumOps.FromDouble(variancesArray[idx++]);
+                    }
+                }
+            }
+        }
+    }
 }
