@@ -1024,6 +1024,12 @@ public class ConvolutionalLayer<T> : LayerBase<T>
 
         var inputGrad = inputNode.Gradient ?? throw new InvalidOperationException("Input gradient was not computed during backward pass.");
 
+        // Restore higher-rank gradients to their original shape
+        if (_originalInputShape != null && _originalInputShape.Length > 4)
+        {
+            return inputGrad.Reshape(_originalInputShape);
+        }
+
         // Return with matching dimensions: remove batch dimension if added: [1, C, H, W] -> [C, H, W]
         return _addedBatchDimension
             ? inputGrad.Reshape(inputGrad.Shape[1], inputGrad.Shape[2], inputGrad.Shape[3])
