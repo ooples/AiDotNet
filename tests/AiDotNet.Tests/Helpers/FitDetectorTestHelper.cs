@@ -176,14 +176,23 @@ public static class FitDetectorTestHelper
     /// <summary>
     /// Creates a well-conditioned feature matrix for testing.
     /// Uses random data with different seeds per column to ensure non-singular correlation matrix.
+    /// Note: For SimpleRegression tests (HeteroscedasticityFitDetector), pass columns=1.
+    /// For VIF tests, use columns >= 2.
     /// </summary>
+    /// <param name="rows">Number of rows (minimum 20 for proper statistics calculation).</param>
+    /// <param name="columns">Number of columns (must be >= 1).</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when columns is less than 1.</exception>
     public static Matrix<double> CreateFeatureMatrix(int rows, int columns = 3)
     {
-        // Ensure minimum dimensions for proper statistics calculation
-        // VIF calculation needs correlation matrix to be invertible, which requires
-        // enough rows and non-correlated columns
+        // Validate columns - caller must explicitly request a valid column count
+        if (columns < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(columns), columns,
+                "Column count must be at least 1. For SimpleRegression tests, use columns=1.");
+        }
+
+        // Ensure minimum rows for proper statistics calculation
         if (rows < 20) rows = 30;
-        if (columns < 2) columns = 3;
 
         var data = new double[rows, columns];
 
