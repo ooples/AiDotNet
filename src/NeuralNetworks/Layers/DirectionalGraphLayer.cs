@@ -356,13 +356,13 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         _lastInput = processInput;
-        int numNodes = input.Shape[1];
-        int inputFeatures = input.Shape[2];
+        int numNodes = processInput.Shape[1];
+        int inputFeatures = processInput.Shape[2];
 
         // Step 1: Aggregate incoming edges (nodes that point TO this node)
         // A[i,j] = 1 means edge from j to i (j→i)
         // For incoming: multiply A @ X @ W_in
-        var xwIn = BatchedMatMul3Dx2D(input, _incomingWeights, batchSize, numNodes, inputFeatures, _outputFeatures);
+        var xwIn = BatchedMatMul3Dx2D(processInput, _incomingWeights, batchSize, numNodes, inputFeatures, _outputFeatures);
         _lastIncoming = Engine.BatchMatMul(_adjacencyMatrix, xwIn);
         var biasIn = BroadcastBias(_incomingBias, batchSize, numNodes);
         _lastIncoming = Engine.TensorAdd(_lastIncoming, biasIn);
@@ -370,13 +370,13 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Step 2: Aggregate outgoing edges (nodes that this node points TO)
         // For outgoing: multiply A^T @ X @ W_out
         var adjTransposed = Engine.TensorTranspose(_adjacencyMatrix);
-        var xwOut = BatchedMatMul3Dx2D(input, _outgoingWeights, batchSize, numNodes, inputFeatures, _outputFeatures);
+        var xwOut = BatchedMatMul3Dx2D(processInput, _outgoingWeights, batchSize, numNodes, inputFeatures, _outputFeatures);
         _lastOutgoing = Engine.BatchMatMul(adjTransposed, xwOut);
         var biasOut = BroadcastBias(_outgoingBias, batchSize, numNodes);
         _lastOutgoing = Engine.TensorAdd(_lastOutgoing, biasOut);
 
         // Step 3: Transform self features: X @ W_self + b_self
-        _lastSelf = BatchedMatMul3Dx2D(input, _selfWeights, batchSize, numNodes, inputFeatures, _outputFeatures);
+        _lastSelf = BatchedMatMul3Dx2D(processInput, _selfWeights, batchSize, numNodes, inputFeatures, _outputFeatures);
         var biasSelf = BroadcastBias(_selfBias, batchSize, numNodes);
         _lastSelf = Engine.TensorAdd(_lastSelf, biasSelf);
 

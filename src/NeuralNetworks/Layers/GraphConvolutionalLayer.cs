@@ -577,12 +577,12 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         }
 
         _lastInput = processInput;
-        int numNodes = input.Shape[1];
+        int numNodes = processInput.Shape[1];
         int outputFeatures = _weights.Shape[1];
 
         // Perform graph convolution: A * X * W
         // First: X * W using reshape pattern for 3D @ 2D
-        var xw = BatchedMatMul3Dx2D(input, _weights, batchSize, numNodes, input.Shape[2], outputFeatures);
+        var xw = BatchedMatMul3Dx2D(processInput, _weights, batchSize, numNodes, processInput.Shape[2], outputFeatures);
 
         // Then: A * (X * W) using batched matmul for 3D @ 3D
         var output = Engine.BatchMatMul(_adjacencyMatrix, xw);
@@ -595,6 +595,25 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
 
         // Store node features for auxiliary loss computation
         _lastNodeFeatures = _lastOutput;
+
+        // Restore original shape for any-rank tensor support
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            if (_originalInputShape.Length == 2)
+            {
+                // Was 2D, return [nodes, outputFeatures]
+                return _lastOutput.Reshape([numNodes, outputFeatures]);
+            }
+            else
+            {
+                // Higher-rank: restore leading dimensions
+                var newShape = new int[_originalInputShape.Length];
+                for (int d = 0; d < _originalInputShape.Length - 1; d++)
+                    newShape[d] = _originalInputShape[d];
+                newShape[_originalInputShape.Length - 1] = outputFeatures;
+                return _lastOutput.Reshape(newShape);
+            }
+        }
 
         return _lastOutput;
     }

@@ -198,31 +198,41 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _originalInputShape = input.Shape;
         int rank = input.Shape.Length;
 
-        // Handle any-rank tensor: collapse to 2D for processing
+        // Graph layer expects 3D: [batchSize, numNodes, features]
+        // Handle any-rank tensor: normalize to 3D for processing
         Tensor<T> processInput;
         int batchSize;
 
-        if (rank == 1)
+        if (rank == 2)
         {
+            // 2D [nodes, features]: add batch dim
             batchSize = 1;
-            processInput = input.Reshape([1, input.Shape[0]]);
+            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
         }
-        else if (rank == 2)
+        else if (rank == 3)
         {
+            // Standard 3D [batchSize, nodes, features]
             batchSize = input.Shape[0];
             processInput = input;
         }
-        else
+        else if (rank > 3)
         {
+            // Higher-rank: collapse leading dims into batch
             int flatBatch = 1;
-            for (int d = 0; d < rank - 1; d++)
+            for (int d = 0; d < rank - 2; d++)
                 flatBatch *= input.Shape[d];
             batchSize = flatBatch;
-            processInput = input.Reshape([flatBatch, input.Shape[rank - 1]]);
+            processInput = input.Reshape([flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
+        }
+        else
+        {
+            // 1D: treat as single node with features
+            batchSize = 1;
+            processInput = input.Reshape([1, 1, input.Shape[0]]);
         }
 
         _lastInput = processInput;
-        int numNodes = input.Shape[1];
+        int numNodes = processInput.Shape[1];
 
         // Step 1: Compute degrees for normalization
         _lastDegrees = Engine.ReduceSum(_adjacencyMatrix, [2], keepDims: false); // [batch, nodes]
@@ -233,10 +243,10 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var safeDegrees = Engine.TensorMax(_lastDegrees, oneTensor);
 
         // Step 2: Aggregate neighbor features using vectorized operations
-        _lastAggregated = ComputeVectorizedAggregation(input, safeDegrees, batchSize, numNodes);
+        _lastAggregated = ComputeVectorizedAggregation(processInput, safeDegrees, batchSize, numNodes);
 
         // Step 3: Transform self features (3D @ 2D requires reshape pattern)
-        var selfTransformed = BatchedMatMul3Dx2D(input, _selfWeights, batchSize, numNodes, _inputFeatures, _outputFeatures);
+        var selfTransformed = BatchedMatMul3Dx2D(processInput, _selfWeights, batchSize, numNodes, _inputFeatures, _outputFeatures);
 
         // Step 4: Transform neighbor features (3D @ 2D requires reshape pattern)
         var neighborTransformed = BatchedMatMul3Dx2D(_lastAggregated, _neighborWeights, batchSize, numNodes, _inputFeatures, _outputFeatures);
@@ -258,6 +268,31 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         _lastOutput = ApplyActivation(output);
+
+        // Restore original shape for any-rank tensor support
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            if (_originalInputShape.Length == 2)
+            {
+                // Was 2D, return [nodes, outputFeatures]
+                return _lastOutput.Reshape([numNodes, _outputFeatures]);
+            }
+            else if (_originalInputShape.Length == 1)
+            {
+                // Was 1D, return [outputFeatures]
+                return _lastOutput.Reshape([_outputFeatures]);
+            }
+            else
+            {
+                // Higher-rank: restore leading dimensions
+                var newShape = new int[_originalInputShape.Length];
+                for (int d = 0; d < _originalInputShape.Length - 1; d++)
+                    newShape[d] = _originalInputShape[d];
+                newShape[_originalInputShape.Length - 1] = _outputFeatures;
+                return _lastOutput.Reshape(newShape);
+            }
+        }
+
         return _lastOutput;
     }
 

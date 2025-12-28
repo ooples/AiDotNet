@@ -232,31 +232,41 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         _originalInputShape = input.Shape;
         int rank = input.Shape.Length;
 
-        // Handle any-rank tensor: collapse to 2D for processing
+        // Graph layer expects 3D: [batchSize, numNodes, features]
+        // Handle any-rank tensor: normalize to 3D for processing
         Tensor<T> processInput;
         int batchSize;
 
-        if (rank == 1)
+        if (rank == 2)
         {
+            // 2D [nodes, features]: add batch dim
             batchSize = 1;
-            processInput = input.Reshape([1, input.Shape[0]]);
+            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
         }
-        else if (rank == 2)
+        else if (rank == 3)
         {
+            // Standard 3D [batchSize, nodes, features]
             batchSize = input.Shape[0];
             processInput = input;
         }
-        else
+        else if (rank > 3)
         {
+            // Higher-rank: collapse leading dims into batch
             int flatBatch = 1;
-            for (int d = 0; d < rank - 1; d++)
+            for (int d = 0; d < rank - 2; d++)
                 flatBatch *= input.Shape[d];
             batchSize = flatBatch;
-            processInput = input.Reshape([flatBatch, input.Shape[rank - 1]]);
+            processInput = input.Reshape([flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
+        }
+        else
+        {
+            // 1D: treat as single node with features
+            batchSize = 1;
+            processInput = input.Reshape([1, 1, input.Shape[0]]);
         }
 
         _lastInput = processInput;
-        int numNodes = input.Shape[1];
+        int numNodes = processInput.Shape[1];
         int numEdges = _edgeFeatures.Shape[1];
 
         // Step 1: Compute edge-specific weights using edge network
