@@ -289,4 +289,98 @@ public class ComplexMorletWavelet<T> : ComplexWaveletFunctionBase<T>
 
         return new Vector<Complex<T>>(coeffs);
     }
+
+    /// <summary>
+    /// Reconstructs the original signal from approximation and detail coefficients.
+    /// </summary>
+    /// <param name="approximation">The approximation coefficients from decomposition.</param>
+    /// <param name="detail">The detail coefficients from decomposition.</param>
+    /// <returns>The reconstructed signal.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method reverses the decomposition process to get back the original signal.
+    ///
+    /// For Complex Morlet wavelets, reconstruction works by:
+    /// 1. Upsampling (inserting zeros between each coefficient)
+    /// 2. Convolving with time-reversed reconstruction filters
+    /// 3. Adding the approximation and detail contributions together
+    ///
+    /// This is the inverse of the Decompose method, so:
+    /// Reconstruct(Decompose(signal)) should equal the original signal.
+    /// </para>
+    /// </remarks>
+    public Vector<Complex<T>> Reconstruct(Vector<Complex<T>> approximation, Vector<Complex<T>> detail)
+    {
+        // Upsample by 2
+        var approxUpsampled = Upsample(approximation, 2);
+        var detailUpsampled = Upsample(detail, 2);
+
+        // Convolve with time-reversed filters
+        var scalingCoeffs = GetScalingCoefficients();
+        var waveletCoeffs = GetWaveletCoefficients();
+
+        var approxRecon = ConvolveReversed(approxUpsampled, scalingCoeffs);
+        var detailRecon = ConvolveReversed(detailUpsampled, waveletCoeffs);
+
+        // Add contributions
+        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
+        int outputLength = Math.Min(approxRecon.Length, detailRecon.Length);
+        var reconstructed = new Vector<Complex<T>>(outputLength);
+        for (int i = 0; i < outputLength; i++)
+        {
+            reconstructed[i] = complexOps.Add(approxRecon[i], detailRecon[i]);
+        }
+
+        return reconstructed;
+    }
+
+    /// <summary>
+    /// Upsamples a signal by inserting zeros between samples.
+    /// </summary>
+    private Vector<Complex<T>> Upsample(Vector<Complex<T>> input, int factor)
+    {
+        int newLength = input.Length * factor;
+        var result = new Complex<T>[newLength];
+        var zero = new Complex<T>(NumOps.Zero, NumOps.Zero);
+
+        for (int i = 0; i < newLength; i++)
+        {
+            result[i] = zero;
+        }
+
+        for (int i = 0; i < input.Length; i++)
+        {
+            result[i * factor] = input[i];
+        }
+
+        return new Vector<Complex<T>>(result);
+    }
+
+    /// <summary>
+    /// Convolves a signal with a time-reversed kernel.
+    /// </summary>
+    private Vector<Complex<T>> ConvolveReversed(Vector<Complex<T>> input, Vector<Complex<T>> kernel)
+    {
+        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
+        int resultLength = input.Length;
+        var result = new Complex<T>[resultLength];
+
+        for (int i = 0; i < resultLength; i++)
+        {
+            Complex<T> sum = new Complex<T>(NumOps.Zero, NumOps.Zero);
+            for (int j = 0; j < kernel.Length; j++)
+            {
+                int inputIndex = i - j + kernel.Length / 2;
+                if (inputIndex >= 0 && inputIndex < input.Length)
+                {
+                    int revJ = kernel.Length - 1 - j;
+                    sum = complexOps.Add(sum, complexOps.Multiply(input[inputIndex], kernel[revJ]));
+                }
+            }
+            result[i] = sum;
+        }
+
+        return new Vector<Complex<T>>(result);
+    }
 }

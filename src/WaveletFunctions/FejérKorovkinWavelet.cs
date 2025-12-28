@@ -462,4 +462,50 @@ public class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
             coefficients[i] = NumOps.Multiply(coefficients[i], normalizationFactor);
         }
     }
+
+    /// <summary>
+    /// Reconstructs the original signal from approximation and detail coefficients.
+    /// </summary>
+    /// <param name="approximation">The approximation coefficients from decomposition.</param>
+    /// <param name="detail">The detail coefficients from decomposition.</param>
+    /// <returns>The reconstructed signal.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method reverses the decomposition process to get back the original signal.
+    ///
+    /// For Fejer-Korovkin wavelets, reconstruction works by:
+    /// 1. Upsampling (inserting zeros between each coefficient)
+    /// 2. Convolving with time-reversed reconstruction filters
+    /// 3. Adding the approximation and detail contributions together
+    ///
+    /// This is the inverse of the Decompose method, so:
+    /// Reconstruct(Decompose(signal)) should equal the original signal.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
+    {
+        int outputLength = approximation.Length * 2;
+        var reconstructed = new Vector<T>(outputLength);
+
+        for (int i = 0; i < outputLength; i++)
+        {
+            T sum = NumOps.Zero;
+
+            for (int j = 0; j < _order; j++)
+            {
+                int approxIndex = (i - j + _order * outputLength) / 2;
+                if (approxIndex >= 0 && approxIndex < approximation.Length && (i - j + _order * outputLength) % 2 == 0)
+                {
+                    int revJ = _order - 1 - j;
+                    sum = NumOps.Add(sum, NumOps.Multiply(_scalingCoefficients[revJ], approximation[approxIndex]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(_waveletCoefficients[revJ], detail[approxIndex]));
+                }
+            }
+
+            reconstructed[i] = sum;
+        }
+
+        return reconstructed;
+    }
 }

@@ -320,4 +320,44 @@ public class PaulWavelet<T> : WaveletFunctionBase<T>
 
         return new Complex<T>(real, imag);
     }
+
+    /// <summary>
+    /// Reconstructs the original signal from approximation and detail coefficients.
+    /// </summary>
+    /// <param name="approximation">The approximation coefficients from decomposition.</param>
+    /// <param name="detail">The detail coefficients from decomposition.</param>
+    /// <returns>The reconstructed signal.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method reverses the decomposition process to get back the original signal.
+    ///
+    /// For Paul wavelets, reconstruction combines the frequency components:
+    /// 1. Transform both approximation and detail to frequency domain using FFT
+    /// 2. Add the spectrums together (since decomposition split them)
+    /// 3. Transform the combined spectrum back to time domain
+    ///
+    /// This is the inverse of the Decompose method, so:
+    /// Reconstruct(Decompose(signal)) should equal the original signal.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
+    {
+        int size = approximation.Length;
+        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
+
+        // Transform both to frequency domain
+        Vector<Complex<T>> approxSpectrum = _fft.Forward(approximation);
+        Vector<Complex<T>> detailSpectrum = _fft.Forward(detail);
+
+        // Combine spectrums
+        var combined = new Vector<Complex<T>>(size);
+        for (int i = 0; i < size; i++)
+        {
+            combined[i] = complexOps.Add(approxSpectrum[i], detailSpectrum[i]);
+        }
+
+        // Transform back to time domain
+        return _fft.Inverse(combined);
+    }
 }

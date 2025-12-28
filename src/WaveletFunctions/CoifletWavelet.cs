@@ -227,6 +227,86 @@ public class CoifletWavelet<T> : WaveletFunctionBase<T>
     }
 
     /// <summary>
+    /// Reconstructs the original signal from approximation and detail coefficients.
+    /// </summary>
+    /// <param name="approximation">The approximation coefficients from decomposition.</param>
+    /// <param name="detail">The detail coefficients from decomposition.</param>
+    /// <returns>The reconstructed signal.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method reverses the decomposition process to get back the original signal.
+    ///
+    /// The reconstruction process for Coiflet wavelets:
+    /// 1. Upsample the approximation and detail coefficients by inserting zeros
+    /// 2. Convolve with the time-reversed reconstruction filters
+    /// 3. Add the results together
+    ///
+    /// For orthogonal wavelets like Coiflets, perfect reconstruction is guaranteed when:
+    /// - The filters satisfy the orthogonality conditions
+    /// - The signal length is compatible with the filter length
+    ///
+    /// This is the inverse of the Decompose method, so:
+    /// Reconstruct(Decompose(signal)) should equal the original signal.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
+    {
+        var lowPass = GetScalingCoefficients();
+        var highPass = GetWaveletCoefficients();
+
+        // Upsample by 2
+        var upsampledApprox = Upsample(approximation, 2);
+        var upsampledDetail = Upsample(detail, 2);
+
+        // Convolve with time-reversed filters
+        var reconLow = ConvolveReversed(upsampledApprox, lowPass);
+        var reconHigh = ConvolveReversed(upsampledDetail, highPass);
+
+        // Add the results - ensure same length
+        int outputLength = Math.Min(reconLow.Length, reconHigh.Length);
+        var reconstructed = new Vector<T>(outputLength);
+        for (int i = 0; i < outputLength; i++)
+        {
+            reconstructed[i] = NumOps.Add(reconLow[i], reconHigh[i]);
+        }
+
+        return reconstructed;
+    }
+
+    /// <summary>
+    /// Upsamples a signal by inserting zeros.
+    /// </summary>
+    private static Vector<T> Upsample(Vector<T> input, int factor)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new T[input.Length * factor];
+        for (int i = 0; i < result.Length; i++)
+        {
+            result[i] = numOps.Zero;
+        }
+        for (int i = 0; i < input.Length; i++)
+        {
+            result[i * factor] = input[i];
+        }
+        return new Vector<T>(result);
+    }
+
+    /// <summary>
+    /// Convolves with a time-reversed filter.
+    /// </summary>
+    private Vector<T> ConvolveReversed(Vector<T> input, Vector<T> filter)
+    {
+        int filterLen = filter.Length;
+        var reversed = new T[filterLen];
+        for (int i = 0; i < filterLen; i++)
+        {
+            reversed[i] = filter[filterLen - 1 - i];
+        }
+        return Convolve(input, new Vector<T>(reversed));
+    }
+
+    /// <summary>
     /// Gets the scaling function coefficients for the Coiflet wavelet.
     /// </summary>
     /// <returns>A vector of scaling function coefficients.</returns>
@@ -235,7 +315,7 @@ public class CoifletWavelet<T> : WaveletFunctionBase<T>
     /// <b>For Beginners:</b>
     /// The scaling coefficients are the filter weights used to extract the low-frequency
     /// components (approximation) from a signal.
-    /// 
+    ///
     /// For Coiflet wavelets, these coefficients:
     /// - Are carefully designed to have specific vanishing moments
     /// - Are nearly symmetric (more symmetric than Daubechies wavelets)

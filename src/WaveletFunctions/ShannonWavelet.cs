@@ -143,6 +143,71 @@ public class ShannonWavelet<T> : WaveletFunctionBase<T>
     }
 
     /// <summary>
+    /// Reconstructs the original signal from approximation and detail coefficients.
+    /// </summary>
+    /// <param name="approximation">The approximation coefficients from decomposition.</param>
+    /// <param name="detail">The detail coefficients from decomposition.</param>
+    /// <param name="originalLength">Optional. The length of the original signal before decomposition.
+    /// If not provided, the length is inferred from coefficient lengths, which may be off by one for odd-length signals.</param>
+    /// <returns>The reconstructed signal.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This method reverses the decomposition process to get back the original signal.
+    ///
+    /// For Shannon wavelets, reconstruction combines the frequency bands:
+    /// 1. Transform both approximation and detail to frequency domain using FFT
+    /// 2. Place approximation spectrum in the low frequency half
+    /// 3. Place detail spectrum in the high frequency half
+    /// 4. Transform the combined spectrum back to time domain
+    ///
+    /// This is the inverse of the Decompose method, so:
+    /// Reconstruct(Decompose(signal)) should equal the original signal.
+    ///
+    /// Note: For signals with odd length, pass the original length to ensure perfect reconstruction.
+    /// Without it, the reconstructed signal may be one element longer than the original.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail, int? originalLength = null)
+    {
+        var fft = new FastFourierTransform<T>();
+
+        // Transform both to frequency domain
+        Vector<Complex<T>> approxSpectrum = fft.Forward(approximation);
+        Vector<Complex<T>> detailSpectrum = fft.Forward(detail);
+
+        // Calculate output length - use provided original length or infer from coefficients
+        // For odd-length original signals, (n+1)/2 + (n+1)/2 = n+1, which is off by one
+        int computedLength = approximation.Length + detail.Length;
+        int outputLength = originalLength ?? computedLength;
+
+        // Adjust if we're inferring and the original was likely odd-length
+        // When both coefficients have same length and the sum is even, original may have been odd
+        if (!originalLength.HasValue && approximation.Length == detail.Length &&
+            computedLength % 2 == 0 && computedLength > 0)
+        {
+            // For odd original length n: (n+1)/2 + (n+1)/2 = n+1 (even)
+            // We can't know for sure without the original, so we keep the computed length
+            // Users should pass originalLength for odd-length signals
+        }
+
+        var combined = new Vector<Complex<T>>(outputLength);
+
+        int halfN = outputLength / 2;
+        for (int i = 0; i < approxSpectrum.Length && i < halfN; i++)
+        {
+            combined[i] = approxSpectrum[i];
+        }
+        for (int i = 0; i < detailSpectrum.Length && halfN + i < outputLength; i++)
+        {
+            combined[halfN + i] = detailSpectrum[i];
+        }
+
+        // Transform back to time domain
+        return fft.Inverse(combined);
+    }
+
+    /// <summary>
     /// Gets the scaling coefficients used in the Shannon wavelet transform.
     /// </summary>
     /// <returns>A vector containing the scaling coefficients in the frequency domain.</returns>
