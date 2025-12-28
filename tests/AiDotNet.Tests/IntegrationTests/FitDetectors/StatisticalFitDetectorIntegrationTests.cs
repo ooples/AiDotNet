@@ -275,17 +275,36 @@ public class StatisticalFitDetectorIntegrationTests
     }
 
     [Fact]
-    public void HeteroscedasticityFitDetector_DetectFit_WithValidData_ThrowsDivideByZero()
+    public void HeteroscedasticityFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
         var detector = new HeteroscedasticityFitDetector<double, Matrix<double>, Vector<double>>();
         // HeteroscedasticityFitDetector uses SimpleRegression internally which requires 1 feature column
         var evaluationData = CreateSingleFeatureData();
 
-        // Act & Assert
-        // Known issue: HeteroscedasticityFitDetector triggers divide by zero in CalculateLearningCurve
-        // when creating PredictionStats internally (StatisticsHelper.cs:3054)
-        Assert.Throws<DivideByZeroException>(() => detector.DetectFit(evaluationData));
+        // Act
+        var result = detector.DetectFit(evaluationData);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.True(Enum.IsDefined(typeof(FitType), result.FitType));
+        Assert.NotNull(result.Recommendations);
+    }
+
+    [Fact]
+    public void HeteroscedasticityFitDetector_DetectFit_ReturnsValidConfidenceLevel()
+    {
+        // Arrange
+        var detector = new HeteroscedasticityFitDetector<double, Matrix<double>, Vector<double>>();
+        // HeteroscedasticityFitDetector uses SimpleRegression internally which requires 1 feature column
+        var evaluationData = CreateSingleFeatureData();
+
+        // Act
+        var result = detector.DetectFit(evaluationData);
+
+        // Assert
+        Assert.True(result.ConfidenceLevel >= 0.0);
+        Assert.True(result.ConfidenceLevel <= 1.0);
     }
 
     #endregion
@@ -496,7 +515,7 @@ public class StatisticalFitDetectorIntegrationTests
     }
 
     [Fact]
-    public void ROCCurveFitDetector_DetectFit_ReturnsConfidenceLevelValue()
+    public void ROCCurveFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
         var detector = new ROCCurveFitDetector<double, Matrix<double>, Vector<double>>();
@@ -505,14 +524,12 @@ public class StatisticalFitDetectorIntegrationTests
         // Act
         var result = detector.DetectFit(evaluationData);
 
-        // Assert - Just verify the detector returns a result
-        // Known issue: ROCCurveFitDetector returns negative confidence values (e.g., -0.2775)
-        // when the test data doesn't match expected AUC calculation requirements.
-        // The AUC calculation may produce unexpected results with synthetic test data.
-        // This test documents the actual behavior.
+        // Assert - Confidence level should be between 0 and 1 (clamped AUC * scaling factor)
         Assert.NotNull(result);
-        Assert.True(Enum.IsDefined(typeof(FitType), result.FitType),
-            "Should return a valid FitType");
+        Assert.True(result.ConfidenceLevel >= 0.0,
+            $"ConfidenceLevel should be >= 0, actual: {result.ConfidenceLevel}");
+        Assert.True(result.ConfidenceLevel <= 1.0,
+            $"ConfidenceLevel should be <= 1, actual: {result.ConfidenceLevel}");
     }
 
     #endregion
