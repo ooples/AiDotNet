@@ -406,8 +406,8 @@ internal class RoIAlign<T>
         for (int roiIdx = 0; roiIdx < numRois; roiIdx++)
         {
             // Get batch index for this RoI (default to 0 if not provided)
-            int batchIdx = batchIndices is not null && roiIdx < batchIndices.Length 
-                ? Math.Min(batchIndices[roiIdx], batchSize - 1) 
+            int batchIdx = batchIndices is not null && roiIdx < batchIndices.Length
+                ? Math.Min(batchIndices[roiIdx], batchSize - 1)
                 : 0;
 
             // Scale RoI to feature map coordinates

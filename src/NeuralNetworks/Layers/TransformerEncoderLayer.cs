@@ -374,7 +374,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Layer norm now supports any-rank tensors (normalizes over last dimension)
         var normalized1 = _norm1.Forward(residual1);
-        
+
         // Standard transformer FFN: Linear(embed -> ff) + GELU + Linear(ff -> embed)
         var ffExpanded = _feedForward1.Forward(normalized1);
         var ffProjected = _feedForward2.Forward(ffExpanded);

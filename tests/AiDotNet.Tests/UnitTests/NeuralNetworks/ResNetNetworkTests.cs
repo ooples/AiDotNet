@@ -1,8 +1,8 @@
-using Xunit;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 
@@ -569,7 +569,7 @@ public class ResNetNetworkTests
 
         // Assert
         Assert.NotNull(block);
-        
+
         Assert.True(block.SupportsTraining);
     }
 
@@ -603,7 +603,7 @@ public class ResNetNetworkTests
 
         // Assert
         Assert.NotNull(block);
-        
+
         Assert.True(block.SupportsTraining);
     }
 
@@ -618,8 +618,8 @@ public class ResNetNetworkTests
 
         // Assert
         Assert.NotNull(layer);
-        
-        
+
+
     }
 
     [Fact]
@@ -635,8 +635,8 @@ public class ResNetNetworkTests
 
         // Assert
         Assert.NotNull(layer);
-        
-        
+
+
     }
 
     #endregion

@@ -117,11 +117,11 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
             // Resize mask to full image size
             int boxWidth = (int)(NumOps.ToDouble(proposal.X2) - NumOps.ToDouble(proposal.X1));
             int boxHeight = (int)(NumOps.ToDouble(proposal.Y2) - NumOps.ToDouble(proposal.Y1));
-            
+
             // Skip degenerate boxes
             if (boxWidth <= 0 || boxHeight <= 0)
                 continue;
-                
+
             var resizedMask = ResizeMask(mask, boxHeight, boxWidth);
 
             // Place mask in full image
@@ -153,11 +153,11 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
         var proposals = new List<(BoundingBox<T> box, double score)>();
 
         int numAnchors = anchors.Count;
-        
+
         // Use actual feature map dimensions from objectness tensor
         int featureH = objectness.Shape[2];
         int featureW = objectness.Shape[3];
-        
+
         // Guard against zero feature dimensions
         if (featureH <= 0 || featureW <= 0)
         {
@@ -169,11 +169,11 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
             // Use actual feature map dimensions for indexing
             int h = i / featureW;
             int w = i % featureW;
-            
+
             // Guard against out of bounds access
             if (h >= featureH || w >= featureW)
                 continue;
-                
+
             double score = NumOps.ToDouble(objectness[0, 1, h, w]);
 
             if (score > 0.3) // Pre-NMS threshold

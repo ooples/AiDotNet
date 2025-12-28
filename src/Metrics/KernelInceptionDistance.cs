@@ -1,8 +1,8 @@
 using System;
 using AiDotNet.Engines;
 using AiDotNet.Helpers;
-using AiDotNet.Tensors.Helpers;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Metrics;
 
