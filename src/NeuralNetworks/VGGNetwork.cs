@@ -219,11 +219,11 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
     public Tensor<T> Forward(Tensor<T> input)
     {
         var expectedShape = Architecture.GetInputShape();
-        
+
         // Validate input shape - accept both 3D [C,H,W] and 4D [B,C,H,W]
         bool addedBatch = false;
         Tensor<T> processedInput;
-        
+
         if (input.Rank == 3)
         {
             // 3D input: validate against expected shape directly

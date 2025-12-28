@@ -1090,7 +1090,7 @@ internal class PatchMergingBlock<T>
                     "Please provide explicit inputHeight and inputWidth parameters.");
             }
         }
-        
+
         int newH = h / 2;
         int newW = w / 2;
         int newSeqLen = newH * newW;

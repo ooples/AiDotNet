@@ -249,8 +249,8 @@ public class AvgPoolingLayer<T> : LayerBase<T>
         var inputGradient4D = Engine.AvgPool2DBackward(gradient4D, inputShape4D, poolSizeArr, strideArr);
 
         // Return with matching dimensions
-        return _addedBatchDimension 
-            ? inputGradient4D.Reshape(_lastInput.Shape) 
+        return _addedBatchDimension
+            ? inputGradient4D.Reshape(_lastInput.Shape)
             : inputGradient4D;
     }
 
