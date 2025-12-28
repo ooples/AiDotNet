@@ -3807,6 +3807,16 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T CalculateDurbinWatsonStatistic(List<T> residualList)
     {
+        if (residualList == null)
+        {
+            throw new ArgumentNullException(nameof(residualList), "Residual list cannot be null.");
+        }
+
+        if (residualList.Count < 2)
+        {
+            throw new ArgumentException("Durbin-Watson statistic requires at least 2 residuals.", nameof(residualList));
+        }
+
         T sumSquaredDifferences = _numOps.Zero;
         T sumSquaredErrors = _numOps.Zero;
 
@@ -3816,6 +3826,15 @@ public static class StatisticsHelper<T>
             sumSquaredErrors = _numOps.Add(sumSquaredErrors, _numOps.Square(residualList[i]));
         }
         sumSquaredErrors = _numOps.Add(sumSquaredErrors, _numOps.Square(residualList[0]));
+
+        // Check for zero residuals (perfect fit) - DW is undefined
+        if (_numOps.Equals(sumSquaredErrors, _numOps.Zero))
+        {
+            throw new ArgumentException(
+                "Durbin-Watson statistic is undefined when all residuals are zero (perfect fit). " +
+                "This typically indicates the model perfectly predicts all observations, which is unusual in practice.",
+                nameof(residualList));
+        }
 
         return _numOps.Divide(sumSquaredDifferences, sumSquaredErrors);
     }
@@ -7133,7 +7152,29 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static Vector<T> CalculateAutoCorrelationFunction(Vector<T> series, int maxLag)
     {
+        if (series == null)
+        {
+            throw new ArgumentNullException(nameof(series), "Time series cannot be null.");
+        }
+
         var n = series.Length;
+
+        if (n < 2)
+        {
+            throw new ArgumentException("Time series must have at least 2 observations for autocorrelation.", nameof(series));
+        }
+
+        if (maxLag < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxLag), "Maximum lag must be non-negative.");
+        }
+
+        if (maxLag >= n)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxLag), 
+                $"Maximum lag ({maxLag}) must be less than series length ({n}).");
+        }
+
         var acf = new T[maxLag + 1];
         var mean = CalculateMean(series);
 
@@ -7143,6 +7184,15 @@ public static class StatisticsHelper<T>
         {
             var deviation = _numOps.Subtract(series[i], mean);
             totalSumSquares = _numOps.Add(totalSumSquares, _numOps.Multiply(deviation, deviation));
+        }
+
+        // Check for constant series (zero variance) - ACF is undefined
+        if (_numOps.Equals(totalSumSquares, _numOps.Zero))
+        {
+            throw new ArgumentException(
+                "Autocorrelation is undefined for a constant series (zero variance). " +
+                "All values in the series are identical.",
+                nameof(series));
         }
 
         for (int lag = 0; lag <= maxLag; lag++)
@@ -7182,30 +7232,40 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static Vector<T> CalculatePartialAutoCorrelationFunction(Vector<T> series, int maxLag)
     {
+        if (series == null)
+        {
+            throw new ArgumentNullException(nameof(series), "Time series cannot be null.");
+        }
+
+        var n = series.Length;
+
+        if (n < 2)
+        {
+            throw new ArgumentException("Time series must have at least 2 observations for partial autocorrelation.", nameof(series));
+        }
+
+        if (maxLag < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxLag), "Maximum lag must be non-negative.");
+        }
+
+        if (maxLag >= n)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxLag), 
+                $"Maximum lag ({maxLag}) must be less than series length ({n}).");
+        }
+
         var pacf = new T[maxLag + 1];
         pacf[0] = _numOps.One;
+
+        // Compute ACF on the full series once (correct Durbin-Levinson approach)
+        var acf = CalculateAutoCorrelationFunction(series, maxLag);
 
         var phi = new T[maxLag + 1, maxLag + 1];
 
         for (int k = 1; k <= maxLag; k++)
         {
-            var temp = new T[k];
-            for (int j = 0; j < k; j++)
-            {
-                temp[j] = series[j];
-            }
-
-            var acf = CalculateAutoCorrelationFunction(new Vector<T>(temp), k);
-
-            phi[k, k] = _numOps.Zero;
-            if (k > 1)
-            {
-                for (int j = 1; j < k; j++)
-                {
-                    phi[k, j] = _numOps.Subtract(phi[k - 1, j], _numOps.Multiply(phi[k, k], phi[k - 1, k - j]));
-                }
-            }
-
+            // Durbin-Levinson recursion
             var numerator = acf[k];
             for (int j = 1; j < k; j++)
             {
@@ -7220,6 +7280,15 @@ public static class StatisticsHelper<T>
 
             phi[k, k] = _numOps.Divide(numerator, denominator);
             pacf[k] = phi[k, k];
+
+            // Update phi coefficients for next iteration
+            if (k < maxLag)
+            {
+                for (int j = 1; j < k; j++)
+                {
+                    phi[k, j] = _numOps.Subtract(phi[k - 1, j], _numOps.Multiply(phi[k, k], phi[k - 1, k - j]));
+                }
+            }
         }
 
         return new Vector<T>(pacf);
