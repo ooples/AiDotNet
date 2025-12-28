@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -227,14 +228,68 @@ public class DenseBlock<T> : LayerBase<T>
         }
     }
 
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    public override bool SupportsJitCompilation
     {
-        throw new NotSupportedException(
-            "DenseBlock does not support JIT compilation. Use the standard Forward/Backward API instead.");
+        get
+        {
+            // Check all sub-layers support JIT
+            foreach (var layer in _layers)
+            {
+                if (!layer.SupportsJitCompilation)
+                    return false;
+            }
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Exports the computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the DenseBlock.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph representing the DenseBlock with dense connectivity:
+    /// Each layer's output is concatenated with all previous features along the channel dimension.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes is null)
+        {
+            throw new ArgumentNullException(nameof(inputNodes));
+        }
+
+        if (InputShape is null || InputShape.Length == 0)
+        {
+            throw new InvalidOperationException("Layer input shape not configured.");
+        }
+
+        // Create symbolic input node with batch dimension
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Current features (accumulated via concatenation)
+        var currentFeatures = inputNode;
+
+        // Process each layer with dense connectivity
+        for (int i = 0; i < _layers.Count; i++)
+        {
+            var layer = _layers[i];
+
+            // Build the layer's computation graph using the current accumulated features
+            var layerOutput = layer.BuildComputationGraph(currentFeatures, $"layer{i}_");
+
+            // Concatenate new features with existing features along channel dimension (axis 1)
+            var nodesToConcat = new List<ComputationNode<T>> { currentFeatures, layerOutput };
+            currentFeatures = TensorOperations<T>.Concat(nodesToConcat, axis: 1);
+        }
+
+        return currentFeatures;
     }
 
     #region Helper Methods

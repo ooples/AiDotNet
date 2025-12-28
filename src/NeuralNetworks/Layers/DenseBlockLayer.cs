@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -7,7 +8,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// A single layer within a DenseBlock: BN-ReLU-Conv1x1-BN-ReLU-Conv3x3.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class DenseBlockLayer<T> : LayerBase<T>
+internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 {
     private readonly BatchNormalizationLayer<T> _bn1;
     private readonly ConvolutionalLayer<T> _conv1x1;
@@ -165,10 +166,101 @@ internal class DenseBlockLayer<T> : LayerBase<T>
         _conv3x3.ResetState();
     }
 
-    public override bool SupportsJitCompilation => false;
-
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    public override bool SupportsJitCompilation
     {
-        throw new NotSupportedException("DenseBlockLayer does not support JIT compilation.");
+        get
+        {
+            // Check all required sub-layers support JIT
+            return _bn1.SupportsJitCompilation &&
+                   _conv1x1.SupportsJitCompilation &&
+                   _bn2.SupportsJitCompilation &&
+                   _conv3x3.SupportsJitCompilation;
+        }
+    }
+
+    /// <summary>
+    /// Exports the computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the DenseBlockLayer.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph representing the DenseBlockLayer:
+    /// Input -> BN1 -> ReLU -> Conv1x1 -> BN2 -> ReLU -> Conv3x3 -> Output
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes is null)
+        {
+            throw new ArgumentNullException(nameof(inputNodes));
+        }
+
+        if (InputShape is null || InputShape.Length == 0)
+        {
+            throw new InvalidOperationException("Layer input shape not configured.");
+        }
+
+        // Create symbolic input node with batch dimension
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        return BuildComputationGraph(inputNode, "");
+    }
+
+    /// <inheritdoc />
+    public ComputationNode<T> BuildComputationGraph(
+        ComputationNode<T> inputNode,
+        string namePrefix)
+    {
+        // BN1
+        var bn1Node = TensorOperations<T>.BatchNorm(
+            inputNode,
+            gamma: TensorOperations<T>.Constant(_bn1.GetGamma(), $"{namePrefix}bn1_gamma"),
+            beta: TensorOperations<T>.Constant(_bn1.GetBeta(), $"{namePrefix}bn1_beta"),
+            runningMean: _bn1.GetRunningMean(),
+            runningVar: _bn1.GetRunningVariance(),
+            training: false,
+            epsilon: NumOps.ToDouble(_bn1.GetEpsilon()));
+
+        // ReLU1
+        var relu1Node = TensorOperations<T>.ReLU(bn1Node);
+
+        // Conv1x1
+        var conv1x1Biases = _conv1x1.GetBiases();
+        var conv1x1Node = TensorOperations<T>.Conv2D(
+            relu1Node,
+            TensorOperations<T>.Constant(_conv1x1.GetFilters(), $"{namePrefix}conv1x1_kernel"),
+            conv1x1Biases is not null ? TensorOperations<T>.Constant(conv1x1Biases, $"{namePrefix}conv1x1_bias") : null,
+            stride: new int[] { _conv1x1.Stride, _conv1x1.Stride },
+            padding: new int[] { _conv1x1.Padding, _conv1x1.Padding });
+
+        // BN2
+        var bn2Node = TensorOperations<T>.BatchNorm(
+            conv1x1Node,
+            gamma: TensorOperations<T>.Constant(_bn2.GetGamma(), $"{namePrefix}bn2_gamma"),
+            beta: TensorOperations<T>.Constant(_bn2.GetBeta(), $"{namePrefix}bn2_beta"),
+            runningMean: _bn2.GetRunningMean(),
+            runningVar: _bn2.GetRunningVariance(),
+            training: false,
+            epsilon: NumOps.ToDouble(_bn2.GetEpsilon()));
+
+        // ReLU2
+        var relu2Node = TensorOperations<T>.ReLU(bn2Node);
+
+        // Conv3x3
+        var conv3x3Biases = _conv3x3.GetBiases();
+        var outputNode = TensorOperations<T>.Conv2D(
+            relu2Node,
+            TensorOperations<T>.Constant(_conv3x3.GetFilters(), $"{namePrefix}conv3x3_kernel"),
+            conv3x3Biases is not null ? TensorOperations<T>.Constant(conv3x3Biases, $"{namePrefix}conv3x3_bias") : null,
+            stride: new int[] { _conv3x3.Stride, _conv3x3.Stride },
+            padding: new int[] { _conv3x3.Padding, _conv3x3.Padding });
+
+        return outputNode;
     }
 }
