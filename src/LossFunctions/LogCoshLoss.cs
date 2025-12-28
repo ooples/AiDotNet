@@ -36,20 +36,30 @@ public class LogCoshLoss<T> : LossFunctionBase<T>
         ValidateVectorLengths(predicted, actual);
 
         T sum = NumOps.Zero;
+        T log2 = NumOps.FromDouble(Math.Log(2));
+
         for (int i = 0; i < predicted.Length; i++)
         {
             T diff = NumOps.Subtract(predicted[i], actual[i]);
-            // log(cosh(x)) = log((e^x + e^-x)/2)
-            T logCosh = NumericalStabilityHelper.SafeLog(
-                NumOps.Divide(
-                    NumOps.Add(
-                        NumOps.Exp(diff),
-                        NumOps.Exp(NumOps.Negate(diff))
-                    ),
-                    NumOps.FromDouble(2)
-                ),
+
+            // Numerically stable computation of log(cosh(x))
+            // For large |x|, exp(x) or exp(-x) overflows, so we use the identity:
+            // log(cosh(x)) = |x| + log(1 + exp(-2*|x|)) - log(2)
+            // This is always stable because exp(-2*|x|) <= 1 for any x.
+            T absDiff = NumOps.Abs(diff);
+            T twoAbsDiff = NumOps.Multiply(NumOps.FromDouble(2), absDiff);
+            T expNeg2Abs = NumOps.Exp(NumOps.Negate(twoAbsDiff));
+            T logOnePlusExp = NumericalStabilityHelper.SafeLog(
+                NumOps.Add(NumOps.One, expNeg2Abs),
                 NumericalStabilityHelper.SmallEpsilon
             );
+
+            // log(cosh(x)) = |x| + log(1 + exp(-2*|x|)) - log(2)
+            T logCosh = NumOps.Subtract(
+                NumOps.Add(absDiff, logOnePlusExp),
+                log2
+            );
+
             sum = NumOps.Add(sum, logCosh);
         }
 
