@@ -668,53 +668,92 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
     /// <param name="b">The right-hand side vector of the equation Ax = b.</param>
     /// <returns>The solution vector x.</returns>
     /// <remarks>
-    /// This method solves the linear system by using the special structure of the Hessenberg matrix.
+    /// This method solves the linear system by using the Hessenberg decomposition A = Q*H*Q^T.
     ///
     /// <b>For Beginners:</b> Solving a linear system means finding values for x that satisfy the equation Ax = b.
     /// This method:
-    /// 1. First performs forward substitution (working from top to bottom) to solve an intermediate system
-    /// 2. Then performs backward substitution (working from bottom to top) to find the final solution
+    /// 1. Transforms b into Hessenberg coordinates: b' = Q^T * b
+    /// 2. Solves the Hessenberg system H*y = b' using Gaussian elimination
+    /// 3. Transforms back to original coordinates: x = Q * y
     ///
-    /// The Hessenberg form makes this process more efficient than solving with the original matrix.
+    /// The Hessenberg form makes step 2 more efficient because H is almost triangular.
     /// </remarks>
     public override Vector<T> Solve(Vector<T> b)
     {
         var n = A.Rows;
-        var y = new Vector<T>(n);
 
-        // VECTORIZED: Forward substitution using dot product
+        // Step 1: Transform b to Hessenberg coordinates: b' = Q^T * b
+        var bPrime = OrthogonalMatrix.Transpose().Multiply(b);
+
+        // Step 2: Solve the Hessenberg system H*y = b' using Gaussian elimination with partial pivoting
+        // Since H is upper Hessenberg (only one subdiagonal), we use a specialized solver
+        var y = SolveHessenbergSystem(HessenbergMatrix, bPrime);
+
+        // Step 3: Transform back to original coordinates: x = Q * y
+        return OrthogonalMatrix.Multiply(y);
+    }
+
+    /// <summary>
+    /// Solves a Hessenberg system H*x = b using Gaussian elimination.
+    /// </summary>
+    private Vector<T> SolveHessenbergSystem(Matrix<T> H, Vector<T> b)
+    {
+        var n = H.Rows;
+        var augmented = new Matrix<T>(n, n + 1);
+
+        // Create augmented matrix [H | b]
         for (int i = 0; i < n; i++)
         {
-            T sum = NumOps.Zero;
-            if (i > 0)
+            for (int j = 0; j < n; j++)
             {
-                int start = Math.Max(0, i - 1);
-                int len = i - start;
-                if (len > 0)
+                augmented[i, j] = H[i, j];
+            }
+            augmented[i, n] = b[i];
+        }
+
+        // Forward elimination with partial pivoting
+        for (int k = 0; k < n - 1; k++)
+        {
+            // For Hessenberg matrix, we only need to check row k and k+1 for pivoting
+            if (NumOps.LessThan(NumOps.Abs(augmented[k, k]), NumOps.Abs(augmented[k + 1, k])))
+            {
+                // Swap rows k and k+1
+                for (int j = k; j <= n; j++)
                 {
-                    var rowSegment = new Vector<T>(HessenbergMatrix.GetRow(i).Skip(start).Take(len));
-                    var ySegment = new Vector<T>(y.Skip(start).Take(len));
-                    sum = rowSegment.DotProduct(ySegment);
+                    var temp = augmented[k, j];
+                    augmented[k, j] = augmented[k + 1, j];
+                    augmented[k + 1, j] = temp;
                 }
             }
 
-            y[i] = NumOps.Divide(NumOps.Subtract(b[i], sum), HessenbergMatrix[i, i]);
+            // Eliminate element in row k+1 (only one element below diagonal in Hessenberg)
+            if (!NumOps.Equals(augmented[k, k], NumOps.Zero))
+            {
+                var factor = NumOps.Divide(augmented[k + 1, k], augmented[k, k]);
+                for (int j = k; j <= n; j++)
+                {
+                    augmented[k + 1, j] = NumOps.Subtract(augmented[k + 1, j],
+                        NumOps.Multiply(factor, augmented[k, j]));
+                }
+            }
         }
 
-        // VECTORIZED: Backward substitution using dot product
+        // Back substitution
         var x = new Vector<T>(n);
         for (int i = n - 1; i >= 0; i--)
         {
-            T sum = NumOps.Zero;
-            if (i < n - 1)
+            T sum = augmented[i, n];
+            for (int j = i + 1; j < n; j++)
             {
-                int len = n - i - 1;
-                var rowSegment = new Vector<T>(HessenbergMatrix.GetRow(i).Skip(i + 1));
-                var xSegment = new Vector<T>(x.Skip(i + 1));
-                sum = rowSegment.DotProduct(xSegment);
+                sum = NumOps.Subtract(sum, NumOps.Multiply(augmented[i, j], x[j]));
             }
 
-            x[i] = NumOps.Subtract(y[i], sum);
+            if (NumOps.Equals(augmented[i, i], NumOps.Zero))
+            {
+                throw new InvalidOperationException("Matrix is singular and cannot be solved.");
+            }
+
+            x[i] = NumOps.Divide(sum, augmented[i, i]);
         }
 
         return x;

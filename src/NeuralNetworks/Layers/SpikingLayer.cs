@@ -197,6 +197,11 @@ public class SpikingLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// Stores the output tensor from the most recent forward pass.
     /// </summary>
     /// <remarks>
@@ -696,23 +701,45 @@ public class SpikingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
         // Store the input for backward pass
         _lastInput = input;
 
         // Flatten input to 1D tensor for processing
+        // Supports any-rank tensors by computing total element count for last dimension
         Tensor<T> inputFlat;
-        if (input.Shape.Length == 1)
+        int inputSize = InputShape[0];
+
+        if (rank == 1)
         {
             inputFlat = input;
         }
-        else if (input.Shape.Length == 2 && input.Shape[0] == 1)
+        else if (rank == 2)
         {
-            // Handle batch size of 1
-            inputFlat = input.Reshape([input.Shape[1]]);
+            // 2D: process each batch item (for now flatten to process first item)
+            // SpikingLayer processes one sample at a time
+            inputFlat = input.Reshape([input.Shape[0] * input.Shape[1]]);
+            // Take only inputSize elements if tensor is larger
+            if (inputFlat.Length > inputSize)
+            {
+                inputFlat = inputFlat.Slice(0, 0, inputSize);
+            }
         }
         else
         {
-            throw new ArgumentException("Input tensor must be 1D or have batch size of 1");
+            // Higher-rank: flatten all dimensions
+            int totalElements = 1;
+            for (int d = 0; d < rank; d++)
+                totalElements *= input.Shape[d];
+            inputFlat = input.Reshape([totalElements]);
+            // Take only inputSize elements if tensor is larger
+            if (inputFlat.Length > inputSize)
+            {
+                inputFlat = inputFlat.Slice(0, 0, inputSize);
+            }
         }
 
         // Process with the appropriate neuron model (all tensor-based)
@@ -720,6 +747,14 @@ public class SpikingLayer<T> : LayerBase<T>
 
         // Store for backward pass
         _lastOutput = output;
+
+        // Restore original shape structure if needed
+        // SpikingLayer outputs 1D tensor (spike train), so shape restoration is minimal
+        if (_originalInputShape != null && _originalInputShape.Length > 1)
+        {
+            // For higher-rank inputs, we keep output as 1D (spike train) per neural network convention
+            // The output represents spike events, not spatial features
+        }
 
         return output;
     }

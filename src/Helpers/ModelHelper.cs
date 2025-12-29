@@ -103,8 +103,14 @@ public static class ModelHelper<T, TInput, TOutput>
         else if (typeof(TInput) == typeof(Tensor<T>) && typeof(TOutput) == typeof(Tensor<T>))
         {
             // For neural network models (tensor input and output)
+            // Use OneDimensional input type with minimal configuration for a default placeholder model
             return (IFullModel<T, TInput, TOutput>)(object)new NeuralNetwork<T>(
-                new NeuralNetworkArchitecture<T>(InputType.ThreeDimensional, NeuralNetworkTaskType.Custom));
+                new NeuralNetworkArchitecture<T>(
+                    InputType.OneDimensional,
+                    NeuralNetworkTaskType.Regression,
+                    NetworkComplexity.Simple,
+                    inputSize: 1,
+                    outputSize: 1));
         }
         else
         {

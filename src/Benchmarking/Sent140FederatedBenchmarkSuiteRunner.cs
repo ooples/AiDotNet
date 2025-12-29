@@ -151,7 +151,7 @@ internal static class Sent140FederatedBenchmarkSuiteRunner
             });
         }
 
-        double accuracy = Convert.ToDouble(StatisticsHelper<T>.CalculateAccuracy(testY, predicted, PredictionType.Binary));
+        double accuracy = Convert.ToDouble(StatisticsHelper<T>.CalculateAccuracy(testY, predicted, PredictionType.BinaryClassification));
         var (mse, rmse) = CalculateMseAndRmse(testY, predicted, numOps);
 
         var metrics = new List<BenchmarkMetricValue>

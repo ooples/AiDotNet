@@ -1003,6 +1003,9 @@ public class JitCompiler : IDisposable
             OperationType.ComplexMatMul,
             OperationType.ComplexMultiply,
 
+            // Octonion operations
+            OperationType.OctonionMatMul,
+
             // Differentiable approximation operations
             // These enable JIT compilation for traditionally non-differentiable models
             OperationType.SoftSplit,          // Differentiable decision tree splits

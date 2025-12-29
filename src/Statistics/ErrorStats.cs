@@ -481,7 +481,7 @@ public class ErrorStats<T>
         MAPE = StatisticsHelper<T>.CalculateMeanAbsolutePercentageError(actual, predicted);
         MedianAbsoluteError = StatisticsHelper<T>.CalculateMedianAbsoluteError(actual, predicted);
         MaxError = StatisticsHelper<T>.CalculateMaxError(actual, predicted);
-        if (predictionType == PredictionType.Binary)
+        if (predictionType == PredictionType.BinaryClassification)
         {
             AUCPR = StatisticsHelper<T>.CalculatePrecisionRecallAUC(actual, predicted);
             AUCROC = StatisticsHelper<T>.CalculateROCAUC(actual, predicted);

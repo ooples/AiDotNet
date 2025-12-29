@@ -177,7 +177,6 @@ public class BasicFitDetectorIntegrationTests
         var result = detector.DetectFit(evaluationData);
 
         // Assert
-        Assert.NotNull(result.ConfidenceLevel);
         Assert.True(result.ConfidenceLevel >= 0.0, "Confidence level should be >= 0");
         Assert.True(result.ConfidenceLevel <= 1.0, "Confidence level should be <= 1");
     }
@@ -288,7 +287,6 @@ public class BasicFitDetectorIntegrationTests
         var result = detector.DetectFit(evaluationData);
 
         // Assert
-        Assert.NotNull(result.ConfidenceLevel);
         Assert.True(result.ConfidenceLevel >= 0.0);
         Assert.True(result.ConfidenceLevel <= 1.0);
     }
@@ -435,7 +433,6 @@ public class BasicFitDetectorIntegrationTests
         var result = detector.DetectFit(evaluationData);
 
         // Assert
-        Assert.NotNull(result.ConfidenceLevel);
         Assert.True(result.ConfidenceLevel >= 0.0);
         Assert.True(result.ConfidenceLevel <= 1.0);
         Assert.NotNull(result.Recommendations);
@@ -567,7 +564,6 @@ public class BasicFitDetectorIntegrationTests
         var result = detector.DetectFit(evaluationData);
 
         // Assert
-        Assert.NotNull(result.ConfidenceLevel);
         Assert.True(result.ConfidenceLevel >= 0.0);
         Assert.True(result.ConfidenceLevel <= 1.0);
     }

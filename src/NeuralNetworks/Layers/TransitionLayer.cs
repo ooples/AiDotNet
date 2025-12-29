@@ -54,6 +54,11 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     private Tensor<T>? _convOut;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// Gets the number of output channels.
     /// </summary>
     public int OutputChannels { get; }
@@ -109,19 +114,71 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// <returns>The output tensor with reduced channels and spatial dimensions.</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: collapse leading dims for rank > 4
+        Tensor<T> processInput;
+        int flatBatch = 1;
+
+        if (rank == 3)
+        {
+            // Standard 3D: [C, H, W]
+            processInput = input;
+        }
+        else if (rank == 4)
+        {
+            // Standard 4D: [B, C, H, W]
+            processInput = input;
+        }
+        else if (rank > 4)
+        {
+            // Higher-rank: collapse leading dims into batch
+            for (int d = 0; d < rank - 3; d++)
+                flatBatch *= input.Shape[d];
+            int channels = input.Shape[rank - 3];
+            int height = input.Shape[rank - 2];
+            int width = input.Shape[rank - 1];
+            processInput = input.Reshape(new[] { flatBatch, channels, height, width });
+        }
+        else
+        {
+            // Rank 2 or less - not typical for transition layer
+            throw new ArgumentException($"TransitionLayer requires at least 3D input, got {rank}D");
+        }
+
+        _lastInput = processInput;
 
         // BN → ReLU → Conv1x1 → AvgPool
-        _bnOut = _bn.Forward(input);
+        _bnOut = _bn.Forward(processInput);
         _reluOut = _relu.Activate(_bnOut);
         _convOut = _conv.Forward(_reluOut);
 
         // Handle batched input (4D) - use Engine.AvgPool2D directly
         // AveragePoolingLayer expects 3D input, so we handle 4D separately
         // [B, C, H, W] uses Engine directly, [C, H, W] uses the AveragePoolingLayer
-        return _convOut.Shape.Length == 4
+        Tensor<T> output = _convOut.Shape.Length == 4
             ? Engine.AvgPool2D(_convOut, poolSize: 2, stride: 2, padding: 0)
             : _pool.Forward(_convOut);
+
+        // Restore original batch dimensions for any-rank support
+        if (_originalInputShape != null && _originalInputShape.Length > 4)
+        {
+            // Output shape: [...leadingDims, outChannels, outH, outW]
+            int outChannels = output.Shape[1];
+            int outH = output.Shape[2];
+            int outW = output.Shape[3];
+            int[] newShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 3; d++)
+                newShape[d] = _originalInputShape[d];
+            newShape[_originalInputShape.Length - 3] = outChannels;
+            newShape[_originalInputShape.Length - 2] = outH;
+            newShape[_originalInputShape.Length - 1] = outW;
+            output = output.Reshape(newShape);
+        }
+
+        return output;
     }
 
     /// <summary>
@@ -337,7 +394,7 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
             padding: new int[] { _conv.Padding, _conv.Padding });
 
         // Average Pooling 2x2, stride 2
-        var poolNode = TensorOperations<T>.AvgPool2D(convNode, new int[] { 2, 2 }, new int[] { 2, 2 });
+        var poolNode = TensorOperations<T>.AvgPool2D(convNode, poolSize: new int[] { 2, 2 }, strides: new int[] { 2, 2 });
 
         return poolNode;
     }

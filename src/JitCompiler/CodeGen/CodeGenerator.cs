@@ -349,6 +349,9 @@ public class CodeGenerator
             ComplexMatMulOp => GenerateComplexMatMulOp<T>(inputVars),
             ComplexMultiplyOp => GenerateComplexMultiplyOp<T>(inputVars),
 
+            // Octonion operations
+            OctonionMatMulOp octonionMatMulOp => GenerateOctonionMatMulOp<T>(inputVars, octonionMatMulOp),
+
             // Dropout
             DropoutOp dropoutOp => GenerateDropoutOp<T>(inputVars[0], dropoutOp),
 
@@ -1404,6 +1407,37 @@ public class CodeGenerator
             typeof(ComputationNode<T>), typeof(ComputationNode<T>),
             typeof(ComputationNode<T>), typeof(ComputationNode<T>));
         return Expression.Call(method, inputs[0], inputs[1], inputs[2], inputs[3]);
+    }
+
+    // ========== Octonion Operation Code Generators ==========
+
+    /// <summary>
+    /// Generates code for octonion matrix multiplication.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Octonion matrix multiplication operates on 8-dimensional octonion values.
+    /// Each input/weight element represents an octonion (8 components per value).
+    /// </para>
+    /// </remarks>
+    private Expression GenerateOctonionMatMulOp<T>(ParameterExpression[] inputs, OctonionMatMulOp op)
+    {
+        // OctonionMatMul takes input and weights, with optional biases
+        if (inputs.Length >= 3)
+        {
+            // With biases
+            var method = FindMethod<T>("OctonionMatMul",
+                typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(ComputationNode<T>));
+            return Expression.Call(method, inputs[0], inputs[1], inputs[2]);
+        }
+        else
+        {
+            // Without biases (biases = null)
+            var method = FindMethod<T>("OctonionMatMul",
+                typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(ComputationNode<T>));
+            return Expression.Call(method, inputs[0], inputs[1],
+                Expression.Constant(null, typeof(ComputationNode<T>)));
+        }
     }
 
     // ========== Dropout Operation Code Generator ==========

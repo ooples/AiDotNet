@@ -80,6 +80,11 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// Gradients for projection weights calculated during backward pass.
     /// </summary>
     private Tensor<T>? _projectionWeightsGradient;
@@ -213,14 +218,56 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-        int batchSize = input.Shape[0];
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // PatchEmbedding expects 4D input [B, C, H, W], normalize to 4D
+        Tensor<T> processInput;
+        int batchSize;
+
+        if (rank < 4)
+        {
+            // Add leading dimensions to make 4D
+            // 3D [C, H, W] -> [1, C, H, W]
+            // 2D [H, W] -> [1, 1, H, W]
+            // 1D [W] -> [1, 1, 1, W]
+            var shape4D = new int[4];
+            int offset = 4 - rank;
+            for (int i = 0; i < offset; i++)
+                shape4D[i] = 1;
+            for (int i = 0; i < rank; i++)
+                shape4D[offset + i] = input.Shape[i];
+            processInput = input.Reshape(shape4D);
+            batchSize = shape4D[0];
+        }
+        else if (rank == 4)
+        {
+            // Standard 4D [B, C, H, W]
+            batchSize = input.Shape[0];
+            processInput = input;
+        }
+        else
+        {
+            // Higher-rank: collapse leading dims into batch
+            // e.g., 5D [B1, B2, C, H, W] -> [B1*B2, C, H, W]
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 3; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            int channels = input.Shape[rank - 3];
+            int height = input.Shape[rank - 2];
+            int width = input.Shape[rank - 1];
+            processInput = input.Reshape([flatBatch, channels, height, width]);
+        }
+
+        _lastInput = processInput;
         int patchDim = _channels * _patchSize * _patchSize;
 
         // Efficient Patchify using Reshape and Transpose
         // Input: [B, C, H, W]
         // 1. Reshape to split H and W into patches: [B, C, Nh, P, Nw, P]
-        var reshaped = input.Reshape(batchSize, _channels, _numPatchesHeight, _patchSize, _numPatchesWidth, _patchSize);
+        var reshaped = processInput.Reshape(batchSize, _channels, _numPatchesHeight, _patchSize, _numPatchesWidth, _patchSize);
 
         // 2. Transpose to group patch dimensions: [B, Nh, Nw, C, P, P]
         var transposed = reshaped.Transpose(new[] { 0, 2, 4, 1, 3, 5 });
@@ -240,7 +287,34 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         var preActivation = Engine.TensorBroadcastAdd(projected, biasBroadcast);
 
         _lastPreActivation = preActivation;
-        return ApplyActivation(preActivation);
+        var output = ApplyActivation(preActivation);
+
+        // Restore output shape to match original input rank
+        // Output goes from 3D [B, N, embedDim] to appropriate rank
+        if (_originalInputShape != null && _originalInputShape.Length != 4)
+        {
+            if (_originalInputShape.Length < 4)
+            {
+                // Lower-rank input: remove batch dimension if it was added
+                // 3D input [C, H, W] -> 2D output [N, embedDim]
+                // 2D input [H, W] -> 2D output [N, embedDim]
+                // 1D input [W] -> 2D output [N, embedDim]
+                return output.Reshape([_numPatches, _embeddingDim]);
+            }
+            else
+            {
+                // Higher-rank input: restore leading dimensions
+                // e.g., 5D input [B1, B2, C, H, W] -> 4D output [B1, B2, N, embedDim]
+                var outShape = new int[_originalInputShape.Length - 1];
+                for (int d = 0; d < _originalInputShape.Length - 3; d++)
+                    outShape[d] = _originalInputShape[d];
+                outShape[_originalInputShape.Length - 3] = _numPatches;
+                outShape[_originalInputShape.Length - 2] = _embeddingDim;
+                return output.Reshape(outShape);
+            }
+        }
+
+        return output;
     }
 
     /// <summary>
@@ -364,7 +438,15 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         _projectionWeightsGradient = weightsNode.Gradient;
         _projectionBiasGradient = biasNode.Gradient;
 
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+
+        // Restore gradient shape to match original input shape
+        if (_originalInputShape != null && _originalInputShape.Length != 4)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     /// <summary>
@@ -414,7 +496,15 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         var gradTransposed = gradReshaped.Transpose(new[] { 0, 3, 1, 4, 2, 5 });
 
         // Reshape to [B, C, H, W]
-        return gradTransposed.Reshape(_lastInput.Shape);
+        var inputGradient = gradTransposed.Reshape(_lastInput.Shape);
+
+        // Restore gradient shape to match original input shape
+        if (_originalInputShape != null && _originalInputShape.Length != 4)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     /// <summary>

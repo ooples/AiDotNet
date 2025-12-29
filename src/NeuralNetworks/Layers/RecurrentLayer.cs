@@ -78,6 +78,11 @@ public class RecurrentLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// Stores the hidden state tensor from the most recent forward pass for use in backpropagation.
     /// </summary>
     /// <remarks>
@@ -265,10 +270,43 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-        int sequenceLength = input.Shape[0];
-        int batchSize = input.Shape[1];
-        int inputSize = input.Shape[2];
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: collapse leading dims for rank > 3
+        Tensor<T> input3D;
+        int sequenceLength;
+        int batchSize;
+
+        if (rank == 2)
+        {
+            // 2D: [sequenceLength, inputSize] -> add batch dim
+            sequenceLength = input.Shape[0];
+            batchSize = 1;
+            int inputSize = input.Shape[1];
+            input3D = input.Reshape([sequenceLength, 1, inputSize]);
+        }
+        else if (rank == 3)
+        {
+            // Standard 3D: [sequenceLength, batchSize, inputSize]
+            sequenceLength = input.Shape[0];
+            batchSize = input.Shape[1];
+            input3D = input;
+        }
+        else
+        {
+            // Higher-rank: collapse middle dims into batch
+            sequenceLength = input.Shape[0];
+            int flatBatch = 1;
+            for (int d = 1; d < rank - 1; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            int inputSize = input.Shape[rank - 1];
+            input3D = input.Reshape([sequenceLength, flatBatch, inputSize]);
+        }
+
+        _lastInput = input3D;
         int hiddenSize = _inputWeights.Shape[0];
 
         var output = new Tensor<T>([sequenceLength, batchSize, hiddenSize]);
@@ -287,7 +325,7 @@ public class RecurrentLayer<T> : LayerBase<T>
         for (int t = 0; t < sequenceLength; t++)
         {
             // VECTORIZED: Extract input slice for time step t: [batchSize, inputSize]
-            var inputAtT = Engine.TensorSliceAxis(input, 0, t); // [batchSize, inputSize]
+            var inputAtT = Engine.TensorSliceAxis(input3D, 0, t); // [batchSize, inputSize]
 
             // VECTORIZED: Extract previous hidden state: [batchSize, hiddenSize]
             var prevHidden = Engine.TensorSliceAxis(hiddenState, 0, t); // [batchSize, hiddenSize]
@@ -310,6 +348,23 @@ public class RecurrentLayer<T> : LayerBase<T>
 
         _lastHiddenState = hiddenState;
         _lastOutput = output;
+
+        // Restore original batch dimensions for any-rank support
+        if (_originalInputShape != null && _originalInputShape.Length > 3)
+        {
+            // Output shape: [sequenceLength, ...middleDims, hiddenSize]
+            int[] newShape = new int[_originalInputShape.Length];
+            newShape[0] = sequenceLength;
+            for (int d = 1; d < _originalInputShape.Length - 1; d++)
+                newShape[d] = _originalInputShape[d];
+            newShape[_originalInputShape.Length - 1] = hiddenSize;
+            output = output.Reshape(newShape);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 2)
+        {
+            // 2D input -> 2D output (remove batch dim)
+            output = output.Reshape([sequenceLength, hiddenSize]);
+        }
 
         return output;
     }
@@ -371,6 +426,23 @@ public class RecurrentLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastHiddenState == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Normalize outputGradient to 3D to match Forward's any-rank handling
+        var outGrad3D = outputGradient;
+        int origRank = _originalInputShape?.Length ?? 3;
+        if (_originalInputShape != null && origRank == 2)
+        {
+            // 2D output gradient -> add batch dim
+            outGrad3D = outputGradient.Reshape([outputGradient.Shape[0], 1, outputGradient.Shape[1]]);
+        }
+        else if (_originalInputShape != null && origRank > 3)
+        {
+            // Higher-rank: collapse middle dims into batch
+            int flatBatch = 1;
+            for (int d = 1; d < origRank - 1; d++)
+                flatBatch *= _originalInputShape[d];
+            outGrad3D = outputGradient.Reshape([outputGradient.Shape[0], flatBatch, outputGradient.Shape[origRank - 1]]);
+        }
+
         int sequenceLength = _lastInput.Shape[0];
         int batchSize = _lastInput.Shape[1];
         int inputSize = _lastInput.Shape[2];
@@ -390,7 +462,7 @@ public class RecurrentLayer<T> : LayerBase<T>
         for (int t = sequenceLength - 1; t >= 0; t--)
         {
             // VECTORIZED: Combine output gradient with hidden gradient from next timestep
-            var outputGradAtT = Engine.TensorSliceAxis(outputGradient, 0, t); // [batchSize, hiddenSize]
+            var outputGradAtT = Engine.TensorSliceAxis(outGrad3D, 0, t); // [batchSize, hiddenSize]
             var currentGradient = Engine.TensorAdd(outputGradAtT, nextHiddenGradient);
 
             // VECTORIZED: Extract data for this timestep using tensor slicing
@@ -445,6 +517,12 @@ public class RecurrentLayer<T> : LayerBase<T>
         _hiddenWeightsGradient = hiddenWeightsGrad;
         _biasesGradient = biasesGrad;
 
+        // Restore gradient to original input shape for any-rank support
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
         return inputGradient;
     }
 
@@ -469,6 +547,23 @@ public class RecurrentLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastHiddenState == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Normalize outputGradient to 3D to match Forward's any-rank handling
+        var outGrad3D = outputGradient;
+        int origRank = _originalInputShape?.Length ?? 3;
+        if (_originalInputShape != null && origRank == 2)
+        {
+            // 2D output gradient -> add batch dim
+            outGrad3D = outputGradient.Reshape([outputGradient.Shape[0], 1, outputGradient.Shape[1]]);
+        }
+        else if (_originalInputShape != null && origRank > 3)
+        {
+            // Higher-rank: collapse middle dims into batch
+            int flatBatch = 1;
+            for (int d = 1; d < origRank - 1; d++)
+                flatBatch *= _originalInputShape[d];
+            outGrad3D = outputGradient.Reshape([outputGradient.Shape[0], flatBatch, outputGradient.Shape[origRank - 1]]);
+        }
+
         int sequenceLength = _lastInput.Shape[0];
         int batchSize = _lastInput.Shape[1];
         int inputSize = _lastInput.Shape[2];
@@ -488,7 +583,7 @@ public class RecurrentLayer<T> : LayerBase<T>
             var inputAtT = Engine.TensorSliceAxis(_lastInput, 0, t); // [batchSize, inputSize]
             var hiddenAtT = Engine.TensorSliceAxis(_lastHiddenState, 0, t); // [batchSize, hiddenSize]
             var outputAtT = Engine.TensorSliceAxis(_lastOutput, 0, t); // [batchSize, hiddenSize]
-            var outputGradAtT = Engine.TensorSliceAxis(outputGradient, 0, t); // [batchSize, hiddenSize]
+            var outputGradAtT = Engine.TensorSliceAxis(outGrad3D, 0, t); // [batchSize, hiddenSize]
             var gradAtT = Engine.TensorAdd(outputGradAtT, nextHiddenGradient);
 
             // Production-grade: Compute activation derivative using cached output at time t
@@ -599,6 +694,12 @@ public class RecurrentLayer<T> : LayerBase<T>
         _inputWeightsGradient = inputWeightsGrad;
         _hiddenWeightsGradient = hiddenWeightsGrad;
         _biasesGradient = biasesGrad;
+
+        // Restore gradient to original input shape for any-rank support
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
 
         return inputGradient;
     }

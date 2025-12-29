@@ -233,6 +233,11 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// The output tensor from the most recent forward pass.
     /// </summary>
     /// <remarks>
@@ -656,8 +661,37 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-        int batchSize = input.Shape[0];
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: collapse to 2D for processing
+        Tensor<T> processInput;
+        int batchSize;
+
+        if (rank == 1)
+        {
+            // 1D: add batch dim
+            batchSize = 1;
+            processInput = input.Reshape([1, input.Shape[0]]);
+        }
+        else if (rank == 2)
+        {
+            // Standard 2D
+            batchSize = input.Shape[0];
+            processInput = input;
+        }
+        else
+        {
+            // Higher-rank: collapse leading dims into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 1; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            processInput = input.Reshape([flatBatch, input.Shape[rank - 1]]);
+        }
+
+        _lastInput = processInput;
         // height/width not needed for Engine operations
 
         // 1. Squeeze: Global Average Pooling [B, H, W, C] -> [B, C]
@@ -1349,6 +1383,9 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <inheritdoc />
     public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
     {
+        if (_weights1 == null || _weights2 == null || _bias1 == null || _bias2 == null)
+            throw new InvalidOperationException("Layer weights not initialized. Initialize the layer before compiling.");
+
         // Squeeze: Global Average Pooling across spatial dimensions
         var squeezed = TensorOperations<T>.ReduceMean(inputNode, axes: new[] { 1, 2 }, keepDims: false);
 

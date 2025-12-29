@@ -119,13 +119,13 @@ public class AdvancedAlgebraLayerTests
     }
 
     [Fact]
-    public void OctonionLinearLayer_SupportsJitCompilation_IsFalse()
+    public void OctonionLinearLayer_SupportsJitCompilation_IsTrue()
     {
         // Arrange
         var layer = new OctonionLinearLayer<double>(4, 2);
 
-        // Assert
-        Assert.False(layer.SupportsJitCompilation);
+        // Assert - OctonionMatMul is fully integrated in JIT compiler
+        Assert.True(layer.SupportsJitCompilation);
     }
 
     #endregion
@@ -330,13 +330,13 @@ public class AdvancedAlgebraLayerTests
     }
 
     [Fact]
-    public void SparseLinearLayer_SupportsJitCompilation_IsFalse()
+    public void SparseLinearLayer_SupportsJitCompilation_IsTrue()
     {
         // Arrange
         var layer = new SparseLinearLayer<double>(100, 50);
 
-        // Assert
-        Assert.False(layer.SupportsJitCompilation);
+        // Assert - SparseLinearLayer converts to dense and uses MatMul/Add which are JIT-supported
+        Assert.True(layer.SupportsJitCompilation);
     }
 
     #endregion
@@ -409,6 +409,192 @@ public class AdvancedAlgebraLayerTests
         // Assert
         Assert.NotNull(inputGrad);
         Assert.Equal(input.Shape, inputGrad.Shape);
+    }
+
+    #endregion
+
+    #region InstanceNormalizationLayer Tests
+
+    [Fact]
+    public void InstanceNormalizationLayer_Construction_SetsCorrectProperties()
+    {
+        // Arrange & Act
+        var layer = new InstanceNormalizationLayer<double>(64);
+
+        // Assert
+        Assert.Equal(64, layer.NumChannels);
+        Assert.True(layer.Affine);
+        Assert.True(layer.SupportsTraining);
+    }
+
+    [Fact]
+    public void InstanceNormalizationLayer_Construction_RequiresPositiveChannels()
+    {
+        // Act & Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => new InstanceNormalizationLayer<double>(0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new InstanceNormalizationLayer<double>(-1));
+    }
+
+    [Fact]
+    public void InstanceNormalizationLayer_Forward_ProducesCorrectShape_2D()
+    {
+        // Arrange
+        var layer = new InstanceNormalizationLayer<double>(10);
+        int batchSize = 4;
+        var input = new Tensor<double>([batchSize, 10]);
+
+        // Initialize with values
+        for (int b = 0; b < batchSize; b++)
+            for (int c = 0; c < 10; c++)
+                input[b, c] = 0.1 * (c + 1);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal(2, output.Rank);
+        Assert.Equal(batchSize, output.Shape[0]);
+        Assert.Equal(10, output.Shape[1]);
+    }
+
+    [Fact]
+    public void InstanceNormalizationLayer_Forward_ProducesCorrectShape_4D()
+    {
+        // Arrange
+        var layer = new InstanceNormalizationLayer<double>(3);
+        int batchSize = 2;
+        int height = 4;
+        int width = 4;
+        var input = new Tensor<double>([batchSize, 3, height, width]);
+
+        // Initialize with values
+        for (int b = 0; b < batchSize; b++)
+            for (int c = 0; c < 3; c++)
+                for (int h = 0; h < height; h++)
+                    for (int w = 0; w < width; w++)
+                        input[b, c, h, w] = 0.1 * (c + 1) + 0.01 * h + 0.001 * w;
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal(4, output.Rank);
+        Assert.Equal(batchSize, output.Shape[0]);
+        Assert.Equal(3, output.Shape[1]);
+        Assert.Equal(height, output.Shape[2]);
+        Assert.Equal(width, output.Shape[3]);
+    }
+
+    [Fact]
+    public void InstanceNormalizationLayer_ParameterCount_IsCorrect()
+    {
+        // Arrange - with affine (default)
+        var layerAffine = new InstanceNormalizationLayer<double>(64);
+        var layerNonAffine = new InstanceNormalizationLayer<double>(64, affine: false);
+
+        // Assert
+        Assert.Equal(128, layerAffine.ParameterCount); // 64 gamma + 64 beta
+        Assert.Equal(0, layerNonAffine.ParameterCount); // no learnable params
+    }
+
+    [Fact]
+    public void InstanceNormalizationLayer_GetSetParameters_RoundTrips()
+    {
+        // Arrange
+        var layer = new InstanceNormalizationLayer<double>(8);
+        var originalParams = layer.GetParameters();
+
+        // Modify parameters
+        var modifiedParams = new Vector<double>(originalParams.Length);
+        for (int i = 0; i < modifiedParams.Length; i++)
+        {
+            modifiedParams[i] = originalParams[i] * 2.0;
+        }
+        layer.SetParameters(modifiedParams);
+
+        // Act
+        var retrievedParams = layer.GetParameters();
+
+        // Assert
+        Assert.Equal(modifiedParams.Length, retrievedParams.Length);
+        for (int i = 0; i < modifiedParams.Length; i++)
+        {
+            Assert.Equal(modifiedParams[i], retrievedParams[i], precision: 10);
+        }
+    }
+
+    [Fact]
+    public void InstanceNormalizationLayer_ResetState_ClearsInternalState()
+    {
+        // Arrange
+        var layer = new InstanceNormalizationLayer<double>(8);
+        var input = new Tensor<double>([2, 8, 4, 4]);
+        for (int b = 0; b < 2; b++)
+            for (int c = 0; c < 8; c++)
+                for (int h = 0; h < 4; h++)
+                    for (int w = 0; w < 4; w++)
+                        input[b, c, h, w] = 0.1;
+
+        layer.Forward(input);
+
+        // Act
+        layer.ResetState();
+
+        // Assert - ResetState shouldn't throw and layer should be usable
+        var output = layer.Forward(input);
+        Assert.NotNull(output);
+    }
+
+    [Fact]
+    public void InstanceNormalizationLayer_SupportsJitCompilation_IsTrue()
+    {
+        // Arrange
+        var layer = new InstanceNormalizationLayer<double>(64);
+
+        // Assert - InstanceNorm uses GroupNorm with numGroups=numChannels, which is JIT-supported
+        Assert.True(layer.SupportsJitCompilation);
+    }
+
+    [Fact]
+    public void InstanceNormalizationLayer_ForwardBackward_ProducesGradients()
+    {
+        // Arrange
+        var layer = new InstanceNormalizationLayer<double>(4);
+        var input = new Tensor<double>([2, 4, 3, 3]); // batch=2, channels=4, 3x3 spatial
+        for (int b = 0; b < 2; b++)
+            for (int c = 0; c < 4; c++)
+                for (int h = 0; h < 3; h++)
+                    for (int w = 0; w < 3; w++)
+                        input[b, c, h, w] = 0.1 * (c + 1) + 0.01 * h;
+
+        var outputGrad = new Tensor<double>([2, 4, 3, 3]);
+        for (int b = 0; b < 2; b++)
+            for (int c = 0; c < 4; c++)
+                for (int h = 0; h < 3; h++)
+                    for (int w = 0; w < 3; w++)
+                        outputGrad[b, c, h, w] = 1.0;
+
+        // Act
+        layer.Forward(input);
+        var inputGrad = layer.Backward(outputGrad);
+
+        // Assert
+        Assert.NotNull(inputGrad);
+        Assert.Equal(input.Shape, inputGrad.Shape);
+    }
+
+    [Fact]
+    public void InstanceNormalizationLayer_NonAffine_HasNoParameters()
+    {
+        // Arrange
+        var layer = new InstanceNormalizationLayer<double>(32, affine: false);
+
+        // Act
+        var parameters = layer.GetParameters();
+
+        // Assert
+        Assert.Equal(0, parameters.Length);
+        Assert.False(layer.Affine);
     }
 
     #endregion

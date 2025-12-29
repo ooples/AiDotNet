@@ -98,24 +98,34 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
     /// <summary>
     /// Performs the forward pass of adaptive average pooling.
     /// </summary>
-    /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
-    /// <returns>The pooled output tensor [C, outH, outW] or [B, C, outH, outW].</returns>
+    /// <param name="input">The input tensor of any rank >= 3. Last 3 dims are [C, H, W].</param>
+    /// <returns>The pooled output tensor with same leading dims, [C, outH, outW].</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        if (input.Shape.Length < 3)
+            throw new ArgumentException("Input must have at least 3 dimensions (channels, height, width).");
+
         _lastInput = input;
         _lastInputShape = input.Shape;
 
-        // Handle both 3D [C, H, W] and 4D [B, C, H, W] inputs
-        bool is4D = input.Shape.Length == 4;
-        int batchSize = is4D ? input.Shape[0] : 1;
-        int channels = is4D ? input.Shape[1] : input.Shape[0];
-        int inputHeight = is4D ? input.Shape[2] : input.Shape[1];
-        int inputWidth = is4D ? input.Shape[3] : input.Shape[2];
+        // Handle any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
+        int rank = input.Shape.Length;
+        int channels = input.Shape[rank - 3];
+        int inputHeight = input.Shape[rank - 2];
+        int inputWidth = input.Shape[rank - 1];
 
-        // Create output tensor
-        int[] outputShape = is4D
-            ? [batchSize, channels, _outputHeight, _outputWidth]
-            : [channels, _outputHeight, _outputWidth];
+        // Calculate total batch size (product of all dims except last 3)
+        int batchSize = 1;
+        for (int d = 0; d < rank - 3; d++)
+            batchSize *= input.Shape[d];
+
+        // Create output tensor with same leading dimensions
+        int[] outputShape = new int[rank];
+        for (int d = 0; d < rank - 3; d++)
+            outputShape[d] = input.Shape[d];
+        outputShape[rank - 3] = channels;
+        outputShape[rank - 2] = _outputHeight;
+        outputShape[rank - 1] = _outputWidth;
 
         int outputSize = outputShape.Aggregate(1, (a, b) => a * b);
         var outputData = new T[outputSize];
@@ -142,18 +152,14 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
                         {
                             for (int w = wStart; w < wEnd; w++)
                             {
-                                int inputIndex = is4D
-                                    ? b * channels * inputHeight * inputWidth + c * inputHeight * inputWidth + h * inputWidth + w
-                                    : c * inputHeight * inputWidth + h * inputWidth + w;
+                                int inputIndex = b * channels * inputHeight * inputWidth + c * inputHeight * inputWidth + h * inputWidth + w;
                                 sum = NumOps.Add(sum, input.Data[inputIndex]);
                                 count++;
                             }
                         }
 
                         T avg = NumOps.Divide(sum, NumOps.FromDouble(count));
-                        int outputIndex = is4D
-                            ? b * channels * _outputHeight * _outputWidth + c * _outputHeight * _outputWidth + oh * _outputWidth + ow
-                            : c * _outputHeight * _outputWidth + oh * _outputWidth + ow;
+                        int outputIndex = b * channels * _outputHeight * _outputWidth + c * _outputHeight * _outputWidth + oh * _outputWidth + ow;
                         outputData[outputIndex] = avg;
                     }
                 }
@@ -175,11 +181,16 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        bool is4D = _lastInputShape.Length == 4;
-        int batchSize = is4D ? _lastInputShape[0] : 1;
-        int channels = is4D ? _lastInputShape[1] : _lastInputShape[0];
-        int inputHeight = is4D ? _lastInputShape[2] : _lastInputShape[1];
-        int inputWidth = is4D ? _lastInputShape[3] : _lastInputShape[2];
+        // Handle any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
+        int rank = _lastInputShape.Length;
+        int channels = _lastInputShape[rank - 3];
+        int inputHeight = _lastInputShape[rank - 2];
+        int inputWidth = _lastInputShape[rank - 1];
+
+        // Calculate total batch size (product of all dims except last 3)
+        int batchSize = 1;
+        for (int d = 0; d < rank - 3; d++)
+            batchSize *= _lastInputShape[d];
 
         // Create input gradient tensor (same shape as input)
         int inputSize = _lastInputShape.Aggregate(1, (a, b) => a * b);
@@ -202,9 +213,7 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
 
                         int count = (hEnd - hStart) * (wEnd - wStart);
 
-                        int outputIndex = is4D
-                            ? b * channels * _outputHeight * _outputWidth + c * _outputHeight * _outputWidth + oh * _outputWidth + ow
-                            : c * _outputHeight * _outputWidth + oh * _outputWidth + ow;
+                        int outputIndex = b * channels * _outputHeight * _outputWidth + c * _outputHeight * _outputWidth + oh * _outputWidth + ow;
 
                         // The gradient from the average is distributed equally to all inputs
                         T gradPerInput = NumOps.Divide(outputGradient.Data[outputIndex], NumOps.FromDouble(count));
@@ -213,9 +222,7 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
                         {
                             for (int w = wStart; w < wEnd; w++)
                             {
-                                int inputIndex = is4D
-                                    ? b * channels * inputHeight * inputWidth + c * inputHeight * inputWidth + h * inputWidth + w
-                                    : c * inputHeight * inputWidth + h * inputWidth + w;
+                                int inputIndex = b * channels * inputHeight * inputWidth + c * inputHeight * inputWidth + h * inputWidth + w;
                                 inputGradData[inputIndex] = NumOps.Add(inputGradData[inputIndex], gradPerInput);
                             }
                         }

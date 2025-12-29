@@ -85,6 +85,11 @@ public class DecoderLayer<T> : LayerBase<T>
     private bool _inputWas2D = false;
 
     /// <summary>
+    /// Stores the original input shape for restoring higher-rank tensor output.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
@@ -160,8 +165,10 @@ public class DecoderLayer<T> : LayerBase<T>
         var encoderOutput = inputs[1];
         Tensor<T>? attentionMask = inputs.Length == 3 ? inputs[2] : null;
 
-        // Handle both 2D [batch, features] and 3D [batch, seq, features] input
-        _inputWas2D = decoderInput.Shape.Length == 2;
+        // Handle any rank >= 2: last 2 dims are [seq, features], earlier dims are batch-like
+        int rank = decoderInput.Shape.Length;
+        _inputWas2D = rank == 2;
+        _originalInputShape = decoderInput.Shape;
         Tensor<T> input3D, encoderOutput3D;
 
         if (_inputWas2D)
@@ -169,27 +176,63 @@ public class DecoderLayer<T> : LayerBase<T>
             // 2D input: [batch, features] -> [batch, 1, features]
             if (decoderInput.Shape[1] != InputSize)
                 throw new ArgumentException($"Decoder input dimension {decoderInput.Shape[1]} does not match expected InputSize {InputSize}.");
-            if (encoderOutput.Shape[1] != InputSize)
-                throw new ArgumentException($"Encoder output dimension {encoderOutput.Shape[1]} does not match expected InputSize {InputSize}.");
+            if (encoderOutput.Shape[encoderOutput.Shape.Length - 1] != InputSize)
+                throw new ArgumentException($"Encoder output last dimension does not match expected InputSize {InputSize}.");
 
             int batchSize = decoderInput.Shape[0];
             input3D = decoderInput.Reshape(batchSize, 1, InputSize);
-            encoderOutput3D = encoderOutput.Reshape(encoderOutput.Shape[0], 1, InputSize);
+
+            // Handle encoder output reshaping
+            int encRank = encoderOutput.Shape.Length;
+            if (encRank == 2)
+                encoderOutput3D = encoderOutput.Reshape(encoderOutput.Shape[0], 1, InputSize);
+            else if (encRank == 3)
+                encoderOutput3D = encoderOutput;
+            else
+            {
+                int encFlatBatch = 1;
+                for (int d = 0; d < encRank - 2; d++)
+                    encFlatBatch *= encoderOutput.Shape[d];
+                encoderOutput3D = encoderOutput.Reshape(encFlatBatch, encoderOutput.Shape[encRank - 2], encoderOutput.Shape[encRank - 1]);
+            }
         }
-        else if (decoderInput.Shape.Length == 3)
+        else if (rank == 3)
         {
-            // 3D input: validate shape
+            // 3D input: standard format
             if (decoderInput.Shape[2] != InputSize)
                 throw new ArgumentException($"Decoder input dimension {decoderInput.Shape[2]} does not match expected InputSize {InputSize}.");
-            if (encoderOutput.Shape.Length != 3 || encoderOutput.Shape[2] != InputSize)
-                throw new ArgumentException($"Encoder output must be 3D with last dimension matching InputSize {InputSize}.");
 
             input3D = decoderInput;
-            encoderOutput3D = encoderOutput;
+
+            // Handle encoder output
+            int encRank = encoderOutput.Shape.Length;
+            if (encRank == 3)
+                encoderOutput3D = encoderOutput;
+            else
+            {
+                int encFlatBatch = 1;
+                for (int d = 0; d < encRank - 2; d++)
+                    encFlatBatch *= encoderOutput.Shape[d];
+                encoderOutput3D = encoderOutput.Reshape(encFlatBatch, encoderOutput.Shape[encRank - 2], encoderOutput.Shape[encRank - 1]);
+            }
         }
         else
         {
-            throw new ArgumentException($"Decoder input must be 2D or 3D. Got tensor with rank {decoderInput.Shape.Length}.");
+            // Higher rank: flatten leading dimensions
+            if (decoderInput.Shape[rank - 1] != InputSize)
+                throw new ArgumentException($"Decoder input last dimension {decoderInput.Shape[rank - 1]} does not match expected InputSize {InputSize}.");
+
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= decoderInput.Shape[d];
+            input3D = decoderInput.Reshape(flatBatch, decoderInput.Shape[rank - 2], decoderInput.Shape[rank - 1]);
+
+            // Handle encoder output
+            int encRank = encoderOutput.Shape.Length;
+            int encFlatBatch = 1;
+            for (int d = 0; d < encRank - 2; d++)
+                encFlatBatch *= encoderOutput.Shape[d];
+            encoderOutput3D = encoderOutput.Reshape(encFlatBatch, encoderOutput.Shape[encRank - 2], encoderOutput.Shape[encRank - 1]);
         }
 
         return ForwardInternal(input3D, encoderOutput3D, attentionMask);
@@ -239,10 +282,20 @@ public class DecoderLayer<T> : LayerBase<T>
         var feedForwardOutput = _feedForward2.Forward(ffExpanded);
         var output = _norm3.Forward(normalized2.Add(feedForwardOutput));
 
-        // If input was originally 2D, reshape output back to 2D
+        // Restore original tensor shape
         if (_inputWas2D)
         {
             output = output.Reshape(batchSize, output.Shape[2]);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length > 3)
+        {
+            // Restore original batch dimensions for higher-rank input
+            var outputShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 2; d++)
+                outputShape[d] = _originalInputShape[d];
+            outputShape[_originalInputShape.Length - 2] = output.Shape[1];
+            outputShape[_originalInputShape.Length - 1] = output.Shape[2];
+            output = output.Reshape(outputShape);
         }
 
         return output;

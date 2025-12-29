@@ -339,8 +339,10 @@ public static class MathHelper
     {
         var numOps = GetNumericOperations<T>();
 
-        // Lanczos approximation for Gamma function
-        T[] p = { numOps.FromDouble(676.5203681218851),
+        // Lanczos approximation for Gamma function with g=7
+        // p[0] is the constant term, p[1..8] are divided by (z+1), (z+2), ..., (z+8)
+        T[] p = { numOps.FromDouble(0.99999999999980993),
+                  numOps.FromDouble(676.5203681218851),
                   numOps.FromDouble(-1259.1392167224028),
                   numOps.FromDouble(771.32342877765313),
                   numOps.FromDouble(-176.61502916214059),
@@ -349,8 +351,9 @@ public static class MathHelper
                   numOps.FromDouble(9.9843695780195716e-6),
                   numOps.FromDouble(1.5056327351493116e-7) };
 
-        if (numOps.LessThanOrEquals(x, numOps.Zero))
+        if (numOps.LessThan(x, numOps.FromDouble(0.5)))
         {
+            // Reflection formula for x < 0.5
             return numOps.Divide(Pi<T>(),
                 numOps.Multiply(Sin(numOps.Multiply(Pi<T>(), x)),
                 Gamma(numOps.Subtract(numOps.One, x))));
@@ -362,8 +365,9 @@ public static class MathHelper
             numOps.Multiply(numOps.Add(x, numOps.FromDouble(0.5)), numOps.Log(t)),
             t));
 
-        T sum = numOps.Zero;
-        for (int i = 7; i >= 0; i--)
+        // p[0] is added directly, p[1..8] are divided by (x+1), (x+2), ..., (x+8)
+        T sum = p[0];
+        for (int i = 8; i >= 1; i--)
         {
             sum = numOps.Add(sum, numOps.Divide(p[i], numOps.Add(x, numOps.FromDouble(i))));
         }
@@ -1131,7 +1135,17 @@ public static class MathHelper
     {
         var numOps = GetNumericOperations<T>();
 
-        // Check if we need range reduction for |x| > 1
+        // Use native Math.Atan for double and float types for best accuracy
+        if (typeof(T) == typeof(double) && x is double xd)
+        {
+            return (T)(object)Math.Atan(xd);
+        }
+        if (typeof(T) == typeof(float) && x is float xf)
+        {
+            return (T)(object)(float)Math.Atan(xf);
+        }
+
+        // For other types, use Taylor series with range reduction
         T absX = numOps.Abs(x);
         bool needsRangeReduction = numOps.GreaterThan(absX, numOps.One);
 
@@ -1139,23 +1153,21 @@ public static class MathHelper
         if (needsRangeReduction)
         {
             // For |x| > 1, use range reduction: atan(x) = sgn(x) * (π/2 - atan(1/|x|))
-            // This transforms the problem to atan(1/|x|) where 1/|x| < 1 (convergent range)
             xReduced = numOps.Divide(numOps.One, absX);
         }
         else
         {
-            // For |x| <= 1, use x directly (already in convergent range)
             xReduced = absX;
         }
 
-        // Use Taylor series approximation for ArcTan in the convergent range |x| <= 1
-        // Series: atan(x) = x - x³/3 + x⁵/5 - x⁷/7 + ...
+        // Taylor series: atan(x) = x - x³/3 + x⁵/5 - x⁷/7 + ...
+        // Use more terms for better convergence
         T _result = xReduced;
         T _xPower = xReduced;
         T _xSquared = numOps.Square(xReduced);
         int _sign = 1;
 
-        for (int n = 3; n <= 15; n += 2)
+        for (int n = 3; n <= 51; n += 2)
         {
             _sign = -_sign;
             _xPower = numOps.Multiply(_xPower, _xSquared);
@@ -1163,15 +1175,12 @@ public static class MathHelper
             _result = numOps.Add(_result, numOps.Multiply(numOps.FromDouble(_sign), _term));
         }
 
-        // If we used range reduction, apply the inverse transformation
         if (needsRangeReduction)
         {
-            // atan(|x|) = π/2 - atan(1/|x|)
             T halfPi = numOps.Divide(Pi<T>(), numOps.FromDouble(2));
             _result = numOps.Subtract(halfPi, _result);
         }
 
-        // Apply the original sign: atan(x) = sgn(x) * atan(|x|)
         if (numOps.LessThan(x, numOps.Zero))
         {
             _result = numOps.Negate(_result);
@@ -1201,6 +1210,13 @@ public static class MathHelper
     public static T Erf<T>(T x)
     {
         var _numOps = GetNumericOperations<T>();
+
+        // Special case: erf(0) = 0 exactly
+        if (_numOps.Equals(x, _numOps.Zero))
+        {
+            return _numOps.Zero;
+        }
+
         T _sign = _numOps.GreaterThanOrEquals(x, _numOps.Zero) ? _numOps.FromDouble(1) : _numOps.FromDouble(-1);
         x = _numOps.Abs(x);
 

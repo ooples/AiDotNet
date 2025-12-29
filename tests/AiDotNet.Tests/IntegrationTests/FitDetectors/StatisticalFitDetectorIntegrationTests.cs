@@ -168,7 +168,6 @@ public class StatisticalFitDetectorIntegrationTests
         var result = detector.DetectFit(evaluationData);
 
         // Assert
-        Assert.NotNull(result.ConfidenceLevel);
         Assert.True(result.ConfidenceLevel >= 0.0);
         Assert.True(result.ConfidenceLevel <= 1.0);
     }
@@ -929,8 +928,6 @@ public class StatisticalFitDetectorIntegrationTests
         foreach (var detector in detectors)
         {
             var result = detector.DetectFit(evaluationData);
-
-            Assert.NotNull(result.ConfidenceLevel);
             Assert.True(result.ConfidenceLevel >= 0.0,
                 $"Detector {detector.GetType().Name} returned confidence < 0");
             Assert.True(result.ConfidenceLevel <= 1.0,

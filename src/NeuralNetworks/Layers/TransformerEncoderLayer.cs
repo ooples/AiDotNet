@@ -83,6 +83,11 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private bool _inputWas2D = false;
 
     /// <summary>
+    /// Stores the original input shape for restoring higher-rank tensor output.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// The size of the embeddings for queries, keys, values, and outputs.
     /// </summary>
     /// <remarks>
@@ -362,11 +367,28 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Handle both 2D [seq, embed] and 3D [batch, seq, embed] input
-        _inputWas2D = input.Shape.Length == 2;
-        Tensor<T> input3D = _inputWas2D
-            ? input.Reshape(1, input.Shape[0], input.Shape[1])
-            : input;
+        // Handle any rank >= 2: last 2 dims are [seq, embed], earlier dims are batch-like
+        int rank = input.Shape.Length;
+        _inputWas2D = rank == 2;
+        _originalInputShape = input.Shape;
+
+        Tensor<T> input3D;
+        if (_inputWas2D)
+        {
+            input3D = input.Reshape(1, input.Shape[0], input.Shape[1]);
+        }
+        else if (rank == 3)
+        {
+            input3D = input;
+        }
+        else
+        {
+            // Higher rank: flatten leading dimensions into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= input.Shape[d];
+            input3D = input.Reshape(flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]);
+        }
 
         var attention = _selfAttention.Forward(input3D);
         // Residual connection: input + attention
@@ -383,10 +405,20 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var residual2 = Engine.TensorAdd(normalized1, ffProjected);
         var output = _norm2.Forward(residual2);
 
-        // If input was 2D, reshape output back to 2D
+        // Restore original tensor shape
         if (_inputWas2D)
         {
             output = output.Reshape(output.Shape[1], output.Shape[2]);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length > 3)
+        {
+            // Restore original batch dimensions for higher-rank input
+            var outputShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 2; d++)
+                outputShape[d] = _originalInputShape[d];
+            outputShape[_originalInputShape.Length - 2] = output.Shape[1];
+            outputShape[_originalInputShape.Length - 1] = output.Shape[2];
+            output = output.Reshape(outputShape);
         }
 
         return output;

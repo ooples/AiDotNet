@@ -74,6 +74,11 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// Cached output from forward pass.
     /// </summary>
     private Tensor<T>? _lastOutput;
@@ -197,8 +202,34 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 "Adjacency matrix must be set using SetAdjacencyMatrix before calling Forward.");
         }
 
-        _lastInput = input;
-        int batchSize = input.Shape[0];
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: collapse to 2D for processing
+        Tensor<T> processInput;
+        int batchSize;
+
+        if (rank == 1)
+        {
+            batchSize = 1;
+            processInput = input.Reshape([1, input.Shape[0]]);
+        }
+        else if (rank == 2)
+        {
+            batchSize = input.Shape[0];
+            processInput = input;
+        }
+        else
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 1; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            processInput = input.Reshape([flatBatch, input.Shape[rank - 1]]);
+        }
+
+        _lastInput = processInput;
         int numNodes = input.Shape[1];
 
         // Step 1: Aggregate neighbor features using sum (batched matmul: [batch, nodes, nodes] @ [batch, nodes, features])

@@ -289,6 +289,11 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     private bool _addedBatchDimension;
 
     /// <summary>
+    /// Stores the original input shape for restoring higher-rank tensor output.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// Random number generator used for weight initialization.
     /// </summary>
     /// <remarks>
@@ -764,21 +769,34 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Support both 3D [C, H, W] and 4D [B, C, H, W] input
+        // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
+        if (input.Shape.Length < 3)
+            throw new ArgumentException($"Conv2D input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
+
         Tensor<T> input4D;
-        if (input.Shape.Length == 3)
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        if (rank == 3)
         {
+            // 3D [C, H, W] -> 4D [1, C, H, W]
             _addedBatchDimension = true;
             input4D = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2]);
         }
-        else if (input.Shape.Length == 4)
+        else if (rank == 4)
         {
+            // 4D [B, C, H, W] - no reshaping needed
             _addedBatchDimension = false;
             input4D = input;
         }
         else
         {
-            throw new ArgumentException($"Conv2D input requires 3D or 4D tensor. Got rank {input.Shape.Length}.");
+            // Higher rank: flatten leading dimensions into batch
+            _addedBatchDimension = false;
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 3; d++)
+                flatBatch *= input.Shape[d];
+            input4D = input.Reshape(flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]);
         }
 
         _lastInput = input4D;
@@ -796,7 +814,18 @@ public class ConvolutionalLayer<T> : LayerBase<T>
 
         _lastOutput = ApplyActivation(output);
 
-        // Return with matching dimensions (3D if batch was added, 4D otherwise)
+        // Return with matching dimensions to preserve original tensor rank
+        if (_originalInputShape != null && _originalInputShape.Length > 4)
+        {
+            // Restore original batch dimensions for higher-rank input
+            var outputShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 3; d++)
+                outputShape[d] = _originalInputShape[d];
+            outputShape[_originalInputShape.Length - 3] = OutputDepth;
+            outputShape[_originalInputShape.Length - 2] = _lastOutput.Shape[2];
+            outputShape[_originalInputShape.Length - 1] = _lastOutput.Shape[3];
+            return _lastOutput.Reshape(outputShape);
+        }
         return _addedBatchDimension ? _lastOutput.Reshape(OutputShape) : _lastOutput;
     }
 
@@ -865,7 +894,12 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         // Store gradients for UpdateParameters to consume (separation of concerns)
         _kernelsGradient = kernelGradients;
 
-        return inputGradient;
+        // Restore original input shape for higher-rank tensors
+        if (_originalInputShape != null && _originalInputShape.Length > 4)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+        return _addedBatchDimension ? inputGradient.Reshape(InputShape) : inputGradient;
     }
 
     /// <summary>
@@ -885,11 +919,26 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Handle 3D gradient input by adding batch dimension if needed
+        // Handle any-rank gradient input by reshaping to 4D
         Tensor<T> gradient4D;
-        gradient4D = outputGradient.Shape.Length == 3
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2])
-            : outputGradient;
+        int gradRank = outputGradient.Shape.Length;
+        if (gradRank == 3)
+        {
+            gradient4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
+        }
+        else if (gradRank == 4)
+        {
+            gradient4D = outputGradient;
+        }
+        else
+        {
+            // Higher-rank: flatten leading dimensions
+            int flatBatch = 1;
+            for (int d = 0; d < gradRank - 3; d++)
+                flatBatch *= outputGradient.Shape[d];
+            gradient4D = outputGradient.Reshape(flatBatch, outputGradient.Shape[gradRank - 3],
+                outputGradient.Shape[gradRank - 2], outputGradient.Shape[gradRank - 1]);
+        }
 
         // Convert parameters to computation nodes
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
@@ -974,6 +1023,12 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         }
 
         var inputGrad = inputNode.Gradient ?? throw new InvalidOperationException("Input gradient was not computed during backward pass.");
+
+        // Restore higher-rank gradients to their original shape
+        if (_originalInputShape != null && _originalInputShape.Length > 4)
+        {
+            return inputGrad.Reshape(_originalInputShape);
+        }
 
         // Return with matching dimensions: remove batch dimension if added: [1, C, H, W] -> [C, H, W]
         return _addedBatchDimension
