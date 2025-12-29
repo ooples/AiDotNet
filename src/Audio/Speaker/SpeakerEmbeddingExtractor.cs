@@ -38,7 +38,10 @@ namespace AiDotNet.Audio.Speaker;
 /// </remarks>
 public class SpeakerEmbeddingExtractor<T> : IDisposable
 {
-    private readonly INumericOperations<T> _numOps;
+    /// <summary>
+    /// Gets numeric operations for type T.
+    /// </summary>
+    protected readonly INumericOperations<T> NumOps;
     private readonly MfccExtractor<T> _mfccExtractor;
     private readonly OnnxModel<T>? _onnxModel;
     private readonly SpeakerEmbeddingOptions _options;
@@ -55,12 +58,22 @@ public class SpeakerEmbeddingExtractor<T> : IDisposable
     public bool HasNeuralModel => _onnxModel?.IsLoaded == true;
 
     /// <summary>
+    /// Gets the expected sample rate for input audio.
+    /// </summary>
+    public int SampleRate => _options.SampleRate;
+
+    /// <summary>
+    /// Gets whether this model is running in ONNX inference mode.
+    /// </summary>
+    public bool IsOnnxMode => _onnxModel is not null;
+
+    /// <summary>
     /// Creates a new speaker embedding extractor.
     /// </summary>
     /// <param name="options">Extraction options.</param>
     public SpeakerEmbeddingExtractor(SpeakerEmbeddingOptions? options = null)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
+        NumOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new SpeakerEmbeddingOptions();
 
         _mfccExtractor = new MfccExtractor<T>(new MfccOptions
@@ -171,7 +184,7 @@ public class SpeakerEmbeddingExtractor<T> : IDisposable
             var values = new double[numFrames];
             for (int f = 0; f < numFrames; f++)
             {
-                values[f] = _numOps.ToDouble(mfccs[f, c]);
+                values[f] = NumOps.ToDouble(mfccs[f, c]);
             }
 
             // Compute statistics
@@ -180,14 +193,14 @@ public class SpeakerEmbeddingExtractor<T> : IDisposable
             double min = values.Min();
             double max = values.Max();
 
-            if (idx < embeddingDim) embedding[idx++] = _numOps.FromDouble(mean);
-            if (idx < embeddingDim) embedding[idx++] = _numOps.FromDouble(std);
-            if (idx < embeddingDim) embedding[idx++] = _numOps.FromDouble(min);
-            if (idx < embeddingDim) embedding[idx++] = _numOps.FromDouble(max);
+            if (idx < embeddingDim) embedding[idx++] = NumOps.FromDouble(mean);
+            if (idx < embeddingDim) embedding[idx++] = NumOps.FromDouble(std);
+            if (idx < embeddingDim) embedding[idx++] = NumOps.FromDouble(min);
+            if (idx < embeddingDim) embedding[idx++] = NumOps.FromDouble(max);
         }
 
         // Normalize embedding
-        NormalizeEmbedding(embedding);
+        NormalizeEmbeddingArray(embedding);
 
         return new SpeakerEmbedding<T>
         {
@@ -197,13 +210,13 @@ public class SpeakerEmbeddingExtractor<T> : IDisposable
         };
     }
 
-    private void NormalizeEmbedding(T[] embedding)
+    private void NormalizeEmbeddingArray(T[] embedding)
     {
         // L2 normalization
         double sumSquared = 0;
         for (int i = 0; i < embedding.Length; i++)
         {
-            double v = _numOps.ToDouble(embedding[i]);
+            double v = NumOps.ToDouble(embedding[i]);
             sumSquared += v * v;
         }
 
@@ -212,8 +225,8 @@ public class SpeakerEmbeddingExtractor<T> : IDisposable
         {
             for (int i = 0; i < embedding.Length; i++)
             {
-                double v = _numOps.ToDouble(embedding[i]) / norm;
-                embedding[i] = _numOps.FromDouble(v);
+                double v = NumOps.ToDouble(embedding[i]) / norm;
+                embedding[i] = NumOps.FromDouble(v);
             }
         }
     }
@@ -246,6 +259,33 @@ public class SpeakerEmbeddingExtractor<T> : IDisposable
         }
 
         _disposed = true;
+    }
+
+    /// <summary>
+    /// Extracts speaker embedding from audio as a Tensor.
+    /// </summary>
+    /// <param name="audio">Audio samples as a tensor.</param>
+    /// <returns>Speaker embedding tensor.</returns>
+    public Tensor<T> ExtractTensor(Tensor<T> audio)
+    {
+        var result = Extract(audio);
+        var tensor = new Tensor<T>([result.Vector.Length]);
+        for (int i = 0; i < result.Vector.Length; i++)
+        {
+            tensor[i] = result.Vector[i];
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Computes cosine similarity between two speaker embeddings.
+    /// </summary>
+    /// <param name="embedding1">First embedding.</param>
+    /// <param name="embedding2">Second embedding.</param>
+    /// <returns>Cosine similarity (0-1 for normalized embeddings).</returns>
+    public T ComputeSimilarity(SpeakerEmbedding<T> embedding1, SpeakerEmbedding<T> embedding2)
+    {
+        return NumOps.FromDouble(embedding1.CosineSimilarity(embedding2));
     }
 }
 

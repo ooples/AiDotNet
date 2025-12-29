@@ -39,7 +39,10 @@ namespace AiDotNet.Audio.Speaker;
 /// </remarks>
 public class SpeakerVerifier<T>
 {
-    private readonly INumericOperations<T> _numOps;
+    /// <summary>
+    /// Gets numeric operations for type T.
+    /// </summary>
+    protected readonly INumericOperations<T> NumOps;
     private readonly SpeakerVerifierOptions _options;
     private readonly Dictionary<string, EnrolledSpeaker<T>> _enrolledSpeakers;
 
@@ -49,12 +52,22 @@ public class SpeakerVerifier<T>
     public int EnrolledCount => _enrolledSpeakers.Count;
 
     /// <summary>
+    /// Gets the verification threshold.
+    /// </summary>
+    public double VerificationThreshold => _options.VerificationThreshold;
+
+    /// <summary>
+    /// Gets the identification threshold.
+    /// </summary>
+    public double IdentificationThreshold => _options.IdentificationThreshold;
+
+    /// <summary>
     /// Creates a new speaker verifier.
     /// </summary>
     /// <param name="options">Verifier options.</param>
     public SpeakerVerifier(SpeakerVerifierOptions? options = null)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
+        NumOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new SpeakerVerifierOptions();
         _enrolledSpeakers = new Dictionary<string, EnrolledSpeaker<T>>();
     }
@@ -198,9 +211,9 @@ public class SpeakerVerifier<T>
             double sum = 0;
             foreach (var emb in embeddings)
             {
-                sum += _numOps.ToDouble(emb.Vector[d]);
+                sum += NumOps.ToDouble(emb.Vector[d]);
             }
-            centroid[d] = _numOps.FromDouble(sum / embeddings.Count);
+            centroid[d] = NumOps.FromDouble(sum / embeddings.Count);
         }
 
         foreach (var emb in embeddings)
@@ -213,7 +226,7 @@ public class SpeakerVerifier<T>
         double norm = 0;
         for (int d = 0; d < dim; d++)
         {
-            double v = _numOps.ToDouble(centroid[d]);
+            double v = NumOps.ToDouble(centroid[d]);
             norm += v * v;
         }
         norm = Math.Sqrt(norm);
@@ -222,8 +235,8 @@ public class SpeakerVerifier<T>
         {
             for (int d = 0; d < dim; d++)
             {
-                double v = _numOps.ToDouble(centroid[d]) / norm;
-                centroid[d] = _numOps.FromDouble(v);
+                double v = NumOps.ToDouble(centroid[d]) / norm;
+                centroid[d] = NumOps.FromDouble(v);
             }
         }
 

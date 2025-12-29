@@ -38,10 +38,28 @@ namespace AiDotNet.Audio.Speaker;
 /// </remarks>
 public class SpeakerDiarizer<T> : IDisposable
 {
-    private readonly INumericOperations<T> _numOps;
+    /// <summary>
+    /// Gets numeric operations for type T.
+    /// </summary>
+    protected readonly INumericOperations<T> NumOps;
     private readonly SpeakerEmbeddingExtractor<T> _embeddingExtractor;
     private readonly SpeakerDiarizerOptions _options;
     private bool _disposed;
+
+    /// <summary>
+    /// Gets the sample rate.
+    /// </summary>
+    public int SampleRate => _options.SampleRate;
+
+    /// <summary>
+    /// Gets the minimum turn duration in seconds.
+    /// </summary>
+    public double MinTurnDuration => _options.MinTurnDuration;
+
+    /// <summary>
+    /// Gets the clustering threshold.
+    /// </summary>
+    public double ClusteringThreshold => _options.ClusteringThreshold;
 
     /// <summary>
     /// Creates a new speaker diarizer.
@@ -49,7 +67,7 @@ public class SpeakerDiarizer<T> : IDisposable
     /// <param name="options">Diarization options.</param>
     public SpeakerDiarizer(SpeakerDiarizerOptions? options = null)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
+        NumOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new SpeakerDiarizerOptions();
 
         _embeddingExtractor = new SpeakerEmbeddingExtractor<T>(new SpeakerEmbeddingOptions
