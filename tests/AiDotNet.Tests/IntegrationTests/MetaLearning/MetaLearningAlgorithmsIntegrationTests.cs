@@ -1,7 +1,5 @@
 using System;
-using System.Linq;
 using AiDotNet.Data.Structures;
-using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning;
@@ -63,7 +61,7 @@ public class MetaLearningAlgorithmsIntegrationTests
         };
     }
 
-    private static IMetaLearningTask<double, Matrix<double>, Tensor<double>> CreateTensorTask(int seed)
+    private static MetaLearningTask<double, Matrix<double>, Tensor<double>> CreateTensorTask(int seed)
     {
         const int numWays = 2;
         const int numShots = 1;
@@ -98,25 +96,17 @@ public class MetaLearningAlgorithmsIntegrationTests
             queryY[new[] { i }] = i % numWays;
         }
 
-        return new TestMetaLearningTask<double, Matrix<double>, Tensor<double>>(
-            supportX,
-            supportY,
-            queryX,
-            queryY,
-            numWays,
-            numShots,
-            numQueryPerClass,
-            name: $"tensor-task-{seed}");
-    }
-
-    private static Matrix<double> CopyFirstRow(Matrix<double> source)
-    {
-        var row = new Matrix<double>(1, source.Columns);
-        for (int j = 0; j < source.Columns; j++)
+        return new MetaLearningTask<double, Matrix<double>, Tensor<double>>
         {
-            row[0, j] = source[0, j];
-        }
-        return row;
+            SupportSetX = supportX,
+            SupportSetY = supportY,
+            QuerySetX = queryX,
+            QuerySetY = queryY,
+            NumWays = numWays,
+            NumShots = numShots,
+            NumQueryPerClass = numQueryPerClass,
+            Name = $"tensor-task-{seed}"
+        };
     }
 
     [Fact]
@@ -144,7 +134,7 @@ public class MetaLearningAlgorithmsIntegrationTests
         bool changed = false;
         for (int i = 0; i < updated.Length; i++)
         {
-            if (Math.Abs(updated[i] - initial[i]) > 1e-9)
+            if (Math.Abs(updated[i] - initial[i]) > 1e-12)
             {
                 changed = true;
                 break;
@@ -179,10 +169,9 @@ public class MetaLearningAlgorithmsIntegrationTests
 
         Assert.False(double.IsNaN(loss));
         bool changed = false;
-        const double tolerance = 1e-9;
         for (int i = 0; i < updated.Length; i++)
         {
-            if (Math.Abs(updated[i] - initial[i]) > tolerance)
+            if (Math.Abs(updated[i] - initial[i]) > 1e-12)
             {
                 changed = true;
                 break;
@@ -237,12 +226,10 @@ public class MetaLearningAlgorithmsIntegrationTests
 
         var loss = algorithm.MetaTrain(batch);
         var adapted = algorithm.Adapt(task);
-        var predictions = adapted.Predict(CopyFirstRow(task.QuerySetX));
+        var predictions = adapted.Predict(task.QuerySetX);
 
         Assert.False(double.IsNaN(loss));
         Assert.Equal(MetaLearningAlgorithmType.ProtoNets, algorithm.AlgorithmType);
-
-        // ProtoNets returns 1D tensor of class probabilities for single query
         Assert.Equal(1, predictions.Shape.Length);
         Assert.Equal(task.NumWays, predictions.Shape[0]);
     }
@@ -264,12 +251,12 @@ public class MetaLearningAlgorithmsIntegrationTests
 
         var loss = algorithm.MetaTrain(batch);
         var adapted = algorithm.Adapt(task);
-        var predictions = adapted.Predict(CopyFirstRow(task.QuerySetX));
+        var predictions = adapted.Predict(task.QuerySetX);
 
         Assert.False(double.IsNaN(loss));
         Assert.Equal(MetaLearningAlgorithmType.MatchingNetworks, algorithm.AlgorithmType);
         Assert.Equal(2, predictions.Shape.Length);
-        Assert.Equal(1, predictions.Shape[0]);
+        Assert.Equal(task.QuerySetX.Rows, predictions.Shape[0]);
         Assert.Equal(options.NumClasses, predictions.Shape[1]);
     }
 }

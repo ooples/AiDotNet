@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Data.Structures;
@@ -328,57 +327,43 @@ internal sealed class ResetTrackingOptimizer : IGradientBasedOptimizer<double, M
     }
 }
 
+/// <summary>
+/// Test implementation of IMetaLearningTask for testing purposes.
+/// </summary>
 internal sealed class TestMetaLearningTask<T, TInput, TOutput> : IMetaLearningTask<T, TInput, TOutput>
 {
     public TestMetaLearningTask(
-        TInput supportSetX,
-        TOutput supportSetY,
-        TInput querySetX,
-        TOutput querySetY,
+        TInput supportInput,
+        TOutput supportOutput,
+        TInput queryInput,
+        TOutput queryOutput,
         int numWays,
         int numShots,
         int numQueryPerClass,
-        string? name = null,
-        Dictionary<string, object>? metadata = null,
-        int? taskId = null)
+        string? name = null)
     {
-        SupportSetX = supportSetX;
-        SupportSetY = supportSetY;
-        QuerySetX = querySetX;
-        QuerySetY = querySetY;
+        SupportInput = supportInput;
+        SupportOutput = supportOutput;
+        QueryInput = queryInput;
+        QueryOutput = queryOutput;
         NumWays = numWays;
         NumShots = numShots;
         NumQueryPerClass = numQueryPerClass;
         Name = name;
-        Metadata = metadata;
-        TaskId = taskId;
     }
 
-    public TInput SupportInput => SupportSetX;
-
-    public TOutput SupportOutput => SupportSetY;
-
-    public TInput QueryInput => QuerySetX;
-
-    public TOutput QueryOutput => QuerySetY;
-
+    public TInput SupportInput { get; }
+    public TOutput SupportOutput { get; }
+    public TInput QueryInput { get; }
+    public TOutput QueryOutput { get; }
     public string? Name { get; }
-
-    public Dictionary<string, object>? Metadata { get; }
-
+    public Dictionary<string, object>? Metadata { get; } = null;
     public int NumWays { get; }
-
     public int NumShots { get; }
-
     public int NumQueryPerClass { get; }
-
-    public TInput QuerySetX { get; }
-
-    public TOutput QuerySetY { get; }
-
-    public TInput SupportSetX { get; }
-
-    public TOutput SupportSetY { get; }
-
+    public TInput QuerySetX => QueryInput;
+    public TOutput QuerySetY => QueryOutput;
+    public TInput SupportSetX => SupportInput;
+    public TOutput SupportSetY => SupportOutput;
     public int? TaskId { get; set; }
 }
