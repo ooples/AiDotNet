@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
 
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -145,6 +146,11 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     private Tensor<T> _weights;
+
+    private Tensor<T>? _weightsTransposedCache;
+    private GpuTensor<float>? _gpuWeightsTransposedFloat;
+    private GpuTensor<double>? _gpuWeightsTransposedDouble;
+    private GpuEngine? _gpuCacheEngine;
 
     /// <summary>
     /// The bias values added to each output neuron.
@@ -413,6 +419,8 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             _biases[i] = NumOps.Zero;
         }
+
+        InvalidateWeightCaches();
     }
 
     /// <summary>
@@ -585,6 +593,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Set the weights directly
         _weights = weights;
+        InvalidateWeightCaches();
     }
 
     /// <summary>
@@ -686,8 +695,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // weights: [outputSize, inputSize]
         // weights.T: [inputSize, outputSize]
         // result: [batchDim, outputSize]
-        var weightsTransposed = Engine.TensorTranspose(_weights);
-        var matmul = Engine.TensorMatMul(flattenedInput, weightsTransposed);
+        var weightsTransposed = GetWeightsTransposed();
+        var matmul = TryTensorMatMulWithCachedWeights(flattenedInput, weightsTransposed)
+            ?? Engine.TensorMatMul(flattenedInput, weightsTransposed);
 
         // Add biases with broadcasting support ([batchDim, outputSize] + [outputSize])
         var output = Engine.TensorBroadcastAdd(matmul, _biases);
@@ -718,6 +728,105 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // 2D input: result is already [batch, outputSize]
 
         return result;
+    }
+
+    private Tensor<T> GetWeightsTransposed()
+    {
+        if (_weightsTransposedCache == null)
+        {
+            _weightsTransposedCache = _weights.Transpose();
+        }
+
+        return _weightsTransposedCache;
+    }
+
+    private Tensor<T>? TryTensorMatMulWithCachedWeights(Tensor<T> input, Tensor<T> weightsTransposed)
+    {
+        if (Engine is not GpuEngine gpuEngine)
+        {
+            ResetGpuCacheForEngine(null);
+            return null;
+        }
+
+        if (!gpuEngine.SupportsGpu)
+        {
+            ResetGpuCacheForEngine(null);
+            return null;
+        }
+
+        ResetGpuCacheForEngine(gpuEngine);
+
+        if (typeof(T) == typeof(float))
+        {
+            var weightsTransposedFloat = (Tensor<float>)(object)weightsTransposed;
+            var gpuWeights = _gpuWeightsTransposedFloat;
+
+            if (gpuWeights == null || gpuWeights.IsDisposed || gpuWeights.Length != weightsTransposedFloat.Length)
+            {
+                gpuWeights?.Dispose();
+                _gpuWeightsTransposedFloat = gpuEngine.TryCreatePersistentTensor(weightsTransposedFloat);
+                gpuWeights = _gpuWeightsTransposedFloat;
+            }
+
+            if (gpuWeights == null)
+                return null;
+
+            var inputFloat = (Tensor<float>)(object)input;
+            var result = gpuEngine.TensorMatMulCachedWeights(inputFloat, weightsTransposedFloat, gpuWeights);
+            return (Tensor<T>)(object)result;
+        }
+
+        if (typeof(T) == typeof(double))
+        {
+            var weightsTransposedDouble = (Tensor<double>)(object)weightsTransposed;
+            var gpuWeights = _gpuWeightsTransposedDouble;
+
+            if (gpuWeights == null || gpuWeights.IsDisposed || gpuWeights.Length != weightsTransposedDouble.Length)
+            {
+                gpuWeights?.Dispose();
+                _gpuWeightsTransposedDouble = gpuEngine.TryCreatePersistentTensor(weightsTransposedDouble);
+                gpuWeights = _gpuWeightsTransposedDouble;
+            }
+
+            if (gpuWeights == null)
+                return null;
+
+            var inputDouble = (Tensor<double>)(object)input;
+            var result = gpuEngine.TensorMatMulCachedWeights(inputDouble, weightsTransposedDouble, gpuWeights);
+            return (Tensor<T>)(object)result;
+        }
+
+        return null;
+    }
+
+    private void InvalidateWeightCaches()
+    {
+        _weightsTransposedCache = null;
+        ClearGpuWeightCache();
+    }
+
+    private void ResetGpuCacheForEngine(GpuEngine? gpuEngine)
+    {
+        if (!ReferenceEquals(_gpuCacheEngine, gpuEngine))
+        {
+            ClearGpuWeightCache();
+            _gpuCacheEngine = gpuEngine;
+        }
+    }
+
+    private void ClearGpuWeightCache()
+    {
+        if (_gpuWeightsTransposedFloat != null)
+        {
+            _gpuWeightsTransposedFloat.Dispose();
+            _gpuWeightsTransposedFloat = null;
+        }
+
+        if (_gpuWeightsTransposedDouble != null)
+        {
+            _gpuWeightsTransposedDouble.Dispose();
+            _gpuWeightsTransposedDouble = null;
+        }
     }
 
     /// <summary>
@@ -1020,8 +1129,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_weightsGradient == null || _biasesGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _weights = _weights.Subtract(_weightsGradient.Multiply(learningRate));
-        _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));
+        _weights = _weights.Subtract(_weightsGradient.Multiply(learningRate));  
+        _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));     
+        InvalidateWeightCaches();
     }
 
     /// <summary>
@@ -1104,6 +1214,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _weights = new Tensor<T>(_weights.Shape, parameters.Slice(index, _weights.Length));
         index += _weights.Length;
         _biases = new Tensor<T>(_biases.Shape, parameters.Slice(index, _biases.Length));
+        InvalidateWeightCaches();
     }
 
     /// <summary>

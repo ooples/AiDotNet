@@ -1605,7 +1605,7 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index1D, ArrayView<long>, long, ArrayView<long>>? _divideScalarKernelLong;
 
     // Kernel cache for matrix operations - float (Phase B: Epic 2)
-    private readonly Action<AcceleratorStream, Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, int>? _matrixMultiplyKernelFloat;
+    private readonly Action<AcceleratorStream, Index2D, ArrayView2D<float, Stride2D.DenseY>, ArrayView2D<float, Stride2D.DenseY>, ArrayView2D<float, Stride2D.DenseY>, int>? _matrixMultiplyKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView2D<float, Stride2D.DenseX>, ArrayView<float>, ArrayView<float>, int, int>? _matrixVectorMultiplyKernelFloat;
     private readonly Action<AcceleratorStream, Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>>? _matrixTransposeKernelFloat;
     private readonly Action<AcceleratorStream, Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>>? _matrixAddKernelFloat;
@@ -1617,7 +1617,7 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index2D, ArrayView<float>, ArrayView<float>, ArrayView2D<float, Stride2D.DenseX>, int, int>? _outerProductKernelFloat;
 
     // Kernel cache for matrix operations - double (Phase B: Epic 2)
-    private readonly Action<AcceleratorStream, Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, int>? _matrixMultiplyKernelDouble;
+    private readonly Action<AcceleratorStream, Index2D, ArrayView2D<double, Stride2D.DenseY>, ArrayView2D<double, Stride2D.DenseY>, ArrayView2D<double, Stride2D.DenseY>, int>? _matrixMultiplyKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView2D<double, Stride2D.DenseX>, ArrayView<double>, ArrayView<double>, int, int>? _matrixVectorMultiplyKernelDouble;
     private readonly Action<AcceleratorStream, Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>>? _matrixTransposeKernelDouble;
     private readonly Action<AcceleratorStream, Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>>? _matrixAddKernelDouble;
@@ -2011,6 +2011,50 @@ public class GpuEngine : IEngine, IDisposable
     private bool ShouldUseGpu<T>(int size, int threshold) where T : unmanaged =>
         SupportsGpu && _gpuHealthy && size >= threshold && IsGpuAcceleratedType<T>();
 
+    internal GpuTensor<float>? TryCreatePersistentTensor(Tensor<float> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (!SupportsGpu || !_gpuHealthy)
+            return null;
+
+        try
+        {
+            var accelerator = _accelerator ?? throw new InvalidOperationException("GPU not initialized");
+            var pool = _memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized");
+
+            var gpuTensor = new GpuTensor<float>(accelerator, pool, tensor.Shape);
+            gpuTensor.CopyFromCpu(tensor.AsSpan());
+            return gpuTensor;
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return null;
+        }
+    }
+
+    internal GpuTensor<double>? TryCreatePersistentTensor(Tensor<double> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (!SupportsGpu || !_gpuHealthy)
+            return null;
+
+        try
+        {
+            var accelerator = _accelerator ?? throw new InvalidOperationException("GPU not initialized");
+            var pool = _memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized");
+
+            var gpuTensor = new GpuTensor<double>(accelerator, pool, tensor.Shape);
+            gpuTensor.CopyFromCpu(tensor.AsSpan());
+            return gpuTensor;
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return null;
+        }
+    }
+
     #endregion
 
     /// <summary>
@@ -2371,7 +2415,7 @@ public class GpuEngine : IEngine, IDisposable
 
                 // Pre-compile kernels for matrix operations - float (Phase B: Epic 2)
                 _matrixMultiplyKernelFloat = _accelerator.LoadAutoGroupedKernel<
-                    Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, int>(
+                    Index2D, ArrayView2D<float, Stride2D.DenseY>, ArrayView2D<float, Stride2D.DenseY>, ArrayView2D<float, Stride2D.DenseY>, int>(
                     (index, a, b, result, k) =>
                     {
                         float sum = 0;
@@ -2450,7 +2494,7 @@ public class GpuEngine : IEngine, IDisposable
 
                 // Pre-compile kernels for matrix operations - double (Phase B: Epic 2)
                 _matrixMultiplyKernelDouble = _accelerator.LoadAutoGroupedKernel<
-                    Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, int>(
+                    Index2D, ArrayView2D<double, Stride2D.DenseY>, ArrayView2D<double, Stride2D.DenseY>, ArrayView2D<double, Stride2D.DenseY>, int>(
                     (index, a, b, result, k) =>
                     {
                         double sum = 0;
@@ -12059,9 +12103,9 @@ public class GpuEngine : IEngine, IDisposable
                 gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
 
                 // Create 2D views
-                var viewA = gpuA.View.As2DView<Stride2D.DenseX>(new Index2D(m, k), new Stride2D.DenseX(k));
-                var viewB = gpuB.View.As2DView<Stride2D.DenseX>(new Index2D(k, n), new Stride2D.DenseX(n));
-                var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(m, n), new Stride2D.DenseX(n));
+                var viewA = gpuA.View.As2DView<Stride2D.DenseY>(new Index2D(m, k), new Stride2D.DenseY(k));
+                var viewB = gpuB.View.As2DView<Stride2D.DenseY>(new Index2D(k, n), new Stride2D.DenseY(n));
+                var viewResult = gpuResult.View.As2DView<Stride2D.DenseY>(new Index2D(m, n), new Stride2D.DenseY(n));
 
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
@@ -12314,9 +12358,9 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
                 gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
 
-                var viewA = gpuA.View.As2DView<Stride2D.DenseX>(new Index2D(m, k), new Stride2D.DenseX(k));
-                var viewB = gpuB.View.As2DView<Stride2D.DenseX>(new Index2D(k, n), new Stride2D.DenseX(n));
-                var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(m, n), new Stride2D.DenseX(n));
+                var viewA = gpuA.View.As2DView<Stride2D.DenseY>(new Index2D(m, k), new Stride2D.DenseY(k));
+                var viewB = gpuB.View.As2DView<Stride2D.DenseY>(new Index2D(k, n), new Stride2D.DenseY(n));
+                var viewResult = gpuResult.View.As2DView<Stride2D.DenseY>(new Index2D(m, n), new Stride2D.DenseY(n));
 
                 (_matrixMultiplyKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(m, n), viewA, viewB, viewResult, k);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -18202,9 +18246,9 @@ public class GpuEngine : IEngine, IDisposable
             gpuB.View.BaseView.CopyFromCPU(b.ToArray());
 
             // Create 2D views for GEMM
-            var viewA = gpuA.View.As2DView<Stride2D.DenseX>(new Index2D(m, k), new Stride2D.DenseX(k));
-            var viewB = gpuB.View.As2DView<Stride2D.DenseX>(new Index2D(k, n), new Stride2D.DenseX(n));
-            var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(m, n), new Stride2D.DenseX(n));
+            var viewA = gpuA.View.As2DView<Stride2D.DenseY>(new Index2D(m, k), new Stride2D.DenseY(k));
+            var viewB = gpuB.View.As2DView<Stride2D.DenseY>(new Index2D(k, n), new Stride2D.DenseY(n));
+            var viewResult = gpuResult.View.As2DView<Stride2D.DenseY>(new Index2D(m, n), new Stride2D.DenseY(n));
 
             lock (_gpuLock)
             {
@@ -18247,9 +18291,9 @@ public class GpuEngine : IEngine, IDisposable
             gpuA.View.BaseView.CopyFromCPU(a.ToArray());
             gpuB.View.BaseView.CopyFromCPU(b.ToArray());
 
-            var viewA = gpuA.View.As2DView<Stride2D.DenseX>(new Index2D(m, k), new Stride2D.DenseX(k));
-            var viewB = gpuB.View.As2DView<Stride2D.DenseX>(new Index2D(k, n), new Stride2D.DenseX(n));
-            var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(m, n), new Stride2D.DenseX(n));
+            var viewA = gpuA.View.As2DView<Stride2D.DenseY>(new Index2D(m, k), new Stride2D.DenseY(k));
+            var viewB = gpuB.View.As2DView<Stride2D.DenseY>(new Index2D(k, n), new Stride2D.DenseY(n));
+            var viewResult = gpuResult.View.As2DView<Stride2D.DenseY>(new Index2D(m, n), new Stride2D.DenseY(n));
 
             lock (_gpuLock)
             {
@@ -18272,6 +18316,120 @@ public class GpuEngine : IEngine, IDisposable
         {
             _memoryPoolDouble.Return(gpuA);
             _memoryPoolDouble.Return(gpuB);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    internal Tensor<float> TensorMatMulCachedWeights(Tensor<float> a, Tensor<float> b, GpuTensor<float> gpuWeights)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (gpuWeights == null) throw new ArgumentNullException(nameof(gpuWeights));
+        if (a.Rank != 2 || b.Rank != 2)
+            throw new ArgumentException($"TensorMatMul requires 2D tensors. Got ranks {a.Rank} and {b.Rank}.");
+
+        int m = a.Shape[0];
+        int k = a.Shape[1];
+        int n = b.Shape[1];
+
+        if (k != b.Shape[0])
+            throw new ArgumentException($"Matrix dimensions incompatible: [{m},{k}] x [{b.Shape[0]},{n}]");
+
+        if (!SupportsGpu || !_gpuHealthy || gpuWeights.IsDisposed || gpuWeights.Length != b.Length)
+            return _cpuFallback.TensorMatMul(a, b);
+
+        int totalOps = m * k * n;
+        if (totalOps < _thresholds.MatrixMultiply)
+            return _cpuFallback.TensorMatMul(a, b);
+
+        var gpuA = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * k);
+        var gpuResult = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * n);
+
+        try
+        {
+            gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
+
+            var viewA = gpuA.View.As2DView<Stride2D.DenseY>(new Index2D(m, k), new Stride2D.DenseY(k));
+            var viewB = gpuWeights.View.As2DView<Stride2D.DenseY>(new Index2D(k, n), new Stride2D.DenseY(n));
+            var viewResult = gpuResult.View.As2DView<Stride2D.DenseY>(new Index2D(m, n), new Stride2D.DenseY(n));
+
+            lock (_gpuLock)
+            {
+                (_matrixMultiplyKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    new Index2D(m, n), viewA, viewB, viewResult, k);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            var result = new Tensor<float>([m, n]);
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.TensorMatMul(a, b);
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuA);
+            _memoryPoolFloat.Return(gpuResult);
+        }
+    }
+
+    internal Tensor<double> TensorMatMulCachedWeights(Tensor<double> a, Tensor<double> b, GpuTensor<double> gpuWeights)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (gpuWeights == null) throw new ArgumentNullException(nameof(gpuWeights));
+        if (a.Rank != 2 || b.Rank != 2)
+            throw new ArgumentException($"TensorMatMul requires 2D tensors. Got ranks {a.Rank} and {b.Rank}.");
+
+        int m = a.Shape[0];
+        int k = a.Shape[1];
+        int n = b.Shape[1];
+
+        if (k != b.Shape[0])
+            throw new ArgumentException($"Matrix dimensions incompatible: [{m},{k}] x [{b.Shape[0]},{n}]");
+
+        if (!SupportsGpu || !_gpuHealthy || gpuWeights.IsDisposed || gpuWeights.Length != b.Length)
+            return _cpuFallback.TensorMatMul(a, b);
+
+        int totalOps = m * k * n;
+        if (totalOps < _thresholds.MatrixMultiply)
+            return _cpuFallback.TensorMatMul(a, b);
+
+        var gpuA = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * k);
+        var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * n);
+
+        try
+        {
+            gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
+
+            var viewA = gpuA.View.As2DView<Stride2D.DenseY>(new Index2D(m, k), new Stride2D.DenseY(k));
+            var viewB = gpuWeights.View.As2DView<Stride2D.DenseY>(new Index2D(k, n), new Stride2D.DenseY(n));
+            var viewResult = gpuResult.View.As2DView<Stride2D.DenseY>(new Index2D(m, n), new Stride2D.DenseY(n));
+
+            lock (_gpuLock)
+            {
+                (_matrixMultiplyKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    new Index2D(m, n), viewA, viewB, viewResult, k);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            var result = new Tensor<double>([m, n]);
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.TensorMatMul(a, b);
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuA);
             _memoryPoolDouble.Return(gpuResult);
         }
     }
