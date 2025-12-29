@@ -826,7 +826,14 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 1] = _lastOutput.Shape[3];
             return _lastOutput.Reshape(outputShape);
         }
-        return _addedBatchDimension ? _lastOutput.Reshape(OutputShape) : _lastOutput;
+        if (_addedBatchDimension)
+        {
+            // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
+            // Remove the batch dimension we added
+            return _lastOutput.Reshape([OutputDepth, _lastOutput.Shape[2], _lastOutput.Shape[3]]);
+        }
+
+        return _lastOutput;
     }
 
     /// <summary>
@@ -868,9 +875,17 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
+        // If we added a batch dimension in Forward, add it to outputGradient too
+        var gradForBackward = outputGradient;
+        if (_addedBatchDimension && outputGradient.Shape.Length == 3)
+        {
+            // outputGradient is 3D [OutC, OutH, OutW], reshape to 4D [1, OutC, OutH, OutW]
+            gradForBackward = outputGradient.Reshape([1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]]);
+        }
+
         // Apply activation derivative to get delta
         // ApplyActivationDerivative already multiplies by outputGradient (chain rule)
-        var delta = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var delta = ApplyActivationDerivative(_lastOutput, gradForBackward);
 
         // === GPU-Accelerated Backward Pass ===
         // Phase B: US-GPU-016 - Replace 7 nested loops with Engine.Conv2DBackward operations
@@ -899,7 +914,13 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         {
             return inputGradient.Reshape(_originalInputShape);
         }
-        return _addedBatchDimension ? inputGradient.Reshape(InputShape) : inputGradient;
+        if (_addedBatchDimension && _originalInputShape != null && _originalInputShape.Length == 3)
+        {
+            // Restore original 3D input shape [C, H, W]
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     /// <summary>

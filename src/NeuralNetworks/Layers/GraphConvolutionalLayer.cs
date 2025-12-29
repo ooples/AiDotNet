@@ -584,8 +584,39 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         // First: X * W using reshape pattern for 3D @ 2D
         var xw = BatchedMatMul3Dx2D(processInput, _weights, batchSize, numNodes, processInput.Shape[2], outputFeatures);
 
+        // Ensure adjacency matrix has matching rank for batch operation
+        // If adjacency is 2D and xw is 3D, broadcast adjacency to 3D
+        Tensor<T> adjForBatch;
+        if (_adjacencyMatrix.Shape.Length == 2 && xw.Shape.Length == 3)
+        {
+            // Reshape 2D adjacency [nodes, nodes] to 3D [1, nodes, nodes] and broadcast to [batchSize, nodes, nodes]
+            if (batchSize == 1)
+            {
+                adjForBatch = _adjacencyMatrix.Reshape([1, numNodes, numNodes]);
+            }
+            else
+            {
+                // Broadcast: repeat adjacency matrix for each batch item
+                adjForBatch = new Tensor<T>([batchSize, numNodes, numNodes]);
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int i = 0; i < numNodes; i++)
+                    {
+                        for (int j = 0; j < numNodes; j++)
+                        {
+                            adjForBatch[new int[] { b, i, j }] = _adjacencyMatrix[new int[] { i, j }];
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            adjForBatch = _adjacencyMatrix;
+        }
+
         // Then: A * (X * W) using batched matmul for 3D @ 3D
-        var output = Engine.BatchMatMul(_adjacencyMatrix, xw);
+        var output = Engine.BatchMatMul(adjForBatch, xw);
 
         // Add bias by broadcasting across batch and node dimensions
         var biasBroadcast = BroadcastBias(_bias, batchSize, numNodes);
