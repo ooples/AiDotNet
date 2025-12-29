@@ -1956,6 +1956,14 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public bool SupportsGpu => _accelerator != null;
 
+    private static bool IsPair(int[] values) => values != null && values.Length == 2;
+
+    private static bool IsUniformPair(int[] values) => IsPair(values) && values[0] == values[1];
+
+    private static bool IsPositivePair(int[] values) => IsPair(values) && values[0] > 0 && values[1] > 0;
+
+    private static bool IsNonNegativePair(int[] values) => IsPair(values) && values[0] >= 0 && values[1] >= 0;
+
     #region Type Acceleration Support Helpers
 
     /// <summary>
@@ -18097,7 +18105,7 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuInput.View.BaseView.CopyFromCPU(tensor.ToArray());
+            gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
 
             lock (_gpuLock)
             {
@@ -18133,7 +18141,7 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuInput.View.BaseView.CopyFromCPU(tensor.ToArray());
+            gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
 
             lock (_gpuLock)
             {
@@ -18198,8 +18206,8 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuA.View.BaseView.CopyFromCPU(a.ToArray());
-            gpuB.View.BaseView.CopyFromCPU(b.ToArray());
+            gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
+            gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
 
             // Create 2D views for GEMM
             var viewA = gpuA.View.As2DView<Stride2D.DenseX>(new Index2D(m, k), new Stride2D.DenseX(k));
@@ -18244,8 +18252,8 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuA.View.BaseView.CopyFromCPU(a.ToArray());
-            gpuB.View.BaseView.CopyFromCPU(b.ToArray());
+            gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
+            gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
 
             var viewA = gpuA.View.As2DView<Stride2D.DenseX>(new Index2D(m, k), new Stride2D.DenseX(k));
             var viewB = gpuB.View.As2DView<Stride2D.DenseX>(new Index2D(k, n), new Stride2D.DenseX(n));
@@ -18279,15 +18287,25 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Tensor<T> Conv2D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] dilation)
     {
-        // GPU Conv2D with asymmetric parameters
-        // For now use CPU, can extend existing Conv2D GPU kernel
-        return _cpuFallback.Conv2D(input, kernel, stride, padding, dilation);
+        if (!IsPositivePair(stride) || !IsPositivePair(dilation) || !IsPair(padding))
+            return _cpuFallback.Conv2D(input, kernel, stride, padding, dilation);
+
+        if (!IsUniformPair(stride) || !IsUniformPair(padding) || !IsUniformPair(dilation))
+            return _cpuFallback.Conv2D(input, kernel, stride, padding, dilation);
+
+        return Conv2D(input, kernel, stride[0], padding[0], dilation[0]);
     }
 
     /// <inheritdoc/>
     public Tensor<T> Conv2DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> kernel, int[] inputShape, int[] stride, int[] padding, int[] dilation)
     {
         if (gradOutput.Length < _thresholds.VectorAdd)
+            return _cpuFallback.Conv2DBackwardInput(gradOutput, kernel, inputShape, stride, padding, dilation);
+
+        if (!IsPositivePair(stride) || !IsPositivePair(dilation) || !IsPair(padding))
+            return _cpuFallback.Conv2DBackwardInput(gradOutput, kernel, inputShape, stride, padding, dilation);
+
+        if (!IsUniformPair(stride) || !IsUniformPair(padding) || !IsUniformPair(dilation))
             return _cpuFallback.Conv2DBackwardInput(gradOutput, kernel, inputShape, stride, padding, dilation);
 
         if (SupportsGpu && _gpuHealthy)
@@ -18400,6 +18418,12 @@ public class GpuEngine : IEngine, IDisposable
         if (gradOutput.Length < _thresholds.VectorAdd)
             return _cpuFallback.Conv2DBackwardKernel(gradOutput, input, kernelShape, stride, padding, dilation);
 
+        if (!IsPositivePair(stride) || !IsPositivePair(dilation) || !IsPair(padding))
+            return _cpuFallback.Conv2DBackwardKernel(gradOutput, input, kernelShape, stride, padding, dilation);
+
+        if (!IsUniformPair(stride) || !IsUniformPair(padding) || !IsUniformPair(dilation))
+            return _cpuFallback.Conv2DBackwardKernel(gradOutput, input, kernelShape, stride, padding, dilation);
+
         if (SupportsGpu && _gpuHealthy)
         {
             if (typeof(T) == typeof(float))
@@ -18508,6 +18532,9 @@ public class GpuEngine : IEngine, IDisposable
     public Tensor<T> MaxPool2DWithIndices<T>(Tensor<T> input, int[] poolSize, int[] stride, out int[,,,,] maxIndices)
     {
         if (input.Length < _thresholds.VectorAdd)
+            return _cpuFallback.MaxPool2DWithIndices(input, poolSize, stride, out maxIndices);
+
+        if (!IsPair(poolSize) || !IsUniformPair(stride))
             return _cpuFallback.MaxPool2DWithIndices(input, poolSize, stride, out maxIndices);
 
         if (SupportsGpu && _gpuHealthy)
@@ -18652,6 +18679,9 @@ public class GpuEngine : IEngine, IDisposable
     public Tensor<T> MaxPool2DBackward<T>(Tensor<T> gradOutput, int[,,,,] maxIndices, int[] inputShape, int[] poolSize, int[] stride)
     {
         if (gradOutput.Length < _thresholds.VectorAdd)
+            return _cpuFallback.MaxPool2DBackward(gradOutput, maxIndices, inputShape, poolSize, stride);
+
+        if (!IsPair(poolSize) || !IsUniformPair(stride))
             return _cpuFallback.MaxPool2DBackward(gradOutput, maxIndices, inputShape, poolSize, stride);
 
         if (SupportsGpu && _gpuHealthy)
@@ -18802,6 +18832,9 @@ public class GpuEngine : IEngine, IDisposable
         if (gradOutput.Length < _thresholds.VectorAdd)
             return _cpuFallback.AvgPool2DBackward(gradOutput, inputShape, poolSize, stride);
 
+        if (!IsUniformPair(poolSize) || !IsUniformPair(stride))
+            return _cpuFallback.AvgPool2DBackward(gradOutput, inputShape, poolSize, stride);
+
         if (SupportsGpu && _gpuHealthy)
         {
             if (typeof(T) == typeof(float))
@@ -18906,6 +18939,9 @@ public class GpuEngine : IEngine, IDisposable
     public Tensor<T> DepthwiseConv2D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding)
     {
         if (input.Length < _thresholds.VectorAdd)
+            return _cpuFallback.DepthwiseConv2D(input, kernel, stride, padding);
+
+        if (!IsPositivePair(stride) || !IsUniformPair(stride) || !IsUniformPair(padding))
             return _cpuFallback.DepthwiseConv2D(input, kernel, stride, padding);
 
         if (SupportsGpu && _gpuHealthy)
@@ -19024,6 +19060,9 @@ public class GpuEngine : IEngine, IDisposable
         if (gradOutput.Length < _thresholds.VectorAdd)
             return _cpuFallback.DepthwiseConv2DBackwardInput(gradOutput, kernel, inputShape, stride, padding);
 
+        if (!IsPositivePair(stride) || !IsUniformPair(stride) || !IsUniformPair(padding))
+            return _cpuFallback.DepthwiseConv2DBackwardInput(gradOutput, kernel, inputShape, stride, padding);
+
         if (SupportsGpu && _gpuHealthy)
         {
             if (typeof(T) == typeof(float))
@@ -19134,6 +19173,9 @@ public class GpuEngine : IEngine, IDisposable
     public Tensor<T> DepthwiseConv2DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding)
     {
         if (gradOutput.Length < _thresholds.VectorAdd)
+            return _cpuFallback.DepthwiseConv2DBackwardKernel(gradOutput, input, kernelShape, stride, padding);
+
+        if (!IsPositivePair(stride) || !IsUniformPair(stride) || !IsUniformPair(padding))
             return _cpuFallback.DepthwiseConv2DBackwardKernel(gradOutput, input, kernelShape, stride, padding);
 
         if (SupportsGpu && _gpuHealthy)
@@ -19248,6 +19290,12 @@ public class GpuEngine : IEngine, IDisposable
     public Tensor<T> ConvTranspose2D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] outputPadding)
     {
         if (input.Length < _thresholds.VectorAdd)
+            return _cpuFallback.ConvTranspose2D(input, kernel, stride, padding, outputPadding);
+
+        if (!IsPositivePair(stride) || !IsNonNegativePair(padding) || !IsNonNegativePair(outputPadding))
+            return _cpuFallback.ConvTranspose2D(input, kernel, stride, padding, outputPadding);
+
+        if (!IsUniformPair(stride) || !IsUniformPair(padding))
             return _cpuFallback.ConvTranspose2D(input, kernel, stride, padding, outputPadding);
 
         if (SupportsGpu && _gpuHealthy)
@@ -19368,6 +19416,9 @@ public class GpuEngine : IEngine, IDisposable
         if (gradOutput.Length < _thresholds.VectorAdd)
             return _cpuFallback.ConvTranspose2DBackwardInput(gradOutput, kernel, inputShape, stride, padding);
 
+        if (!IsPositivePair(stride) || !IsUniformPair(stride) || !IsUniformPair(padding))
+            return _cpuFallback.ConvTranspose2DBackwardInput(gradOutput, kernel, inputShape, stride, padding);
+
         if (SupportsGpu && _gpuHealthy)
         {
             if (typeof(T) == typeof(float))
@@ -19480,6 +19531,9 @@ public class GpuEngine : IEngine, IDisposable
     public Tensor<T> ConvTranspose2DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding)
     {
         if (gradOutput.Length < _thresholds.VectorAdd)
+            return _cpuFallback.ConvTranspose2DBackwardKernel(gradOutput, input, kernelShape, stride, padding);
+
+        if (!IsPositivePair(stride) || !IsUniformPair(stride) || !IsUniformPair(padding))
             return _cpuFallback.ConvTranspose2DBackwardKernel(gradOutput, input, kernelShape, stride, padding);
 
         if (SupportsGpu && _gpuHealthy)
@@ -22838,7 +22892,7 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuInput.View.BaseView.CopyFromCPU(input.ToArray());
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
 
             lock (_gpuLock)
             {
@@ -22881,7 +22935,7 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuInput.View.BaseView.CopyFromCPU(input.ToArray());
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
 
             lock (_gpuLock)
             {
@@ -22935,7 +22989,7 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuInput.View.BaseView.CopyFromCPU(input.ToArray());
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
 
             lock (_gpuLock)
             {
@@ -22990,7 +23044,7 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuInput.View.BaseView.CopyFromCPU(input.ToArray());
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
 
             lock (_gpuLock)
             {
@@ -23295,7 +23349,7 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuInput.View.BaseView.CopyFromCPU(input.ToArray());
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
 
             lock (_gpuLock)
             {
@@ -23340,7 +23394,7 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuInput.View.BaseView.CopyFromCPU(input.ToArray());
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
 
             lock (_gpuLock)
             {

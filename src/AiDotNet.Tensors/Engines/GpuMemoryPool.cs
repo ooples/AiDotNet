@@ -31,6 +31,7 @@ public class GpuMemoryPool<T> : IDisposable where T : unmanaged
     private readonly Accelerator _accelerator;
     private readonly ConcurrentDictionary<int, ConcurrentBag<MemoryBuffer1D<T, Stride1D.Dense>>> _pools;
     private readonly int[] _bucketSizes;
+    private readonly bool _clearOnRent;
     private bool _disposed;
 
     // Standard bucket sizes (in elements)
@@ -48,7 +49,7 @@ public class GpuMemoryPool<T> : IDisposable where T : unmanaged
     /// </summary>
     /// <param name="accelerator">The GPU accelerator to allocate buffers on.</param>
     public GpuMemoryPool(Accelerator accelerator)
-        : this(accelerator, DefaultBucketSizes)
+        : this(accelerator, DefaultBucketSizes, clearOnRent: true)
     {
     }
 
@@ -58,9 +59,21 @@ public class GpuMemoryPool<T> : IDisposable where T : unmanaged
     /// <param name="accelerator">The GPU accelerator to allocate buffers on.</param>
     /// <param name="bucketSizes">Custom bucket sizes in ascending order.</param>
     public GpuMemoryPool(Accelerator accelerator, int[] bucketSizes)
+        : this(accelerator, bucketSizes, clearOnRent: true)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the GpuMemoryPool class with custom bucket sizes and clear behavior.
+    /// </summary>
+    /// <param name="accelerator">The GPU accelerator to allocate buffers on.</param>
+    /// <param name="bucketSizes">Custom bucket sizes in ascending order.</param>
+    /// <param name="clearOnRent">Whether to clear reused buffers before handing them out.</param>
+    public GpuMemoryPool(Accelerator accelerator, int[] bucketSizes, bool clearOnRent)
     {
         _accelerator = accelerator ?? throw new ArgumentNullException(nameof(accelerator));
         _bucketSizes = bucketSizes ?? throw new ArgumentNullException(nameof(bucketSizes));
+        _clearOnRent = clearOnRent;
 
         if (_bucketSizes.Length == 0)
         {
@@ -117,9 +130,12 @@ public class GpuMemoryPool<T> : IDisposable where T : unmanaged
         // Try to rent from pool
         if (_pools.TryGetValue(bucketSize, out var pool) && pool.TryTake(out var buffer))
         {
-            // Buffer is reused as-is for performance
-            // Note: If data privacy is a concern, consider clearing buffers before reuse
-            // by calling buffer.MemSetToZero() (expensive operation)
+            if (_clearOnRent)
+            {
+                buffer.MemSetToZero();
+            }
+
+            // Buffer is reused as-is for performance when clearing is disabled
             return buffer;
         }
 
