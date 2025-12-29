@@ -6,6 +6,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.Audio.AudioGen;
 
@@ -27,7 +28,10 @@ namespace AiDotNet.Audio.AudioGen;
 ///
 /// Usage:
 /// <code>
-/// var audioGen = await AudioGenModel&lt;float&gt;.CreateAsync(new AudioGenOptions
+/// // First, load the tokenizer that matches your text encoder model
+/// var tokenizer = await AutoTokenizer.FromPretrainedAsync("t5-base");
+///
+/// var audioGen = await AudioGenModel&lt;float&gt;.CreateAsync(tokenizer, new AudioGenOptions
 /// {
 ///     DurationSeconds = 5.0,
 ///     Temperature = 1.0
@@ -46,6 +50,7 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     private readonly OnnxModel<T>? _textEncoder;
     private readonly OnnxModel<T>? _languageModel;
     private readonly OnnxModel<T>? _audioDecoder;
+    private readonly ITokenizer _tokenizer;
     private readonly Random _random;
     private bool _disposed;
 
@@ -89,17 +94,32 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// <summary>
     /// Creates a new AudioGenModel instance.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For ONNX mode, you MUST provide a tokenizer that matches your text encoder model.
+    /// AudioGen models typically use T5-based text encoders. Use
+    /// <see cref="HuggingFace.AutoTokenizer.FromPretrained(string, string?)"/> with
+    /// "t5-base" or the specific model repository for your text encoder.
+    /// </para>
+    /// </remarks>
     private AudioGenModel(
         AudioGenOptions options,
         OnnxModel<T>? textEncoder,
         OnnxModel<T>? languageModel,
-        OnnxModel<T>? audioDecoder)
+        OnnxModel<T>? audioDecoder,
+        ITokenizer tokenizer)
         : base(CreateMinimalArchitecture(options))
     {
         _options = options;
         _textEncoder = textEncoder;
         _languageModel = languageModel;
         _audioDecoder = audioDecoder;
+
+        // Tokenizer is required for ONNX mode - must match the text encoder model
+        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer),
+            "Tokenizer is required for ONNX mode. AudioGen uses T5-based text encoders. " +
+            "Use AutoTokenizer.FromPretrained(\"t5-base\") or the tokenizer matching your text encoder.");
+
         _random = options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
@@ -126,11 +146,25 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// <summary>
     /// Creates an AudioGenModel asynchronously, downloading models if needed.
     /// </summary>
+    /// <param name="tokenizer">The text tokenizer. AudioGen uses T5-based text encoders.
+    /// Use <see cref="HuggingFace.AutoTokenizer.FromPretrained(string, string?)"/> with "t5-base"
+    /// or the tokenizer matching your text encoder model.</param>
     /// <param name="options">Configuration options.</param>
     /// <param name="progress">Optional download progress reporter.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The initialized AudioGenModel.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>IMPORTANT:</b> The tokenizer must match the text encoder model used.
+    /// AudioGen models typically use T5 text encoders, so use a T5 tokenizer:
+    /// <code>
+    /// var tokenizer = await AutoTokenizer.FromPretrainedAsync("t5-base");
+    /// var audioGen = await AudioGenModel&lt;float&gt;.CreateAsync(tokenizer, new AudioGenOptions { ... });
+    /// </code>
+    /// </para>
+    /// </remarks>
     public static async Task<AudioGenModel<T>> CreateAsync(
+        ITokenizer tokenizer,
         AudioGenOptions? options = null,
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
@@ -191,7 +225,7 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
                 audioDecoder = new OnnxModel<T>(path, options.OnnxOptions);
             }
 
-            return new AudioGenModel<T>(options, textEncoder, languageModel, audioDecoder);
+            return new AudioGenModel<T>(options, textEncoder, languageModel, audioDecoder, tokenizer);
         }
         catch
         {
@@ -205,7 +239,16 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// <summary>
     /// Creates an AudioGenModel from local model files.
     /// </summary>
+    /// <param name="tokenizer">The text tokenizer. AudioGen uses T5-based text encoders.
+    /// Use <see cref="HuggingFace.AutoTokenizer.FromPretrained(string, string?)"/> with "t5-base"
+    /// or the tokenizer matching your text encoder model.</param>
+    /// <param name="textEncoderPath">Path to the text encoder ONNX model.</param>
+    /// <param name="languageModelPath">Path to the language model ONNX model.</param>
+    /// <param name="audioDecoderPath">Path to the audio decoder ONNX model.</param>
+    /// <param name="options">Configuration options.</param>
+    /// <returns>The initialized AudioGenModel.</returns>
     public static AudioGenModel<T> FromFiles(
+        ITokenizer tokenizer,
         string textEncoderPath,
         string languageModelPath,
         string audioDecoderPath,
@@ -220,7 +263,7 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         var languageModel = new OnnxModel<T>(languageModelPath, options.OnnxOptions);
         var audioDecoder = new OnnxModel<T>(audioDecoderPath, options.OnnxOptions);
 
-        return new AudioGenModel<T>(options, textEncoder, languageModel, audioDecoder);
+        return new AudioGenModel<T>(options, textEncoder, languageModel, audioDecoder, tokenizer);
     }
 
     #region IAudioGenerator Implementation
@@ -447,7 +490,7 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// </summary>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new AudioGenModel<T>(_options, null, null, null);
+        return new AudioGenModel<T>(_options, null, null, null, _tokenizer);
     }
 
     #endregion
@@ -459,7 +502,7 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         if (_textEncoder is null)
             throw new InvalidOperationException("Text encoder not loaded.");
 
-        // Tokenize the prompt (simplified - real impl would use proper tokenizer)
+        // Tokenize the prompt using the provided ITokenizer
         var tokens = TokenizePrompt(prompt);
 
         // Create input tensor
@@ -475,36 +518,23 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
     private int[] TokenizePrompt(string prompt)
     {
-        // Simplified tokenization - real implementation would use proper BPE tokenizer
-        var tokens = new List<int>();
+        // Use the proper tokenizer provided at construction
+        var encoding = _tokenizer.Encode(prompt);
 
-        // Add start token
-        tokens.Add(1);
-
-        // Simple character-level tokenization as placeholder
-        foreach (char c in prompt.ToLowerInvariant())
-        {
-            if (char.IsLetterOrDigit(c))
-            {
-                tokens.Add(c - 'a' + 10);
-            }
-            else if (c == ' ')
-            {
-                tokens.Add(3);
-            }
-        }
-
-        // Add end token
-        tokens.Add(2);
-
-        // Pad or truncate to fixed length
+        // Convert token IDs to int array, padding/truncating to max length
         int maxLength = 256;
-        while (tokens.Count < maxLength)
+        var tokens = new int[maxLength];
+
+        // Copy token IDs (up to maxLength)
+        int copyCount = Math.Min(encoding.TokenIds.Count, maxLength);
+        for (int i = 0; i < copyCount; i++)
         {
-            tokens.Add(0); // Pad token
+            tokens[i] = encoding.TokenIds[i];
         }
 
-        return tokens.Take(maxLength).ToArray();
+        // Remaining positions are already 0 (pad token) due to array initialization
+
+        return tokens;
     }
 
     private Tensor<T> GenerateAudioCodes(Tensor<T> textEmbeddings, int seed, double durationSeconds)

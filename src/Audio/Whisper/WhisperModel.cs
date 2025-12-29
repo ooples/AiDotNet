@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -50,6 +52,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     private readonly WhisperOptions _options;
     private readonly MelSpectrogram<T> _melSpectrogram;
     private readonly WhisperTokenizer _tokenizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private bool _disposed;
 
     /// <summary>
@@ -78,7 +81,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public bool SupportsWordTimestamps => true;
 
     /// <summary>
-    /// Creates a new WhisperModel instance.
+    /// Creates a new WhisperModel instance for ONNX inference.
     /// </summary>
     /// <param name="options">Configuration options.</param>
     /// <param name="encoder">Pre-loaded encoder model.</param>
@@ -90,6 +93,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         OnnxEncoder = encoder;
         OnnxDecoder = decoder;
         _tokenizer = new WhisperTokenizer();
+        _optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Set audio properties
         SampleRate = options.SampleRate;
@@ -109,6 +113,109 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
         // Initialize supported languages based on model size
         SupportedLanguages = GetSupportedLanguages(options.ModelSize);
+    }
+
+    /// <summary>
+    /// Creates a new WhisperModel instance for training from scratch.
+    /// </summary>
+    /// <param name="options">Configuration options.</param>
+    /// <param name="customLayers">Optional custom layers. If null, default Whisper layers are created.</param>
+    /// <param name="optimizer">Optional optimizer for training. If null, Adam optimizer is used.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Use this constructor when you want to train a speech recognition
+    /// model from scratch with your own data. This is useful for:
+    /// - Training on domain-specific vocabulary (medical, legal, technical terms)
+    /// - Training on specific accents or languages not well supported by pre-trained models
+    /// - Research and experimentation with different architectures
+    ///
+    /// Example:
+    /// <code>
+    /// var options = new WhisperOptions { ModelSize = WhisperModelSize.Base };
+    /// var whisper = WhisperModel&lt;float&gt;.CreateForTraining(options);
+    ///
+    /// // Train on your data
+    /// for (int epoch = 0; epoch &lt; 100; epoch++)
+    /// {
+    ///     foreach (var (audio, transcript) in trainingData)
+    ///     {
+    ///         whisper.Train(audio, transcript);
+    ///     }
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public static WhisperModel<T> CreateForTraining(
+        WhisperOptions? options = null,
+        IEnumerable<ILayer<T>>? customLayers = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    {
+        options ??= new WhisperOptions();
+        return new WhisperModel<T>(options, customLayers, optimizer);
+    }
+
+    /// <summary>
+    /// Private constructor for training mode.
+    /// </summary>
+    private WhisperModel(
+        WhisperOptions options,
+        IEnumerable<ILayer<T>>? customLayers,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+        : base(CreateTrainingArchitecture(options, customLayers))
+    {
+        _options = options;
+        _tokenizer = new WhisperTokenizer();
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        // Set audio properties
+        SampleRate = options.SampleRate;
+        NumMels = options.NumMels;
+
+        // Create mel spectrogram preprocessor
+        _melSpectrogram = new MelSpectrogram<T>(
+            sampleRate: options.SampleRate,
+            nMels: options.NumMels,
+            nFft: 400,
+            hopLength: 160,
+            fMin: 0,
+            fMax: 8000,
+            logMel: true);
+
+        MelSpec = _melSpectrogram;
+
+        // Initialize supported languages
+        SupportedLanguages = GetSupportedLanguages(options.ModelSize);
+
+        // Initialize trainable layers
+        InitializeLayers();
+    }
+
+    private static NeuralNetworkArchitecture<T> CreateTrainingArchitecture(
+        WhisperOptions options,
+        IEnumerable<ILayer<T>>? customLayers)
+    {
+        // Pass custom layers to the constructor since Layers is read-only
+        return new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.SpeechRecognition,
+            complexity: GetComplexity(options.ModelSize),
+            inputSize: options.SampleRate * options.MaxAudioLengthSeconds,
+            outputSize: 51865, // Whisper vocabulary size
+            layers: customLayers?.ToList()
+        );
+    }
+
+    private static NetworkComplexity GetComplexity(WhisperModelSize size)
+    {
+        return size switch
+        {
+            WhisperModelSize.Tiny => NetworkComplexity.Simple,
+            WhisperModelSize.Base => NetworkComplexity.Medium,
+            WhisperModelSize.Small => NetworkComplexity.Medium,
+            WhisperModelSize.Medium => NetworkComplexity.Deep,
+            WhisperModelSize.Large or WhisperModelSize.LargeV2 or WhisperModelSize.LargeV3 => NetworkComplexity.VeryDeep,
+            _ => NetworkComplexity.Medium
+        };
     }
 
     private static NeuralNetworkArchitecture<T> CreateMinimalArchitecture(WhisperOptions options)
@@ -424,11 +531,61 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     }
 
     /// <summary>
-    /// Initializes the neural network layers.
+    /// Initializes the neural network layers for training mode.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// In ONNX mode, layers are not initialized as inference is handled by the ONNX runtime.
+    /// In training mode, this creates the full encoder-decoder transformer architecture.
+    /// </para>
+    /// <para>
+    /// Users can provide custom layers via the architecture, or use the default Whisper layers
+    /// created by <see cref="LayerHelper{T}.CreateDefaultWhisperLayers"/>.
+    /// </para>
+    /// </remarks>
     protected override void InitializeLayers()
     {
-        // ONNX-only model - no native layers to initialize
+        // Skip layer initialization in ONNX mode
+        if (IsOnnxMode)
+        {
+            return;
+        }
+
+        // Use custom layers if provided, otherwise create default Whisper layers
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            // Get model parameters based on model size
+            var (modelDim, numEncoderLayers, numDecoderLayers, numHeads, ffDim) = GetModelParameters(_options.ModelSize);
+
+            // Create default Whisper layers using the industry-standard architecture
+            Layers.AddRange(LayerHelper<T>.CreateDefaultWhisperLayers(
+                numMels: _options.NumMels,
+                modelDimension: modelDim,
+                numEncoderLayers: numEncoderLayers,
+                numDecoderLayers: numDecoderLayers,
+                numHeads: numHeads,
+                feedForwardDim: ffDim,
+                vocabularySize: 51865,
+                maxSequenceLength: 1500,
+                dropoutRate: 0.1));
+        }
+    }
+
+    private static (int modelDim, int encoderLayers, int decoderLayers, int heads, int ffDim) GetModelParameters(WhisperModelSize size)
+    {
+        return size switch
+        {
+            WhisperModelSize.Tiny => (384, 4, 4, 6, 1536),
+            WhisperModelSize.Base => (512, 6, 6, 8, 2048),
+            WhisperModelSize.Small => (768, 12, 12, 12, 3072),
+            WhisperModelSize.Medium => (1024, 24, 24, 16, 4096),
+            WhisperModelSize.Large or WhisperModelSize.LargeV2 or WhisperModelSize.LargeV3 => (1280, 32, 32, 20, 5120),
+            _ => (512, 6, 6, 8, 2048) // Default to Base
+        };
     }
 
     /// <summary>
@@ -449,32 +606,98 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     }
 
     /// <summary>
-    /// Updates model parameters.
+    /// Updates model parameters from a parameter vector.
     /// </summary>
+    /// <param name="parameters">Vector containing all trainable parameters.</param>
+    /// <remarks>
+    /// <para>
+    /// This method distributes parameters to each layer based on their parameter counts.
+    /// Only available in training mode (not ONNX inference mode).
+    /// </para>
+    /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (IsOnnxMode)
         {
-            throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
+            throw new NotSupportedException("Cannot update parameters in ONNX inference mode. Use CreateForTraining() to create a trainable model.");
         }
 
-        // Native training mode - update layer parameters from the parameter vector
-        // This would be implemented when native training support is added
-        throw new NotImplementedException("Native parameter updates for Whisper are not yet implemented.");
+        // Distribute parameters to each layer
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            int layerParamCount = layer.ParameterCount;
+            if (layerParamCount > 0)
+            {
+                var layerParams = new Vector<T>(layerParamCount);
+                for (int i = 0; i < layerParamCount; i++)
+                {
+                    layerParams[i] = parameters[offset + i];
+                }
+                layer.SetParameters(layerParams);
+                offset += layerParamCount;
+            }
+        }
     }
 
     /// <summary>
-    /// Trains the model on input data.
+    /// Trains the model on a single batch of audio and expected transcription tokens.
     /// </summary>
+    /// <param name="input">Audio waveform tensor [batch, samples] or [samples].</param>
+    /// <param name="expectedOutput">Expected token sequence tensor [batch, sequence_length].</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Training teaches the model to transcribe audio correctly.
+    ///
+    /// The training process:
+    /// 1. Forward pass: Audio goes through encoder-decoder to predict tokens
+    /// 2. Loss calculation: Compare predicted tokens to expected tokens
+    /// 3. Backward pass: Calculate gradients showing how to improve
+    /// 4. Update: Adjust model parameters to reduce error
+    ///
+    /// Call this method repeatedly with different audio/transcript pairs.
+    /// After many iterations, the model learns to transcribe correctly.
+    /// </para>
+    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (IsOnnxMode)
         {
-            throw new NotSupportedException("Cannot train in ONNX inference mode. Load the model in training mode instead.");
+            throw new NotSupportedException("Cannot train in ONNX inference mode. Use CreateForTraining() to create a trainable model.");
         }
 
-        // Native training would be implemented here
-        throw new NotImplementedException("Native training for Whisper is not yet implemented.");
+        // Set training mode
+        SetTrainingMode(true);
+
+        // 1. Preprocess audio to mel spectrogram
+        var melFeatures = PreprocessAudio(input);
+
+        // 2. Forward pass through encoder-decoder layers
+        var prediction = Forward(melFeatures);
+
+        // 3. Flatten tensors to vectors for loss calculation (following Transformer pattern)
+        var flattenedPredictions = prediction.ToVector();
+        var flattenedExpected = expectedOutput.ToVector();
+
+        // 4. Calculate loss
+        LastLoss = LossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
+
+        // 5. Calculate gradient of loss with respect to output
+        var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
+
+        // 6. Backward pass through layers - convert gradient back to tensor
+        Backpropagate(Tensor<T>.FromVector(outputGradients));
+
+        // 7. Get parameter gradients from all layers
+        Vector<T> parameterGradients = GetParameterGradients();
+
+        // 8. Update parameters using optimizer
+        Vector<T> currentParameters = GetParameters();
+        Vector<T> updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
+        UpdateParameters(updatedParameters);
+
+        // Exit training mode
+        SetTrainingMode(false);
     }
 
     /// <summary>
@@ -525,7 +748,8 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// </summary>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new WhisperModel<T>(_options, null, null);
+        // Explicitly cast to OnnxModel types to call the ONNX constructor
+        return new WhisperModel<T>(_options, (OnnxModel<T>?)null, (OnnxModel<T>?)null);
     }
 
     #endregion

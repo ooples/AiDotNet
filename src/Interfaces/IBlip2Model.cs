@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Interfaces;
@@ -48,17 +49,17 @@ public interface IBlip2Model<T> : IMultimodalEmbedding<T>
     int NumQueryTokens { get; }
 
     /// <summary>
-    /// Gets the type of language model backend used for generation.
+    /// Gets the type of language model backbone used for generation.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// BLIP-2 can use different LLM backends:
-    /// - OPT (Open Pre-trained Transformer) - decoder-only
-    /// - Flan-T5 - encoder-decoder
+    /// BLIP-2 can use different LLM backbones:
+    /// - <see cref="LanguageModelBackbone.OPT"/> - decoder-only, good for general generation
+    /// - <see cref="LanguageModelBackbone.FlanT5"/> - encoder-decoder, better for instruction-following
     /// The choice affects generation capabilities and quality.
     /// </para>
     /// </remarks>
-    string LanguageModelType { get; }
+    LanguageModelBackbone LanguageModelBackbone { get; }
 
     /// <summary>
     /// Extracts visual features using the Q-Former's learnable queries.

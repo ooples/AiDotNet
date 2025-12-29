@@ -4465,4 +4465,169 @@ public static class LayerHelper<T>
             outputSize: projectionDim,
             activationFunction: null); // Linear projection (no activation)
     }
+
+    /// <summary>
+    /// Creates default layers for Whisper-style speech recognition models.
+    /// </summary>
+    /// <param name="numMels">Number of mel spectrogram bins (default: 80).</param>
+    /// <param name="modelDimension">Hidden dimension of the model (default: 512).</param>
+    /// <param name="numEncoderLayers">Number of encoder layers (default: 6).</param>
+    /// <param name="numDecoderLayers">Number of decoder layers (default: 6).</param>
+    /// <param name="numHeads">Number of attention heads (default: 8).</param>
+    /// <param name="feedForwardDim">Feed-forward dimension (default: 2048).</param>
+    /// <param name="vocabularySize">Output vocabulary size (default: 51865).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length (default: 1500).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers forming a Whisper-style ASR model.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Whisper is an encoder-decoder transformer for speech recognition.
+    ///
+    /// The architecture consists of:
+    /// 1. Audio encoder: Converts mel spectrograms to hidden representations
+    ///    - Convolutional layers to process spectrogram
+    ///    - Transformer encoder layers with self-attention
+    /// 2. Text decoder: Generates text tokens autoregressively
+    ///    - Embedding layer for text tokens
+    ///    - Transformer decoder layers with self-attention and cross-attention
+    ///    - Output projection to vocabulary
+    ///
+    /// This creates a trainable model from scratch. For inference with pre-trained weights,
+    /// use the ONNX-based WhisperModel.CreateAsync() method instead.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultWhisperLayers(
+        int numMels = 80,
+        int modelDimension = 512,
+        int numEncoderLayers = 6,
+        int numDecoderLayers = 6,
+        int numHeads = 8,
+        int feedForwardDim = 2048,
+        int vocabularySize = 51865,
+        int maxSequenceLength = 1500,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // === AUDIO ENCODER ===
+
+        // Initial projection from mel spectrogram to model dimension
+        // Using Dense layer to project numMels features to modelDimension
+        yield return new DenseLayer<T>(numMels, modelDimension, geluActivation);
+
+        // Second projection for feature extraction
+        yield return new DenseLayer<T>(modelDimension, modelDimension, geluActivation);
+
+        // Positional encoding for encoder
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, modelDimension);
+
+        // Encoder dropout
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Encoder transformer layers
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            // Self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: modelDimension,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+
+            // Dropout
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            // Feed-forward network
+            yield return new DenseLayer<T>(modelDimension, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, modelDimension, identityActivation);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+
+            // Dropout
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // === TEXT DECODER ===
+
+        // Token embedding layer
+        yield return new EmbeddingLayer<T>(vocabularySize, modelDimension);
+
+        // Positional encoding for decoder
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, modelDimension);
+
+        // Decoder dropout
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Decoder transformer layers
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            // Self-attention (masked for autoregressive decoding)
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: modelDimension,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+
+            // Dropout
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            // Cross-attention (attends to encoder output)
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: modelDimension,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+
+            // Dropout
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            // Feed-forward network
+            yield return new DenseLayer<T>(modelDimension, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, modelDimension, identityActivation);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+
+            // Dropout
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Final layer normalization
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+
+        // Output projection to vocabulary
+        yield return new DenseLayer<T>(modelDimension, vocabularySize, identityActivation);
+    }
 }
