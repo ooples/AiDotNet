@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageId>AiDotNet.Native.CLBlast</PackageId>
+    <Version>1.6.3</Version>
+    <Authors>AiDotNet Contributors</Authors>
+    <Company>AiDotNet</Company>
+    <Description>Native CLBlast binaries for GPU-accelerated BLAS operations on AMD/Intel GPUs. This package provides the clblast native library required by AiDotNet.Tensors for OpenCL acceleration.</Description>
+    <PackageTags>clblast;opencl;blas;gpu;amd;intel;native</PackageTags>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/ooples/AiDotNet</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/ooples/AiDotNet</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+
+    <!-- This is a native-only package, no managed code -->
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+
+    <!-- Include native libraries in package -->
+    <ContentTargetFolders>content</ContentTargetFolders>
+  </PropertyGroup>
+
+  <!-- Windows x64 native library -->
+  <ItemGroup>
+    <None Include="runtimes\win-x64\native\clblast.dll" Pack="true" PackagePath="runtimes\win-x64\native" />
+  </ItemGroup>
+
+  <!-- Future: Linux x64 -->
+  <!-- <None Include="runtimes\linux-x64\native\libclblast.so" Pack="true" PackagePath="runtimes\linux-x64\native" /> -->
+
+  <!-- Future: macOS x64/arm64 -->
+  <!-- <None Include="runtimes\osx-x64\native\libclblast.dylib" Pack="true" PackagePath="runtimes\osx-x64\native" /> -->
+
+  <!-- Ensure the native library is copied to output -->
+  <ItemGroup>
+    <None Include="runtimes\**\*" CopyToOutputDirectory="PreserveNewest" Link="%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- Build targets to copy native library -->
+  <ItemGroup>
+    <None Include="build\AiDotNet.Native.CLBlast.targets" Pack="true" PackagePath="build" />
+  </ItemGroup>
+
+</Project>

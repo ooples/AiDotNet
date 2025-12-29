@@ -46,6 +46,10 @@ public static class OpenClGemmBenchmark
 
             using var matmul = new OpenClMatMul(context);
 
+            Console.WriteLine($"CLBlast Available: {ClBlastNative.IsAvailable}");
+            Console.WriteLine($"Using CLBlast: {matmul.UsingClBlast}");
+            Console.WriteLine();
+
             foreach (int size in sizes)
             {
                 BenchmarkSize(matmul, size);
