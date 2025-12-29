@@ -22,26 +22,15 @@ namespace AiDotNet.Audio.Fingerprinting;
 /// or slight speed changes.
 /// </para>
 /// </remarks>
-public class SpectrogramFingerprinter<T> : IAudioFingerprinter<T>
+public class SpectrogramFingerprinter<T> : AudioFingerprinterBase<T>
 {
-    private readonly INumericOperations<T> _numOps;
     private readonly ShortTimeFourierTransform<T> _stft;
     private readonly SpectrogramFingerprintOptions _options;
 
     /// <summary>
     /// Gets the name of the fingerprinting algorithm.
     /// </summary>
-    public string Name => "SpectrogramPeaks";
-
-    /// <summary>
-    /// Gets the expected sample rate.
-    /// </summary>
-    public int SampleRate => _options.SampleRate;
-
-    /// <summary>
-    /// Gets the fingerprint length per hash (32-bit).
-    /// </summary>
-    public int FingerprintLength => 32;
+    public override string Name => "SpectrogramPeaks";
 
     /// <summary>
     /// Creates a new spectrogram-based fingerprinter.
@@ -49,8 +38,11 @@ public class SpectrogramFingerprinter<T> : IAudioFingerprinter<T>
     /// <param name="options">Configuration options.</param>
     public SpectrogramFingerprinter(SpectrogramFingerprintOptions? options = null)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new SpectrogramFingerprintOptions();
+
+        // Set base class properties
+        SampleRate = _options.SampleRate;
+        FingerprintLength = 32;
 
         _stft = new ShortTimeFourierTransform<T>(
             nFft: _options.FftSize,
@@ -60,7 +52,7 @@ public class SpectrogramFingerprinter<T> : IAudioFingerprinter<T>
     /// <summary>
     /// Generates a fingerprint from audio tensor.
     /// </summary>
-    public AudioFingerprint<T> Fingerprint(Tensor<T> audio)
+    public override AudioFingerprint<T> Fingerprint(Tensor<T> audio)
     {
         // Compute STFT
         var stftResult = _stft.Forward(audio);
@@ -78,7 +70,7 @@ public class SpectrogramFingerprinter<T> : IAudioFingerprinter<T>
     /// <summary>
     /// Generates a fingerprint from audio vector.
     /// </summary>
-    public AudioFingerprint<T> Fingerprint(Vector<T> audio)
+    public override AudioFingerprint<T> Fingerprint(Vector<T> audio)
     {
         var tensor = new Tensor<T>([audio.Length]);
         for (int i = 0; i < audio.Length; i++)
@@ -100,8 +92,8 @@ public class SpectrogramFingerprinter<T> : IAudioFingerprinter<T>
             for (int b = 0; b < numBins; b++)
             {
                 var complex = stft[f, b];
-                double real = _numOps.ToDouble(complex.Real);
-                double imag = _numOps.ToDouble(complex.Imaginary);
+                double real = NumOps.ToDouble(complex.Real);
+                double imag = NumOps.ToDouble(complex.Imaginary);
                 magnitude[f, b] = Math.Sqrt(real * real + imag * imag);
             }
         }
@@ -206,7 +198,7 @@ public class SpectrogramFingerprinter<T> : IAudioFingerprinter<T>
         }
 
         // Convert to fingerprint data
-        var fpData = hashes.Select(h => _numOps.FromDouble(h)).ToArray();
+        var fpData = hashes.Select(h => NumOps.FromDouble(h)).ToArray();
 
         return new AudioFingerprint<T>
         {
@@ -237,7 +229,7 @@ public class SpectrogramFingerprinter<T> : IAudioFingerprinter<T>
     /// <summary>
     /// Computes similarity between two fingerprints.
     /// </summary>
-    public double ComputeSimilarity(AudioFingerprint<T> fp1, AudioFingerprint<T> fp2)
+    public override double ComputeSimilarity(AudioFingerprint<T> fp1, AudioFingerprint<T> fp2)
     {
         if (fp1.Hash is null || fp2.Hash is null)
             return 0;
@@ -258,7 +250,7 @@ public class SpectrogramFingerprinter<T> : IAudioFingerprinter<T>
     /// <summary>
     /// Finds matching segments between fingerprints.
     /// </summary>
-    public IReadOnlyList<FingerprintMatch> FindMatches(
+    public override IReadOnlyList<FingerprintMatch> FindMatches(
         AudioFingerprint<T> query,
         AudioFingerprint<T> reference,
         int minMatchLength = 10)

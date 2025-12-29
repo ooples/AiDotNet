@@ -22,26 +22,15 @@ namespace AiDotNet.Audio.Fingerprinting;
 /// matching different recordings of the same song.
 /// </para>
 /// </remarks>
-public class ChromaprintFingerprinter<T> : IAudioFingerprinter<T>
+public class ChromaprintFingerprinter<T> : AudioFingerprinterBase<T>
 {
-    private readonly INumericOperations<T> _numOps;
     private readonly ChromaExtractor<T> _chromaExtractor;
     private readonly ChromaprintOptions _options;
 
     /// <summary>
     /// Gets the name of the fingerprinting algorithm.
     /// </summary>
-    public string Name => "Chromaprint";
-
-    /// <summary>
-    /// Gets the expected sample rate.
-    /// </summary>
-    public int SampleRate => _options.SampleRate;
-
-    /// <summary>
-    /// Gets the fingerprint length per frame (32-bit hash).
-    /// </summary>
-    public int FingerprintLength => 32;
+    public override string Name => "Chromaprint";
 
     /// <summary>
     /// Creates a new Chromaprint fingerprinter.
@@ -49,8 +38,11 @@ public class ChromaprintFingerprinter<T> : IAudioFingerprinter<T>
     /// <param name="options">Configuration options.</param>
     public ChromaprintFingerprinter(ChromaprintOptions? options = null)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new ChromaprintOptions();
+
+        // Set base class properties
+        SampleRate = _options.SampleRate;
+        FingerprintLength = 32;
 
         _chromaExtractor = new ChromaExtractor<T>(new ChromaOptions
         {
@@ -63,7 +55,7 @@ public class ChromaprintFingerprinter<T> : IAudioFingerprinter<T>
     /// <summary>
     /// Generates a fingerprint from audio tensor.
     /// </summary>
-    public AudioFingerprint<T> Fingerprint(Tensor<T> audio)
+    public override AudioFingerprint<T> Fingerprint(Tensor<T> audio)
     {
         // Extract chroma features
         var chroma = _chromaExtractor.Extract(audio);
@@ -75,7 +67,7 @@ public class ChromaprintFingerprinter<T> : IAudioFingerprinter<T>
     /// <summary>
     /// Generates a fingerprint from audio vector.
     /// </summary>
-    public AudioFingerprint<T> Fingerprint(Vector<T> audio)
+    public override AudioFingerprint<T> Fingerprint(Vector<T> audio)
     {
         // Extract chroma features
         var chroma = _chromaExtractor.Extract(audio);
@@ -97,7 +89,7 @@ public class ChromaprintFingerprinter<T> : IAudioFingerprinter<T>
         {
             uint hash = ComputeFrameHash(chroma, i, numChroma);
             hashes.Add(hash);
-            fpData.Add(_numOps.FromDouble(hash));
+            fpData.Add(NumOps.FromDouble(hash));
         }
 
         return new AudioFingerprint<T>
@@ -123,7 +115,7 @@ public class ChromaprintFingerprinter<T> : IAudioFingerprinter<T>
         {
             uint hash = ComputeFrameHashFromMatrix(chroma, i, numChroma);
             hashes.Add(hash);
-            fpData.Add(_numOps.FromDouble(hash));
+            fpData.Add(NumOps.FromDouble(hash));
         }
 
         return new AudioFingerprint<T>
@@ -145,7 +137,7 @@ public class ChromaprintFingerprinter<T> : IAudioFingerprinter<T>
         {
             for (int c = 0; c < numChroma; c++)
             {
-                context[f, c] = _numOps.ToDouble(chroma[startFrame + f, c]);
+                context[f, c] = NumOps.ToDouble(chroma[startFrame + f, c]);
             }
         }
 
@@ -160,7 +152,7 @@ public class ChromaprintFingerprinter<T> : IAudioFingerprinter<T>
         {
             for (int c = 0; c < numChroma; c++)
             {
-                context[f, c] = _numOps.ToDouble(chroma[startFrame + f, c]);
+                context[f, c] = NumOps.ToDouble(chroma[startFrame + f, c]);
             }
         }
 
@@ -198,7 +190,7 @@ public class ChromaprintFingerprinter<T> : IAudioFingerprinter<T>
     /// <summary>
     /// Computes similarity between two fingerprints.
     /// </summary>
-    public double ComputeSimilarity(AudioFingerprint<T> fp1, AudioFingerprint<T> fp2)
+    public override double ComputeSimilarity(AudioFingerprint<T> fp1, AudioFingerprint<T> fp2)
     {
         if (fp1.Hash is null || fp2.Hash is null)
         {
@@ -257,8 +249,8 @@ public class ChromaprintFingerprinter<T> : IAudioFingerprinter<T>
 
         for (int i = 0; i < minLen; i++)
         {
-            double v1 = _numOps.ToDouble(data1[i]);
-            double v2 = _numOps.ToDouble(data2[i]);
+            double v1 = NumOps.ToDouble(data1[i]);
+            double v2 = NumOps.ToDouble(data2[i]);
             sum += v1 * v2;
             norm1 += v1 * v1;
             norm2 += v2 * v2;
@@ -273,7 +265,7 @@ public class ChromaprintFingerprinter<T> : IAudioFingerprinter<T>
     /// <summary>
     /// Finds matching segments between fingerprints.
     /// </summary>
-    public IReadOnlyList<FingerprintMatch> FindMatches(
+    public override IReadOnlyList<FingerprintMatch> FindMatches(
         AudioFingerprint<T> query,
         AudioFingerprint<T> reference,
         int minMatchLength = 10)
