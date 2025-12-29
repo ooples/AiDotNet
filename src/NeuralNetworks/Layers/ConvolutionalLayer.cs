@@ -936,7 +936,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             int flatBatch = 1;
             for (int d = 0; d < gradRank - 3; d++)
                 flatBatch *= outputGradient.Shape[d];
-            gradient4D = outputGradient.Reshape(flatBatch, outputGradient.Shape[gradRank - 3], 
+            gradient4D = outputGradient.Reshape(flatBatch, outputGradient.Shape[gradRank - 3],
                 outputGradient.Shape[gradRank - 2], outputGradient.Shape[gradRank - 1]);
         }
 
