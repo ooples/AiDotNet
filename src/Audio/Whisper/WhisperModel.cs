@@ -306,8 +306,10 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         OnnxModelOptions? onnxOptions = null)
         : base(architecture)
     {
-        ArgumentNullException.ThrowIfNull(encoderPath);
-        ArgumentNullException.ThrowIfNull(decoderPath);
+        if (encoderPath is null)
+            throw new ArgumentNullException(nameof(encoderPath));
+        if (decoderPath is null)
+            throw new ArgumentNullException(nameof(decoderPath));
 
         _useNativeMode = false;
         _encoderPath = encoderPath;

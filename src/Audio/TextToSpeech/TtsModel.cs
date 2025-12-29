@@ -290,7 +290,8 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         OnnxModelOptions? onnxOptions = null)
         : base(architecture)
     {
-        ArgumentNullException.ThrowIfNull(acousticModelPath);
+        if (acousticModelPath is null)
+            throw new ArgumentNullException(nameof(acousticModelPath));
 
         _useNativeMode = false;
         _acousticModelPath = acousticModelPath;
