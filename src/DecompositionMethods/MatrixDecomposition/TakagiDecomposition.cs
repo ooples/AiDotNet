@@ -121,7 +121,8 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
     {
         int n = matrix.Rows;
         var S = new Matrix<T>(n, n);
-        var U = Matrix<Complex<T>>.CreateIdentity(n);
+        // Start with real identity for eigenvector accumulation
+        var V = Matrix<T>.CreateIdentityMatrix(n);
         var A = matrix.Clone();
 
         const int maxIterations = 100;
@@ -152,20 +153,53 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
                 break;
             }
 
-            // Compute the Jacobi rotation
+            // Compute the Jacobi rotation angle
             T app = A[p, p];
             T aqq = A[q, q];
             T apq = A[p, q];
-            T theta = NumOps.Divide(NumOps.Subtract(app, aqq), NumOps.Multiply(NumOps.FromDouble(2), apq));
-            T t = NumOps.Divide(NumOps.FromDouble(1), NumOps.Add(NumOps.Abs(theta), NumOps.Sqrt(NumOps.Add(NumOps.Square(theta), NumOps.One))));
-            if (NumOps.LessThan(theta, NumOps.Zero))
-            {
-                t = NumOps.Negate(t);
-            }
-            T c = NumOps.Divide(NumOps.FromDouble(1), NumOps.Sqrt(NumOps.Add(NumOps.Square(t), NumOps.One)));
-            T s = NumOps.Multiply(t, c);
 
-            // Update A
+            // Handle case when app == aqq
+            T diff = NumOps.Subtract(app, aqq);  // Note: (app - aqq), not (aqq - app)
+            T c, s;
+            if (NumOps.LessThan(NumOps.Abs(diff), tolerance))
+            {
+                // When diagonal elements are equal, use 45-degree rotation
+                c = NumOps.FromDouble(Math.Sqrt(0.5));
+                s = NumOps.FromDouble(Math.Sqrt(0.5));
+                if (NumOps.LessThan(apq, NumOps.Zero))
+                {
+                    s = NumOps.Negate(s);
+                }
+            }
+            else
+            {
+                // For A' = G^T * A * G to zero out A'[p,q], we need:
+                // A'[p,q] = (c² - s²)*apq + cs*(aqq - app) = 0
+                // This gives tan(2θ) = 2*apq / (app - aqq)
+                // For Jacobi eigenvalue algorithm, t = tan(θ) where:
+                // t = tau / (sqrt(1 + tau²) + 1) [numerically stable form]
+                T tau = NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(2), apq), diff);
+                T sqrtTerm = NumOps.Sqrt(NumOps.Add(NumOps.One, NumOps.Square(tau)));
+                T t = NumOps.Divide(tau, NumOps.Add(sqrtTerm, NumOps.One));
+                c = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.Add(NumOps.One, NumOps.Square(t))));
+                s = NumOps.Multiply(t, c);
+            }
+
+            // Update A with correct Jacobi rotation formulas
+            // For G^T * A * G where G has G[p,q] = -s, G[q,p] = s:
+            // A'[p,p] = c²*app + 2*c*s*apq + s²*aqq
+            // A'[q,q] = s²*app - 2*c*s*apq + c²*aqq
+            T c2 = NumOps.Square(c);
+            T s2 = NumOps.Square(s);
+            T cs2 = NumOps.Multiply(NumOps.Multiply(NumOps.FromDouble(2), c), s);
+            T csapq = NumOps.Multiply(cs2, apq);
+
+            T newApp = NumOps.Add(NumOps.Add(NumOps.Multiply(c2, app), NumOps.Multiply(s2, aqq)), csapq);
+            T newAqq = NumOps.Subtract(NumOps.Add(NumOps.Multiply(s2, app), NumOps.Multiply(c2, aqq)), csapq);
+
+            // Update off-diagonal elements: A' = G^T * A * G
+            // A'[i,p] = c*A[i,p] + s*A[i,q]  (for i != p,q)
+            // A'[i,q] = -s*A[i,p] + c*A[i,q]
             for (int i = 0; i < n; i++)
             {
                 if (i != p && i != q)
@@ -178,27 +212,49 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
                     A[i, q] = A[q, i];
                 }
             }
-            A[p, p] = NumOps.Add(NumOps.Multiply(NumOps.Square(c), app), NumOps.Multiply(NumOps.Square(s), aqq));
-            A[q, q] = NumOps.Add(NumOps.Multiply(NumOps.Square(s), app), NumOps.Multiply(NumOps.Square(c), aqq));
+            A[p, p] = newApp;
+            A[q, q] = newAqq;
             A[p, q] = NumOps.Zero;
             A[q, p] = NumOps.Zero;
 
-            // Update U
+            // Update eigenvectors V: V' = V * G
+            // V'[:,p] = c*V[:,p] + s*V[:,q]
+            // V'[:,q] = -s*V[:,p] + c*V[:,q]
             for (int i = 0; i < n; i++)
             {
-                Complex<T> uip = U[i, p];
-                Complex<T> uiq = U[i, q];
-                U[i, p] = new Complex<T>(NumOps.Add(NumOps.Multiply(c, uip.Real), NumOps.Multiply(s, uiq.Real)),
-                                      NumOps.Add(NumOps.Multiply(c, uip.Imaginary), NumOps.Multiply(s, uiq.Imaginary)));
-                U[i, q] = new Complex<T>(NumOps.Subtract(NumOps.Multiply(c, uiq.Real), NumOps.Multiply(s, uip.Real)),
-                                      NumOps.Subtract(NumOps.Multiply(c, uiq.Imaginary), NumOps.Multiply(s, uip.Imaginary)));
+                T vip = V[i, p];
+                T viq = V[i, q];
+                V[i, p] = NumOps.Add(NumOps.Multiply(c, vip), NumOps.Multiply(s, viq));
+                V[i, q] = NumOps.Subtract(NumOps.Multiply(c, viq), NumOps.Multiply(s, vip));
             }
         }
 
-        // Extract singular values
-        for (int i = 0; i < n; i++)
+        // Build Takagi U matrix with proper phase handling for negative eigenvalues
+        // For Takagi: A = U * S * U^T, where S has non-negative singular values
+        // If eigenvalue λ_i < 0, we need U column to have phase factor i (imaginary unit)
+        var U = new Matrix<Complex<T>>(n, n);
+        for (int j = 0; j < n; j++)
         {
-            S[i, i] = NumOps.Sqrt(NumOps.Abs(A[i, i]));
+            T eigenvalue = A[j, j];
+            S[j, j] = NumOps.Abs(eigenvalue);
+
+            if (NumOps.GreaterThanOrEquals(eigenvalue, NumOps.Zero))
+            {
+                // Positive eigenvalue: U column is real
+                for (int i = 0; i < n; i++)
+                {
+                    U[i, j] = new Complex<T>(V[i, j], NumOps.Zero);
+                }
+            }
+            else
+            {
+                // Negative eigenvalue: U column is purely imaginary (multiply by i)
+                // This ensures: (i*v) * |λ| * (i*v)^T = -|λ| * v*v^T = λ * v*v^T
+                for (int i = 0; i < n; i++)
+                {
+                    U[i, j] = new Complex<T>(NumOps.Zero, V[i, j]);
+                }
+            }
         }
 
         return (S, U);
@@ -523,10 +579,36 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     public override Matrix<T> Invert()
     {
+        // For Takagi decomposition A = U * S * U^T:
+        // A^(-1) = (U^T)^(-1) * S^(-1) * U^(-1) = conj(U) * S^(-1) * U^H
+        int n = SigmaMatrix.Rows;
         var invSigma = SigmaMatrix.InvertDiagonalMatrix();
-        var invU = UnitaryMatrix.InvertUnitaryMatrix();
         var invSigmaComplex = invSigma.ToComplexMatrix();
-        var inv = invU.Multiply(invSigmaComplex).Multiply(invU.Transpose());
+
+        // Compute U^H (conjugate transpose of U)
+        var uConjTranspose = new Matrix<Complex<T>>(n, n);
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                var u = UnitaryMatrix[j, i];
+                uConjTranspose[i, j] = new Complex<T>(u.Real, NumOps.Negate(u.Imaginary));
+            }
+        }
+
+        // Compute conj(U) (element-wise conjugate)
+        var uConj = new Matrix<Complex<T>>(n, n);
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                var u = UnitaryMatrix[i, j];
+                uConj[i, j] = new Complex<T>(u.Real, NumOps.Negate(u.Imaginary));
+            }
+        }
+
+        // Compute conj(U) * S^(-1) * U^H
+        var inv = uConj.Multiply(invSigmaComplex).Multiply(uConjTranspose);
 
         return inv.ToRealMatrix();
     }
@@ -544,14 +626,15 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
     /// this process much more efficient than directly inverting the matrix.
     /// </para>
     /// <para>
-    /// For Takagi decomposition A = U * S * U^T, solve x = U * S^(-1) * U^T * b
+    /// For Takagi decomposition A = U * S * U^T, solve x = conj(U) * S^(-1) * U^H * b
+    /// where U^H is the conjugate transpose and conj(U) is element-wise conjugate.
     /// </para>
     /// </remarks>
     public override Vector<T> Solve(Vector<T> bVector)
     {
         int n = bVector.Length;
 
-        // For Takagi decomposition A = U * S * U^T, solve x = U * S^(-1) * U^T * b
+        // For Takagi decomposition A = U * S * U^T, solve x = conj(U) * S^(-1) * U^H * b
         // Step 1: Compute y = U^H * b (conjugate transpose of U times b)
         var yVector = new Vector<Complex<T>>(n);
         for (int i = 0; i < n; i++)
@@ -572,34 +655,33 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
 
         // Step 2: Compute z = S^(-1) * y (divide by diagonal singular values)
         var zVector = new Vector<Complex<T>>(n);
+        T tolerance = NumOps.FromDouble(1e-10);
         for (int i = 0; i < n; i++)
         {
             T sigma = SigmaMatrix[i, i];
-            if (NumOps.Equals(sigma, NumOps.Zero))
-            {
-                // Handle zero singular value - set to zero (pseudoinverse behavior)
-                zVector[i] = new Complex<T>(NumOps.Zero, NumOps.Zero);
-            }
-            else
-            {
-                zVector[i] = new Complex<T>(
+            // Use tolerance-based check for near-zero singular values (pseudoinverse behavior)
+            zVector[i] = NumOps.LessThan(NumOps.Abs(sigma), tolerance)
+                ? new Complex<T>(NumOps.Zero, NumOps.Zero)
+                : new Complex<T>(
                     NumOps.Divide(yVector[i].Real, sigma),
                     NumOps.Divide(yVector[i].Imaginary, sigma));
-            }
         }
 
-        // Step 3: Compute x = U * z
+        // Step 3: Compute x = conj(U) * z
+        // Note: For Takagi A = U*S*U^T, we need (U^T)^(-1) = conj(U) for unitary U
         var xVector = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
             Complex<T> sum = new Complex<T>(NumOps.Zero, NumOps.Zero);
             for (int j = 0; j < n; j++)
             {
+                // Use conjugate of U[i,j]
                 var u = UnitaryMatrix[i, j];
+                var uConj = new Complex<T>(u.Real, NumOps.Negate(u.Imaginary));
                 var z = zVector[j];
                 var product = new Complex<T>(
-                    NumOps.Subtract(NumOps.Multiply(u.Real, z.Real), NumOps.Multiply(u.Imaginary, z.Imaginary)),
-                    NumOps.Add(NumOps.Multiply(u.Real, z.Imaginary), NumOps.Multiply(u.Imaginary, z.Real)));
+                    NumOps.Subtract(NumOps.Multiply(uConj.Real, z.Real), NumOps.Multiply(uConj.Imaginary, z.Imaginary)),
+                    NumOps.Add(NumOps.Multiply(uConj.Real, z.Imaginary), NumOps.Multiply(uConj.Imaginary, z.Real)));
                 sum = new Complex<T>(NumOps.Add(sum.Real, product.Real), NumOps.Add(sum.Imaginary, product.Imaginary));
             }
             // Take real part of result

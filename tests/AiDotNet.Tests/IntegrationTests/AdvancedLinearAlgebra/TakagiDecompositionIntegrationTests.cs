@@ -132,6 +132,62 @@ public class TakagiDecompositionIntegrationTests
         }
     }
 
+    [Theory]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void TakagiDecomposition_Reconstruction_Accurate(int size)
+    {
+        // Arrange
+        var A = CreateSymmetricMatrix(size);
+
+        // Act
+        var takagi = new TakagiDecomposition<double>(A, TakagiAlgorithmType.Jacobi);
+
+        // Reconstruct: A = U * S * U^T for Takagi decomposition
+        // For complex U = Re(U) + i*Im(U), the real part of U*S*U^T is:
+        // Real(U*S*U^T) = Re(U)*S*Re(U)^T - Im(U)*S*Im(U)^T
+        var U = takagi.UnitaryMatrix;
+        var S = takagi.SigmaMatrix;
+
+        var URealPart = new Matrix<double>(size, size);
+        var UImagPart = new Matrix<double>(size, size);
+        for (int i = 0; i < size; i++)
+        {
+            for (int j = 0; j < size; j++)
+            {
+                URealPart[i, j] = U[i, j].Real;
+                UImagPart[i, j] = U[i, j].Imaginary;
+            }
+        }
+
+        // Real part = Re(U)*S*Re(U)^T - Im(U)*S*Im(U)^T
+        var realPart = URealPart.Multiply(S).Multiply(URealPart.Transpose());
+        var imagContribution = UImagPart.Multiply(S).Multiply(UImagPart.Transpose());
+
+        var reconstructed = new Matrix<double>(size, size);
+        for (int i = 0; i < size; i++)
+        {
+            for (int j = 0; j < size; j++)
+            {
+                reconstructed[i, j] = realPart[i, j] - imagContribution[i, j];
+            }
+        }
+
+        // Assert - Reconstruction error should be small
+        var diff = new Matrix<double>(size, size);
+        for (int i = 0; i < size; i++)
+        {
+            for (int j = 0; j < size; j++)
+            {
+                diff[i, j] = A[i, j] - reconstructed[i, j];
+            }
+        }
+
+        double reconstructionError = FrobeniusNorm(diff);
+        Assert.True(reconstructionError < LooseTolerance,
+            $"Reconstruction error {reconstructionError} should be small (< {LooseTolerance})");
+    }
+
     #endregion
 
     #region Algorithm Variant Tests
@@ -344,8 +400,9 @@ public class TakagiDecompositionIntegrationTests
         // Act
         var takagi = new TakagiDecomposition<double>(A);
 
-        // Assert - Singular values should be sqrt of diagonal elements
-        // (2, 3, 4 in some order)
+        // Assert - Singular values should be the absolute values of eigenvalues
+        // For a diagonal matrix, eigenvalues = diagonal elements = [4, 9, 16]
+        // So singular values should be [4, 9, 16] (in some order)
         var singularValues = new List<double>();
         for (int i = 0; i < 3; i++)
         {
@@ -353,9 +410,12 @@ public class TakagiDecompositionIntegrationTests
         }
         singularValues.Sort();
 
-        Assert.True(Math.Abs(singularValues[0] - 2.0) < LooseTolerance);
-        Assert.True(Math.Abs(singularValues[1] - 3.0) < LooseTolerance);
-        Assert.True(Math.Abs(singularValues[2] - 4.0) < LooseTolerance);
+        Assert.True(Math.Abs(singularValues[0] - 4.0) < LooseTolerance,
+            $"Expected 4.0, got {singularValues[0]}");
+        Assert.True(Math.Abs(singularValues[1] - 9.0) < LooseTolerance,
+            $"Expected 9.0, got {singularValues[1]}");
+        Assert.True(Math.Abs(singularValues[2] - 16.0) < LooseTolerance,
+            $"Expected 16.0, got {singularValues[2]}");
     }
 
     [Fact]
