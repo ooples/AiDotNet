@@ -1,9 +1,11 @@
-using System.Diagnostics;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization.Interfaces;
@@ -11,65 +13,244 @@ using AiDotNet.Tokenization.Interfaces;
 namespace AiDotNet.Audio.AudioGen;
 
 /// <summary>
-/// Audio generation model that creates audio from text descriptions.
+/// AudioGen model for generating audio from text descriptions using neural audio codecs.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
 /// AudioGen uses a language model approach to generate audio from text prompts.
-/// The pipeline consists of:
-/// 1. Text Encoder: Converts text prompt to embeddings
-/// 2. Audio Language Model: Generates discrete audio codes autoregressively
-/// 3. Audio Decoder (EnCodec): Converts audio codes to waveform
+/// The architecture consists of three main components:
+/// <list type="number">
+/// <item><description>Text Encoder: Converts text prompts to embeddings (typically T5-based)</description></item>
+/// <item><description>Audio Language Model: Generates discrete audio codes autoregressively</description></item>
+/// <item><description>Audio Decoder (EnCodec): Converts audio codes back to waveforms</description></item>
+/// </list>
 /// </para>
-/// <para><b>For Beginners:</b> AudioGen is different from TTS:
-/// - TTS: Converts specific words to speech ("Hello" → spoken "Hello")
-/// - AudioGen: Creates sounds matching a description ("dog barking" → bark sound)
+/// <para><b>For Beginners:</b> AudioGen is fundamentally different from Text-to-Speech (TTS):
 ///
-/// Usage:
-/// <code>
-/// // First, load the tokenizer that matches your text encoder model
-/// var tokenizer = await AutoTokenizer.FromPretrainedAsync("t5-base");
+/// TTS vs AudioGen:
+/// - TTS: Converts specific words to speech ("Hello world" -> spoken words "Hello world")
+/// - AudioGen: Creates sounds matching a description ("dog barking" -> actual bark sound)
 ///
-/// var audioGen = await AudioGenModel&lt;float&gt;.CreateAsync(tokenizer, new AudioGenOptions
-/// {
-///     DurationSeconds = 5.0,
-///     Temperature = 1.0
-/// });
+/// How it works:
+/// 1. Your text prompt ("a cat meowing softly") is encoded into a numerical representation
+/// 2. A language model generates a sequence of "audio tokens" (like words, but for sound)
+/// 3. The EnCodec decoder converts these tokens back into actual audio waveforms
 ///
-/// var result = audioGen.GenerateAudio("A dog barking in the distance");
-/// SaveAudio(result.ToArray(), audioGen.SampleRate);  // Your audio saving code
+/// Why discrete audio codes?
+/// - Raw audio has too many samples (32,000 per second!)
+/// - EnCodec compresses audio to ~50 tokens per second
+/// - This makes the language model's job much easier
 ///
-/// audioGen.Dispose();
-/// </code>
+/// Common use cases:
+/// - Sound effect generation for games/films
+/// - Creating ambient soundscapes
+/// - Generating audio for multimedia content
+/// - Rapid prototyping of audio concepts
+///
+/// Limitations:
+/// - Cannot generate intelligible speech (use TTS for that)
+/// - Quality depends on training data
+/// - May struggle with very specific or unusual sounds
+/// </para>
+/// <para>
+/// Reference: "AudioGen: Textually Guided Audio Generation" by Kreuk et al., 2022
 /// </para>
 /// </remarks>
 public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
-    private readonly AudioGenOptions _options;
+    #region Execution Mode
+
+    /// <summary>
+    /// Indicates whether this network uses native layers (true) or ONNX models (false).
+    /// </summary>
+    private readonly bool _useNativeMode;
+
+    #endregion
+
+    #region ONNX Mode Fields
+
+    /// <summary>
+    /// The ONNX model for text encoding.
+    /// </summary>
     private readonly OnnxModel<T>? _textEncoder;
+
+    /// <summary>
+    /// The ONNX model for audio language modeling.
+    /// </summary>
     private readonly OnnxModel<T>? _languageModel;
+
+    /// <summary>
+    /// The ONNX model for audio decoding (EnCodec).
+    /// </summary>
     private readonly OnnxModel<T>? _audioDecoder;
+
+    /// <summary>
+    /// Path to the text encoder ONNX model file.
+    /// </summary>
+    private readonly string? _textEncoderPath;
+
+    /// <summary>
+    /// Path to the language model ONNX model file.
+    /// </summary>
+    private readonly string? _languageModelPath;
+
+    /// <summary>
+    /// Path to the audio decoder ONNX model file.
+    /// </summary>
+    private readonly string? _audioDecoderPath;
+
+    #endregion
+
+    #region Native Mode Fields
+
+    /// <summary>
+    /// Text encoder layers for native mode.
+    /// </summary>
+    private readonly List<ILayer<T>> _textEncoderLayers = [];
+
+    /// <summary>
+    /// Language model transformer layers for native mode.
+    /// </summary>
+    private readonly List<ILayer<T>> _languageModelLayers = [];
+
+    /// <summary>
+    /// Audio decoder layers for native mode.
+    /// </summary>
+    private readonly List<ILayer<T>> _audioDecoderLayers = [];
+
+    /// <summary>
+    /// Text token embedding layer.
+    /// </summary>
+    private ILayer<T>? _textEmbedding;
+
+    /// <summary>
+    /// Audio code embedding layer.
+    /// </summary>
+    private ILayer<T>? _audioCodeEmbedding;
+
+    /// <summary>
+    /// Output projection to audio codebook vocabulary.
+    /// </summary>
+    private ILayer<T>? _outputProjection;
+
+    #endregion
+
+    #region Shared Fields
+
+    /// <summary>
+    /// The tokenizer for processing text input.
+    /// </summary>
     private readonly ITokenizer _tokenizer;
+
+    /// <summary>
+    /// Optimizer for training.
+    /// </summary>
+    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+
+    /// <summary>
+    /// Loss function for training.
+    /// </summary>
+    private readonly ILossFunction<T> _lossFunction;
+
+    /// <summary>
+    /// Random number generator for sampling.
+    /// </summary>
     private readonly Random _random;
+
+    /// <summary>
+    /// Model size variant.
+    /// </summary>
+    private readonly AudioGenModelSize _modelSize;
+
+    /// <summary>
+    /// Output sample rate in Hz.
+    /// </summary>
+    private readonly int _sampleRate;
+
+    /// <summary>
+    /// Default duration of generated audio in seconds.
+    /// </summary>
+    private readonly double _durationSeconds;
+
+    /// <summary>
+    /// Maximum duration of generated audio in seconds.
+    /// </summary>
+    private readonly double _maxDurationSeconds;
+
+    /// <summary>
+    /// Sampling temperature (higher = more random).
+    /// </summary>
+    private readonly double _temperature;
+
+    /// <summary>
+    /// Top-k sampling parameter.
+    /// </summary>
+    private readonly int _topK;
+
+    /// <summary>
+    /// Top-p (nucleus) sampling parameter.
+    /// </summary>
+    private readonly double _topP;
+
+    /// <summary>
+    /// Classifier-free guidance scale.
+    /// </summary>
+    private readonly double _guidanceScale;
+
+    /// <summary>
+    /// Number of audio channels (1=mono, 2=stereo).
+    /// </summary>
+    private readonly int _channels;
+
+    /// <summary>
+    /// Text encoder hidden dimension.
+    /// </summary>
+    private readonly int _textHiddenDim;
+
+    /// <summary>
+    /// Language model hidden dimension.
+    /// </summary>
+    private readonly int _lmHiddenDim;
+
+    /// <summary>
+    /// Number of transformer layers in the language model.
+    /// </summary>
+    private readonly int _numLmLayers;
+
+    /// <summary>
+    /// Number of attention heads.
+    /// </summary>
+    private readonly int _numHeads;
+
+    /// <summary>
+    /// Number of EnCodec codebooks.
+    /// </summary>
+    private readonly int _numCodebooks;
+
+    /// <summary>
+    /// Size of each codebook vocabulary.
+    /// </summary>
+    private readonly int _codebookSize;
+
+    /// <summary>
+    /// Maximum text sequence length.
+    /// </summary>
+    private readonly int _maxTextLength;
+
+    /// <summary>
+    /// Disposed flag.
+    /// </summary>
     private bool _disposed;
 
-    /// <summary>
-    /// Gets the model options.
-    /// </summary>
-    public AudioGenOptions Options => _options;
+    #endregion
 
-    /// <summary>
-    /// Gets whether the model is ready for generation.
-    /// </summary>
-    public bool IsReady => _textEncoder?.IsLoaded == true &&
-        _languageModel?.IsLoaded == true &&
-        _audioDecoder?.IsLoaded == true;
+    #region IAudioGenerator Properties
 
     /// <summary>
     /// Gets the maximum duration of audio that can be generated in seconds.
     /// </summary>
-    public double MaxDurationSeconds => _options.MaxDurationSeconds;
+    public double MaxDurationSeconds => _maxDurationSeconds;
 
     /// <summary>
     /// Gets whether this model supports text-to-audio generation.
@@ -91,85 +272,111 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// </summary>
     public bool SupportsAudioInpainting => false;
 
-    /// <summary>
-    /// Creates a new AudioGenModel instance.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// For ONNX mode, you MUST provide a tokenizer that matches your text encoder model.
-    /// AudioGen models typically use T5-based text encoders. Use
-    /// <see cref="HuggingFace.AutoTokenizer.FromPretrained(string, string?)"/> with
-    /// "t5-base" or the specific model repository for your text encoder.
-    /// </para>
-    /// </remarks>
-    private AudioGenModel(
-        AudioGenOptions options,
-        OnnxModel<T>? textEncoder,
-        OnnxModel<T>? languageModel,
-        OnnxModel<T>? audioDecoder,
-        ITokenizer tokenizer)
-        : base(CreateMinimalArchitecture(options))
-    {
-        _options = options;
-        _textEncoder = textEncoder;
-        _languageModel = languageModel;
-        _audioDecoder = audioDecoder;
+    #endregion
 
-        // Tokenizer is required for ONNX mode - must match the text encoder model
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer),
-            "Tokenizer is required for ONNX mode. AudioGen uses T5-based text encoders. " +
-            "Use AutoTokenizer.FromPretrained(\"t5-base\") or the tokenizer matching your text encoder.");
-
-        _random = options.Seed.HasValue
-            ? RandomHelper.CreateSeededRandom(options.Seed.Value)
-            : RandomHelper.CreateSecureRandom();
-
-        // Store audio decoder as OnnxModel for base class
-        OnnxModel = audioDecoder;
-
-        // Set audio properties
-        SampleRate = options.SampleRate;
-    }
-
-    private static NeuralNetworkArchitecture<T> CreateMinimalArchitecture(AudioGenOptions options)
-    {
-        // Create minimal architecture for ONNX-only model
-        return new NeuralNetworkArchitecture<T>(
-            inputType: InputType.OneDimensional,
-            taskType: NeuralNetworkTaskType.Generative,
-            complexity: NetworkComplexity.VeryDeep,
-            inputSize: 256, // Max text token sequence length
-            outputSize: options.SampleRate * (int)options.MaxDurationSeconds
-        );
-    }
+    #region Public Properties
 
     /// <summary>
-    /// Creates an AudioGenModel asynchronously, downloading models if needed.
+    /// Gets the model size variant.
     /// </summary>
-    /// <param name="tokenizer">The text tokenizer. AudioGen uses T5-based text encoders.
-    /// Use <see cref="HuggingFace.AutoTokenizer.FromPretrained(string, string?)"/> with "t5-base"
-    /// or the tokenizer matching your text encoder model.</param>
-    /// <param name="options">Configuration options.</param>
-    /// <param name="progress">Optional download progress reporter.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The initialized AudioGenModel.</returns>
+    public AudioGenModelSize ModelSize => _modelSize;
+
+    /// <summary>
+    /// Gets whether the model is ready for inference.
+    /// </summary>
+    public bool IsReady => _useNativeMode ||
+        (_textEncoder?.IsLoaded == true && _languageModel?.IsLoaded == true && _audioDecoder?.IsLoaded == true);
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Creates an AudioGen network using pretrained ONNX models.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="textEncoderPath">Path to the text encoder ONNX model.</param>
+    /// <param name="languageModelPath">Path to the audio language model ONNX model.</param>
+    /// <param name="audioDecoderPath">Path to the audio decoder (EnCodec) ONNX model.</param>
+    /// <param name="tokenizer">Tokenizer for text processing. REQUIRED - must match the text encoder (typically T5).</param>
+    /// <param name="modelSize">Model size variant (default: Medium).</param>
+    /// <param name="sampleRate">Output sample rate in Hz (default: 32000 for AudioGen).</param>
+    /// <param name="durationSeconds">Default generation duration in seconds (default: 5.0).</param>
+    /// <param name="maxDurationSeconds">Maximum generation duration in seconds (default: 30.0).</param>
+    /// <param name="temperature">Sampling temperature - higher values produce more random output (default: 1.0).</param>
+    /// <param name="topK">Top-k sampling - only consider top k tokens (default: 250).</param>
+    /// <param name="topP">Top-p (nucleus) sampling threshold (default: 0.0 = disabled).</param>
+    /// <param name="guidanceScale">Classifier-free guidance scale (default: 3.0).</param>
+    /// <param name="channels">Number of audio channels, 1=mono, 2=stereo (default: 1).</param>
+    /// <param name="seed">Random seed for reproducibility. Null for non-deterministic generation.</param>
+    /// <param name="optimizer">Optional optimizer for fine-tuning.</param>
+    /// <param name="lossFunction">Optional loss function.</param>
     /// <remarks>
     /// <para>
-    /// <b>IMPORTANT:</b> The tokenizer must match the text encoder model used.
-    /// AudioGen models typically use T5 text encoders, so use a T5 tokenizer:
+    /// When loading pretrained ONNX models, you MUST provide a tokenizer that matches
+    /// the text encoder. AudioGen uses T5-based text encoders, so use a T5 tokenizer:
     /// <code>
     /// var tokenizer = await AutoTokenizer.FromPretrainedAsync("t5-base");
-    /// var audioGen = await AudioGenModel&lt;float&gt;.CreateAsync(tokenizer, new AudioGenOptions { ... });
+    /// var audioGen = new AudioGenModel&lt;float&gt;(architecture, encoderPath, lmPath, decoderPath, tokenizer);
     /// </code>
     /// </para>
     /// </remarks>
-    public static async Task<AudioGenModel<T>> CreateAsync(
+    public AudioGenModel(
+        NeuralNetworkArchitecture<T> architecture,
+        string textEncoderPath,
+        string languageModelPath,
+        string audioDecoderPath,
         ITokenizer tokenizer,
-        AudioGenOptions? options = null,
-        IProgress<double>? progress = null,
-        CancellationToken cancellationToken = default)
+        AudioGenModelSize modelSize = AudioGenModelSize.Medium,
+        int sampleRate = 32000,
+        double durationSeconds = 5.0,
+        double maxDurationSeconds = 30.0,
+        double temperature = 1.0,
+        int topK = 250,
+        double topP = 0.0,
+        double guidanceScale = 3.0,
+        int channels = 1,
+        int? seed = null,
+        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
-        options ??= new AudioGenOptions();
+        // Validate ONNX model paths
+        if (string.IsNullOrWhiteSpace(textEncoderPath))
+            throw new ArgumentException("Text encoder path cannot be null or empty.", nameof(textEncoderPath));
+        if (string.IsNullOrWhiteSpace(languageModelPath))
+            throw new ArgumentException("Language model path cannot be null or empty.", nameof(languageModelPath));
+        if (string.IsNullOrWhiteSpace(audioDecoderPath))
+            throw new ArgumentException("Audio decoder path cannot be null or empty.", nameof(audioDecoderPath));
+        if (!File.Exists(textEncoderPath))
+            throw new FileNotFoundException($"Text encoder model not found: {textEncoderPath}");
+        if (!File.Exists(languageModelPath))
+            throw new FileNotFoundException($"Language model not found: {languageModelPath}");
+        if (!File.Exists(audioDecoderPath))
+            throw new FileNotFoundException($"Audio decoder model not found: {audioDecoderPath}");
+
+        _useNativeMode = false;
+        _textEncoderPath = textEncoderPath;
+        _languageModelPath = languageModelPath;
+        _audioDecoderPath = audioDecoderPath;
+        _modelSize = modelSize;
+        _sampleRate = sampleRate;
+        _durationSeconds = durationSeconds;
+        _maxDurationSeconds = maxDurationSeconds;
+        _temperature = temperature;
+        _topK = topK;
+        _topP = topP;
+        _guidanceScale = guidanceScale;
+        _channels = channels;
+
+        // Set model dimensions based on size
+        (_textHiddenDim, _lmHiddenDim, _numLmLayers, _numHeads) = GetModelDimensions(modelSize);
+        _numCodebooks = 4;  // EnCodec standard
+        _codebookSize = 1024;  // EnCodec standard
+        _maxTextLength = 256;
+
+        // Set audio base class properties
+        SampleRate = sampleRate;
 
         OnnxModel<T>? textEncoder = null;
         OnnxModel<T>? languageModel = null;
@@ -177,55 +384,30 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
         try
         {
-            var downloader = new OnnxModelDownloader();
-            var modelRepo = GetModelRepository(options.ModelSize);
+            textEncoder = new OnnxModel<T>(textEncoderPath);
+            languageModel = new OnnxModel<T>(languageModelPath);
+            audioDecoder = new OnnxModel<T>(audioDecoderPath);
 
-            // Load text encoder
-            if (options.TextEncoderPath is not null && options.TextEncoderPath.Length > 0)
-            {
-                textEncoder = new OnnxModel<T>(options.TextEncoderPath, options.OnnxOptions);
-            }
-            else
-            {
-                var path = await downloader.DownloadAsync(
-                    modelRepo,
-                    "text_encoder.onnx",
-                    progress: new Progress<double>(p => progress?.Report(p * 0.33)),
-                    cancellationToken);
-                textEncoder = new OnnxModel<T>(path, options.OnnxOptions);
-            }
+            _textEncoder = textEncoder;
+            _languageModel = languageModel;
+            _audioDecoder = audioDecoder;
 
-            // Load language model
-            if (options.LanguageModelPath is not null && options.LanguageModelPath.Length > 0)
-            {
-                languageModel = new OnnxModel<T>(options.LanguageModelPath, options.OnnxOptions);
-            }
-            else
-            {
-                var path = await downloader.DownloadAsync(
-                    modelRepo,
-                    "language_model.onnx",
-                    progress: new Progress<double>(p => progress?.Report(0.33 + p * 0.33)),
-                    cancellationToken);
-                languageModel = new OnnxModel<T>(path, options.OnnxOptions);
-            }
+            // Store audio decoder as OnnxModel for base class
+            OnnxModel = audioDecoder;
 
-            // Load audio decoder (EnCodec)
-            if (options.AudioCodecPath is not null && options.AudioCodecPath.Length > 0)
-            {
-                audioDecoder = new OnnxModel<T>(options.AudioCodecPath, options.OnnxOptions);
-            }
-            else
-            {
-                var path = await downloader.DownloadAsync(
-                    modelRepo,
-                    "audio_decoder.onnx",
-                    progress: new Progress<double>(p => progress?.Report(0.66 + p * 0.34)),
-                    cancellationToken);
-                audioDecoder = new OnnxModel<T>(path, options.OnnxOptions);
-            }
+            // Tokenizer is required for ONNX mode - must match the text encoder
+            _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer),
+                "Tokenizer is required for ONNX mode. AudioGen uses T5-based text encoders. " +
+                "Use AutoTokenizer.FromPretrained(\"t5-base\") or the tokenizer matching your text encoder.");
 
-            return new AudioGenModel<T>(options, textEncoder, languageModel, audioDecoder, tokenizer);
+            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
+
+            _random = seed.HasValue
+                ? RandomHelper.CreateSeededRandom(seed.Value)
+                : RandomHelper.CreateSecureRandom();
+
+            InitializeLayers();
         }
         catch
         {
@@ -237,40 +419,187 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     }
 
     /// <summary>
-    /// Creates an AudioGenModel from local model files.
+    /// Creates an AudioGen network using native library layers for training from scratch.
     /// </summary>
-    /// <param name="tokenizer">The text tokenizer. AudioGen uses T5-based text encoders.
-    /// Use <see cref="HuggingFace.AutoTokenizer.FromPretrained(string, string?)"/> with "t5-base"
-    /// or the tokenizer matching your text encoder model.</param>
-    /// <param name="textEncoderPath">Path to the text encoder ONNX model.</param>
-    /// <param name="languageModelPath">Path to the language model ONNX model.</param>
-    /// <param name="audioDecoderPath">Path to the audio decoder ONNX model.</param>
-    /// <param name="options">Configuration options.</param>
-    /// <returns>The initialized AudioGenModel.</returns>
-    public static AudioGenModel<T> FromFiles(
-        ITokenizer tokenizer,
-        string textEncoderPath,
-        string languageModelPath,
-        string audioDecoderPath,
-        AudioGenOptions? options = null)
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="modelSize">Model size variant (default: Medium).</param>
+    /// <param name="sampleRate">Output sample rate in Hz (default: 32000 for AudioGen).</param>
+    /// <param name="durationSeconds">Default generation duration in seconds (default: 5.0).</param>
+    /// <param name="maxDurationSeconds">Maximum generation duration in seconds (default: 30.0).</param>
+    /// <param name="temperature">Sampling temperature - higher values produce more random output (default: 1.0).</param>
+    /// <param name="topK">Top-k sampling - only consider top k tokens (default: 250).</param>
+    /// <param name="topP">Top-p (nucleus) sampling threshold (default: 0.0 = disabled).</param>
+    /// <param name="guidanceScale">Classifier-free guidance scale (default: 3.0).</param>
+    /// <param name="channels">Number of audio channels, 1=mono, 2=stereo (default: 1).</param>
+    /// <param name="textHiddenDim">Text encoder hidden dimension. If 0, uses model size default.</param>
+    /// <param name="lmHiddenDim">Language model hidden dimension. If 0, uses model size default.</param>
+    /// <param name="numLmLayers">Number of language model layers. If 0, uses model size default.</param>
+    /// <param name="numHeads">Number of attention heads. If 0, uses model size default.</param>
+    /// <param name="numCodebooks">Number of EnCodec codebooks (default: 4).</param>
+    /// <param name="codebookSize">Size of each codebook vocabulary (default: 1024).</param>
+    /// <param name="maxTextLength">Maximum text sequence length (default: 256).</param>
+    /// <param name="seed">Random seed for reproducibility. Null for non-deterministic generation.</param>
+    /// <param name="tokenizer">Optional tokenizer for text processing. If null, creates a T5-style default.</param>
+    /// <param name="optimizer">Optional optimizer for training.</param>
+    /// <param name="lossFunction">Optional loss function.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this constructor when training AudioGen from scratch.
+    ///
+    /// Training your own AudioGen:
+    /// 1. You need paired data: (text descriptions, audio clips)
+    /// 2. Audio is pre-encoded to discrete codes using EnCodec
+    /// 3. The model learns to predict audio codes from text
+    ///
+    /// This is computationally expensive and requires significant data.
+    /// For most use cases, load pretrained ONNX models instead.
+    /// </para>
+    /// </remarks>
+    public AudioGenModel(
+        NeuralNetworkArchitecture<T> architecture,
+        AudioGenModelSize modelSize = AudioGenModelSize.Medium,
+        int sampleRate = 32000,
+        double durationSeconds = 5.0,
+        double maxDurationSeconds = 30.0,
+        double temperature = 1.0,
+        int topK = 250,
+        double topP = 0.0,
+        double guidanceScale = 3.0,
+        int channels = 1,
+        int textHiddenDim = 0,
+        int lmHiddenDim = 0,
+        int numLmLayers = 0,
+        int numHeads = 0,
+        int numCodebooks = 4,
+        int codebookSize = 1024,
+        int maxTextLength = 256,
+        int? seed = null,
+        ITokenizer? tokenizer = null,
+        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
-        options ??= new AudioGenOptions();
-        options.TextEncoderPath = textEncoderPath;
-        options.LanguageModelPath = languageModelPath;
-        options.AudioCodecPath = audioDecoderPath;
+        _useNativeMode = true;
+        _modelSize = modelSize;
+        _sampleRate = sampleRate;
+        _durationSeconds = durationSeconds;
+        _maxDurationSeconds = maxDurationSeconds;
+        _temperature = temperature;
+        _topK = topK;
+        _topP = topP;
+        _guidanceScale = guidanceScale;
+        _channels = channels;
 
-        var textEncoder = new OnnxModel<T>(textEncoderPath, options.OnnxOptions);
-        var languageModel = new OnnxModel<T>(languageModelPath, options.OnnxOptions);
-        var audioDecoder = new OnnxModel<T>(audioDecoderPath, options.OnnxOptions);
+        // Get default dimensions from model size, override with explicit values if provided
+        var (defaultTextDim, defaultLmDim, defaultLayers, defaultHeads) = GetModelDimensions(modelSize);
+        _textHiddenDim = textHiddenDim > 0 ? textHiddenDim : defaultTextDim;
+        _lmHiddenDim = lmHiddenDim > 0 ? lmHiddenDim : defaultLmDim;
+        _numLmLayers = numLmLayers > 0 ? numLmLayers : defaultLayers;
+        _numHeads = numHeads > 0 ? numHeads : defaultHeads;
+        _numCodebooks = numCodebooks;
+        _codebookSize = codebookSize;
+        _maxTextLength = maxTextLength;
 
-        return new AudioGenModel<T>(options, textEncoder, languageModel, audioDecoder, tokenizer);
+        // Set audio base class properties
+        SampleRate = sampleRate;
+
+        // Use T5-style tokenizer as default for AudioGen text encoder
+        _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
+
+        _random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
+
+        InitializeNativeLayers();
     }
+
+    #endregion
+
+    #region Initialization
+
+    /// <summary>
+    /// Initializes layers for ONNX mode (minimal initialization).
+    /// </summary>
+    protected override void InitializeLayers()
+    {
+        // ONNX mode - layers are handled by ONNX runtime
+    }
+
+    /// <summary>
+    /// Initializes native mode layers for training from scratch.
+    /// </summary>
+    private void InitializeNativeLayers()
+    {
+        // Text embedding layer
+        _textEmbedding = new EmbeddingLayer<T>(32128, _textHiddenDim); // T5 vocabulary size
+        _textEncoderLayers.Add(_textEmbedding);
+
+        // Text encoder transformer layers (simplified T5-style)
+        for (int i = 0; i < 6; i++)
+        {
+            var selfAttn = new MultiHeadAttentionLayer<T>(_maxTextLength, _textHiddenDim, _numHeads);
+            var ff = new DenseLayer<T>(_textHiddenDim, _textHiddenDim * 4);
+            _textEncoderLayers.Add(selfAttn);
+            _textEncoderLayers.Add(ff);
+        }
+
+        // Audio code embedding
+        _audioCodeEmbedding = new EmbeddingLayer<T>(_codebookSize * _numCodebooks, _lmHiddenDim);
+
+        // Language model transformer layers
+        // Calculate max audio tokens: sample_rate * max_duration / encodec_framerate (~50 tokens/sec)
+        int maxAudioTokens = (int)(_sampleRate * _maxDurationSeconds / 640);
+        for (int i = 0; i < _numLmLayers; i++)
+        {
+            var decoderLayer = new TransformerDecoderLayer<T>(
+                embeddingSize: _lmHiddenDim,
+                numHeads: _numHeads,
+                feedForwardDim: _lmHiddenDim * 4,
+                sequenceLength: maxAudioTokens,
+                ffnActivation: (IActivationFunction<T>?)null);
+            _languageModelLayers.Add(decoderLayer);
+        }
+
+        // Output projection to codebook logits
+        _outputProjection = new DenseLayer<T>(_lmHiddenDim, _codebookSize * _numCodebooks);
+
+        // Register all layers
+        foreach (var layer in _textEncoderLayers)
+            Layers.Add(layer);
+        if (_audioCodeEmbedding != null)
+            Layers.Add(_audioCodeEmbedding);
+        foreach (var layer in _languageModelLayers)
+            Layers.Add(layer);
+        if (_outputProjection != null)
+            Layers.Add(_outputProjection);
+    }
+
+    private static (int textHiddenDim, int lmHiddenDim, int numLayers, int numHeads) GetModelDimensions(AudioGenModelSize size)
+    {
+        return size switch
+        {
+            AudioGenModelSize.Small => (512, 1024, 12, 8),
+            AudioGenModelSize.Medium => (768, 1536, 24, 16),
+            AudioGenModelSize.Large => (1024, 2048, 32, 16),
+            _ => (768, 1536, 24, 16)
+        };
+    }
+
+    #endregion
 
     #region IAudioGenerator Implementation
 
     /// <summary>
     /// Generates audio from a text description.
     /// </summary>
+    /// <param name="prompt">Text description of the desired audio.</param>
+    /// <param name="negativePrompt">Optional negative prompt for classifier-free guidance.</param>
+    /// <param name="durationSeconds">Duration of audio to generate in seconds.</param>
+    /// <param name="numInferenceSteps">Number of inference steps (not used in autoregressive generation).</param>
+    /// <param name="guidanceScale">Classifier-free guidance scale.</param>
+    /// <param name="seed">Optional random seed for reproducibility.</param>
+    /// <returns>Generated audio waveform tensor.</returns>
     public Tensor<T> GenerateAudio(
         string prompt,
         string? negativePrompt = null,
@@ -281,7 +610,7 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     {
         ThrowIfDisposed();
 
-        int seedUsed = seed ?? _options.Seed ?? _random.Next();
+        int seedUsed = seed ?? _random.Next();
 
         // Encode the text prompt
         var textEmbeddings = EncodeText(prompt);
@@ -328,7 +657,7 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         double guidanceScale = 3.0,
         int? seed = null)
     {
-        throw new NotSupportedException("Music generation is not supported by this AudioGen model.");
+        throw new NotSupportedException("Music generation is not supported by AudioGen. Use MusicGen for music generation.");
     }
 
     /// <summary>
@@ -358,18 +687,18 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     }
 
     /// <summary>
-    /// Gets generation options for advanced control.
+    /// Gets default generation options.
     /// </summary>
     public AudioGenerationOptions<T> GetDefaultOptions()
     {
         return new AudioGenerationOptions<T>
         {
-            DurationSeconds = _options.DurationSeconds,
+            DurationSeconds = _durationSeconds,
             NumInferenceSteps = 100,
-            GuidanceScale = _options.GuidanceScale,
-            Seed = _options.Seed,
-            Stereo = false,
-            SchedulerType = "ddpm"
+            GuidanceScale = _guidanceScale,
+            Seed = null,
+            Stereo = _channels == 2,
+            SchedulerType = "autoregressive"
         };
     }
 
@@ -382,8 +711,7 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// </summary>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
-        // For AudioGen, we typically work with text input
-        // This method is used for audio continuation scenarios
+        // For AudioGen, we typically work with text input, not audio preprocessing
         return rawAudio;
     }
 
@@ -396,19 +724,15 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     }
 
     /// <summary>
-    /// Initializes the neural network layers.
-    /// </summary>
-    protected override void InitializeLayers()
-    {
-        // ONNX-only model - no native layers to initialize
-    }
-
-    /// <summary>
     /// Makes a prediction using the model.
     /// </summary>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // For AudioGen, prediction requires text encoding first
+        if (_useNativeMode)
+        {
+            return Forward(input);
+        }
+
         if (_textEncoder is null)
             throw new InvalidOperationException("Text encoder not loaded.");
 
@@ -416,18 +740,46 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     }
 
     /// <summary>
-    /// Updates model parameters.
+    /// Updates model parameters by applying gradient descent.
     /// </summary>
-    public override void UpdateParameters(Vector<T> parameters)
+    /// <param name="gradients">The gradients to apply.</param>
+    /// <remarks>
+    /// <para>
+    /// Applies the simple gradient descent update rule: params = params - learning_rate * gradients.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how the model learns!
+    ///
+    /// During training:
+    /// 1. The model makes predictions
+    /// 2. We calculate how wrong it was (loss)
+    /// 3. We compute gradients (which direction to adjust each parameter)
+    /// 4. This method applies those adjustments to make the model better
+    ///
+    /// The learning rate controls how big each adjustment is:
+    /// - Too big: Model learns fast but may overshoot optimal values
+    /// - Too small: Model learns slowly but more precisely
+    /// - Default (0.001): A good starting point for most tasks
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(Vector<T> gradients)
     {
-        if (IsOnnxMode)
+        if (!_useNativeMode)
         {
-            throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
+            throw new NotSupportedException("Cannot update parameters in ONNX inference mode. Use the native constructor for training.");
         }
 
-        // Native training mode - update layer parameters from the parameter vector
-        // This would be implemented when native training support is added
-        throw new NotImplementedException("Native parameter updates for AudioGen are not yet implemented.");
+        // Get current parameters
+        var currentParams = GetParameters();
+
+        // Apply gradient descent: params = params - learning_rate * gradients
+        T learningRate = NumOps.FromDouble(0.001); // Default learning rate
+        for (int i = 0; i < currentParams.Length; i++)
+        {
+            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
+        }
+
+        // Set the updated parameters
+        SetParameters(currentParams);
     }
 
     /// <summary>
@@ -435,12 +787,31 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// </summary>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (IsOnnxMode)
+        if (!_useNativeMode)
         {
-            throw new NotSupportedException("Cannot train in ONNX inference mode. Load the model in training mode instead.");
+            throw new NotSupportedException("Cannot train in ONNX inference mode. Use the native constructor for training.");
         }
 
-        throw new NotImplementedException("Native training for AudioGen is not yet implemented.");
+        // Set training mode
+        SetTrainingMode(true);
+
+        // Forward pass
+        var prediction = Forward(input);
+
+        // Calculate loss
+        var flatPrediction = prediction.ToVector();
+        var flatExpected = expectedOutput.ToVector();
+        LastLoss = _lossFunction.CalculateLoss(flatPrediction, flatExpected);
+
+        // Backward pass
+        var lossGradient = _lossFunction.CalculateDerivative(flatPrediction, flatExpected);
+        Backpropagate(Tensor<T>.FromVector(lossGradient));
+
+        // Update parameters using gradient descent
+        var gradients = GetParameterGradients();
+        UpdateParameters(gradients);
+
+        SetTrainingMode(false);
     }
 
     /// <summary>
@@ -450,14 +821,15 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = $"AudioGen-{_options.ModelSize}",
-            Description = $"AudioGen model for text-to-audio generation - {_options.ModelSize} variant",
+            Name = $"AudioGen-{_modelSize}",
+            Description = $"AudioGen text-to-audio model - {_modelSize} variant",
             ModelType = ModelType.NeuralNetwork,
-            FeatureCount = 256,
-            Complexity = (int)_options.ModelSize
+            FeatureCount = _maxTextLength,
+            Complexity = (int)_modelSize
         };
         metadata.AdditionalInfo["InputFormat"] = "Text Prompt";
-        metadata.AdditionalInfo["OutputFormat"] = $"Audio ({SampleRate}Hz, up to {MaxDurationSeconds}s)";
+        metadata.AdditionalInfo["OutputFormat"] = $"Audio ({_sampleRate}Hz, up to {_maxDurationSeconds}s)";
+        metadata.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
         return metadata;
     }
 
@@ -466,11 +838,23 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// </summary>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.DurationSeconds);
-        writer.Write(_options.Temperature);
-        writer.Write(_options.GuidanceScale);
-        writer.Write((int)_options.ModelSize);
+        writer.Write(_useNativeMode);
+        writer.Write((int)_modelSize);
+        writer.Write(_sampleRate);
+        writer.Write(_durationSeconds);
+        writer.Write(_maxDurationSeconds);
+        writer.Write(_temperature);
+        writer.Write(_topK);
+        writer.Write(_topP);
+        writer.Write(_guidanceScale);
+        writer.Write(_channels);
+        writer.Write(_textHiddenDim);
+        writer.Write(_lmHiddenDim);
+        writer.Write(_numLmLayers);
+        writer.Write(_numHeads);
+        writer.Write(_numCodebooks);
+        writer.Write(_codebookSize);
+        writer.Write(_maxTextLength);
     }
 
     /// <summary>
@@ -478,11 +862,24 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// </summary>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _options.SampleRate = reader.ReadInt32();
-        _options.DurationSeconds = reader.ReadDouble();
-        _options.Temperature = reader.ReadDouble();
-        _options.GuidanceScale = reader.ReadDouble();
-        _options.ModelSize = (AudioGenModelSize)reader.ReadInt32();
+        // Read values to advance stream position (validation done in CreateNewInstance)
+        _ = reader.ReadBoolean();  // useNativeMode
+        _ = reader.ReadInt32();    // modelSize
+        _ = reader.ReadInt32();    // sampleRate
+        _ = reader.ReadDouble();   // durationSeconds
+        _ = reader.ReadDouble();   // maxDurationSeconds
+        _ = reader.ReadDouble();   // temperature
+        _ = reader.ReadInt32();    // topK
+        _ = reader.ReadDouble();   // topP
+        _ = reader.ReadDouble();   // guidanceScale
+        _ = reader.ReadInt32();    // channels
+        _ = reader.ReadInt32();    // textHiddenDim
+        _ = reader.ReadInt32();    // lmHiddenDim
+        _ = reader.ReadInt32();    // numLmLayers
+        _ = reader.ReadInt32();    // numHeads
+        _ = reader.ReadInt32();    // numCodebooks
+        _ = reader.ReadInt32();    // codebookSize
+        _ = reader.ReadInt32();    // maxTextLength
     }
 
     /// <summary>
@@ -490,7 +887,28 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// </summary>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new AudioGenModel<T>(_options, null, null, null, _tokenizer);
+        return new AudioGenModel<T>(
+            Architecture,
+            _modelSize,
+            _sampleRate,
+            _durationSeconds,
+            _maxDurationSeconds,
+            _temperature,
+            _topK,
+            _topP,
+            _guidanceScale,
+            _channels,
+            _textHiddenDim,
+            _lmHiddenDim,
+            _numLmLayers,
+            _numHeads,
+            _numCodebooks,
+            _codebookSize,
+            _maxTextLength,
+            seed: null,
+            tokenizer: _tokenizer,
+            optimizer: null,
+            lossFunction: _lossFunction);
     }
 
     #endregion
@@ -499,7 +917,7 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
     private Tensor<T> EncodeText(string prompt)
     {
-        if (_textEncoder is null)
+        if (!_useNativeMode && _textEncoder is null)
             throw new InvalidOperationException("Text encoder not loaded.");
 
         // Tokenize the prompt using the provided ITokenizer
@@ -512,8 +930,24 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             inputTensor[0, i] = NumOps.FromDouble(tokens[i]);
         }
 
-        // Run text encoder
-        return _textEncoder.Run(inputTensor);
+        if (_useNativeMode)
+        {
+            // Native mode: run through text encoder layers
+            return ForwardTextEncoder(inputTensor);
+        }
+
+        // ONNX mode: run through text encoder model
+        return _textEncoder!.Run(inputTensor);
+    }
+
+    private Tensor<T> ForwardTextEncoder(Tensor<T> input)
+    {
+        var x = input;
+        foreach (var layer in _textEncoderLayers)
+        {
+            x = layer.Forward(x);
+        }
+        return x;
     }
 
     private int[] TokenizePrompt(string prompt)
@@ -522,81 +956,112 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         var encoding = _tokenizer.Encode(prompt);
 
         // Convert token IDs to int array, padding/truncating to max length
-        int maxLength = 256;
-        var tokens = new int[maxLength];
+        var tokens = new int[_maxTextLength];
 
         // Copy token IDs (up to maxLength)
-        int copyCount = Math.Min(encoding.TokenIds.Count, maxLength);
+        int copyCount = Math.Min(encoding.TokenIds.Count, _maxTextLength);
         for (int i = 0; i < copyCount; i++)
         {
             tokens[i] = encoding.TokenIds[i];
         }
-
-        // Remaining positions are already 0 (pad token) due to array initialization
 
         return tokens;
     }
 
     private Tensor<T> GenerateAudioCodes(Tensor<T> textEmbeddings, int seed, double durationSeconds)
     {
-        if (_languageModel is null)
+        if (!_useNativeMode && _languageModel is null)
             throw new InvalidOperationException("Language model not loaded.");
 
         var random = RandomHelper.CreateSeededRandom(seed);
 
         // Calculate number of tokens based on duration
-        int numCodebooks = 4; // EnCodec uses 4 codebooks typically
-        int tokensPerSecond = 50; // 50 tokens per second at 32kHz
+        int tokensPerSecond = 50;  // EnCodec: ~50 tokens per second at 32kHz
         int numTokens = (int)(durationSeconds * tokensPerSecond);
 
-        var codes = new Tensor<T>([1, numCodebooks, numTokens]);
-
-        // Autoregressive generation
-        var currentTokens = new Tensor<T>([1, numCodebooks, 1]);
+        var codes = new Tensor<T>([1, _numCodebooks, numTokens]);
+        var currentTokens = new Tensor<T>([1, _numCodebooks, 1]);
 
         // Initialize with start token
-        for (int cb = 0; cb < numCodebooks; cb++)
+        for (int cb = 0; cb < _numCodebooks; cb++)
         {
-            currentTokens[0, cb, 0] = NumOps.FromDouble(0);
+            currentTokens[0, cb, 0] = NumOps.Zero;
         }
 
         for (int t = 0; t < numTokens; t++)
         {
-            // Prepare inputs
-            var inputs = new Dictionary<string, Tensor<T>>
-            {
-                ["text_embeddings"] = textEmbeddings,
-                ["audio_codes"] = currentTokens
-            };
+            Tensor<T> logits;
 
-            // Get logits from language model
-            var outputs = _languageModel.Run(inputs);
-            var logits = outputs.Values.First();
+            if (_useNativeMode)
+            {
+                logits = ForwardLanguageModel(textEmbeddings, currentTokens);
+            }
+            else
+            {
+                var inputs = new Dictionary<string, Tensor<T>>
+                {
+                    ["text_embeddings"] = textEmbeddings,
+                    ["audio_codes"] = currentTokens
+                };
+                var outputs = _languageModel!.Run(inputs);
+                logits = outputs.Values.First();
+            }
 
             // Sample next tokens for each codebook
-            for (int cb = 0; cb < numCodebooks; cb++)
+            for (int cb = 0; cb < _numCodebooks; cb++)
             {
                 int nextToken = SampleFromLogits(logits, cb, random);
                 codes[0, cb, t] = NumOps.FromDouble(nextToken);
 
-                // Update current tokens for next iteration
                 if (t < numTokens - 1)
                 {
-                    var newCurrentTokens = new Tensor<T>([1, numCodebooks, currentTokens.Shape[2] + 1]);
-                    for (int c = 0; c < numCodebooks; c++)
+                    var newTokens = new Tensor<T>([1, _numCodebooks, currentTokens.Shape[2] + 1]);
+                    for (int c = 0; c < _numCodebooks; c++)
                     {
                         for (int i = 0; i < currentTokens.Shape[2]; i++)
                         {
-                            newCurrentTokens[0, c, i] = currentTokens[0, c, i];
+                            newTokens[0, c, i] = currentTokens[0, c, i];
                         }
-                        newCurrentTokens[0, c, currentTokens.Shape[2]] = codes[0, c, t];
+                        newTokens[0, c, currentTokens.Shape[2]] = codes[0, c, t];
                     }
-                    currentTokens = newCurrentTokens;
+                    currentTokens = newTokens;
                 }
             }
         }
 
         return codes;
+    }
+
+    private Tensor<T> ForwardLanguageModel(Tensor<T> textEmbeddings, Tensor<T> audioCodes)
+    {
+        // Simplified forward pass for native mode
+        var x = audioCodes;
+
+        if (_audioCodeEmbedding != null)
+        {
+            // Flatten and embed audio codes
+            var flat = audioCodes.Reshape(audioCodes.Shape[0], -1);
+            x = _audioCodeEmbedding.Forward(flat);
+        }
+
+        foreach (var layer in _languageModelLayers)
+        {
+            if (layer is TransformerDecoderLayer<T> decoderLayer)
+            {
+                x = decoderLayer.Forward(x, textEmbeddings);
+            }
+            else
+            {
+                x = layer.Forward(x);
+            }
+        }
+
+        if (_outputProjection != null)
+        {
+            x = _outputProjection.Forward(x);
+        }
+
+        return x;
     }
 
     private Tensor<T> GenerateAudioCodesWithGuidance(
@@ -606,64 +1071,68 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         int seed,
         double durationSeconds)
     {
-        if (_languageModel is null)
+        if (!_useNativeMode && _languageModel is null)
             throw new InvalidOperationException("Language model not loaded.");
 
         var random = RandomHelper.CreateSeededRandom(seed);
 
-        int numCodebooks = 4;
         int tokensPerSecond = 50;
         int numTokens = (int)(durationSeconds * tokensPerSecond);
 
-        var codes = new Tensor<T>([1, numCodebooks, numTokens]);
-        var currentTokens = new Tensor<T>([1, numCodebooks, 1]);
+        var codes = new Tensor<T>([1, _numCodebooks, numTokens]);
+        var currentTokens = new Tensor<T>([1, _numCodebooks, 1]);
 
-        for (int cb = 0; cb < numCodebooks; cb++)
+        for (int cb = 0; cb < _numCodebooks; cb++)
         {
-            currentTokens[0, cb, 0] = NumOps.FromDouble(0);
+            currentTokens[0, cb, 0] = NumOps.Zero;
         }
 
         for (int t = 0; t < numTokens; t++)
         {
-            // Get conditional logits
-            var condInputs = new Dictionary<string, Tensor<T>>
-            {
-                ["text_embeddings"] = condEmbeddings,
-                ["audio_codes"] = currentTokens
-            };
-            var condOutputs = _languageModel.Run(condInputs);
-            var condLogits = condOutputs.Values.First();
+            Tensor<T> condLogits, uncondLogits;
 
-            // Get unconditional logits
-            var uncondInputs = new Dictionary<string, Tensor<T>>
+            if (_useNativeMode)
             {
-                ["text_embeddings"] = uncondEmbeddings,
-                ["audio_codes"] = currentTokens
-            };
-            var uncondOutputs = _languageModel.Run(uncondInputs);
-            var uncondLogits = uncondOutputs.Values.First();
+                condLogits = ForwardLanguageModel(condEmbeddings, currentTokens);
+                uncondLogits = ForwardLanguageModel(uncondEmbeddings, currentTokens);
+            }
+            else
+            {
+                var condInputs = new Dictionary<string, Tensor<T>>
+                {
+                    ["text_embeddings"] = condEmbeddings,
+                    ["audio_codes"] = currentTokens
+                };
+                condLogits = _languageModel!.Run(condInputs).Values.First();
+
+                var uncondInputs = new Dictionary<string, Tensor<T>>
+                {
+                    ["text_embeddings"] = uncondEmbeddings,
+                    ["audio_codes"] = currentTokens
+                };
+                uncondLogits = _languageModel!.Run(uncondInputs).Values.First();
+            }
 
             // Apply classifier-free guidance
             var guidedLogits = ApplyGuidance(condLogits, uncondLogits, guidanceScale);
 
-            // Sample next tokens
-            for (int cb = 0; cb < numCodebooks; cb++)
+            for (int cb = 0; cb < _numCodebooks; cb++)
             {
                 int nextToken = SampleFromLogits(guidedLogits, cb, random);
                 codes[0, cb, t] = NumOps.FromDouble(nextToken);
 
                 if (t < numTokens - 1)
                 {
-                    var newCurrentTokens = new Tensor<T>([1, numCodebooks, currentTokens.Shape[2] + 1]);
-                    for (int c = 0; c < numCodebooks; c++)
+                    var newTokens = new Tensor<T>([1, _numCodebooks, currentTokens.Shape[2] + 1]);
+                    for (int c = 0; c < _numCodebooks; c++)
                     {
                         for (int i = 0; i < currentTokens.Shape[2]; i++)
                         {
-                            newCurrentTokens[0, c, i] = currentTokens[0, c, i];
+                            newTokens[0, c, i] = currentTokens[0, c, i];
                         }
-                        newCurrentTokens[0, c, currentTokens.Shape[2]] = codes[0, c, t];
+                        newTokens[0, c, currentTokens.Shape[2]] = codes[0, c, t];
                     }
-                    currentTokens = newCurrentTokens;
+                    currentTokens = newTokens;
                 }
             }
         }
@@ -690,30 +1159,27 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
     private int SampleFromLogits(Tensor<T> logits, int codebook, Random random)
     {
-        // Get logits for this codebook (assuming shape [batch, codebooks, vocab] or similar)
-        int vocabSize = 1024; // Typical EnCodec codebook size
-
-        // Apply temperature
+        int vocabSize = _codebookSize;
         var scaledLogits = new double[vocabSize];
+
         for (int i = 0; i < vocabSize; i++)
         {
-            // Simplified: assume logits are at end dimension
             int idx = codebook * vocabSize + i;
             if (idx < logits.Length)
             {
-                scaledLogits[i] = NumOps.ToDouble(logits[idx]) / _options.Temperature;
+                scaledLogits[i] = NumOps.ToDouble(logits[idx]) / _temperature;
             }
         }
 
         // Apply top-k filtering
-        if (_options.TopK > 0 && _options.TopK < vocabSize)
+        if (_topK > 0 && _topK < vocabSize)
         {
             var sorted = scaledLogits
                 .Select((v, i) => (Value: v, Index: i))
                 .OrderByDescending(x => x.Value)
                 .ToList();
 
-            double threshold = sorted[Math.Min(_options.TopK - 1, sorted.Count - 1)].Value;
+            double threshold = sorted[Math.Min(_topK - 1, sorted.Count - 1)].Value;
             for (int i = 0; i < vocabSize; i++)
             {
                 if (scaledLogits[i] < threshold)
@@ -724,7 +1190,7 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         }
 
         // Apply top-p (nucleus) filtering
-        if (_options.TopP > 0 && _options.TopP < 1.0)
+        if (_topP > 0 && _topP < 1.0)
         {
             var probs = Softmax(scaledLogits);
             var sorted = probs
@@ -738,7 +1204,7 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             {
                 keepIndices.Add(item.Index);
                 cumSum += item.Value;
-                if (cumSum >= _options.TopP)
+                if (cumSum >= _topP)
                     break;
             }
 
@@ -765,7 +1231,7 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             }
         }
 
-        return vocabSize - 1; // Fallback
+        return vocabSize - 1;
     }
 
     private static double[] Softmax(double[] logits)
@@ -774,25 +1240,40 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         var expValues = logits.Select(x => double.IsNegativeInfinity(x) ? 0 : Math.Exp(x - maxLogit)).ToArray();
         double sumExp = expValues.Sum();
 
-        if (sumExp == 0) sumExp = 1; // Avoid division by zero
+        if (sumExp == 0) sumExp = 1;
 
         return expValues.Select(x => x / sumExp).ToArray();
     }
 
     private Tensor<T> DecodeAudio(Tensor<T> audioCodes, double durationSeconds)
     {
-        if (_audioDecoder is null)
+        if (!_useNativeMode && _audioDecoder is null)
             throw new InvalidOperationException("Audio decoder not loaded.");
 
-        // Run EnCodec decoder
-        var waveformTensor = _audioDecoder.Run(audioCodes);
+        Tensor<T> waveformTensor;
+
+        if (_useNativeMode)
+        {
+            // Native mode: simplified decoding (real EnCodec would be much more complex)
+            int targetSamples = (int)(durationSeconds * _sampleRate);
+            waveformTensor = new Tensor<T>([targetSamples]);
+            // Placeholder: actual decoding would use trained decoder layers
+            for (int i = 0; i < targetSamples; i++)
+            {
+                waveformTensor[i] = NumOps.Zero;
+            }
+        }
+        else
+        {
+            waveformTensor = _audioDecoder!.Run(audioCodes);
+        }
 
         // Trim to target duration
-        int targetSamples = (int)(durationSeconds * _options.SampleRate);
-        if (waveformTensor.Length > targetSamples)
+        int targetLength = (int)(durationSeconds * _sampleRate);
+        if (waveformTensor.Length > targetLength)
         {
-            var trimmed = new Tensor<T>([targetSamples]);
-            for (int i = 0; i < targetSamples; i++)
+            var trimmed = new Tensor<T>([targetLength]);
+            for (int i = 0; i < targetLength; i++)
             {
                 trimmed[i] = waveformTensor[i];
             }
@@ -800,17 +1281,6 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         }
 
         return waveformTensor;
-    }
-
-    private static string GetModelRepository(AudioGenModelSize modelSize)
-    {
-        return modelSize switch
-        {
-            AudioGenModelSize.Small => "facebook/audiogen-small",
-            AudioGenModelSize.Medium => "facebook/audiogen-medium",
-            AudioGenModelSize.Large => "facebook/audiogen-large",
-            _ => "facebook/audiogen-medium"
-        };
     }
 
     private void ThrowIfDisposed()

@@ -1,10 +1,14 @@
 using System.Diagnostics;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -25,40 +29,191 @@ namespace AiDotNet.Audio.TextToSpeech;
 /// 2. The acoustic model predicts what the speech should "look like" (mel spectrogram)
 /// 3. The vocoder makes it actually sound like speech
 ///
-/// Usage:
+/// This class supports two modes:
+/// - ONNX Mode: Load pretrained FastSpeech2/HiFi-GAN models for instant synthesis
+/// - Native Mode: Train your own TTS model from scratch
+///
+/// Usage (ONNX Mode):
 /// <code>
-/// var tts = await TtsModel&lt;float&gt;.CreateAsync(new TtsOptions
-/// {
-///     SpeakingRate = 1.0,
-///     PitchShift = 0.0
-/// });
+/// var tts = new TtsModel&lt;float&gt;(
+///     architecture,
+///     acousticModelPath: "path/to/fastspeech2.onnx",
+///     vocoderModelPath: "path/to/hifigan.onnx");
 ///
-/// var result = tts.Synthesize("Hello, world!");
-/// SaveAudio(result, 22050);  // Your audio saving code
+/// var audio = tts.Synthesize("Hello, world!");
+/// </code>
 ///
-/// tts.Dispose();
+/// Usage (Native Training Mode):
+/// <code>
+/// var tts = new TtsModel&lt;float&gt;(
+///     architecture,
+///     optimizer: new AdamOptimizer&lt;float&gt;(),
+///     lossFunction: new MeanSquaredErrorLoss&lt;float&gt;());
+///
+/// tts.Train(phonemeInput, expectedMelSpectrogram);
 /// </code>
 /// </para>
 /// </remarks>
 public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
-    private readonly TtsOptions _options;
-    private readonly OnnxModel<T>? _acousticModel;
-    private readonly OnnxModel<T>? _vocoder;
-    private readonly GriffinLim<T>? _griffinLim;
-    private readonly TtsPreprocessor _preprocessor;
-    private bool _disposed;
+    #region Execution Mode
 
     /// <summary>
-    /// Gets the model options.
+    /// Whether the model is operating in native training mode.
+    /// When false, the model uses ONNX for inference only.
     /// </summary>
-    public TtsOptions Options => _options;
+    private readonly bool _useNativeMode;
+
+    #endregion
+
+    #region ONNX Mode Fields
+
+    /// <summary>
+    /// Path to the acoustic model ONNX file.
+    /// </summary>
+    private readonly string? _acousticModelPath;
+
+    /// <summary>
+    /// Path to the vocoder model ONNX file.
+    /// </summary>
+    private readonly string? _vocoderModelPath;
+
+    /// <summary>
+    /// ONNX acoustic model (FastSpeech2 or similar).
+    /// </summary>
+    private readonly OnnxModel<T>? _acousticModel;
+
+    /// <summary>
+    /// ONNX vocoder model (HiFi-GAN or similar).
+    /// </summary>
+    private readonly OnnxModel<T>? _vocoder;
+
+    /// <summary>
+    /// Griffin-Lim vocoder fallback.
+    /// </summary>
+    private readonly GriffinLim<T>? _griffinLim;
+
+    #endregion
+
+    #region Native Mode Fields
+
+    /// <summary>
+    /// Encoder layers for native training mode.
+    /// </summary>
+    private readonly List<ILayer<T>> _encoderLayers = [];
+
+    /// <summary>
+    /// Decoder layers for native training mode.
+    /// </summary>
+    private readonly List<ILayer<T>> _decoderLayers = [];
+
+    #endregion
+
+    #region Shared Fields
+
+    /// <summary>
+    /// Text preprocessor for phoneme conversion.
+    /// </summary>
+    private readonly TtsPreprocessor _preprocessor;
+
+    /// <summary>
+    /// Optimizer for training.
+    /// </summary>
+    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+
+    /// <summary>
+    /// Loss function for training.
+    /// </summary>
+    private readonly ILossFunction<T> _lossFunction;
+
+    /// <summary>
+    /// Whether the model has been disposed.
+    /// </summary>
+    private bool _disposed;
+
+    #endregion
+
+    #region Model Architecture Parameters
+
+    /// <summary>
+    /// Speaking rate multiplier. 1.0 = normal speed.
+    /// </summary>
+    private readonly double _speakingRate;
+
+    /// <summary>
+    /// Pitch shift in semitones. 0 = normal.
+    /// </summary>
+    private readonly double _pitchShift;
+
+    /// <summary>
+    /// Energy/volume level. 1.0 = normal.
+    /// </summary>
+    private readonly double _energy;
+
+    /// <summary>
+    /// Speaker ID for multi-speaker models.
+    /// </summary>
+    private readonly int? _speakerId;
+
+    /// <summary>
+    /// Language code for multi-lingual models.
+    /// </summary>
+    private readonly string? _language;
+
+    /// <summary>
+    /// Whether to use Griffin-Lim as fallback vocoder.
+    /// </summary>
+    private readonly bool _useGriffinLimFallback;
+
+    /// <summary>
+    /// Number of Griffin-Lim iterations.
+    /// </summary>
+    private readonly int _griffinLimIterations;
+
+    /// <summary>
+    /// FFT size for Griffin-Lim.
+    /// </summary>
+    private readonly int _fftSize;
+
+    /// <summary>
+    /// Hop length for Griffin-Lim.
+    /// </summary>
+    private readonly int _hopLength;
+
+    /// <summary>
+    /// Hidden dimension for the acoustic model.
+    /// </summary>
+    private readonly int _hiddenDim;
+
+    /// <summary>
+    /// Number of attention heads.
+    /// </summary>
+    private readonly int _numHeads;
+
+    /// <summary>
+    /// Number of encoder layers.
+    /// </summary>
+    private readonly int _numEncoderLayers;
+
+    /// <summary>
+    /// Number of decoder layers.
+    /// </summary>
+    private readonly int _numDecoderLayers;
+
+    /// <summary>
+    /// Maximum phoneme sequence length.
+    /// </summary>
+    private readonly int _maxPhonemeLength;
+
+    #endregion
+
+    #region Public Properties
 
     /// <summary>
     /// Gets whether the model is ready for synthesis.
     /// </summary>
     public bool IsReady => _acousticModel?.IsLoaded == true &&
-        (_vocoder?.IsLoaded == true || _options.UseGriffinLimFallback);
+        (_vocoder?.IsLoaded == true || _useGriffinLimFallback);
 
     /// <summary>
     /// Gets the list of available built-in voices.
@@ -80,44 +235,282 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// </summary>
     public bool SupportsStreaming => false;
 
+    #endregion
+
+    #region Constructors
+
     /// <summary>
-    /// Creates a new TtsModel instance.
+    /// Creates a TtsModel for ONNX inference with pretrained models.
     /// </summary>
-    private TtsModel(
-        TtsOptions options,
-        OnnxModel<T>? acousticModel,
-        OnnxModel<T>? vocoder,
-        GriffinLim<T>? griffinLim)
-        : base(CreateMinimalArchitecture(options))
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="acousticModelPath">Required path to acoustic model ONNX file (e.g., FastSpeech2).</param>
+    /// <param name="vocoderModelPath">Optional path to vocoder ONNX file (e.g., HiFi-GAN). If null, uses Griffin-Lim.</param>
+    /// <param name="sampleRate">Output sample rate in Hz. Default is 22050 (standard for TTS).</param>
+    /// <param name="numMels">Number of mel spectrogram channels. Default is 80.</param>
+    /// <param name="speakingRate">Speaking rate multiplier. 1.0 = normal speed. Default is 1.0.</param>
+    /// <param name="pitchShift">Pitch shift in semitones. 0 = normal. Default is 0.</param>
+    /// <param name="energy">Energy/volume level. 1.0 = normal. Default is 1.0.</param>
+    /// <param name="speakerId">Speaker ID for multi-speaker models. Default is null.</param>
+    /// <param name="language">Language code for multi-lingual models. Default is null.</param>
+    /// <param name="useGriffinLimFallback">Whether to use Griffin-Lim as fallback. Default is true.</param>
+    /// <param name="griffinLimIterations">Number of Griffin-Lim iterations. Default is 60.</param>
+    /// <param name="fftSize">FFT size for Griffin-Lim. Default is 1024.</param>
+    /// <param name="hopLength">Hop length for Griffin-Lim. Default is 256.</param>
+    /// <param name="onnxOptions">ONNX runtime options.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this constructor when you have pretrained TTS models.
+    ///
+    /// You need at least an acoustic model (converts text to mel spectrogram).
+    /// The vocoder (converts mel to audio) is optional - Griffin-Lim can be used as fallback.
+    ///
+    /// Example:
+    /// <code>
+    /// var tts = new TtsModel&lt;float&gt;(
+    ///     architecture,
+    ///     acousticModelPath: "fastspeech2.onnx",
+    ///     vocoderModelPath: "hifigan.onnx");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public TtsModel(
+        NeuralNetworkArchitecture<T> architecture,
+        string acousticModelPath,
+        string? vocoderModelPath = null,
+        int sampleRate = 22050,
+        int numMels = 80,
+        double speakingRate = 1.0,
+        double pitchShift = 0.0,
+        double energy = 1.0,
+        int? speakerId = null,
+        string? language = null,
+        bool useGriffinLimFallback = true,
+        int griffinLimIterations = 60,
+        int fftSize = 1024,
+        int hopLength = 256,
+        OnnxModelOptions? onnxOptions = null)
+        : base(architecture)
     {
-        _options = options;
-        _acousticModel = acousticModel;
-        _vocoder = vocoder;
-        _griffinLim = griffinLim;
+        ArgumentNullException.ThrowIfNull(acousticModelPath);
+
+        _useNativeMode = false;
+        _acousticModelPath = acousticModelPath;
+        _vocoderModelPath = vocoderModelPath;
+
+        // Store parameters
+        SampleRate = sampleRate;
+        NumMels = numMels;
+        _speakingRate = speakingRate;
+        _pitchShift = pitchShift;
+        _energy = energy;
+        _speakerId = speakerId;
+        _language = language;
+        _useGriffinLimFallback = useGriffinLimFallback;
+        _griffinLimIterations = griffinLimIterations;
+        _fftSize = fftSize;
+        _hopLength = hopLength;
+        _hiddenDim = 256;
+        _numHeads = 4;
+        _numEncoderLayers = 4;
+        _numDecoderLayers = 4;
+        _maxPhonemeLength = 256;
+
+        // Initialize preprocessor
         _preprocessor = new TtsPreprocessor();
 
-        // Store vocoder as OnnxModel for base class
-        OnnxModel = vocoder;
+        // Load acoustic model
+        _acousticModel = new OnnxModel<T>(acousticModelPath, onnxOptions ?? new OnnxModelOptions());
 
-        // Set audio properties
-        SampleRate = options.SampleRate;
-        NumMels = options.NumMels;
+        // Load vocoder or create Griffin-Lim fallback
+        if (vocoderModelPath is not null && vocoderModelPath.Length > 0)
+        {
+            _vocoder = new OnnxModel<T>(vocoderModelPath, onnxOptions ?? new OnnxModelOptions());
+            OnnxModel = _vocoder;
+        }
+
+        if (useGriffinLimFallback || _vocoder is null)
+        {
+            _griffinLim = new GriffinLim<T>(
+                nFft: fftSize,
+                hopLength: hopLength,
+                iterations: griffinLimIterations);
+        }
 
         // Initialize available voices
         AvailableVoices = GetDefaultVoices();
+
+        // Initialize optimizer and loss function (not used in ONNX mode, but required for readonly fields)
+        _lossFunction = new MeanSquaredErrorLoss<T>();
+        _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        // Initialize layers (empty for ONNX mode)
+        InitializeLayers();
     }
 
-    private static NeuralNetworkArchitecture<T> CreateMinimalArchitecture(TtsOptions options)
+    /// <summary>
+    /// Creates a TtsModel for native training mode.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="sampleRate">Output sample rate in Hz. Default is 22050 (standard for TTS).</param>
+    /// <param name="numMels">Number of mel spectrogram channels. Default is 80.</param>
+    /// <param name="speakingRate">Speaking rate multiplier. 1.0 = normal speed. Default is 1.0.</param>
+    /// <param name="pitchShift">Pitch shift in semitones. 0 = normal. Default is 0.</param>
+    /// <param name="energy">Energy/volume level. 1.0 = normal. Default is 1.0.</param>
+    /// <param name="speakerId">Speaker ID for multi-speaker models. Default is null.</param>
+    /// <param name="language">Language code for multi-lingual models. Default is null.</param>
+    /// <param name="hiddenDim">Hidden dimension for acoustic model. Default is 256.</param>
+    /// <param name="numHeads">Number of attention heads. Default is 4.</param>
+    /// <param name="numEncoderLayers">Number of encoder layers. Default is 4.</param>
+    /// <param name="numDecoderLayers">Number of decoder layers. Default is 4.</param>
+    /// <param name="maxPhonemeLength">Maximum phoneme sequence length. Default is 256.</param>
+    /// <param name="fftSize">FFT size for Griffin-Lim. Default is 1024.</param>
+    /// <param name="hopLength">Hop length for Griffin-Lim. Default is 256.</param>
+    /// <param name="griffinLimIterations">Number of Griffin-Lim iterations. Default is 60.</param>
+    /// <param name="optimizer">Optimizer for training. If null, a default Adam optimizer is used.</param>
+    /// <param name="lossFunction">Loss function for training. If null, MSE loss is used.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this constructor to train your own TTS model.
+    ///
+    /// You'll need a dataset of (phoneme sequence, mel spectrogram) pairs.
+    /// Training TTS from scratch requires significant data and compute resources.
+    ///
+    /// Example:
+    /// <code>
+    /// var tts = new TtsModel&lt;float&gt;(
+    ///     architecture,
+    ///     optimizer: new AdamOptimizer&lt;float&gt;(),
+    ///     lossFunction: new MeanSquaredErrorLoss&lt;float&gt;());
+    ///
+    /// // Train on your dataset
+    /// tts.Train(phonemeInput, expectedMelSpectrogram);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public TtsModel(
+        NeuralNetworkArchitecture<T> architecture,
+        int sampleRate = 22050,
+        int numMels = 80,
+        double speakingRate = 1.0,
+        double pitchShift = 0.0,
+        double energy = 1.0,
+        int? speakerId = null,
+        string? language = null,
+        int hiddenDim = 256,
+        int numHeads = 4,
+        int numEncoderLayers = 4,
+        int numDecoderLayers = 4,
+        int maxPhonemeLength = 256,
+        int fftSize = 1024,
+        int hopLength = 256,
+        int griffinLimIterations = 60,
+        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
-        // Create minimal architecture for ONNX-only model
-        return new NeuralNetworkArchitecture<T>(
-            inputType: InputType.OneDimensional,
-            taskType: NeuralNetworkTaskType.Generative,
-            complexity: NetworkComplexity.Deep,
-            inputSize: 256, // Max phoneme sequence length
-            outputSize: options.SampleRate * 30 // Max 30 seconds of audio
-        );
+        _useNativeMode = true;
+        _acousticModelPath = null;
+        _vocoderModelPath = null;
+
+        // Store parameters
+        SampleRate = sampleRate;
+        NumMels = numMels;
+        _speakingRate = speakingRate;
+        _pitchShift = pitchShift;
+        _energy = energy;
+        _speakerId = speakerId;
+        _language = language;
+        _useGriffinLimFallback = true;
+        _griffinLimIterations = griffinLimIterations;
+        _fftSize = fftSize;
+        _hopLength = hopLength;
+        _hiddenDim = hiddenDim;
+        _numHeads = numHeads;
+        _numEncoderLayers = numEncoderLayers;
+        _numDecoderLayers = numDecoderLayers;
+        _maxPhonemeLength = maxPhonemeLength;
+
+        // Initialize preprocessor
+        _preprocessor = new TtsPreprocessor();
+
+        // Create Griffin-Lim for audio generation from mel
+        _griffinLim = new GriffinLim<T>(
+            nFft: fftSize,
+            hopLength: hopLength,
+            iterations: griffinLimIterations);
+
+        // Initialize optimizer and loss function
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        // Initialize available voices
+        AvailableVoices = GetDefaultVoices();
+
+        // Initialize native layers
+        InitializeNativeLayers();
     }
+
+    #endregion
+
+    #region Layer Initialization
+
+    /// <summary>
+    /// Initializes layers for ONNX inference mode.
+    /// </summary>
+    protected override void InitializeLayers()
+    {
+        // ONNX mode - no native layers needed
+    }
+
+    /// <summary>
+    /// Initializes layers for native training mode.
+    /// </summary>
+    private void InitializeNativeLayers()
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        int phonemeVocabSize = 128; // Typical phoneme vocabulary size
+
+        // Encoder: Phoneme embedding -> Hidden representation
+        // Phoneme embedding projection
+        var phonemeEmbed = new DenseLayer<T>(phonemeVocabSize, _hiddenDim, geluActivation);
+        _encoderLayers.Add(phonemeEmbed);
+
+        // Encoder transformer layers
+        for (int i = 0; i < _numEncoderLayers; i++)
+        {
+            var selfAttn = new MultiHeadAttentionLayer<T>(_maxPhonemeLength, _hiddenDim, _numHeads, identityActivation);
+            var ff = new DenseLayer<T>(_hiddenDim, _hiddenDim * 4, geluActivation);
+            var ffOut = new DenseLayer<T>(_hiddenDim * 4, _hiddenDim, identityActivation);
+            _encoderLayers.Add(selfAttn);
+            _encoderLayers.Add(ff);
+            _encoderLayers.Add(ffOut);
+        }
+
+        // Duration predictor (predicts mel frames per phoneme)
+        var durationPredictor = new DenseLayer<T>(_hiddenDim, 1, identityActivation);
+        _encoderLayers.Add(durationPredictor);
+
+        // Decoder: Hidden representation -> Mel spectrogram
+        int maxMelFrames = (SampleRate * 30) / _hopLength; // Max 30 seconds
+
+        for (int i = 0; i < _numDecoderLayers; i++)
+        {
+            var selfAttn = new MultiHeadAttentionLayer<T>(maxMelFrames, _hiddenDim, _numHeads, identityActivation);
+            var ff = new DenseLayer<T>(_hiddenDim, _hiddenDim * 4, geluActivation);
+            var ffOut = new DenseLayer<T>(_hiddenDim * 4, _hiddenDim, identityActivation);
+            _decoderLayers.Add(selfAttn);
+            _decoderLayers.Add(ff);
+            _decoderLayers.Add(ffOut);
+        }
+
+        // Output projection to mel spectrogram
+        var melOutput = new DenseLayer<T>(_hiddenDim, NumMels, identityActivation);
+        _decoderLayers.Add(melOutput);
+    }
+
+    #endregion
+
+    #region Helper Methods
 
     private static IReadOnlyList<VoiceInfo<T>> GetDefaultVoices()
     {
@@ -134,109 +527,7 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         };
     }
 
-    /// <summary>
-    /// Creates a TtsModel asynchronously, downloading models if needed.
-    /// </summary>
-    /// <param name="options">Configuration options.</param>
-    /// <param name="progress">Optional download progress reporter.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The initialized TtsModel.</returns>
-    public static async Task<TtsModel<T>> CreateAsync(
-        TtsOptions? options = null,
-        IProgress<double>? progress = null,
-        CancellationToken cancellationToken = default)
-    {
-        options ??= new TtsOptions();
-
-        OnnxModel<T>? acousticModel = null;
-        OnnxModel<T>? vocoder = null;
-        GriffinLim<T>? griffinLim = null;
-
-        try
-        {
-            // Load acoustic model
-            if (options.AcousticModelPath is not null && options.AcousticModelPath.Length > 0)
-            {
-                acousticModel = new OnnxModel<T>(options.AcousticModelPath, options.OnnxOptions);
-            }
-            else
-            {
-                // Download from HuggingFace
-                var downloader = new OnnxModelDownloader();
-                var path = await downloader.DownloadAsync(
-                    OnnxModelRepositories.Tts.FastSpeech2,
-                    "model.onnx",
-                    progress: new Progress<double>(p => progress?.Report(p * 0.5)),
-                    cancellationToken);
-                acousticModel = new OnnxModel<T>(path, options.OnnxOptions);
-            }
-
-            // Load vocoder
-            if (options.VocoderModelPath is not null && options.VocoderModelPath.Length > 0)
-            {
-                vocoder = new OnnxModel<T>(options.VocoderModelPath, options.OnnxOptions);
-            }
-            else if (!options.UseGriffinLimFallback)
-            {
-                var downloader = new OnnxModelDownloader();
-                var path = await downloader.DownloadAsync(
-                    OnnxModelRepositories.Tts.HiFiGan,
-                    "model.onnx",
-                    progress: new Progress<double>(p => progress?.Report(0.5 + p * 0.5)),
-                    cancellationToken);
-                vocoder = new OnnxModel<T>(path, options.OnnxOptions);
-            }
-
-            // Create Griffin-Lim fallback
-            if (options.UseGriffinLimFallback)
-            {
-                griffinLim = new GriffinLim<T>(
-                    nFft: options.FftSize,
-                    hopLength: options.HopLength,
-                    iterations: options.GriffinLimIterations);
-            }
-
-            return new TtsModel<T>(options, acousticModel, vocoder, griffinLim);
-        }
-        catch
-        {
-            acousticModel?.Dispose();
-            vocoder?.Dispose();
-            throw;
-        }
-    }
-
-    /// <summary>
-    /// Creates a TtsModel from local model files.
-    /// </summary>
-    public static TtsModel<T> FromFiles(
-        string acousticModelPath,
-        string? vocoderPath = null,
-        TtsOptions? options = null)
-    {
-        options ??= new TtsOptions();
-        options.AcousticModelPath = acousticModelPath;
-        options.VocoderModelPath = vocoderPath;
-
-        var acousticModel = new OnnxModel<T>(acousticModelPath, options.OnnxOptions);
-        OnnxModel<T>? vocoder = null;
-        GriffinLim<T>? griffinLim = null;
-
-        if (vocoderPath is not null && vocoderPath.Length > 0)
-        {
-            vocoder = new OnnxModel<T>(vocoderPath, options.OnnxOptions);
-        }
-
-        if (options.UseGriffinLimFallback || vocoder is null)
-        {
-            griffinLim = new GriffinLim<T>(
-                nFft: options.FftSize,
-                hopLength: options.HopLength,
-                iterations: options.GriffinLimIterations);
-        }
-
-        return new TtsModel<T>(options, acousticModel, vocoder, griffinLim);
-    }
+    #endregion
 
     #region ITextToSpeech Implementation
 
@@ -254,7 +545,7 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         var stopwatch = Stopwatch.StartNew();
 
         // Override options with parameters
-        double effectiveRate = Math.Abs(speakingRate - 1.0) > 0.01 ? speakingRate : _options.SpeakingRate;
+        double effectiveRate = Math.Abs(speakingRate - 1.0) > 0.01 ? speakingRate : _speakingRate;
 
         // Preprocess text to phonemes
         var phonemes = _preprocessor.TextToPhonemes(text);
@@ -284,12 +575,12 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         }
 
         // Apply energy/volume
-        if (Math.Abs(_options.Energy - 1.0) > 0.01)
+        if (Math.Abs(_energy - 1.0) > 0.01)
         {
             var result = new Tensor<T>(audio.Shape);
             for (int i = 0; i < audio.Length; i++)
             {
-                result[i] = NumOps.Multiply(audio[i], NumOps.FromDouble(_options.Energy));
+                result[i] = NumOps.Multiply(audio[i], NumOps.FromDouble(_energy));
             }
             audio = result;
         }
@@ -382,38 +673,55 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     }
 
     /// <summary>
-    /// Initializes the neural network layers.
-    /// </summary>
-    protected override void InitializeLayers()
-    {
-        // ONNX-only model - no native layers to initialize
-    }
-
-    /// <summary>
     /// Makes a prediction using the model.
     /// </summary>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // For TTS, prediction means synthesis from phoneme input
-        if (_acousticModel is null)
-            throw new InvalidOperationException("Acoustic model not loaded.");
+        if (!_useNativeMode)
+        {
+            // ONNX inference
+            if (_acousticModel is null)
+                throw new InvalidOperationException("Acoustic model not loaded.");
 
-        return _acousticModel.Run(input);
+            return _acousticModel.Run(input);
+        }
+        else
+        {
+            // Native forward pass through encoder
+            Tensor<T> output = input;
+            foreach (var layer in _encoderLayers)
+            {
+                output = layer.Forward(output);
+            }
+            // Continue through decoder
+            foreach (var layer in _decoderLayers)
+            {
+                output = layer.Forward(output);
+            }
+            return output;
+        }
     }
 
     /// <summary>
-    /// Updates model parameters.
+    /// Updates model parameters using gradient descent.
     /// </summary>
-    public override void UpdateParameters(Vector<T> parameters)
+    public override void UpdateParameters(Vector<T> gradients)
     {
-        if (IsOnnxMode)
+        if (!_useNativeMode)
         {
             throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
         }
 
-        // Native training mode - update layer parameters from the parameter vector
-        // This would be implemented when native training support is added
-        throw new NotImplementedException("Native parameter updates for TTS are not yet implemented.");
+        // Apply gradient descent: params = params - learning_rate * gradients
+        var currentParams = GetParameters();
+        T learningRate = NumOps.FromDouble(0.001);
+
+        for (int i = 0; i < currentParams.Length; i++)
+        {
+            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
+        }
+
+        SetParameters(currentParams);
     }
 
     /// <summary>
@@ -421,12 +729,33 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// </summary>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (IsOnnxMode)
+        if (!_useNativeMode)
         {
-            throw new NotSupportedException("Cannot train in ONNX inference mode. Load the model in training mode instead.");
+            throw new NotSupportedException("Cannot train in ONNX inference mode. Use the native training constructor.");
         }
 
-        throw new NotImplementedException("Native training for TTS is not yet implemented.");
+        // Set training mode
+        SetTrainingMode(true);
+
+        // Forward pass
+        var prediction = Predict(input);
+
+        // Convert tensors to vectors for loss calculation
+        var flatPrediction = prediction.ToVector();
+        var flatExpected = expectedOutput.ToVector();
+
+        // Compute loss
+        LastLoss = _lossFunction.CalculateLoss(flatPrediction, flatExpected);
+
+        // Compute gradients via backpropagation
+        var lossGradient = _lossFunction.CalculateDerivative(flatPrediction, flatExpected);
+        Backpropagate(Tensor<T>.FromVector(lossGradient));
+
+        // Update parameters using gradient descent
+        var gradients = GetParameterGradients();
+        UpdateParameters(gradients);
+
+        SetTrainingMode(false);
     }
 
     /// <summary>
@@ -436,14 +765,15 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "TtsModel-FastSpeech2-HiFiGAN",
-            Description = "Text-to-speech model using FastSpeech2 acoustic model and HiFi-GAN vocoder",
+            Name = _useNativeMode ? "TtsModel-Native" : "TtsModel-FastSpeech2-HiFiGAN",
+            Description = "Text-to-speech model using FastSpeech2 acoustic model and HiFi-GAN/Griffin-Lim vocoder",
             ModelType = ModelType.NeuralNetwork,
-            FeatureCount = 256,
+            FeatureCount = _maxPhonemeLength,
             Complexity = 2
         };
         metadata.AdditionalInfo["InputFormat"] = "Text/Phonemes";
         metadata.AdditionalInfo["OutputFormat"] = $"Audio ({SampleRate}Hz)";
+        metadata.AdditionalInfo["Mode"] = _useNativeMode ? "Native Training" : "ONNX Inference";
         return metadata;
     }
 
@@ -452,11 +782,17 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// </summary>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.NumMels);
-        writer.Write(_options.SpeakingRate);
-        writer.Write(_options.Energy);
-        writer.Write(_options.UseGriffinLimFallback);
+        writer.Write(SampleRate);
+        writer.Write(NumMels);
+        writer.Write(_speakingRate);
+        writer.Write(_energy);
+        writer.Write(_useGriffinLimFallback);
+        writer.Write(_useNativeMode);
+        writer.Write(_hiddenDim);
+        writer.Write(_numHeads);
+        writer.Write(_numEncoderLayers);
+        writer.Write(_numDecoderLayers);
+        writer.Write(_maxPhonemeLength);
     }
 
     /// <summary>
@@ -464,11 +800,19 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// </summary>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _options.SampleRate = reader.ReadInt32();
-        _options.NumMels = reader.ReadInt32();
-        _options.SpeakingRate = reader.ReadDouble();
-        _options.Energy = reader.ReadDouble();
-        _options.UseGriffinLimFallback = reader.ReadBoolean();
+        SampleRate = reader.ReadInt32();
+        NumMels = reader.ReadInt32();
+        // Other fields are readonly and set during construction
+        // Read them but don't assign
+        _ = reader.ReadDouble(); // speakingRate
+        _ = reader.ReadDouble(); // energy
+        _ = reader.ReadBoolean(); // useGriffinLimFallback
+        _ = reader.ReadBoolean(); // useNativeMode
+        _ = reader.ReadInt32(); // hiddenDim
+        _ = reader.ReadInt32(); // numHeads
+        _ = reader.ReadInt32(); // numEncoderLayers
+        _ = reader.ReadInt32(); // numDecoderLayers
+        _ = reader.ReadInt32(); // maxPhonemeLength
     }
 
     /// <summary>
@@ -476,7 +820,45 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// </summary>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new TtsModel<T>(_options, null, null, null);
+        if (!_useNativeMode && _acousticModelPath is not null)
+        {
+            return new TtsModel<T>(
+                Architecture,
+                _acousticModelPath,
+                _vocoderModelPath,
+                SampleRate,
+                NumMels,
+                _speakingRate,
+                _pitchShift,
+                _energy,
+                _speakerId,
+                _language,
+                _useGriffinLimFallback,
+                _griffinLimIterations,
+                _fftSize,
+                _hopLength);
+        }
+        else
+        {
+            return new TtsModel<T>(
+                Architecture,
+                SampleRate,
+                NumMels,
+                _speakingRate,
+                _pitchShift,
+                _energy,
+                _speakerId,
+                _language,
+                _hiddenDim,
+                _numHeads,
+                _numEncoderLayers,
+                _numDecoderLayers,
+                _maxPhonemeLength,
+                _fftSize,
+                _hopLength,
+                _griffinLimIterations,
+                lossFunction: _lossFunction);
+        }
     }
 
     #endregion
@@ -485,31 +867,45 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
     private Tensor<T> GenerateMelSpectrogram(int[] phonemes, string? voiceId)
     {
-        if (_acousticModel is null)
-            throw new InvalidOperationException("Acoustic model not loaded.");
-
-        // Create phoneme tensor
-        var phonemeTensor = new Tensor<T>([1, phonemes.Length]);
-        for (int i = 0; i < phonemes.Length; i++)
+        if (!_useNativeMode)
         {
-            phonemeTensor[0, i] = NumOps.FromDouble(phonemes[i]);
+            if (_acousticModel is null)
+                throw new InvalidOperationException("Acoustic model not loaded.");
+
+            // Create phoneme tensor
+            var phonemeTensor = new Tensor<T>([1, phonemes.Length]);
+            for (int i = 0; i < phonemes.Length; i++)
+            {
+                phonemeTensor[0, i] = NumOps.FromDouble(phonemes[i]);
+            }
+
+            // Add speaker ID if multi-speaker
+            var inputs = new Dictionary<string, Tensor<T>>
+            {
+                ["phoneme_ids"] = phonemeTensor
+            };
+
+            if (_speakerId.HasValue)
+            {
+                var speakerTensor = new Tensor<T>([1]);
+                speakerTensor[0] = NumOps.FromDouble(_speakerId.Value);
+                inputs["speaker_id"] = speakerTensor;
+            }
+
+            var outputs = _acousticModel.Run(inputs);
+            return outputs.Values.First();
         }
-
-        // Add speaker ID if multi-speaker
-        var inputs = new Dictionary<string, Tensor<T>>
+        else
         {
-            ["phoneme_ids"] = phonemeTensor
-        };
+            // Native mode - run through encoder/decoder layers
+            var phonemeTensor = new Tensor<T>([1, phonemes.Length]);
+            for (int i = 0; i < phonemes.Length; i++)
+            {
+                phonemeTensor[0, i] = NumOps.FromDouble(phonemes[i]);
+            }
 
-        if (_options.SpeakerId.HasValue)
-        {
-            var speakerTensor = new Tensor<T>([1]);
-            speakerTensor[0] = NumOps.FromDouble(_options.SpeakerId.Value);
-            inputs["speaker_id"] = speakerTensor;
+            return Predict(phonemeTensor);
         }
-
-        var outputs = _acousticModel.Run(inputs);
-        return outputs.Values.First();
     }
 
     private Tensor<T> ModifyDuration(Tensor<T> melSpectrogram, double factor)
@@ -593,7 +989,7 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         if (disposing)
         {
             _acousticModel?.Dispose();
-            // _vocoder is stored as OnnxModel and disposed by base class
+            _vocoder?.Dispose();
         }
 
         _disposed = true;
