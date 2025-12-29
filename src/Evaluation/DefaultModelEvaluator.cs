@@ -74,13 +74,15 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
             testSet = CalculateDataSetStats(input.InputData.XTest, input.InputData.YTest, input.Model, inferredPredictionType);
         }
 
-        // Use training set for model stats if validation set is not available
+        // ModelStats (R-squared, AIC, BIC, etc.) uses validation data if available, otherwise training data.
+        // This fallback is intentional because model-level statistics like information criteria still provide
+        // value when computed on training data, even if they're less reliable for generalization assessment.
         var statsForModelCalc = validationSet ?? trainingSet;
 
-        // Note: We do NOT fall back to training data for validation/test sets.
+        // Note: We do NOT fall back to training data for ValidationSet/TestSet properties.
         // Showing training metrics as validation/test would mislead users about model generalization.
-        // If validation or test data is not provided, an empty DataSetStats is used to make it clear
-        // that those metrics are unavailable.
+        // When validation or test data is not provided, the returned DataSetStats has IsDataProvided = false,
+        // allowing users to distinguish between "data not provided" vs "data provided but empty".
         var evaluationData = new ModelEvaluationData<T, TInput, TOutput>
         {
             TrainingSet = trainingSet,
@@ -171,7 +173,8 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
                 PredictionStats = PredictionStats<T>.Empty(),
                 Predicted = predictions,
                 Features = X,
-                Actual = y
+                Actual = y,
+                IsDataProvided = true  // Data was provided but couldn't be aligned to vectors
             };
 
             TryPopulateUncertaintyStats(emptyStats, X, model);
@@ -186,7 +189,8 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
             PredictionStats = CalculatePredictionStats(actual, predicted, inputSize, predictionType),
             Predicted = predictions,
             Features = X,
-            Actual = y
+            Actual = y,
+            IsDataProvided = true  // Data was provided and successfully evaluated
         };
 
         TryPopulateUncertaintyStats(stats, X, model);
