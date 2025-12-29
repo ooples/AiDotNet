@@ -29,9 +29,19 @@ class Program
             return;
         }
 
+#if !NET462
+        // Run cuBLAS vs ILGPU GEMM benchmark
+        if (args[0] == "--cublas")
+        {
+            CuBlasGemmBenchmark.Run();
+            return;
+        }
+#endif
+
         Console.WriteLine("Usage:");
         Console.WriteLine("  --quick  : Run quick performance validation (default)");
         Console.WriteLine("  --full   : Run full BenchmarkDotNet suite (trigonometric)");
         Console.WriteLine("  --linalg : Run linear algebra benchmarks vs MathNet.Numerics");
+        Console.WriteLine("  --cublas : Run cuBLAS vs ILGPU GEMM benchmark");
     }
 }

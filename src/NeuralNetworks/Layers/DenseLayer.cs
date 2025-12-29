@@ -241,6 +241,15 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 #if !NET462
     private GpuTensorHandle<float>? _gpuWeightsTransposedFloat;
     private GpuTensorHandle<double>? _gpuWeightsTransposedDouble;
+
+    // === cuBLAS GPU Acceleration (Phase B: Direct NVIDIA Library Access) ===
+    // cuBLAS provides ~30,000 GFLOPS vs ILGPU's ~52-86 GFLOPS ceiling
+    private static CuBlasMatMul? _cuBlasInstance;
+    private static readonly object _cuBlasLock = new object();
+    private CudaDeviceMemory<float>? _cuBlasWeightsFloat;
+    private CudaDeviceMemory<double>? _cuBlasWeightsDouble;
+    private static bool _cuBlasChecked;
+    private static bool _cuBlasAvailable;
 #endif
 
 
@@ -611,12 +620,19 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _weightsTransposedCache = null;
 
 #if !NET462
-        // Dispose and clear GPU handles
+        // Dispose and clear ILGPU GPU handles
         _gpuWeightsTransposedFloat?.Dispose();
         _gpuWeightsTransposedFloat = null;
 
         _gpuWeightsTransposedDouble?.Dispose();
         _gpuWeightsTransposedDouble = null;
+
+        // Dispose and clear cuBLAS GPU handles
+        _cuBlasWeightsFloat?.Dispose();
+        _cuBlasWeightsFloat = null;
+
+        _cuBlasWeightsDouble?.Dispose();
+        _cuBlasWeightsDouble = null;
 #endif
     }
 
@@ -635,7 +651,104 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
 #if !NET462
     /// <summary>
-    /// Attempts to perform matrix multiplication using GPU-cached weights.
+    /// Attempts to perform matrix multiplication using cuBLAS (NVIDIA's optimized library).
+    /// Returns null if cuBLAS is not available or operation fails.
+    /// </summary>
+    /// <param name="input">The input tensor [batch, inputSize].</param>
+    /// <param name="weightsTransposed">The transposed weights [inputSize, outputSize].</param>
+    /// <returns>The result tensor, or null if cuBLAS operation failed.</returns>
+    /// <remarks>
+    /// <para><b>Phase B: Direct NVIDIA Library Access</b></para>
+    /// <para>
+    /// cuBLAS provides ~30,000 GFLOPS for SGEMM vs ILGPU's ~52-86 GFLOPS ceiling.
+    /// This is because cuBLAS uses hand-tuned PTX/SASS kernels with:
+    /// - Tensor core acceleration (Volta+)
+    /// - Multi-level tiling (register, shared memory, L2 cache)
+    /// - Software pipelining and double-buffering
+    /// </para>
+    /// <para><b>Performance Impact:</b>
+    /// - ILGPU: ~52-86 GFLOPS (100-500x slower than competitors)
+    /// - cuBLAS: ~15,000-30,000 GFLOPS (matches PyTorch/TensorFlow)
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? TryTensorMatMulWithCuBlas(Tensor<T> input, Tensor<T> weightsTransposed)
+    {
+        // Check cuBLAS availability (lazy initialization)
+        if (!_cuBlasChecked)
+        {
+            lock (_cuBlasLock)
+            {
+                if (!_cuBlasChecked)
+                {
+                    _cuBlasAvailable = CuBlasMatMul.IsAvailable;
+                    if (_cuBlasAvailable)
+                    {
+                        _cuBlasInstance = new CuBlasMatMul();
+                    }
+                    _cuBlasChecked = true;
+                }
+            }
+        }
+
+        if (!_cuBlasAvailable || _cuBlasInstance == null)
+            return null;
+
+        // Handle float type
+        if (typeof(T) == typeof(float))
+        {
+            var inputTensor = input as Tensor<float>;
+            var weightsTensor = weightsTransposed as Tensor<float>;
+            if (inputTensor == null || weightsTensor == null) return null;
+
+            int batch = inputTensor.Shape[0];
+            int inputSize = inputTensor.Shape[1];
+            int outputSize = weightsTensor.Shape[1];
+
+            // Allocate cuBLAS weights if needed (one-time upload)
+            if (_cuBlasWeightsFloat == null)
+            {
+                _cuBlasWeightsFloat = _cuBlasInstance.AllocateWeightsFloat(weightsTensor.ToArray());
+                if (_cuBlasWeightsFloat == null) return null;
+            }
+
+            // Perform cuBLAS GEMM with cached weights
+            var resultData = _cuBlasInstance.MatMulWithCachedWeightsFloat(
+                inputTensor.ToArray(), batch, inputSize,
+                _cuBlasWeightsFloat, outputSize);
+
+            if (resultData == null) return null;
+
+            return new Tensor<float>(new int[] { batch, outputSize }, new Vector<float>(resultData)) as Tensor<T>;
+        }
+
+        // Handle double type
+        if (typeof(T) == typeof(double))
+        {
+            var inputTensor = input as Tensor<double>;
+            var weightsTensor = weightsTransposed as Tensor<double>;
+            if (inputTensor == null || weightsTensor == null) return null;
+
+            int batch = inputTensor.Shape[0];
+            int inputSize = inputTensor.Shape[1];
+            int outputSize = weightsTensor.Shape[1];
+
+            // Allocate cuBLAS weights if needed (one-time upload)
+            if (_cuBlasWeightsDouble == null)
+            {
+                _cuBlasWeightsDouble = _cuBlasInstance.AllocateWeightsDouble(weightsTensor.ToArray());
+                if (_cuBlasWeightsDouble == null) return null;
+            }
+
+            // Perform cuBLAS GEMM with cached weights (need to implement double version)
+            // For now, fall back to ILGPU for double
+            return null;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Attempts to perform matrix multiplication using GPU-cached weights (ILGPU).
     /// Returns null if GPU is not available or operation fails.
     /// </summary>
     /// <param name="input">The input tensor (uploaded to GPU per call).</param>
@@ -811,12 +924,19 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Get cached transposed weights (avoids re-transposing every forward pass)
         var weightsTransposed = GetWeightsTransposed();
 
-        // Try GPU-cached mat mul path first (weights stay on GPU, only input transfers)
+        // Try GPU-accelerated mat mul paths in order of expected performance:
+        // 1. cuBLAS (~30,000 GFLOPS) - Direct NVIDIA library, best performance
+        // 2. ILGPU with cached weights (~52-86 GFLOPS) - Persistent GPU memory
+        // 3. Standard Engine.TensorMatMul (CPU/GPU fallback)
         Tensor<T>? matmul = null;
 #if !NET462
-        matmul = TryTensorMatMulWithCachedWeights(flattenedInput, weightsTransposed);
+        // Priority 1: Try cuBLAS (fastest - uses NVIDIA's hand-tuned kernels)
+        matmul = TryTensorMatMulWithCuBlas(flattenedInput, weightsTransposed);
+
+        // Priority 2: Fall back to ILGPU with cached weights if cuBLAS unavailable
+        matmul ??= TryTensorMatMulWithCachedWeights(flattenedInput, weightsTransposed);
 #endif
-        // Fall back to standard mat mul if GPU path failed
+        // Priority 3: Fall back to standard mat mul if all GPU paths failed
         matmul ??= Engine.TensorMatMul(flattenedInput, weightsTransposed);
 
         // Add biases with broadcasting support ([batchDim, outputSize] + [outputSize])
