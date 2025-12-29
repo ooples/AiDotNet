@@ -7237,7 +7237,7 @@ public static class StatisticsHelper<T>
 
         if (maxLag >= n)
         {
-            throw new ArgumentOutOfRangeException(nameof(maxLag), 
+            throw new ArgumentOutOfRangeException(nameof(maxLag),
                 $"Maximum lag ({maxLag}) must be less than series length ({n}).");
         }
 
@@ -7317,7 +7317,7 @@ public static class StatisticsHelper<T>
 
         if (maxLag >= n)
         {
-            throw new ArgumentOutOfRangeException(nameof(maxLag), 
+            throw new ArgumentOutOfRangeException(nameof(maxLag),
                 $"Maximum lag ({maxLag}) must be less than series length ({n}).");
         }
 

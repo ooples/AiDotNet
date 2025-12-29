@@ -1,5 +1,5 @@
-using AiDotNet.Classification.Meta;
 using AiDotNet.Classification.Linear;
+using AiDotNet.Classification.Meta;
 using AiDotNet.Classification.NaiveBayes;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;

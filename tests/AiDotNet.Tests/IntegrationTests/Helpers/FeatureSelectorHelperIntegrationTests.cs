@@ -1,6 +1,6 @@
-using Xunit;
-using AiDotNet.FeatureSelectors;
 using AiDotNet.Enums;
+using AiDotNet.FeatureSelectors;
+using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Helpers;
 
