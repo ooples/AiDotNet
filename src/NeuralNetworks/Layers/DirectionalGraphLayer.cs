@@ -361,17 +361,47 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         int numNodes = processInput.Shape[1];
         int inputFeatures = processInput.Shape[2];
 
+        // Ensure adjacency matrix has matching rank for batch operation
+        // If adjacency is 2D [nodes, nodes] and input is 3D [batch, nodes, features], reshape to 3D
+        Tensor<T> adjForBatch;
+        if (_adjacencyMatrix.Shape.Length == 2 && processInput.Shape.Length == 3)
+        {
+            if (batchSize == 1)
+            {
+                adjForBatch = _adjacencyMatrix.Reshape([1, numNodes, numNodes]);
+            }
+            else
+            {
+                // Broadcast: repeat adjacency matrix for each batch item
+                adjForBatch = new Tensor<T>([batchSize, numNodes, numNodes]);
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int i = 0; i < numNodes; i++)
+                    {
+                        for (int j = 0; j < numNodes; j++)
+                        {
+                            adjForBatch[new int[] { b, i, j }] = _adjacencyMatrix[new int[] { i, j }];
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            adjForBatch = _adjacencyMatrix;
+        }
+
         // Step 1: Aggregate incoming edges (nodes that point TO this node)
         // A[i,j] = 1 means edge from j to i (j→i)
         // For incoming: multiply A @ X @ W_in
         var xwIn = BatchedMatMul3Dx2D(processInput, _incomingWeights, batchSize, numNodes, inputFeatures, _outputFeatures);
-        _lastIncoming = Engine.BatchMatMul(_adjacencyMatrix, xwIn);
+        _lastIncoming = Engine.BatchMatMul(adjForBatch, xwIn);
         var biasIn = BroadcastBias(_incomingBias, batchSize, numNodes);
         _lastIncoming = Engine.TensorAdd(_lastIncoming, biasIn);
 
         // Step 2: Aggregate outgoing edges (nodes that this node points TO)
         // For outgoing: multiply A^T @ X @ W_out
-        var adjTransposed = Engine.TensorTranspose(_adjacencyMatrix);
+        var adjTransposed = Engine.TensorPermute(adjForBatch, [0, 2, 1]); // Batched transpose
         var xwOut = BatchedMatMul3Dx2D(processInput, _outgoingWeights, batchSize, numNodes, inputFeatures, _outputFeatures);
         _lastOutgoing = Engine.BatchMatMul(adjTransposed, xwOut);
         var biasOut = BroadcastBias(_outgoingBias, batchSize, numNodes);

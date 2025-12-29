@@ -160,6 +160,11 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
     private Tensor<T>? _adjacencyMatrix;
 
     /// <summary>
+    /// Cached reshaped adjacency matrix (3D) for backward pass.
+    /// </summary>
+    private Tensor<T>? _adjForBatch;
+
+    /// <summary>
     /// Stores the gradients for the weights calculated during the backward pass.
     /// </summary>
     private Tensor<T>? _weightsGradient;
@@ -615,6 +620,9 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
             adjForBatch = _adjacencyMatrix;
         }
 
+        // Store for backward pass
+        _adjForBatch = adjForBatch;
+
         // Then: A * (X * W) using batched matmul for 3D @ 3D
         var output = Engine.BatchMatMul(adjForBatch, xw);
 
@@ -724,7 +732,14 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        // Reshape outputGradient to match _lastOutput's 3D shape if needed
+        var gradForBackward = outputGradient;
+        if (_originalInputShape != null && _originalInputShape.Length != 3 && outputGradient.Shape.Length != _lastOutput.Shape.Length)
+        {
+            gradForBackward = outputGradient.Reshape(_lastOutput.Shape);
+        }
+
+        var activationGradient = ApplyActivationDerivative(_lastOutput, gradForBackward);
 
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
@@ -740,8 +755,11 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         _weightsGradient = new Tensor<T>([inputFeatures, outputFeatures]);
         _weightsGradient.Fill(NumOps.Zero);
 
-        // Transpose adjacency matrix (swap last two dims for each batch element)
-        var adjTransposed = Engine.TensorTranspose(_adjacencyMatrix);
+        // Use the stored reshaped adjacency matrix for backward pass
+        var adjBatched = _adjForBatch ?? _adjacencyMatrix;
+
+        // Transpose adjacency matrix (batched transpose - swap last two dims for each batch element)
+        var adjTransposed = Engine.TensorPermute(adjBatched, [0, 2, 1]);
 
         // For each batch, compute: input^T @ adj^T @ activationGradient
         // This equals: (adj @ input)^T @ activationGradient for forward was: A @ X @ W
@@ -781,6 +799,12 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
             inputGradient = Engine.TensorSetSlice(inputGradient, inputGradBatch.Reshape([1, numNodes, inputFeatures]), [b, 0, 0]);
         }
 
+        // Reshape back to original input shape if it was not 3D
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
         return inputGradient;
     }
 
@@ -802,22 +826,29 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Reshape outputGradient to match _lastOutput's 3D shape if needed
+        var gradForBackward = outputGradient;
+        if (_originalInputShape != null && _originalInputShape.Length != 3 && outputGradient.Shape.Length != _lastOutput.Shape.Length)
+        {
+            gradForBackward = outputGradient.Reshape(_lastOutput.Shape);
+        }
+
         // Production-grade: Compute activation derivative using cached output
         Tensor<T> preActivationGradient;
         if (VectorActivation != null)
         {
             var actDeriv = VectorActivation.Derivative(_lastOutput);
-            preActivationGradient = Engine.TensorMultiply(outputGradient, actDeriv);
+            preActivationGradient = Engine.TensorMultiply(gradForBackward, actDeriv);
         }
         else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
         {
             var activation = ScalarActivation;
             var activationDerivative = _lastOutput.Transform((x, _) => activation.Derivative(x));
-            preActivationGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
+            preActivationGradient = Engine.TensorMultiply(gradForBackward, activationDerivative);
         }
         else
         {
-            preActivationGradient = outputGradient;
+            preActivationGradient = gradForBackward;
         }
 
         // Create computation nodes (weights/bias already Tensor<T>)
@@ -876,7 +907,15 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         _biasGradient = biasNode.Gradient;
 
         // Return input gradient
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+
+        // Reshape back to original input shape if it was not 3D
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     /// <summary>
@@ -1158,6 +1197,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         _lastInput = null;
         _lastOutput = null;
         _lastNodeFeatures = null;
+        _adjForBatch = null;
         _weightsGradient = null;
         _biasGradient = null;
     }
