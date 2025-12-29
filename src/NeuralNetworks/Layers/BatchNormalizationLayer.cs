@@ -363,35 +363,31 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             var term2 = Engine.TensorDivide(Engine.TensorMultiply(_gamma, _runningMean), stdDev);
             var shift = Engine.TensorSubtract(_beta, term2);
 
-            // Handle both 2D [batch, features] and 4D [batch, channels, height, width]
-            if (input.Shape.Length == 4)
-            {
-                // 4D case: [batch, channels, height, width]
-                return ApplyInference4D(input, scale, shift);
-            }
-
-            // 2D case: [batch, features]
-            int batchSize = input.Shape[0];
-            int featureSize = input.Shape[1];
-
-            var scaleExpanded = Engine.TensorRepeatElements(scale.Reshape([1, featureSize]), batchSize, axis: 0);
-            var shiftExpanded = Engine.TensorRepeatElements(shift.Reshape([1, featureSize]), batchSize, axis: 0);
-
-            var scaled = Engine.TensorMultiply(input, scaleExpanded);
-            return Engine.TensorAdd(scaled, shiftExpanded);
+            // Handle any tensor rank (2D, 3D, 4D, 5D, etc.)
+            // Dimension 0 is batch, dimension 1 is features/channels
+            // Dimensions 2+ are spatial dimensions
+            return ApplyInferenceAnyRank(input, scale, shift);
         }
     }
 
     /// <summary>
-    /// Applies batch normalization inference for 4D tensors.
+    /// Applies batch normalization inference for tensors of any rank.
     /// </summary>
-    private Tensor<T> ApplyInference4D(Tensor<T> input, Tensor<T> scale, Tensor<T> shift)
+    /// <remarks>
+    /// Supports any tensor rank >= 2. Dimension 0 is batch, dimension 1 is features/channels,
+    /// and dimensions 2+ are spatial dimensions that are processed element-wise.
+    /// </remarks>
+    private Tensor<T> ApplyInferenceAnyRank(Tensor<T> input, Tensor<T> scale, Tensor<T> shift)
     {
         int batch = input.Shape[0];
         int channels = input.Shape[1];
-        int height = input.Shape[2];
-        int width = input.Shape[3];
-        int spatialSize = height * width;
+
+        // Calculate total spatial size (product of all dimensions after batch and channels)
+        int spatialSize = 1;
+        for (int d = 2; d < input.Shape.Length; d++)
+        {
+            spatialSize *= input.Shape[d];
+        }
 
         var inputData = input.Data;
         var scaleData = scale.Data;

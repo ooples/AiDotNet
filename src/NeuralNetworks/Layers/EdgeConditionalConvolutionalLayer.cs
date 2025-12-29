@@ -68,6 +68,11 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
     /// Cached values for backward pass.
     /// </summary>
     private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
     private Tensor<T>? _lastOutput;
     private Tensor<T>? _lastEdgeWeights;
     private Tensor<T>? _lastHidden;
@@ -223,9 +228,45 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
                 "Edge features must be set using SetEdgeFeatures before calling Forward.");
         }
 
-        _lastInput = input;
-        int batchSize = input.Shape[0];
-        int numNodes = input.Shape[1];
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Graph layer expects 3D: [batchSize, numNodes, features]
+        // Handle any-rank tensor: normalize to 3D for processing
+        Tensor<T> processInput;
+        int batchSize;
+
+        if (rank == 2)
+        {
+            // 2D [nodes, features]: add batch dim
+            batchSize = 1;
+            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
+        }
+        else if (rank == 3)
+        {
+            // Standard 3D [batchSize, nodes, features]
+            batchSize = input.Shape[0];
+            processInput = input;
+        }
+        else if (rank > 3)
+        {
+            // Higher-rank: collapse leading dims into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            processInput = input.Reshape([flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
+        }
+        else
+        {
+            // 1D: treat as single node with features
+            batchSize = 1;
+            processInput = input.Reshape([1, 1, input.Shape[0]]);
+        }
+
+        _lastInput = processInput;
+        int numNodes = processInput.Shape[1];
         int numEdges = _edgeFeatures.Shape[1];
 
         // Step 1: Compute edge-specific weights using edge network

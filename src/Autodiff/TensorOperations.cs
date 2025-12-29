@@ -5469,8 +5469,9 @@ public static class TensorOperations<T>
     }
     /// <summary>
     /// Upsamples a tensor using nearest neighbor interpolation.
+    /// Supports tensors of any rank (at least 2D), treating the last two dimensions as height and width.
     /// </summary>
-    /// <param name="a">The input computation node.</param>
+    /// <param name="a">The input computation node with at least 2 dimensions.</param>
     /// <param name="scale">The upsampling scale factor.</param>
     /// <returns>A computation node representing the upsampled tensor.</returns>
     public static ComputationNode<T> Upsample(ComputationNode<T> a, int scale)
@@ -5478,8 +5479,8 @@ public static class TensorOperations<T>
         var engine = AiDotNetEngine.Current;
         var inputShape = a.Value.Shape;
 
-        if (inputShape.Length != 4)
-            throw new ArgumentException("Upsample expects 4D input [batch, channels, height, width]");
+        if (inputShape.Length < 2)
+            throw new ArgumentException("Upsample requires tensor with at least 2 dimensions for height and width.");
 
         // Use IEngine for GPU-accelerated forward pass
         var result = engine.Upsample(a.Value, scale, scale);

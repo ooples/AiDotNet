@@ -89,6 +89,11 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="RepParameterizationLayer{T}"/> class.
     /// </summary>
     /// <param name="inputShape">The shape of the input tensor. The first dimension is the batch size, and the second dimension must be even (half for means, half for log variances).</param>
@@ -150,12 +155,43 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        int batchSize = input.Shape[0];
-        int latentSize = input.Shape[1] / 2;
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: collapse to 2D for processing
+        Tensor<T> processInput;
+        int batchSize;
+        int latentSize;
+
+        if (rank == 1)
+        {
+            // 1D: add batch dim
+            batchSize = 1;
+            latentSize = input.Shape[0] / 2;
+            processInput = input.Reshape([1, input.Shape[0]]);
+        }
+        else if (rank == 2)
+        {
+            // Standard 2D
+            batchSize = input.Shape[0];
+            latentSize = input.Shape[1] / 2;
+            processInput = input;
+        }
+        else
+        {
+            // Higher-rank: collapse leading dims into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 1; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            latentSize = input.Shape[rank - 1] / 2;
+            processInput = input.Reshape([flatBatch, input.Shape[rank - 1]]);
+        }
 
         // Use Engine.TensorSlice to split mean and logvar
-        _lastMean = Engine.TensorSlice(input, [0, 0], [batchSize, latentSize]);
-        _lastLogVar = Engine.TensorSlice(input, [0, latentSize], [batchSize, latentSize]);
+        _lastMean = Engine.TensorSlice(processInput, [0, 0], [batchSize, latentSize]);
+        _lastLogVar = Engine.TensorSlice(processInput, [0, latentSize], [batchSize, latentSize]);
 
         // Generate random epsilon using Tensor<T>.CreateRandom
         _lastEpsilon = Tensor<T>.CreateRandom(batchSize, latentSize);
@@ -169,6 +205,20 @@ public class RepParameterizationLayer<T> : LayerBase<T>
         // Compute output = mean + stdDev * epsilon using Engine operations
         var scaledEpsilon = Engine.TensorMultiply(stdDev, _lastEpsilon);
         var output = Engine.TensorAdd(_lastMean, scaledEpsilon);
+
+        // Restore original shape for any-rank support (output is half the input size)
+        if (_originalInputShape != null && _originalInputShape.Length > 2)
+        {
+            int[] newShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 1; d++)
+                newShape[d] = _originalInputShape[d];
+            newShape[_originalInputShape.Length - 1] = latentSize;
+            output = output.Reshape(newShape);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 1)
+        {
+            output = output.Reshape([latentSize]);
+        }
 
         return output;
     }
