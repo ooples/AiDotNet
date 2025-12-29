@@ -2012,6 +2012,487 @@ public class GpuEngine : IEngine, IDisposable
         return null;
     }
 
+    #endregion
+
+    #region Persistent GPU Tensor Allocation (Phase B: US-GPU-030)
+
+    /// <summary>
+    /// Allocates a persistent GPU tensor with the specified shape, initialized to zeros.
+    /// </summary>
+    /// <typeparam name="T">The element type (float, double).</typeparam>
+    /// <param name="shape">The tensor dimensions.</param>
+    /// <returns>A GPU tensor handle for persistent storage, or null if GPU unavailable.</returns>
+    /// <remarks>
+    /// <para><b>Persistent GPU Tensors (Phase B: US-GPU-030)</b></para>
+    /// <para>
+    /// Unlike pooled buffers that are recycled after each operation, persistent tensors
+    /// remain on GPU across multiple operations. Use for weights and biases that should
+    /// stay on GPU during training/inference.
+    /// </para>
+    /// <para><b>Important:</b> Caller owns the returned handle and must dispose it.</para>
+    /// </remarks>
+    public GpuTensorHandle<T>? AllocateGpuTensor<T>(int[] shape) where T : unmanaged
+    {
+        if (!SupportsGpu || _accelerator == null || !_gpuHealthy)
+            return null;
+
+        if (shape == null || shape.Length == 0)
+            throw new ArgumentException("Shape cannot be null or empty.", nameof(shape));
+
+        long totalElements = 1;
+        foreach (var dim in shape)
+        {
+            if (dim <= 0)
+                throw new ArgumentException($"All dimensions must be positive. Got: {dim}", nameof(shape));
+            totalElements *= dim;
+        }
+
+        if (totalElements > int.MaxValue)
+            throw new ArgumentException($"Total elements ({totalElements}) exceeds maximum supported size.", nameof(shape));
+
+        lock (_gpuLock)
+        {
+            try
+            {
+                var buffer = _accelerator.Allocate1D<T>((int)totalElements);
+                buffer.MemSetToZero();
+                return new GpuTensorHandle<T>(buffer, shape);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GpuEngine] Failed to allocate GPU tensor: {ex.Message}");
+                return null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Allocates a persistent GPU tensor and copies data from CPU array.
+    /// </summary>
+    /// <typeparam name="T">The element type (float, double).</typeparam>
+    /// <param name="data">The CPU data to upload.</param>
+    /// <param name="shape">The tensor dimensions.</param>
+    /// <returns>A GPU tensor handle with the data uploaded, or null if GPU unavailable.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is the primary method for creating persistent GPU tensors from weights/biases.
+    /// The data is uploaded once and stays on GPU until explicitly synced or disposed.
+    /// </para>
+    /// </remarks>
+    public GpuTensorHandle<T>? AllocateGpuTensor<T>(T[] data, int[] shape) where T : unmanaged
+    {
+        if (!SupportsGpu || _accelerator == null || !_gpuHealthy)
+            return null;
+
+        if (data == null)
+            throw new ArgumentNullException(nameof(data));
+        if (shape == null || shape.Length == 0)
+            throw new ArgumentException("Shape cannot be null or empty.", nameof(shape));
+
+        long totalElements = 1;
+        foreach (var dim in shape)
+        {
+            if (dim <= 0)
+                throw new ArgumentException($"All dimensions must be positive. Got: {dim}", nameof(shape));
+            totalElements *= dim;
+        }
+
+        if (totalElements != data.Length)
+            throw new ArgumentException($"Data length ({data.Length}) doesn't match shape total ({totalElements}).", nameof(data));
+
+        lock (_gpuLock)
+        {
+            try
+            {
+                var buffer = _accelerator.Allocate1D<T>(data);
+                return new GpuTensorHandle<T>(buffer, shape);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GpuEngine] Failed to allocate GPU tensor: {ex.Message}");
+                return null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Allocates a persistent GPU tensor from a Vector.
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="vector">The vector to upload to GPU.</param>
+    /// <returns>A GPU tensor handle, or null if GPU unavailable.</returns>
+    public GpuTensorHandle<T>? AllocateGpuTensor<T>(LinearAlgebra.Vector<T> vector) where T : unmanaged
+    {
+        if (vector == null)
+            throw new ArgumentNullException(nameof(vector));
+
+        return AllocateGpuTensor(vector.ToArray(), new[] { vector.Length });
+    }
+
+    /// <summary>
+    /// Allocates a persistent GPU tensor from a Matrix (row-major layout).
+    /// </summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="matrix">The matrix to upload to GPU.</param>
+    /// <returns>A GPU tensor handle, or null if GPU unavailable.</returns>
+    public GpuTensorHandle<T>? AllocateGpuTensor<T>(LinearAlgebra.Matrix<T> matrix) where T : unmanaged
+    {
+        if (matrix == null)
+            throw new ArgumentNullException(nameof(matrix));
+
+        // Convert matrix to row-major flat array
+        var data = new T[matrix.Rows * matrix.Columns];
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                data[i * matrix.Columns + j] = matrix[i, j];
+            }
+        }
+
+        return AllocateGpuTensor(data, new[] { matrix.Rows, matrix.Columns });
+    }
+
+    #endregion
+
+    #region Direct GPU Operations (Phase B: US-GPU-030)
+
+    /// <summary>
+    /// Performs matrix multiplication directly on GPU handles without CPU transfer.
+    /// result = a * b (GPU-resident computation)
+    /// </summary>
+    /// <param name="a">First matrix handle [M x K].</param>
+    /// <param name="b">Second matrix handle [K x N].</param>
+    /// <param name="result">Result matrix handle [M x N]. Must be pre-allocated.</param>
+    /// <returns>True if GPU operation succeeded, false if fallback to CPU needed.</returns>
+    /// <remarks>
+    /// <para><b>Persistent GPU Operation (Phase B: US-GPU-030)</b></para>
+    /// <para>
+    /// This is the KEY method for eliminating per-operation memory transfers.
+    /// Weights stay on GPU between forward passes, only activations transfer.
+    /// </para>
+    /// </remarks>
+    public bool MatMulDirect(GpuTensorHandle<float> a, GpuTensorHandle<float> b, GpuTensorHandle<float> result)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (result == null) throw new ArgumentNullException(nameof(result));
+
+        if (!SupportsGpu || _accelerator == null || !_gpuHealthy || _matrixMultiplyKernelFloat == null)
+            return false;
+
+        // Validate shapes: a[M,K] * b[K,N] = result[M,N]
+        if (a.Shape.Length != 2 || b.Shape.Length != 2 || result.Shape.Length != 2)
+            throw new ArgumentException("All handles must be 2D matrices.");
+
+        int m = a.Shape[0], k = a.Shape[1];
+        int k2 = b.Shape[0], n = b.Shape[1];
+        int rm = result.Shape[0], rn = result.Shape[1];
+
+        if (k != k2)
+            throw new ArgumentException($"Matrix dimensions incompatible. A is [{m}x{k}], B is [{k2}x{n}].");
+        if (rm != m || rn != n)
+            throw new ArgumentException($"Result shape [{rm}x{rn}] doesn't match expected [{m}x{n}].");
+
+        try
+        {
+            // Create 2D views from the 1D buffers using View1D for proper stride support
+            var viewA = a.View1D.As2DView<Stride2D.DenseX>(new Index2D(m, k), new Stride2D.DenseX(k));
+            var viewB = b.View1D.As2DView<Stride2D.DenseX>(new Index2D(k, n), new Stride2D.DenseX(n));
+            var viewResult = result.View1D.As2DView<Stride2D.DenseX>(new Index2D(m, n), new Stride2D.DenseX(n));
+
+            lock (_gpuLock)
+            {
+                _matrixMultiplyKernelFloat(_accelerator.DefaultStream, new Index2D(m, n), viewA, viewB, viewResult, k);
+            }
+
+            result.MarkDirty();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] MatMulDirect failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Performs matrix multiplication directly on GPU handles (double precision).
+    /// </summary>
+    public bool MatMulDirect(GpuTensorHandle<double> a, GpuTensorHandle<double> b, GpuTensorHandle<double> result)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (result == null) throw new ArgumentNullException(nameof(result));
+
+        if (!SupportsGpu || _accelerator == null || !_gpuHealthy || _matrixMultiplyKernelDouble == null)
+            return false;
+
+        if (a.Shape.Length != 2 || b.Shape.Length != 2 || result.Shape.Length != 2)
+            throw new ArgumentException("All handles must be 2D matrices.");
+
+        int m = a.Shape[0], k = a.Shape[1];
+        int k2 = b.Shape[0], n = b.Shape[1];
+        int rm = result.Shape[0], rn = result.Shape[1];
+
+        if (k != k2)
+            throw new ArgumentException($"Matrix dimensions incompatible. A is [{m}x{k}], B is [{k2}x{n}].");
+        if (rm != m || rn != n)
+            throw new ArgumentException($"Result shape [{rm}x{rn}] doesn't match expected [{m}x{n}].");
+
+        try
+        {
+            var viewA = a.View1D.As2DView<Stride2D.DenseX>(new Index2D(m, k), new Stride2D.DenseX(k));
+            var viewB = b.View1D.As2DView<Stride2D.DenseX>(new Index2D(k, n), new Stride2D.DenseX(n));
+            var viewResult = result.View1D.As2DView<Stride2D.DenseX>(new Index2D(m, n), new Stride2D.DenseX(n));
+
+            lock (_gpuLock)
+            {
+                _matrixMultiplyKernelDouble(_accelerator.DefaultStream, new Index2D(m, n), viewA, viewB, viewResult, k);
+            }
+
+            result.MarkDirty();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] MatMulDirect failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Adds two GPU tensors element-wise directly without CPU transfer.
+    /// result = a + b
+    /// </summary>
+    public bool AddDirect(GpuTensorHandle<float> a, GpuTensorHandle<float> b, GpuTensorHandle<float> result)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (result == null) throw new ArgumentNullException(nameof(result));
+
+        if (!SupportsGpu || _accelerator == null || !_gpuHealthy || _addKernelFloat == null)
+            return false;
+
+        if (a.Length != b.Length || a.Length != result.Length)
+            throw new ArgumentException("All tensors must have the same length.");
+
+        try
+        {
+            lock (_gpuLock)
+            {
+                _addKernelFloat(_accelerator.DefaultStream, (int)a.Length, a.View, b.View, result.View);
+            }
+
+            result.MarkDirty();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] AddDirect failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Adds two GPU tensors element-wise directly (double precision).
+    /// </summary>
+    public bool AddDirect(GpuTensorHandle<double> a, GpuTensorHandle<double> b, GpuTensorHandle<double> result)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (result == null) throw new ArgumentNullException(nameof(result));
+
+        if (!SupportsGpu || _accelerator == null || !_gpuHealthy || _addKernelDouble == null)
+            return false;
+
+        if (a.Length != b.Length || a.Length != result.Length)
+            throw new ArgumentException("All tensors must have the same length.");
+
+        try
+        {
+            lock (_gpuLock)
+            {
+                _addKernelDouble(_accelerator.DefaultStream, (int)a.Length, a.View, b.View, result.View);
+            }
+
+            result.MarkDirty();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] AddDirect failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Broadcasts and adds a bias vector to each row of a matrix.
+    /// result[i,j] = matrix[i,j] + bias[j]
+    /// This is the key operation for DenseLayer: output = input @ weights + bias
+    /// </summary>
+    public bool BroadcastAddDirect(GpuTensorHandle<float> matrix, GpuTensorHandle<float> bias, GpuTensorHandle<float> result)
+    {
+        if (matrix == null) throw new ArgumentNullException(nameof(matrix));
+        if (bias == null) throw new ArgumentNullException(nameof(bias));
+        if (result == null) throw new ArgumentNullException(nameof(result));
+
+        if (!SupportsGpu || _accelerator == null || !_gpuHealthy)
+            return false;
+
+        if (matrix.Shape.Length != 2 || bias.Shape.Length != 1)
+            throw new ArgumentException("Matrix must be 2D, bias must be 1D.");
+
+        int rows = matrix.Shape[0];
+        int cols = matrix.Shape[1];
+
+        if (bias.Length != cols)
+            throw new ArgumentException($"Bias length ({bias.Length}) must match matrix columns ({cols}).");
+        if (result.Length != matrix.Length)
+            throw new ArgumentException("Result must have same size as matrix.");
+
+        try
+        {
+            // Use a simple kernel: for each element, add the corresponding bias
+            // We'll execute per-element and calculate the column from the flat index
+            lock (_gpuLock)
+            {
+                // Use element-wise add with index calculation
+                // Since we don't have a pre-compiled broadcast kernel, we can:
+                // Option 1: Create a broadcast kernel
+                // Option 2: Do row-by-row (less efficient)
+                // For now, we'll do element-wise with modulo for column
+
+                // Actually, let's use a simpler approach: copy matrix to result, then add bias per row
+                // This requires 2 passes but uses existing kernels
+
+                // Copy matrix to result
+                matrix.View1D.CopyTo(result.View1D);
+
+                // For each row, add bias (this is still O(n) but uses element-wise add)
+                // Better approach: load a custom broadcast add kernel
+
+                // For MVP, let's fall back to indicating this needs a custom kernel
+                // and return false so CPU handles it
+            }
+
+            // TODO: Add proper broadcast kernel for production use
+            // For now, return false to indicate CPU fallback needed
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] BroadcastAddDirect failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Multiplies two GPU tensors element-wise directly without CPU transfer.
+    /// result = a * b (element-wise)
+    /// </summary>
+    public bool MultiplyDirect(GpuTensorHandle<float> a, GpuTensorHandle<float> b, GpuTensorHandle<float> result)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (result == null) throw new ArgumentNullException(nameof(result));
+
+        if (!SupportsGpu || _accelerator == null || !_gpuHealthy || _multiplyKernelFloat == null)
+            return false;
+
+        if (a.Length != b.Length || a.Length != result.Length)
+            throw new ArgumentException("All tensors must have the same length.");
+
+        try
+        {
+            lock (_gpuLock)
+            {
+                _multiplyKernelFloat(_accelerator.DefaultStream, (int)a.Length, a.View, b.View, result.View);
+            }
+
+            result.MarkDirty();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] MultiplyDirect failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Multiplies two GPU tensors element-wise directly (double precision).
+    /// </summary>
+    public bool MultiplyDirect(GpuTensorHandle<double> a, GpuTensorHandle<double> b, GpuTensorHandle<double> result)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (result == null) throw new ArgumentNullException(nameof(result));
+
+        if (!SupportsGpu || _accelerator == null || !_gpuHealthy || _multiplyKernelDouble == null)
+            return false;
+
+        if (a.Length != b.Length || a.Length != result.Length)
+            throw new ArgumentException("All tensors must have the same length.");
+
+        try
+        {
+            lock (_gpuLock)
+            {
+                _multiplyKernelDouble(_accelerator.DefaultStream, (int)a.Length, a.View, b.View, result.View);
+            }
+
+            result.MarkDirty();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] MultiplyDirect failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Multiplies a GPU tensor by a scalar directly without CPU transfer.
+    /// result = a * scalar
+    /// </summary>
+    public bool MultiplyScalarDirect(GpuTensorHandle<float> a, float scalar, GpuTensorHandle<float> result)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (result == null) throw new ArgumentNullException(nameof(result));
+
+        if (!SupportsGpu || _accelerator == null || !_gpuHealthy || _multiplyScalarKernelFloat == null)
+            return false;
+
+        if (a.Length != result.Length)
+            throw new ArgumentException("Tensors must have the same length.");
+
+        try
+        {
+            lock (_gpuLock)
+            {
+                _multiplyScalarKernelFloat(_accelerator.DefaultStream, (int)a.Length, a.View, scalar, result.View);
+            }
+
+            result.MarkDirty();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] MultiplyScalarDirect failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Gets the underlying ILGPU accelerator for advanced operations.
+    /// </summary>
+    internal Accelerator? GetAccelerator() => _accelerator;
+
+    #endregion
+
+    #region Helper Methods
+
     /// <summary>
     /// Determines if GPU acceleration should be used for the given operation size and type.
     /// Considers GPU health, minimum size threshold, and type support.

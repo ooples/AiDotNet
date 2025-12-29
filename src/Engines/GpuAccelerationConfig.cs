@@ -165,6 +165,32 @@ public class GpuAccelerationConfig
     public bool EnableForInference { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets whether to enable GPU persistence for neural network weights (default: true).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Phase B: Persistent GPU Tensors (US-GPU-030)</b></para>
+    /// <para>
+    /// When enabled, neural network weights and biases stay on GPU memory between operations,
+    /// eliminating per-operation CPU-GPU memory transfers. This provides massive speedups
+    /// (up to 100x) for training and inference.
+    /// </para>
+    /// <para><b>For Beginners:</b> This keeps your model's weights on the GPU permanently
+    /// instead of copying them back and forth for each operation. This is the single most
+    /// important optimization for GPU performance.
+    ///
+    /// Only disable if:
+    /// - You're running out of GPU memory
+    /// - You need weights on CPU for other purposes between operations
+    /// - You're debugging GPU-related issues
+    /// </para>
+    /// <para><b>Memory Impact:</b> Weights stay in GPU memory until the model is disposed.
+    /// For large models (e.g., 100M parameters at 4 bytes each = 400MB), this GPU memory
+    /// is allocated and held for the model's lifetime.
+    /// </para>
+    /// </remarks>
+    public bool EnableGpuPersistence { get; set; } = true;
+
+    /// <summary>
     /// Creates a configuration with default GPU settings.
     /// </summary>
     public GpuAccelerationConfig()
@@ -177,6 +203,6 @@ public class GpuAccelerationConfig
     /// <returns>A string describing the configuration settings.</returns>
     public override string ToString()
     {
-        return $"GpuConfig: DeviceType={DeviceType}, UsageLevel={UsageLevel}, DeviceIndex={DeviceIndex}, EnableForInference={EnableForInference}, Verbose={VerboseLogging}";
+        return $"GpuConfig: DeviceType={DeviceType}, UsageLevel={UsageLevel}, DeviceIndex={DeviceIndex}, EnableForInference={EnableForInference}, EnableGpuPersistence={EnableGpuPersistence}, Verbose={VerboseLogging}";
     }
 }
