@@ -33,11 +33,20 @@ namespace AiDotNet.Audio.MusicAnalysis;
 /// </code>
 /// </para>
 /// </remarks>
-public class BeatTracker<T>
+public class BeatTracker<T> : MusicAnalysisBase<T>
 {
-    private readonly INumericOperations<T> _numOps;
     private readonly SpectralFeatureExtractor<T> _spectralExtractor;
     private readonly BeatTrackerOptions _options;
+
+    /// <summary>
+    /// Gets the minimum BPM for beat detection.
+    /// </summary>
+    public double MinBPM => _options.MinTempo;
+
+    /// <summary>
+    /// Gets the maximum BPM for beat detection.
+    /// </summary>
+    public double MaxBPM => _options.MaxTempo;
 
     /// <summary>
     /// Creates a new beat tracker.
@@ -45,8 +54,12 @@ public class BeatTracker<T>
     /// <param name="options">Beat tracking options.</param>
     public BeatTracker(BeatTrackerOptions? options = null)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new BeatTrackerOptions();
+
+        // Set base class properties
+        SampleRate = _options.SampleRate;
+        HopLength = _options.HopLength;
+        FftSize = _options.FftSize;
 
         _spectralExtractor = new SpectralFeatureExtractor<T>(new SpectralFeatureOptions
         {
@@ -64,10 +77,10 @@ public class BeatTracker<T>
     public BeatTrackingResult Track(Tensor<T> audio)
     {
         // Compute spectral flux (onset strength)
-        var onsetEnvelope = ComputeOnsetEnvelope(audio);
+        var onsetEnvelope = ComputeOnsetEnvelopeInternal(audio);
 
         // Estimate tempo from onset autocorrelation
-        double tempo = EstimateTempo(onsetEnvelope);
+        double tempo = EstimateTempoFromEnvelope(onsetEnvelope);
 
         // Track beats using dynamic programming
         var beatTimes = TrackBeats(onsetEnvelope, tempo);
@@ -95,7 +108,7 @@ public class BeatTracker<T>
         return Track(tensor);
     }
 
-    private double[] ComputeOnsetEnvelope(Tensor<T> audio)
+    private double[] ComputeOnsetEnvelopeInternal(Tensor<T> audio)
     {
         // Use spectral flux as onset strength
         var features = _spectralExtractor.Extract(audio);
@@ -108,7 +121,7 @@ public class BeatTracker<T>
         for (int f = 0; f < numFrames; f++)
         {
             // Use spectral flux (index 4) as onset strength
-            onsetEnvelope[f] = Math.Max(0, _numOps.ToDouble(features[f, 4]));
+            onsetEnvelope[f] = Math.Max(0, NumOps.ToDouble(features[f, 4]));
         }
 
         // Apply half-wave rectification and smoothing
@@ -130,7 +143,7 @@ public class BeatTracker<T>
         return smoothed;
     }
 
-    private double EstimateTempo(double[] onsetEnvelope)
+    private double EstimateTempoFromEnvelope(double[] onsetEnvelope)
     {
         // Compute autocorrelation of onset envelope
         int maxLag = (int)(_options.SampleRate / _options.HopLength * 60.0 / _options.MinTempo);

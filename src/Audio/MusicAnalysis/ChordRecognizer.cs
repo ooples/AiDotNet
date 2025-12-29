@@ -31,9 +31,8 @@ namespace AiDotNet.Audio.MusicAnalysis;
 /// </code>
 /// </para>
 /// </remarks>
-public class ChordRecognizer<T>
+public class ChordRecognizer<T> : MusicAnalysisBase<T>
 {
-    private readonly INumericOperations<T> _numOps;
     private readonly ChromaExtractor<T> _chromaExtractor;
     private readonly ChordRecognizerOptions _options;
     private readonly Dictionary<string, double[]> _chordTemplates;
@@ -47,8 +46,12 @@ public class ChordRecognizer<T>
     /// <param name="options">Chord recognition options.</param>
     public ChordRecognizer(ChordRecognizerOptions? options = null)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new ChordRecognizerOptions();
+
+        // Set base class properties
+        SampleRate = _options.SampleRate;
+        HopLength = _options.HopLength;
+        FftSize = _options.FftSize;
 
         _chromaExtractor = new ChromaExtractor<T>(new ChromaOptions
         {
@@ -174,7 +177,7 @@ public class ChordRecognizer<T>
 
             for (int c = 0; c < 12; c++)
             {
-                chromaVector[c] = _numOps.ToDouble(chroma[f, c]);
+                chromaVector[c] = NumOps.ToDouble(chroma[f, c]);
                 maxChroma = Math.Max(maxChroma, chromaVector[c]);
             }
 

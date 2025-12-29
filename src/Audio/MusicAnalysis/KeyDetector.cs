@@ -34,9 +34,8 @@ namespace AiDotNet.Audio.MusicAnalysis;
 /// </code>
 /// </para>
 /// </remarks>
-public class KeyDetector<T>
+public class KeyDetector<T> : MusicAnalysisBase<T>
 {
-    private readonly INumericOperations<T> _numOps;
     private readonly ChromaExtractor<T> _chromaExtractor;
     private readonly KeyDetectorOptions _options;
     private readonly double[,] _majorProfiles;
@@ -61,8 +60,12 @@ public class KeyDetector<T>
     /// <param name="options">Key detection options.</param>
     public KeyDetector(KeyDetectorOptions? options = null)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new KeyDetectorOptions();
+
+        // Set base class properties
+        SampleRate = _options.SampleRate;
+        HopLength = _options.HopLength;
+        FftSize = _options.FftSize;
 
         _chromaExtractor = new ChromaExtractor<T>(new ChromaOptions
         {
@@ -153,7 +156,7 @@ public class KeyDetector<T>
         {
             for (int c = 0; c < 12; c++)
             {
-                avgChroma[c] += _numOps.ToDouble(chroma[f, c]);
+                avgChroma[c] += NumOps.ToDouble(chroma[f, c]);
             }
         }
 
