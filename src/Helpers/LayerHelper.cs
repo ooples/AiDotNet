@@ -4630,4 +4630,183 @@ public static class LayerHelper<T>
         // Output projection to vocabulary
         yield return new DenseLayer<T>(modelDimension, vocabularySize, identityActivation);
     }
+
+    #region Language Identification Layers
+
+    /// <summary>
+    /// Creates default ECAPA-TDNN layers for spoken language identification.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numMels">Number of mel filterbank channels (default: 80).</param>
+    /// <param name="tdnnChannels">Number of TDNN channels (default: 1024).</param>
+    /// <param name="embeddingDimension">Embedding dimension (default: 192).</param>
+    /// <param name="numLanguages">Number of languages to classify (default: 20).</param>
+    /// <param name="dilations">Dilation factors for TDNN layers (default: [1, 2, 3, 4, 1]).</param>
+    /// <returns>A collection of layers forming an ECAPA-TDNN language identifier.</returns>
+    /// <remarks>
+    /// <para>
+    /// ECAPA-TDNN (Emphasized Channel Attention, Propagation and Aggregation TDNN)
+    /// is a state-of-the-art architecture for speaker and language recognition using:
+    /// - SE-Res2Net blocks with channel attention
+    /// - Multi-layer feature aggregation (MFA)
+    /// - Attentive statistics pooling
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultECAPATDNNLanguageIdentifierLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numMels = 80,
+        int tdnnChannels = 1024,
+        int embeddingDimension = 192,
+        int numLanguages = 20,
+        int[]? dilations = null)
+    {
+        dilations ??= [1, 2, 3, 4, 1];
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
+
+        int inputDim = numMels * 3; // MFCC + delta + delta-delta
+
+        // Initial TDNN layer
+        yield return new DenseLayer<T>(inputDim, tdnnChannels, reluActivation);
+        yield return new BatchNormalizationLayer<T>(tdnnChannels);
+
+        // SE-Res2Net blocks for each dilation
+        foreach (int dilation in dilations)
+        {
+            // 1x1 reduction
+            yield return new DenseLayer<T>(tdnnChannels, tdnnChannels / 4, reluActivation);
+            yield return new BatchNormalizationLayer<T>(tdnnChannels / 4);
+
+            // Dilated conv (simulated)
+            yield return new DenseLayer<T>(tdnnChannels / 4, tdnnChannels / 4, reluActivation);
+            yield return new BatchNormalizationLayer<T>(tdnnChannels / 4);
+
+            // 1x1 expansion
+            yield return new DenseLayer<T>(tdnnChannels / 4, tdnnChannels, reluActivation);
+            yield return new BatchNormalizationLayer<T>(tdnnChannels);
+
+            // Squeeze-Excitation block
+            int seReduction = 8;
+            yield return new DenseLayer<T>(tdnnChannels, tdnnChannels / seReduction, reluActivation);
+            yield return new DenseLayer<T>(tdnnChannels / seReduction, tdnnChannels, sigmoidActivation);
+        }
+
+        // Attentive Statistics Pooling projection
+        int mfaOutputDim = tdnnChannels * dilations.Length;
+        yield return new DenseLayer<T>(mfaOutputDim, embeddingDimension * 2);
+
+        // Final batch normalization
+        yield return new BatchNormalizationLayer<T>(embeddingDimension);
+
+        // Classification layer
+        yield return new DenseLayer<T>(embeddingDimension, numLanguages);
+    }
+
+    /// <summary>
+    /// Creates default Wav2Vec2 layers for spoken language identification.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="hiddenSize">Hidden size of transformer (default: 768).</param>
+    /// <param name="numLayers">Number of transformer layers (default: 12).</param>
+    /// <param name="numAttentionHeads">Number of attention heads (default: 12).</param>
+    /// <param name="intermediateSize">Feed-forward intermediate size (default: 3072).</param>
+    /// <param name="numLanguages">Number of languages to classify (default: 20).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers forming a Wav2Vec2 language identifier.</returns>
+    /// <remarks>
+    /// <para>
+    /// Wav2Vec2-LID uses Meta's self-supervised speech representation model:
+    /// - 7-layer CNN feature encoder processing raw waveform
+    /// - Transformer encoder for contextual representations
+    /// - Classification head for language prediction
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultWav2Vec2LanguageIdentifierLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenSize = 768,
+        int numLayers = 12,
+        int numAttentionHeads = 12,
+        int intermediateSize = 3072,
+        int numLanguages = 20,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> tanhActivation = new TanhActivation<T>();
+
+        // Feature encoder: 7 temporal convolution layers
+        int[] kernelSizes = [10, 3, 3, 3, 3, 2, 2];
+        int[] channels = [512, 512, 512, 512, 512, 512, 512];
+
+        int inputDim = 1; // Raw waveform
+        for (int i = 0; i < kernelSizes.Length; i++)
+        {
+            int outputDim = channels[i];
+            yield return new DenseLayer<T>(inputDim * kernelSizes[i], outputDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(outputDim);
+            inputDim = outputDim;
+        }
+
+        // Feature projection
+        yield return new DenseLayer<T>(channels[^1], hiddenSize, geluActivation);
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Transformer encoder layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Self-attention (simplified as dense)
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize);
+            yield return new LayerNormalizationLayer<T>(hiddenSize);
+
+            // Feed-forward
+            yield return new DenseLayer<T>(hiddenSize, intermediateSize, geluActivation);
+            yield return new DenseLayer<T>(intermediateSize, hiddenSize);
+            yield return new LayerNormalizationLayer<T>(hiddenSize);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Classification head
+        yield return new DenseLayer<T>(hiddenSize, hiddenSize, tanhActivation);
+        yield return new DenseLayer<T>(hiddenSize, numLanguages);
+    }
+
+    /// <summary>
+    /// Creates default VoxLingua107 layers for 107-language identification.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numMels">Number of mel filterbank channels (default: 80).</param>
+    /// <param name="tdnnChannels">Number of TDNN channels (default: 1024).</param>
+    /// <param name="embeddingDimension">Embedding dimension (default: 256).</param>
+    /// <param name="dilations">Dilation factors for TDNN layers (default: [1, 2, 3, 4, 1]).</param>
+    /// <returns>A collection of layers forming a VoxLingua107 language identifier.</returns>
+    /// <remarks>
+    /// <para>
+    /// VoxLingua107 uses ECAPA-TDNN architecture trained on 107 languages from
+    /// the VoxLingua107 dataset (YouTube speech samples).
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultVoxLingua107Layers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numMels = 80,
+        int tdnnChannels = 1024,
+        int embeddingDimension = 256,
+        int[]? dilations = null)
+    {
+        // VoxLingua107 uses ECAPA-TDNN with 107 output classes
+        return CreateDefaultECAPATDNNLanguageIdentifierLayers(
+            architecture,
+            numMels: numMels,
+            tdnnChannels: tdnnChannels,
+            embeddingDimension: embeddingDimension,
+            numLanguages: 107,
+            dilations: dilations);
+    }
+
+    #endregion
 }
