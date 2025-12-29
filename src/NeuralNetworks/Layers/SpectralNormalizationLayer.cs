@@ -178,12 +178,11 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
         var vReshaped2 = v.Reshape(inputSize, 1);
         var Wv = Engine.TensorMatMul(weights, vReshaped2).Reshape(outputSize);
 
-        // Dot product u^T @ Wv
-        var dotProduct = u.Multiply(Wv);
+        // Dot product u^T @ Wv - computed element-wise for 1D vectors
         T spectralNorm = NumOps.Zero;
-        for (int i = 0; i < dotProduct.Length; i++)
+        for (int i = 0; i < outputSize; i++)
         {
-            spectralNorm = NumOps.Add(spectralNorm, dotProduct[i]);
+            spectralNorm = NumOps.Add(spectralNorm, NumOps.Multiply(u[i], Wv[i]));
         }
 
         return spectralNorm;
@@ -196,65 +195,56 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
     {
         _lastInput = input;
 
-        // Get weights from inner layer and reshape to matrix
+        // Get weights from inner layer
         var parameters = _innerLayer.GetParameters();
-        int outputSize = OutputShape.Aggregate(1, (a, b) => a * b);
-        int inputSize = InputShape.Aggregate(1, (a, b) => a * b);
-        int expectedWeightCount = outputSize * inputSize;
+        int paramCount = parameters.Length;
 
-        // Validate that we have at least enough parameters for the weight matrix
-        if (parameters.Length < expectedWeightCount)
+        if (paramCount == 0)
         {
-            throw new NotSupportedException(
-                $"{nameof(SpectralNormalizationLayer<T>)} requires inner layer to have at least " +
-                $"{expectedWeightCount} parameters for a {outputSize}x{inputSize} weight matrix. " +
-                $"Got {parameters.Length} parameters.");
+            // No parameters to normalize, just forward through inner layer
+            var result = _innerLayer.Forward(input);
+            _lastOutput = result;
+            return result;
         }
 
         // Store original parameters to restore after Backward
         _originalParameters = parameters.Clone();
 
-        // Create weight tensor [outputSize, inputSize]
-        var weights = new Tensor<T>([outputSize, inputSize]);
-        int paramIdx = 0;
-        for (int i = 0; i < outputSize; i++)
+        // Reshape parameters into 2D matrix for spectral norm computation
+        // Use square-ish shape to minimize condition number issues
+        int rows = (int)Math.Ceiling(Math.Sqrt(paramCount));
+        int cols = (paramCount + rows - 1) / rows;
+        int paddedSize = rows * cols;
+
+        // Create weight tensor [rows, cols] with zero-padding if needed
+        var weights = new Tensor<T>([rows, cols]);
+        for (int i = 0; i < rows; i++)
         {
-            for (int j = 0; j < inputSize; j++)
+            for (int j = 0; j < cols; j++)
             {
-                weights[new int[] { i, j }] = parameters[paramIdx++];
+                int idx = i * cols + j;
+                weights[new int[] { i, j }] = idx < paramCount ? parameters[idx] : NumOps.Zero;
             }
+        }
+
+        // Reinitialize u and v if dimensions changed
+        if (_u.Shape[0] != rows || _v.Shape[0] != cols)
+        {
+            _u = Engine.TensorRandomUniformRange<T>([rows], NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
+            _v = Engine.TensorRandomUniformRange<T>([cols], NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
+            NormalizeVector(ref _u);
+            NormalizeVector(ref _v);
         }
 
         // Compute spectral norm
         T spectralNorm = ComputeSpectralNorm(weights);
         T normPlusEps = NumOps.Add(spectralNorm, _epsilon);
 
-        // Normalize weights - element-wise division
-        var normalizedWeights = new Tensor<T>([outputSize, inputSize]);
-        for (int i = 0; i < outputSize; i++)
+        // Normalize all parameters by spectral norm
+        var normalizedParams = new Vector<T>(paramCount);
+        for (int i = 0; i < paramCount; i++)
         {
-            for (int j = 0; j < inputSize; j++)
-            {
-                T weightValue = weights[new int[] { i, j }];
-                normalizedWeights[new int[] { i, j }] = NumOps.Divide(weightValue, normPlusEps);
-            }
-        }
-
-        // Apply normalized weights to inner layer
-        var normalizedParams = new Vector<T>(parameters.Length);
-        paramIdx = 0;
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                normalizedParams[paramIdx] = normalizedWeights[new int[] { i, j }];
-                paramIdx++;
-            }
-        }
-        // Copy any remaining parameters (biases)
-        for (; paramIdx < parameters.Length; paramIdx++)
-        {
-            normalizedParams[paramIdx] = parameters[paramIdx];
+            normalizedParams[i] = NumOps.Divide(parameters[i], normPlusEps);
         }
 
         _innerLayer.SetParameters(normalizedParams);
