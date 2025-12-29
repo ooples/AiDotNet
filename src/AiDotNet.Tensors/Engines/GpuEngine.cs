@@ -148,6 +148,179 @@ internal static class Conv2DKernels
 }
 
 /// <summary>
+/// Parameter struct for tiled matrix multiplication kernel.
+/// </summary>
+internal readonly struct TiledMatMulParams
+{
+    public readonly int M;  // Rows of A and C
+    public readonly int N;  // Columns of B and C
+    public readonly int K;  // Columns of A / Rows of B
+
+    public TiledMatMulParams(int m, int n, int k)
+    {
+        M = m;
+        N = n;
+        K = k;
+    }
+}
+
+/// <summary>
+/// Static helper class for tiled matrix multiply kernels using shared memory.
+/// </summary>
+/// <remarks>
+/// <para><b>Phase B: GPU Performance Optimization</b></para>
+/// <para>
+/// Tiled matrix multiplication dramatically improves performance for large matrices by:
+/// - Loading tiles of A and B into shared memory (fast on-chip memory)
+/// - Reusing data within each tile (reduces global memory bandwidth)
+/// - Coalesced memory access patterns (maximizes memory throughput)
+/// </para>
+/// <para><b>Performance Impact:</b>
+/// - Naive kernel: Each element loads 2K values from global memory
+/// - Tiled kernel: Each tile loads 2*TileSize values, reuses TileSize times
+/// - Expected speedup: 2-10x for large matrices (k >= 1024)
+/// </para>
+/// </remarks>
+internal static class TiledMatMulKernels
+{
+    /// <summary>
+    /// Tile size for shared memory. 32x32 is optimal for most GPUs (1KB per tile).
+    /// Larger tiles have more data reuse but require more shared memory.
+    /// </summary>
+    public const int TileSize = 32;
+
+    /// <summary>
+    /// Tiled matrix multiply kernel for float precision.
+    /// C = A × B^T where B is pre-transposed for coalesced access.
+    /// </summary>
+    /// <param name="group">The thread group (for shared memory and barriers).</param>
+    /// <param name="a">Matrix A [M, K].</param>
+    /// <param name="bT">Matrix B transposed [N, K].</param>
+    /// <param name="c">Result matrix C [M, N].</param>
+    /// <param name="p">Matrix dimensions.</param>
+    public static void TiledMatMulFloatImpl(
+        ArrayView2D<float, Stride2D.DenseX> a,
+        ArrayView2D<float, Stride2D.DenseX> bT,
+        ArrayView2D<float, Stride2D.DenseX> c,
+        TiledMatMulParams p)
+    {
+        // Thread indices within the tile
+        int tx = Group.IdxX;
+        int ty = Group.IdxY;
+
+        // Global row and column indices
+        int row = Group.IdxX + Group.DimX * Grid.IdxX;
+        int col = Group.IdxY + Group.DimY * Grid.IdxY;
+
+        // Allocate shared memory for tiles of A and B^T
+        var tileA = SharedMemory.Allocate2D<float, Stride2D.DenseX>(
+            new Index2D(TileSize, TileSize), new Stride2D.DenseX(TileSize));
+        var tileBT = SharedMemory.Allocate2D<float, Stride2D.DenseX>(
+            new Index2D(TileSize, TileSize), new Stride2D.DenseX(TileSize));
+
+        float sum = 0.0f;
+
+        // Loop over tiles of K dimension
+        int numTiles = (p.K + TileSize - 1) / TileSize;
+        for (int t = 0; t < numTiles; t++)
+        {
+            // Load tile of A into shared memory
+            int aCol = t * TileSize + ty;
+            if (row < p.M && aCol < p.K)
+                tileA[tx, ty] = a[row, aCol];
+            else
+                tileA[tx, ty] = 0.0f;
+
+            // Load tile of B^T into shared memory
+            // B^T[col, k] - we load row 'col' of B^T
+            int bCol = t * TileSize + ty;
+            if (col < p.N && bCol < p.K)
+                tileBT[tx, ty] = bT[col, bCol];
+            else
+                tileBT[tx, ty] = 0.0f;
+
+            // Synchronize to ensure all threads have loaded their tiles
+            Group.Barrier();
+
+            // Compute partial dot product for this tile
+            for (int i = 0; i < TileSize; i++)
+            {
+                sum += tileA[tx, i] * tileBT[ty, i];
+            }
+
+            // Synchronize before loading next tile
+            Group.Barrier();
+        }
+
+        // Write result
+        if (row < p.M && col < p.N)
+            c[row, col] = sum;
+    }
+
+    /// <summary>
+    /// Tiled matrix multiply kernel for double precision.
+    /// C = A × B^T where B is pre-transposed for coalesced access.
+    /// </summary>
+    public static void TiledMatMulDoubleImpl(
+        ArrayView2D<double, Stride2D.DenseX> a,
+        ArrayView2D<double, Stride2D.DenseX> bT,
+        ArrayView2D<double, Stride2D.DenseX> c,
+        TiledMatMulParams p)
+    {
+        // Thread indices within the tile
+        int tx = Group.IdxX;
+        int ty = Group.IdxY;
+
+        // Global row and column indices
+        int row = Group.IdxX + Group.DimX * Grid.IdxX;
+        int col = Group.IdxY + Group.DimY * Grid.IdxY;
+
+        // Allocate shared memory for tiles of A and B^T
+        var tileA = SharedMemory.Allocate2D<double, Stride2D.DenseX>(
+            new Index2D(TileSize, TileSize), new Stride2D.DenseX(TileSize));
+        var tileBT = SharedMemory.Allocate2D<double, Stride2D.DenseX>(
+            new Index2D(TileSize, TileSize), new Stride2D.DenseX(TileSize));
+
+        double sum = 0.0;
+
+        // Loop over tiles of K dimension
+        int numTiles = (p.K + TileSize - 1) / TileSize;
+        for (int t = 0; t < numTiles; t++)
+        {
+            // Load tile of A into shared memory
+            int aCol = t * TileSize + ty;
+            if (row < p.M && aCol < p.K)
+                tileA[tx, ty] = a[row, aCol];
+            else
+                tileA[tx, ty] = 0.0;
+
+            // Load tile of B^T into shared memory
+            int bCol = t * TileSize + ty;
+            if (col < p.N && bCol < p.K)
+                tileBT[tx, ty] = bT[col, bCol];
+            else
+                tileBT[tx, ty] = 0.0;
+
+            // Synchronize to ensure all threads have loaded their tiles
+            Group.Barrier();
+
+            // Compute partial dot product for this tile
+            for (int i = 0; i < TileSize; i++)
+            {
+                sum += tileA[tx, i] * tileBT[ty, i];
+            }
+
+            // Synchronize before loading next tile
+            Group.Barrier();
+        }
+
+        // Write result
+        if (row < p.M && col < p.N)
+            c[row, col] = sum;
+    }
+}
+
+/// <summary>
 /// Parameter struct for LocallyConnectedConv2D kernel.
 /// LocallyConnected layers have position-specific weights (6D tensor).
 /// </summary>
@@ -1623,6 +1796,15 @@ public class GpuEngine : IEngine, IDisposable
     // This avoids catastrophic cache misses when accessing columns of B
     private readonly Action<AcceleratorStream, Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, int>? _matrixMultiplyTransposedBKernelFloat;
     private readonly Action<AcceleratorStream, Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, int>? _matrixMultiplyTransposedBKernelDouble;
+
+    // Tiled matrix multiply kernels using shared memory for large matrices (Phase B: Performance)
+    // These use explicitly grouped kernels with 32x32 thread tiles for optimal cache reuse
+    // NOTE: Currently not used - ILGPU tiled kernels require explicit group configuration
+    // TODO: Implement tiled kernel loading once ILGPU kernel launcher API is finalized
+#pragma warning disable CS0169 // Field is never used (planned for tiled kernel implementation)
+    private readonly Action<AcceleratorStream, KernelConfig, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, TiledMatMulParams>? _tiledMatMulKernelFloat;
+    private readonly Action<AcceleratorStream, KernelConfig, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, TiledMatMulParams>? _tiledMatMulKernelDouble;
+#pragma warning restore CS0169
 
     // Kernel cache for matrix operations - double (Phase B: Epic 2)
     private readonly Action<AcceleratorStream, Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, int>? _matrixMultiplyKernelDouble;
