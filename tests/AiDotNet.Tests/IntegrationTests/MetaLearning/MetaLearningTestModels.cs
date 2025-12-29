@@ -163,7 +163,7 @@ internal class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<dou
     {
         if (stream == null)
             throw new ArgumentNullException(nameof(stream));
-        using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true);
+        using var writer = new StreamWriter(stream, Encoding.UTF8, 1024, leaveOpen: true);
         writer.Write(SerializeParameters());
         writer.Flush();
     }
@@ -172,7 +172,7 @@ internal class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<dou
     {
         if (stream == null)
             throw new ArgumentNullException(nameof(stream));
-        using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 1024, leaveOpen: true);
         DeserializeParameters(reader.ReadToEnd());
     }
 
@@ -221,7 +221,7 @@ internal class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<dou
             return;
         }
 
-        var parts = content.Split(',', StringSplitOptions.RemoveEmptyEntries);
+        var parts = content.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
         var vector = new Vector<double>(parts.Length);
         for (int i = 0; i < parts.Length; i++)
         {
@@ -408,7 +408,7 @@ internal class TensorEmbeddingModel : IFullModel<double, Matrix<double>, Tensor<
     {
         if (stream == null)
             throw new ArgumentNullException(nameof(stream));
-        using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true);
+        using var writer = new StreamWriter(stream, Encoding.UTF8, 1024, leaveOpen: true);
         writer.Write(SerializeParameters());
         writer.Flush();
     }
@@ -417,7 +417,7 @@ internal class TensorEmbeddingModel : IFullModel<double, Matrix<double>, Tensor<
     {
         if (stream == null)
             throw new ArgumentNullException(nameof(stream));
-        using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 1024, leaveOpen: true);
         DeserializeParameters(reader.ReadToEnd());
     }
 
@@ -466,7 +466,7 @@ internal class TensorEmbeddingModel : IFullModel<double, Matrix<double>, Tensor<
             return;
         }
 
-        var parts = content.Split(',', StringSplitOptions.RemoveEmptyEntries);
+        var parts = content.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
         var vector = new Vector<double>(parts.Length);
         for (int i = 0; i < parts.Length; i++)
         {
