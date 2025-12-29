@@ -35,9 +35,9 @@ public class TimeSeriesStatsIntegrationTests
         var actual = Vector<double>.FromArray([1.0, 2.0, 3.0, 4.0, 5.0]);
         var predicted = Vector<double>.FromArray([1.0, 2.0, 3.0, 4.0, 5.0]);
 
-        var ex = Assert.Throws<ArgumentException>(() => 
+        var ex = Assert.Throws<ArgumentException>(() =>
             StatisticsHelper<double>.CalculateDurbinWatsonStatistic(actual, predicted));
-        
+
         Assert.Contains("zero", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -275,9 +275,9 @@ public class TimeSeriesStatsIntegrationTests
         // Constant series has zero variance, so ACF is undefined
         var series = Vector<double>.FromArray([5.0, 5.0, 5.0, 5.0, 5.0]);
 
-        var ex = Assert.Throws<ArgumentException>(() => 
+        var ex = Assert.Throws<ArgumentException>(() =>
             StatisticsHelper<double>.CalculateAutoCorrelationFunction(series, 2));
-        
+
         Assert.Contains("zero variance", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 

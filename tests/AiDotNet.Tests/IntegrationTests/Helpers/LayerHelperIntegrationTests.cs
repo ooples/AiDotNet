@@ -1,8 +1,8 @@
-using Xunit;
-using AiDotNet.Helpers;
-using AiDotNet.NeuralNetworks;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks;
+using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Helpers;
 
