@@ -665,38 +665,46 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _originalInputShape = input.Shape;
         int rank = input.Shape.Length;
 
-        // Handle any-rank tensor: collapse to 2D for processing
-        Tensor<T> processInput;
+        Tensor<T> squeezed;
         int batchSize;
 
         if (rank == 1)
         {
-            // 1D: add batch dim
+            // 1D: [C] -> add batch dim -> [1, C]
             batchSize = 1;
-            processInput = input.Reshape([1, input.Shape[0]]);
+            // No spatial dims to squeeze, just reshape to [1, C]
+            squeezed = input.Reshape([1, input.Shape[0]]);
         }
         else if (rank == 2)
         {
-            // Standard 2D
+            // 2D: [B, C] - no spatial dims, already in "squeezed" form
             batchSize = input.Shape[0];
-            processInput = input;
+            squeezed = input;
+        }
+        else if (rank == 4)
+        {
+            // 4D: Standard SE block case [B, H, W, C]
+            batchSize = input.Shape[0];
+            // Squeeze: Global Average Pooling [B, H, W, C] -> [B, C]
+            squeezed = Engine.ReduceMean(input, new[] { 1, 2 }, keepDims: false);
+        }
+        else if (rank == 3)
+        {
+            // 3D: [B, L, C] - could be sequence data
+            batchSize = input.Shape[0];
+            // Squeeze over dim 1 (sequence length)
+            squeezed = Engine.ReduceMean(input, new[] { 1 }, keepDims: false);
         }
         else
         {
-            // Higher-rank: collapse leading dims into batch
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 1; d++)
-                flatBatch *= input.Shape[d];
-            batchSize = flatBatch;
-            processInput = input.Reshape([flatBatch, input.Shape[rank - 1]]);
+            // Higher-rank: [B, D1, D2, ..., C]
+            // Squeeze over all spatial dimensions (1 to rank-2)
+            batchSize = input.Shape[0];
+            var spatialAxes = Enumerable.Range(1, rank - 2).ToArray();
+            squeezed = Engine.ReduceMean(input, spatialAxes, keepDims: false);
         }
 
-        _lastInput = processInput;
-        // height/width not needed for Engine operations
-
-        // 1. Squeeze: Global Average Pooling [B, H, W, C] -> [B, C]
-        // Use Engine.ReduceMean over spatial dims (1, 2)
-        var squeezed = Engine.ReduceMean(input, new[] { 1, 2 }, keepDims: false);
+        _lastInput = input;
         _lastSqueezed = squeezed;
 
         // 2. Excitation: FC1 + Activation
@@ -722,9 +730,38 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastExcitationWeights = excitation;
 
         // 3. Scale: input * excitation
-        // input: [B, H, W, C], excitation: [B, C]
-        // Reshape excitation to [B, 1, 1, C] for broadcasting
-        var excitationReshaped = excitation.Reshape(batchSize, 1, 1, _channels);
+        // Reshape excitation to match input rank for broadcasting
+        Tensor<T> excitationReshaped;
+        if (rank == 1)
+        {
+            // [1, C] -> [C] for element-wise multiply with [C]
+            excitationReshaped = excitation.Reshape([_channels]);
+        }
+        else if (rank == 2)
+        {
+            // [B, C] - already correct shape for [B, C] input
+            excitationReshaped = excitation;
+        }
+        else if (rank == 4)
+        {
+            // [B, C] -> [B, 1, 1, C] for broadcasting with [B, H, W, C]
+            excitationReshaped = excitation.Reshape([batchSize, 1, 1, _channels]);
+        }
+        else if (rank == 3)
+        {
+            // [B, C] -> [B, 1, C] for broadcasting with [B, L, C]
+            excitationReshaped = excitation.Reshape([batchSize, 1, _channels]);
+        }
+        else
+        {
+            // Higher-rank: expand dims for all spatial dimensions
+            var shape = new int[rank];
+            shape[0] = batchSize;
+            for (int i = 1; i < rank - 1; i++)
+                shape[i] = 1;
+            shape[rank - 1] = _channels;
+            excitationReshaped = excitation.Reshape(shape);
+        }
 
         var output = Engine.TensorBroadcastMultiply(input, excitationReshaped);
 
@@ -876,15 +913,42 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        int batchSize = _lastInput.Shape[0];
+        int rank = _lastInput.Shape.Length;
+        int batchSize = rank == 1 ? 1 : _lastInput.Shape[0];
 
         // Build computation graph mirroring Forward
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
 
-        // 1. Squeeze: Global Average Pooling
-        // Input [B, H, W, C] -> [B, C]
-        var axes = new int[] { 1, 2 };
-        var squeezed = Autodiff.TensorOperations<T>.ReduceMean(inputNode, axes, keepDims: false);
+        // 1. Squeeze: Handle different ranks
+        Autodiff.ComputationNode<T> squeezed;
+        if (rank == 1)
+        {
+            // 1D: reshape to [1, C]
+            squeezed = Autodiff.TensorOperations<T>.Reshape(inputNode, new[] { 1, _lastInput.Shape[0] });
+        }
+        else if (rank == 2)
+        {
+            // 2D: already [B, C], no squeeze needed
+            squeezed = inputNode;
+        }
+        else if (rank == 4)
+        {
+            // 4D: Global Average Pooling [B, H, W, C] -> [B, C]
+            var axes = new int[] { 1, 2 };
+            squeezed = Autodiff.TensorOperations<T>.ReduceMean(inputNode, axes, keepDims: false);
+        }
+        else if (rank == 3)
+        {
+            // 3D: [B, L, C] -> [B, C]
+            var axes = new int[] { 1 };
+            squeezed = Autodiff.TensorOperations<T>.ReduceMean(inputNode, axes, keepDims: false);
+        }
+        else
+        {
+            // Higher-rank: squeeze all spatial dimensions
+            var axes = Enumerable.Range(1, rank - 2).ToArray();
+            squeezed = Autodiff.TensorOperations<T>.ReduceMean(inputNode, axes, keepDims: false);
+        }
 
         // 2. Excitation FC1
         var w1Node = Autodiff.TensorOperations<T>.Variable(_weights1, "w1", requiresGradient: true);
@@ -906,9 +970,32 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Activation 2
         var excitation = ApplyActivationToGraphNode(fc2Biased, false);
 
-        // 3. Scale
-        // excitation [B, C] -> [B, 1, 1, C]
-        var reshapeShape = new int[] { batchSize, 1, 1, _channels };
+        // 3. Scale: reshape excitation to match input rank
+        int[] reshapeShape;
+        if (rank == 1)
+        {
+            reshapeShape = new int[] { _channels };
+        }
+        else if (rank == 2)
+        {
+            reshapeShape = new int[] { batchSize, _channels };
+        }
+        else if (rank == 4)
+        {
+            reshapeShape = new int[] { batchSize, 1, 1, _channels };
+        }
+        else if (rank == 3)
+        {
+            reshapeShape = new int[] { batchSize, 1, _channels };
+        }
+        else
+        {
+            reshapeShape = new int[rank];
+            reshapeShape[0] = batchSize;
+            for (int i = 1; i < rank - 1; i++)
+                reshapeShape[i] = 1;
+            reshapeShape[rank - 1] = _channels;
+        }
         var excitationReshaped = Autodiff.TensorOperations<T>.Reshape(excitation, reshapeShape);
 
         var outputNode = Autodiff.TensorOperations<T>.ElementwiseMultiply(inputNode, excitationReshaped);
@@ -993,11 +1080,60 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_lastInput == null || _lastOutput == null || _lastExcitationWeights == null || _lastSqueezed == null || _lastFc1Biased == null || _lastFc1Activated == null || _lastFc2Biased == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        int batchSize = _lastInput.Shape[0];
-        var inputGradientDirect = Engine.TensorMultiply(outputGradient, _lastExcitationWeights.Reshape(batchSize, 1, 1, _channels));
+        int rank = _lastInput.Shape.Length;
+        int batchSize = rank == 1 ? 1 : _lastInput.Shape[0];
+
+        // Reshape excitation weights to match input shape for broadcasting
+        Tensor<T> excitationReshaped;
+        int[] spatialAxes;
+        if (rank == 1)
+        {
+            excitationReshaped = _lastExcitationWeights.Reshape([_channels]);
+            spatialAxes = Array.Empty<int>();
+        }
+        else if (rank == 2)
+        {
+            excitationReshaped = _lastExcitationWeights;
+            spatialAxes = Array.Empty<int>();
+        }
+        else if (rank == 4)
+        {
+            excitationReshaped = _lastExcitationWeights.Reshape([batchSize, 1, 1, _channels]);
+            spatialAxes = new[] { 1, 2 };
+        }
+        else if (rank == 3)
+        {
+            excitationReshaped = _lastExcitationWeights.Reshape([batchSize, 1, _channels]);
+            spatialAxes = new[] { 1 };
+        }
+        else
+        {
+            var shape = new int[rank];
+            shape[0] = batchSize;
+            for (int i = 1; i < rank - 1; i++)
+                shape[i] = 1;
+            shape[rank - 1] = _channels;
+            excitationReshaped = _lastExcitationWeights.Reshape(shape);
+            spatialAxes = Enumerable.Range(1, rank - 2).ToArray();
+        }
+
+        var inputGradientDirect = Engine.TensorMultiply(outputGradient, excitationReshaped);
 
         var excitationGradientSpatial = Engine.TensorMultiply(outputGradient, _lastInput);
-        var excitationGradient = Engine.ReduceSum(excitationGradientSpatial, new[] { 1, 2 }, keepDims: false);
+        Tensor<T> excitationGradient;
+        if (spatialAxes.Length > 0)
+        {
+            excitationGradient = Engine.ReduceSum(excitationGradientSpatial, spatialAxes, keepDims: false);
+        }
+        else
+        {
+            // For 1D and 2D, excitation gradient is already in correct shape
+            excitationGradient = excitationGradientSpatial;
+            if (rank == 1)
+            {
+                excitationGradient = excitationGradientSpatial.Reshape([1, _channels]);
+            }
+        }
 
         var secondActivationDerivative = ApplyTensorActivationDerivative(_lastFc2Biased, isFirstActivation: false);
         var fc2OutputGradient = Engine.TensorMultiply(excitationGradient, secondActivationDerivative);
@@ -1014,7 +1150,24 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _bias1Gradient = Engine.ReduceSum(fc1Gradient, new[] { 0 }, keepDims: false);
 
         var squeezedGradient = Engine.TensorMatMul(fc1Gradient, Engine.TensorTranspose(_weights1));
-        var squeezeBackprop = Engine.ReduceMeanBackward(squeezedGradient, _lastInput.Shape, new[] { 1, 2 });
+
+        Tensor<T> squeezeBackprop;
+        if (spatialAxes.Length > 0)
+        {
+            squeezeBackprop = Engine.ReduceMeanBackward(squeezedGradient, _lastInput.Shape, spatialAxes);
+        }
+        else
+        {
+            // For 1D and 2D, no spatial reduction was done
+            if (rank == 1)
+            {
+                squeezeBackprop = squeezedGradient.Reshape([_channels]);
+            }
+            else
+            {
+                squeezeBackprop = squeezedGradient;
+            }
+        }
 
         var inputGradient = Engine.TensorAdd(inputGradientDirect, squeezeBackprop);
         return inputGradient;

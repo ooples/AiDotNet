@@ -625,7 +625,8 @@ public class NormalizationLayersIntegrationTests
         int batchSize = 4;
         int numFeatures = 16;
         var constantData = new float[batchSize * numFeatures];
-        Array.Fill(constantData, 0.5f);
+        for (int i = 0; i < constantData.Length; i++)
+            constantData[i] = 0.5f;
         var input = new Tensor<float>(constantData, [batchSize, numFeatures]);
 
         var batchNorm = new BatchNormalizationLayer<float>(numFeatures);
