@@ -109,18 +109,23 @@ public class LogisticRegression<T> : RegressionBase<T>
         Intercept = NumOps.Zero;
         // Apply regularization to the input matrix
         Matrix<T> regularizedX = Regularization != null ? Regularization.Regularize(x) : x;
+        T learningRate = NumOps.FromDouble(_options.LearningRate);
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
             Vector<T> predictions = Predict(regularizedX);
             Vector<T> errors = y.Subtract(predictions);
+            // Calculate gradient: X^T * (y - predictions)
             Vector<T> gradient = regularizedX.Transpose().Multiply(errors);
             // Apply regularization to the gradient
             if (Regularization != null)
             {
                 gradient = ApplyRegularizationGradient(gradient);
             }
-            Coefficients = Coefficients.Add(gradient.Multiply(NumOps.FromDouble(_options.LearningRate)));
-            Intercept = NumOps.Add(Intercept, NumOps.Multiply(NumOps.FromDouble(_options.LearningRate), errors.Sum()));
+            // Update coefficients: coef += learning_rate * gradient
+            Coefficients = Coefficients.Add(gradient.Multiply(learningRate));
+            // Update intercept: intercept += learning_rate * sum(errors)
+            T interceptGrad = errors.Sum();
+            Intercept = NumOps.Add(Intercept, NumOps.Multiply(learningRate, interceptGrad));
             if (HasConverged(gradient))
                 break;
         }

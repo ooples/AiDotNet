@@ -103,14 +103,9 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
         // Compute RBF features
         Matrix<T> rbfFeatures = ComputeRBFFeatures(x);
 
-        // Apply regularization to the RBF features
-        rbfFeatures = Regularization.Regularize(rbfFeatures);
-
         // Solve for weights using linear regression
+        // Note: Regularization is applied within SolveLinearRegression via ridge penalty
         _weights = SolveLinearRegression(rbfFeatures, y);
-
-        // Apply regularization to the weights
-        _weights = Regularization.Regularize(_weights);
     }
 
     /// <summary>
@@ -133,9 +128,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         Matrix<T> rbfFeatures = ComputeRBFFeatures(input);
-        // Apply regularization to the RBF features before prediction
-        rbfFeatures = Regularization.Regularize(rbfFeatures);
-
+        // RBF features are computed directly - no transformation needed
         return rbfFeatures.Multiply(_weights);
     }
 
@@ -159,9 +152,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     protected override T PredictSingle(Vector<T> input)
     {
         Vector<T> rbfFeatures = ComputeRBFFeaturesSingle(input);
-        // Apply regularization to the RBF features before prediction
-        rbfFeatures = Regularization.Regularize(rbfFeatures);
-
+        // RBF features are computed directly - no transformation needed
         return rbfFeatures.DotProduct(_weights);
     }
 

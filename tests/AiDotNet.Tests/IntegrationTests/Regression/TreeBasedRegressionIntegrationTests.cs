@@ -1,3 +1,6 @@
+using AiDotNet.Enums;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
 using Xunit;
@@ -424,6 +427,234 @@ public class TreeBasedRegressionIntegrationTests
 
         // Assert - should return predictions for each quantile
         Assert.NotNull(predictions);
+    }
+
+    #endregion
+
+    #region ConditionalInferenceTreeRegression Tests
+
+    [Fact]
+    public void ConditionalInferenceTreeRegression_Train_SimpleData_FitsWithinBounds()
+    {
+        // Arrange
+        var options = new ConditionalInferenceTreeOptions
+        {
+            MaxDepth = 5,
+            MinSamplesSplit = 2,
+            // Use higher significance level to allow more splits with small sample size
+            SignificanceLevel = 0.15
+        };
+        var regression = new ConditionalInferenceTreeRegression<double>(options);
+        var x = CreateMatrix(new double[,]
+        {
+            { 1 }, { 2 }, { 3 }, { 4 }, { 5 },
+            { 6 }, { 7 }, { 8 }, { 9 }, { 10 }
+        });
+        var y = CreateVector(new double[] { 2, 4, 6, 8, 10, 12, 14, 16, 18, 20 });
+
+        // Act
+        regression.Train(x, y);
+        var predictions = regression.Predict(x);
+
+        // Assert - tree should fit training data reasonably
+        for (int i = 0; i < y.Length; i++)
+        {
+            Assert.True(Math.Abs(predictions[i] - y[i]) < LooseTolerance * 5,
+                $"Prediction {i} should be close to {y[i]}, got {predictions[i]}");
+        }
+    }
+
+    [Fact]
+    public void ConditionalInferenceTreeRegression_Train_WithSignificanceTest_SelectsFeatures()
+    {
+        // Arrange
+        var options = new ConditionalInferenceTreeOptions
+        {
+            MaxDepth = 5,
+            MinSamplesSplit = 2,
+            SignificanceLevel = 0.05  // Only split on statistically significant features
+        };
+        var regression = new ConditionalInferenceTreeRegression<double>(options);
+
+        // Create data where only first feature matters
+        var x = CreateMatrix(new double[,]
+        {
+            { 1, 100 }, { 2, 200 }, { 3, 300 }, { 4, 400 }, { 5, 500 },
+            { 6, 100 }, { 7, 200 }, { 8, 300 }, { 9, 400 }, { 10, 500 }
+        });
+        var y = CreateVector(new double[] { 2, 4, 6, 8, 10, 12, 14, 16, 18, 20 }); // y = 2*x1
+
+        // Act
+        regression.Train(x, y);
+        var predictions = regression.Predict(x);
+
+        // Assert - predictions should be reasonable
+        Assert.Equal(y.Length, predictions.Length);
+    }
+
+    [Fact]
+    public void ConditionalInferenceTreeRegression_GetModelMetadata_ReturnsCorrectInfo()
+    {
+        // Arrange
+        var options = new ConditionalInferenceTreeOptions
+        {
+            MaxDepth = 3,
+            MinSamplesSplit = 2,
+            SignificanceLevel = 0.01
+        };
+        var regression = new ConditionalInferenceTreeRegression<double>(options);
+        var x = CreateMatrix(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 } });
+        var y = CreateVector(new double[] { 2, 4, 6, 8, 10 });
+        regression.Train(x, y);
+
+        // Act
+        var metadata = regression.GetModelMetadata();
+
+        // Assert
+        Assert.NotNull(metadata);
+        Assert.Equal(ModelType.ConditionalInferenceTree, metadata.ModelType);
+    }
+
+    #endregion
+
+    #region M5ModelTree Tests
+
+    [Fact]
+    public void M5ModelTree_Train_SimpleData_FitsWithLinearModels()
+    {
+        // Arrange
+        var options = new M5ModelTreeOptions
+        {
+            MaxDepth = 3,
+            MinInstancesPerLeaf = 2
+        };
+        var regression = new M5ModelTree<double>(options);
+        var x = CreateMatrix(new double[,]
+        {
+            { 1 }, { 2 }, { 3 }, { 4 }, { 5 },
+            { 6 }, { 7 }, { 8 }, { 9 }, { 10 }
+        });
+        var y = CreateVector(new double[] { 2, 4, 6, 8, 10, 12, 14, 16, 18, 20 });
+
+        // Act
+        regression.Train(x, y);
+        var predictions = regression.Predict(x);
+
+        // Assert - M5 should fit linear data very well
+        for (int i = 0; i < y.Length; i++)
+        {
+            Assert.True(Math.Abs(predictions[i] - y[i]) < LooseTolerance * 2,
+                $"Prediction {i} should be close to {y[i]}, got {predictions[i]}");
+        }
+    }
+
+    [Fact]
+    public void M5ModelTree_Train_PiecewiseLinearData_CapturesBothRegimes()
+    {
+        // Arrange
+        var options = new M5ModelTreeOptions
+        {
+            MaxDepth = 5,
+            MinInstancesPerLeaf = 2
+        };
+        var regression = new M5ModelTree<double>(options);
+
+        // Piecewise linear: y = x for x <= 5, y = 2x - 5 for x > 5
+        var x = CreateMatrix(new double[,]
+        {
+            { 1 }, { 2 }, { 3 }, { 4 }, { 5 },
+            { 6 }, { 7 }, { 8 }, { 9 }, { 10 }
+        });
+        var y = CreateVector(new double[] { 1, 2, 3, 4, 5, 7, 9, 11, 13, 15 });
+
+        // Act
+        regression.Train(x, y);
+        var predictions = regression.Predict(x);
+
+        // Assert - should fit both linear segments
+        for (int i = 0; i < y.Length; i++)
+        {
+            Assert.True(Math.Abs(predictions[i] - y[i]) < 2.0,
+                $"Prediction {i} should be close to {y[i]}, got {predictions[i]}");
+        }
+    }
+
+    [Fact]
+    public void M5ModelTree_Predict_NewData_Extrapolates()
+    {
+        // Arrange
+        var options = new M5ModelTreeOptions
+        {
+            MaxDepth = 3,
+            MinInstancesPerLeaf = 2
+        };
+        var regression = new M5ModelTree<double>(options);
+        var x = CreateMatrix(new double[,]
+        {
+            { 1 }, { 2 }, { 3 }, { 4 }, { 5 }
+        });
+        var y = CreateVector(new double[] { 2, 4, 6, 8, 10 });
+        regression.Train(x, y);
+
+        // Act - predict outside training range
+        var newX = CreateMatrix(new double[,] { { 6 }, { 7 } });
+        var predictions = regression.Predict(newX);
+
+        // Assert - M5 with linear models should extrapolate reasonably
+        Assert.Equal(2, predictions.Length);
+        // Predictions should continue the linear trend
+        Assert.True(predictions[0] > 10, "Should extrapolate beyond training data");
+    }
+
+    [Fact]
+    public void M5ModelTree_GetModelMetadata_ReturnsCorrectInfo()
+    {
+        // Arrange
+        var options = new M5ModelTreeOptions
+        {
+            MaxDepth = 3,
+            MinInstancesPerLeaf = 3
+        };
+        var regression = new M5ModelTree<double>(options);
+        var x = CreateMatrix(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 } });
+        var y = CreateVector(new double[] { 2, 4, 6, 8, 10 });
+        regression.Train(x, y);
+
+        // Act
+        var metadata = regression.GetModelMetadata();
+
+        // Assert
+        Assert.NotNull(metadata);
+        Assert.Equal(ModelType.M5ModelTree, metadata.ModelType);
+    }
+
+    [Fact]
+    public void M5ModelTree_SerializeDeserialize_PreservesModel()
+    {
+        // Arrange
+        var options = new M5ModelTreeOptions
+        {
+            MaxDepth = 3,
+            MinInstancesPerLeaf = 2
+        };
+        var regression = new M5ModelTree<double>(options);
+        var x = CreateMatrix(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 } });
+        var y = CreateVector(new double[] { 2, 4, 6, 8, 10 });
+        regression.Train(x, y);
+
+        // Act
+        var serialized = regression.Serialize();
+        var newRegression = new M5ModelTree<double>(options);
+        newRegression.Deserialize(serialized);
+
+        // Assert
+        var originalPreds = regression.Predict(x);
+        var newPreds = newRegression.Predict(x);
+
+        for (int i = 0; i < originalPreds.Length; i++)
+        {
+            Assert.Equal(originalPreds[i], newPreds[i], LooseTolerance);
+        }
     }
 
     #endregion

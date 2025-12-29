@@ -612,17 +612,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     private Vector<T> ApplyActivationDerivative(Vector<T> input, bool isOutputLayer)
     {
-        // First check if vector activation is available
-        var vectorActivation = isOutputLayer
-            ? _options.OutputVectorActivation
-            : _options.HiddenVectorActivation;
-
-        if (vectorActivation != null)
-        {
-            return vectorActivation.Derivative(input).ToVector();
-        }
-
-        // Fall back to scalar activation
+        // First check if scalar activation is available (most common case for element-wise operations)
         var scalarActivation = isOutputLayer
             ? _options.OutputActivationFunction
             : _options.HiddenActivationFunction;
@@ -630,6 +620,25 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
         if (scalarActivation != null)
         {
             return input.Transform(x => scalarActivation.Derivative(x));
+        }
+
+        // Fall back to vector activation - Derivative returns a Jacobian matrix,
+        // so we extract the diagonal for element-wise activation functions
+        var vectorActivation = isOutputLayer
+            ? _options.OutputVectorActivation
+            : _options.HiddenVectorActivation;
+
+        if (vectorActivation != null)
+        {
+            var jacobian = vectorActivation.Derivative(input);
+            // Extract diagonal from Jacobian matrix for element-wise activation functions
+            int size = Math.Min(jacobian.Rows, jacobian.Columns);
+            var diagonal = new Vector<T>(size);
+            for (int i = 0; i < size; i++)
+            {
+                diagonal[i] = jacobian[i, i];
+            }
+            return diagonal;
         }
 
         // If no activation function is specified, return ones (derivative of identity function)

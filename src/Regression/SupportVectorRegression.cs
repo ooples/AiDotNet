@@ -122,14 +122,9 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
-        // Apply regularization to the input matrix
-        Matrix<T> regularizedX = Regularization.Regularize(x);
-
-        // Implement SMO algorithm for SVR with regularized input
-        SequentialMinimalOptimization(regularizedX, y);
-
-        // Apply regularization to the coefficients (alphas)
-        Alphas = Regularization.Regularize(Alphas);
+        // Note: SVR regularization is controlled through the C parameter (penalty),
+        // not through data transformation
+        SequentialMinimalOptimization(x, y);
     }
 
     /// <summary>
@@ -159,13 +154,11 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        // Apply regularization to the input matrix for prediction
-        Matrix<T> regularizedInput = Regularization.Regularize(input);
-
-        var predictions = new Vector<T>(regularizedInput.Rows);
-        for (int i = 0; i < regularizedInput.Rows; i++)
+        // Note: SVR doesn't transform input data - predictions use kernel similarity
+        var predictions = new Vector<T>(input.Rows);
+        for (int i = 0; i < input.Rows; i++)
         {
-            predictions[i] = PredictSingle(regularizedInput.GetRow(i));
+            predictions[i] = PredictSingle(input.GetRow(i));
         }
 
         return predictions;
@@ -251,67 +244,121 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     {
         int m = x.Rows;
         Alphas = new Vector<T>(m);
-        Vector<T> errors = new(m);
 
+        // Precompute kernel matrix for efficiency
+        var K = new Matrix<T>(m, m);
+        for (int ki = 0; ki < m; ki++)
+            for (int kj = 0; kj <= ki; kj++)
+            {
+                K[ki, kj] = KernelFunction(x.GetRow(ki), x.GetRow(kj));
+                K[kj, ki] = K[ki, kj]; // Kernel matrix is symmetric
+            }
+
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+        T C = NumOps.FromDouble(_options.C);
+        T negC = NumOps.Negate(C);
+
+        // Initialize bias to mean of y
+        T sumY = NumOps.Zero;
+        for (int i = 0; i < m; i++)
+            sumY = NumOps.Add(sumY, y[i]);
+        B = NumOps.Divide(sumY, NumOps.FromDouble(m));
+
+        // SMO-style optimization
         for (int iter = 0; iter < _options.MaxIterations; iter++)
         {
             int numChangedAlphas = 0;
+
             for (int i = 0; i < m; i++)
             {
-                T Ei = NumOps.Subtract(PredictSingle(x.GetRow(i)), y[i]);
-                if ((NumOps.LessThan(y[i], NumOps.Subtract(PredictSingle(x.GetRow(i)), NumOps.FromDouble(_options.Epsilon))) && NumOps.LessThan(Alphas[i], NumOps.FromDouble(_options.C))) ||
-                    (NumOps.GreaterThan(y[i], NumOps.Add(PredictSingle(x.GetRow(i)), NumOps.FromDouble(_options.Epsilon))) && NumOps.GreaterThan(Alphas[i], NumOps.Zero)))
+                // Compute prediction and error for sample i
+                T fi = B;
+                for (int idx = 0; idx < m; idx++)
+                    fi = NumOps.Add(fi, NumOps.Multiply(Alphas[idx], K[i, idx]));
+                T Ei = NumOps.Subtract(fi, y[i]);
+
+                // Check KKT conditions
+                T yMinusEps = NumOps.Subtract(y[i], epsilon);
+                T yPlusEps = NumOps.Add(y[i], epsilon);
+                bool violatesKKT = (NumOps.LessThan(fi, yMinusEps) && NumOps.LessThan(Alphas[i], C)) ||
+                                   (NumOps.GreaterThan(fi, yPlusEps) && NumOps.GreaterThan(Alphas[i], negC));
+
+                if (!violatesKKT) continue;
+
+                // Select second alpha (j != i with largest |Ei - Ej|)
+                int j = (i + 1) % m;
+                T maxDiff = NumOps.Zero;
+                for (int k = 0; k < m; k++)
                 {
-                    int j = SelectSecondAlpha(i, m);
-                    T Ej = NumOps.Subtract(PredictSingle(x.GetRow(j)), y[j]);
-
-                    T oldAi = Alphas[i];
-                    T oldAj = Alphas[j];
-
-                    (T L, T H) = ComputeBounds(y[i], y[j], Alphas[i], Alphas[j]);
-
-                    if (NumOps.Equals(L, H)) continue;
-
-                    T eta = NumOps.Subtract(
-                        NumOps.Subtract(
-                            NumOps.Multiply(NumOps.FromDouble(2), KernelFunction(x.GetRow(i), x.GetRow(j))),
-                            KernelFunction(x.GetRow(i), x.GetRow(i))
-                        ),
-                        KernelFunction(x.GetRow(j), x.GetRow(j))
-                    );
-
-                    if (NumOps.GreaterThanOrEquals(eta, NumOps.Zero)) continue;
-
-                    Alphas[j] = NumOps.Subtract(Alphas[j], NumOps.Divide(NumOps.Multiply(y[j], NumOps.Subtract(Ei, Ej)), eta));
-                    Alphas[j] = Clip(Alphas[j], L, H);
-
-                    if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(Alphas[j], oldAj)), NumOps.FromDouble(1e-5)))
-                        continue;
-
-                    Alphas[i] = NumOps.Add(Alphas[i], NumOps.Multiply(NumOps.Multiply(y[i], y[j]), NumOps.Subtract(oldAj, Alphas[j])));
-
-                    T b1 = NumOps.Add(B, NumOps.Subtract(Ei, NumOps.Multiply(NumOps.Multiply(y[i], NumOps.Subtract(Alphas[i], oldAi)), KernelFunction(x.GetRow(i), x.GetRow(i)))));
-                    b1 = NumOps.Subtract(b1, NumOps.Multiply(NumOps.Multiply(y[j], NumOps.Subtract(Alphas[j], oldAj)), KernelFunction(x.GetRow(i), x.GetRow(j))));
-
-                    T b2 = NumOps.Add(B, NumOps.Subtract(Ej, NumOps.Multiply(NumOps.Multiply(y[i], NumOps.Subtract(Alphas[i], oldAi)), KernelFunction(x.GetRow(i), x.GetRow(j)))));
-                    b2 = NumOps.Subtract(b2, NumOps.Multiply(NumOps.Multiply(y[j], NumOps.Subtract(Alphas[j], oldAj)), KernelFunction(x.GetRow(j), x.GetRow(j))));
-
-                    if (NumOps.GreaterThan(Alphas[i], NumOps.Zero) && NumOps.LessThan(Alphas[i], NumOps.FromDouble(_options.C)))
-                        B = b1;
-                    else if (NumOps.GreaterThan(Alphas[j], NumOps.Zero) && NumOps.LessThan(Alphas[j], NumOps.FromDouble(_options.C)))
-                        B = b2;
-                    else
-                        B = NumOps.Divide(NumOps.Add(b1, b2), NumOps.FromDouble(2));
-
-                    numChangedAlphas++;
+                    if (k == i) continue;
+                    T fk = B;
+                    for (int l = 0; l < m; l++)
+                        fk = NumOps.Add(fk, NumOps.Multiply(Alphas[l], K[k, l]));
+                    T Ek = NumOps.Subtract(fk, y[k]);
+                    T diff = NumOps.Abs(NumOps.Subtract(Ei, Ek));
+                    if (NumOps.GreaterThan(diff, maxDiff))
+                    {
+                        maxDiff = diff;
+                        j = k;
+                    }
                 }
+
+                T Ej = NumOps.Subtract(
+                    NumOps.Add(B, K.GetRow(j).Zip(Alphas, (k, a) => NumOps.Multiply(k, a)).Aggregate(NumOps.Zero, (acc, v) => NumOps.Add(acc, v))),
+                    y[j]);
+
+                T oldAi = Alphas[i];
+                T oldAj = Alphas[j];
+
+                // Compute eta = 2*K(i,j) - K(i,i) - K(j,j)
+                T eta = NumOps.Subtract(
+                    NumOps.Subtract(NumOps.Multiply(NumOps.FromDouble(2), K[i, j]), K[i, i]),
+                    K[j, j]);
+
+                if (NumOps.GreaterThanOrEquals(eta, NumOps.Zero)) continue;
+
+                // Compute new alpha_j: for SVR, use error-based update
+                // alpha_j_new = alpha_j - (Ei - Ej) / eta
+                Alphas[j] = NumOps.Subtract(Alphas[j],
+                    NumOps.Divide(NumOps.Subtract(Ei, Ej), eta));
+
+                // Compute bounds for alpha_j
+                T sum = NumOps.Add(oldAi, oldAj);
+                T L = MathHelper.Max(negC, NumOps.Subtract(sum, C));
+                T H = MathHelper.Min(C, NumOps.Add(sum, C));
+                Alphas[j] = Clip(Alphas[j], L, H);
+
+                if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(Alphas[j], oldAj)), NumOps.FromDouble(1e-5)))
+                    continue;
+
+                // Update alpha_i to maintain sum constraint
+                Alphas[i] = NumOps.Add(oldAi, NumOps.Subtract(oldAj, Alphas[j]));
+                Alphas[i] = Clip(Alphas[i], negC, C);
+
+                // Update bias
+                T deltaAi = NumOps.Subtract(Alphas[i], oldAi);
+                T deltaAj = NumOps.Subtract(Alphas[j], oldAj);
+
+                T b1 = NumOps.Subtract(B, NumOps.Add(Ei,
+                    NumOps.Add(NumOps.Multiply(deltaAi, K[i, i]), NumOps.Multiply(deltaAj, K[i, j]))));
+                T b2 = NumOps.Subtract(B, NumOps.Add(Ej,
+                    NumOps.Add(NumOps.Multiply(deltaAi, K[i, j]), NumOps.Multiply(deltaAj, K[j, j]))));
+
+                if (NumOps.GreaterThan(Alphas[i], negC) && NumOps.LessThan(Alphas[i], C))
+                    B = b1;
+                else if (NumOps.GreaterThan(Alphas[j], negC) && NumOps.LessThan(Alphas[j], C))
+                    B = b2;
+                else
+                    B = NumOps.Divide(NumOps.Add(b1, b2), NumOps.FromDouble(2));
+
+                numChangedAlphas++;
             }
 
             if (numChangedAlphas == 0)
                 break;
         }
 
-        // Store all training data as support vectors (base class will filter to non-zero alphas)
+        // Store all training data as support vectors
         SupportVectors = x;
     }
 
@@ -381,20 +428,17 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     private (T L, T H) ComputeBounds(T yi, T yj, T ai, T aj)
     {
-        if (NumOps.Equals(yi, yj))
-        {
-            T L = MathHelper.Max(NumOps.Zero, NumOps.Subtract(NumOps.Add(ai, aj), NumOps.FromDouble(_options.C)));
-            T H = MathHelper.Min(NumOps.FromDouble(_options.C), NumOps.Add(ai, aj));
+        // For SVR, alphas can be in [-C, C] to represent (alpha - alpha*)
+        // Maintain constraint: ai + aj = constant (sum of alphas)
+        T sum = NumOps.Add(ai, aj);
+        T C = NumOps.FromDouble(_options.C);
+        T negC = NumOps.Negate(C);
 
-            return (L, H);
-        }
-        else
-        {
-            T L = MathHelper.Max(NumOps.Zero, NumOps.Subtract(aj, ai));
-            T H = MathHelper.Min(NumOps.FromDouble(_options.C), NumOps.Add(NumOps.Subtract(NumOps.FromDouble(_options.C), ai), aj));
+        // L = max(-C, sum - C), H = min(C, sum + C)
+        T L = MathHelper.Max(negC, NumOps.Subtract(sum, C));
+        T H = MathHelper.Min(C, NumOps.Add(sum, C));
 
-            return (L, H);
-        }
+        return (L, H);
     }
 
     /// <summary>

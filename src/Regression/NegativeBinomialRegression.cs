@@ -141,21 +141,37 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
             var weights = CalculateWeights(means);
             var workingResponse = CalculateWorkingResponse(y, means, linearPredictors);
 
-            // Weighted least squares step
-            var weightedX = X.PointwiseMultiply(weights.Transform(NumOps.Sqrt));
-            var weightedY = workingResponse.PointwiseMultiply(weights.Transform(NumOps.Sqrt));
+            // Add intercept column to design matrix
+            var xWithIntercept = X.AddColumn(Vector<T>.CreateDefault(X.Rows, NumOps.One));
 
-            // Apply regularization to the design matrix
-            var regularizedX = Regularization.Regularize(weightedX);
+            // Weighted least squares: solve (X^T * W * X) * coefficients = X^T * W * z
+            var sqrtWeights = weights.Transform(NumOps.Sqrt);
+            var weightedX = sqrtWeights.CreateDiagonal().Multiply(xWithIntercept);
+            var weightedZ = workingResponse.PointwiseMultiply(sqrtWeights);
 
-            // Solve the regularized system
-            var newCoefficients = MatrixSolutionHelper.SolveLinearSystem(regularizedX, weightedY, MatrixDecompositionFactory.GetDecompositionType(_options.DecompositionMethod));
+            var xTwx = weightedX.Transpose().Multiply(weightedX);
+            var xTwz = weightedX.Transpose().Multiply(weightedZ);
 
-            // Apply regularization to the coefficients
-            newCoefficients = Regularization.Regularize(newCoefficients);
+            // Add ridge regularization to ensure numerical stability
+            var minRegularization = 1e-10;
+            var userStrength = Regularization?.GetOptions().Strength ?? 0.0;
+            var effectiveStrength = NumOps.FromDouble(Math.Max(minRegularization, userStrength));
+            for (int i = 0; i < xTwx.Rows; i++)
+            {
+                xTwx[i, i] = NumOps.Add(xTwx[i, i], effectiveStrength);
+            }
 
-            Coefficients = newCoefficients.Slice(1, newCoefficients.Length - 1);
-            Intercept = newCoefficients[0];
+            var newCoefficients = MatrixSolutionHelper.SolveLinearSystem(xTwx, xTwz, _options.DecompositionType);
+
+            // Apply regularization to the coefficients (shrinkage) if regularization is configured
+            if (Regularization != null)
+            {
+                newCoefficients = Regularization.Regularize(newCoefficients);
+            }
+
+            // Extract coefficients and intercept (intercept is in last column)
+            Coefficients = newCoefficients.Slice(0, X.Columns);
+            Intercept = newCoefficients[X.Columns];
 
             // Check for convergence
             if (NumOps.LessThan(Coefficients.Subtract(oldCoefficients).Norm(), NumOps.FromDouble(_options.Tolerance)))

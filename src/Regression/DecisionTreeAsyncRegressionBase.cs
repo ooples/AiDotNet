@@ -261,7 +261,8 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
         // Serialize options
         writer.Write(Options.MaxDepth);
         writer.Write(Options.MinSamplesSplit);
-        writer.Write(double.IsNaN(Options.MaxFeatures) ? -1 : Options.MaxFeatures);
+        // Write MaxFeatures as int (-1 for NaN, cast to int otherwise)
+        writer.Write(double.IsNaN(Options.MaxFeatures) ? -1 : (int)Options.MaxFeatures);
         writer.Write(Options.Seed ?? -1);
         writer.Write((int)Options.SplitCriterion);
 

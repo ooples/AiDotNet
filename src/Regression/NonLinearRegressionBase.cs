@@ -550,8 +550,9 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
 
-        // Serialize options
-        var optionsJson = JsonConvert.SerializeObject(Options);
+        // Serialize options with type information for proper polymorphic deserialization
+        var serializerSettings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.All };
+        var optionsJson = JsonConvert.SerializeObject(Options, serializerSettings);
         writer.Write(optionsJson);
 
         // Serialize support vectors
@@ -624,9 +625,10 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         using var ms = new MemoryStream(modelData);
         using var reader = new BinaryReader(ms);
 
-        // Deserialize options
+        // Deserialize options with type information for proper polymorphic deserialization
+        var serializerSettings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.All };
         var optionsJson = reader.ReadString();
-        Options = JsonConvert.DeserializeObject<NonLinearRegressionOptions>(optionsJson) ?? new NonLinearRegressionOptions();
+        Options = JsonConvert.DeserializeObject<NonLinearRegressionOptions>(optionsJson, serializerSettings) ?? new NonLinearRegressionOptions();
 
         // Deserialize support vectors
         int svRows = reader.ReadInt32();

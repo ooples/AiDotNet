@@ -190,19 +190,35 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         var weights = ComputeWeights(input);
 
         // Create the weighted design matrix and target vector
-        var weightedX = _xTrain.PointwiseMultiply(weights.CreateDiagonal());
-        var weightedY = _yTrain.PointwiseMultiply(weights);
-
-        // Add regularization
-        weightedX = Regularization.Regularize(weightedX);
+        // For weighted least squares, we multiply each row of X by its corresponding weight
+        // This is equivalent to W^0.5 * X where W is the diagonal weight matrix
+        var sqrtWeights = weights.Transform(w => NumOps.Sqrt(w));
+        var weightedX = sqrtWeights.CreateDiagonal().Multiply(_xTrain);
+        var weightedY = _yTrain.PointwiseMultiply(sqrtWeights);
 
         // Solve the weighted least squares problem
         var xTx = weightedX.Transpose().Multiply(weightedX);
+
+        // Add ridge regularization penalty to ensure numerical stability
+        // The tricube kernel can produce many zero weights, making X^T*W*X nearly singular.
+        // We always add a minimum regularization (1e-10) to ensure the matrix is invertible,
+        // plus any user-specified regularization strength.
+        var minRegularization = 1e-10;
+        var userStrength = Regularization?.GetOptions().Strength ?? 0.0;
+        var effectiveStrength = NumOps.FromDouble(Math.Max(minRegularization, userStrength));
+        for (int i = 0; i < xTx.Rows; i++)
+        {
+            xTx[i, i] = NumOps.Add(xTx[i, i], effectiveStrength);
+        }
+
         var xTy = weightedX.Transpose().Multiply(weightedY);
         var coefficients = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _options.DecompositionType);
 
-        // Apply regularization to coefficients
-        coefficients = Regularization.Regularize(coefficients);
+        // Apply regularization to coefficients (shrinkage) if regularization is configured
+        if (Regularization != null)
+        {
+            coefficients = Regularization.Regularize(coefficients);
+        }
 
         // Make prediction
         return input.DotProduct(coefficients);

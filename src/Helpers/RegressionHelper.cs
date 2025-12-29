@@ -28,6 +28,7 @@ public static class RegressionHelper<T>
     /// - yScaled: The standardized target values
     /// - xMean: The mean of each feature column
     /// - xStd: The standard deviation of each feature column
+    /// - yMean: The mean of the target values
     /// - yStd: The standard deviation of the target values
     /// </returns>
     /// <remarks>
@@ -43,7 +44,7 @@ public static class RegressionHelper<T>
     /// The method returns both the transformed data and the values used for transformation,
     /// which you'll need later to transform new data or interpret results.
     /// </remarks>
-    public static (Matrix<T> xScaled, Vector<T> yScaled, Vector<T> xMean, Vector<T> xStd, T yStd) CenterAndScale(Matrix<T> x, Vector<T> y)
+    public static (Matrix<T> xScaled, Vector<T> yScaled, Vector<T> xMean, Vector<T> xStd, T yMean, T yStd) CenterAndScale(Matrix<T> x, Vector<T> y)
     {
         // Calculate mean for each feature column
         Vector<T> xMean = new(x.Columns);
@@ -54,7 +55,6 @@ public static class RegressionHelper<T>
 
         // Calculate mean for target values
         T yMean = y.Mean();
-        Vector<T> yMeanVector = new([yMean]);
 
         // Calculate standard deviation for each feature column
         Vector<T> xStd = new(x.Columns);
@@ -79,6 +79,6 @@ public static class RegressionHelper<T>
         // Standardize target values: (y - mean) / std
         Vector<T> yScaled = y.Transform(yi => _numOps.Divide(_numOps.Subtract(yi, yMean), yStd));
 
-        return (xScaled, yScaled, xMean, xStd, yStd);
+        return (xScaled, yScaled, xMean, xStd, yMean, yStd);
     }
 }

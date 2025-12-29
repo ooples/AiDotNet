@@ -1,3 +1,4 @@
+using AiDotNet.Exceptions;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
 using AiDotNet.Regularization;
@@ -92,15 +93,15 @@ public class LinearRegressionIntegrationTests
     }
 
     [Fact]
-    public void SimpleRegression_Train_MultipleColumns_ThrowsArgumentException()
+    public void SimpleRegression_Train_MultipleColumns_ThrowsException()
     {
         // Arrange
         var regression = new SimpleRegression<double>();
         var x = CreateMatrix(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } }); // 2 columns - invalid
         var y = CreateVector(new double[] { 1, 2, 3 });
 
-        // Act & Assert
-        Assert.Throws<ArgumentException>(() => regression.Train(x, y));
+        // Act & Assert - throws InvalidInputDimensionException for invalid feature count
+        Assert.Throws<InvalidInputDimensionException>(() => regression.Train(x, y));
     }
 
     #endregion

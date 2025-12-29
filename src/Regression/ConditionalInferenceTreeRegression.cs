@@ -128,10 +128,9 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
     /// </remarks>
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {
-        var regularizedX = Regularization.Regularize(x);
-        var regularizedY = Regularization.Regularize(y);
-
-        _root = await BuildTreeAsync(regularizedX, regularizedY, 0);
+        // Note: Tree-based methods handle regularization through tree structure parameters
+        // (MaxDepth, MinSamplesSplit, etc.), not through data transformation
+        _root = await BuildTreeAsync(x, y, 0);
         await CalculateFeatureImportancesAsync(x.Columns);
     }
 
@@ -181,7 +180,8 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
         {
             FeatureIndex = splitResult.Value.Feature,
             Threshold = splitResult.Value.Threshold,
-            PValue = splitResult.Value.PValue
+            PValue = splitResult.Value.PValue,
+            IsLeaf = false // Mark as internal node
         };
 
         var buildTasks = new[]
@@ -381,9 +381,10 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
     /// </remarks>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
-        var regularizedInput = Regularization.Regularize(input);
+        // Note: Tree-based methods handle regularization through tree structure parameters
+        // (MaxDepth, MinSamplesSplit, etc.), not through data transformation
         var tasks = Enumerable.Range(0, input.Rows)
-            .Select(i => new Func<T>(() => PredictSingle(regularizedInput.GetRow(i))));
+            .Select(i => new Func<T>(() => PredictSingle(input.GetRow(i))));
 
         return new Vector<T>(await ParallelProcessingHelper.ProcessTasksInParallel(tasks, _options.MaxDegreeOfParallelism));
     }

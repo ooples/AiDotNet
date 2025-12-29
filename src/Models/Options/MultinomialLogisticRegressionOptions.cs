@@ -111,4 +111,20 @@ public class MultinomialLogisticRegressionOptions<T> : RegressionOptions<T>
     /// </para>
     /// </remarks>
     public double Tolerance { get; set; } = 1e-4;
+
+    /// <summary>
+    /// Gets or sets the matrix decomposition type to use when solving the linear system.
+    /// </summary>
+    /// <value>The matrix decomposition type, defaulting to QR decomposition.</value>
+    /// <remarks>
+    /// <para>
+    /// The decomposition type determines how the system of linear equations is solved during optimization.
+    /// QR decomposition is a numerically stable choice suitable for most problems.
+    /// </para>
+    /// <para><b>For Beginners:</b> This setting controls the mathematical method used to solve equations
+    /// during model fitting. The default QR method works well for most cases - you typically don't need
+    /// to change this unless you have specific performance or numerical stability requirements.
+    /// </para>
+    /// </remarks>
+    public MatrixDecompositionType DecompositionType { get; set; } = MatrixDecompositionType.Qr;
 }

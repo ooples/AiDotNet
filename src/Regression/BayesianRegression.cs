@@ -145,9 +145,8 @@ public class BayesianRegression<T> : RegressionBase<T>
             x = ApplyKernel(x);
         }
 
-        // Apply regularization
-        x = Regularization.Regularize(x);
-        y = Regularization.Regularize(y);
+        // Note: Bayesian regression has built-in regularization through the prior precision (alpha).
+        // Additional regularization is not applied through data transformation.
 
         // Compute prior precision (inverse of prior covariance)
         var priorPrecision = Matrix<T>.CreateIdentity(d).Multiply(NumOps.FromDouble(_bayesOptions.Alpha));
@@ -215,8 +214,25 @@ public class BayesianRegression<T> : RegressionBase<T>
             input = ApplyKernel(input);
         }
 
-        var coefficientsMatrix = Coefficients.AppendAsMatrix(Intercept);
-        return input.Multiply(coefficientsMatrix).GetColumn(0);
+        // Create coefficient vector with intercept at position 0 (matching constant column at front)
+        // input × coefficients = (N, d+1) × (d+1,) = (N,)
+        Vector<T> allCoeffs;
+        if (Options.UseIntercept)
+        {
+            // Prepend intercept to match the constant column at front
+            allCoeffs = new Vector<T>(Coefficients.Length + 1);
+            allCoeffs[0] = Intercept;
+            for (int i = 0; i < Coefficients.Length; i++)
+            {
+                allCoeffs[i + 1] = Coefficients[i];
+            }
+        }
+        else
+        {
+            allCoeffs = Coefficients;
+        }
+
+        return input.Multiply(allCoeffs);
     }
 
     /// <summary>

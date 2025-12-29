@@ -166,7 +166,14 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
                 break; // Stop if the error is too high
             }
 
-            var beta = NumOps.Divide(averageError, NumOps.Subtract(NumOps.One, averageError));
+            // Handle edge case: if averageError is 0, set a small value to avoid division by 0
+            T effectiveError = NumOps.LessThan(averageError, NumOps.FromDouble(1e-10))
+                ? NumOps.FromDouble(1e-10)
+                : averageError;
+
+            var beta = NumOps.Divide(effectiveError, NumOps.Subtract(NumOps.One, effectiveError));
+            // Clamp beta to avoid Log(0) or Log(infinity)
+            beta = MathHelper.Max(beta, NumOps.FromDouble(1e-10));
             var weight = NumOps.Log(NumOps.Divide(NumOps.One, beta));
 
             _ensemble.Add((tree, weight));
@@ -211,14 +218,41 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </remarks>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
-        var regularizedInput = Regularization.Regularize(input);
+        // Handle empty ensemble case
+        if (_ensemble.Count == 0)
+        {
+            return new Vector<T>(new T[input.Rows]); // Return zeros
+        }
+
+        // Note: Tree-based methods handle regularization through tree structure parameters
+        // (MaxDepth, MinSamplesSplit, etc.), not through data transformation
         var sumWeights = _ensemble.Aggregate(NumOps.Zero, (acc, e) => NumOps.Add(acc, e.Weight));
+
+        // Handle case where all weights sum to 0
+        if (NumOps.Equals(sumWeights, NumOps.Zero))
+        {
+            // Use unweighted average instead
+            sumWeights = NumOps.FromDouble(_ensemble.Count);
+            var uniformWeight = NumOps.One;
+
+            var result0 = new T[input.Rows];
+            foreach (var (tree, _) in _ensemble)
+            {
+                var prediction = tree.Predict(input);
+                for (int i = 0; i < input.Rows; i++)
+                    result0[i] = NumOps.Add(result0[i], prediction[i]);
+            }
+            for (int i = 0; i < input.Rows; i++)
+                result0[i] = NumOps.Divide(result0[i], sumWeights);
+            return new Vector<T>(result0);
+        }
+
         var result = new T[input.Rows];
 
         var tasks = _ensemble.Select(treeWeight => Task.Run(() =>
         {
             var (tree, weight) = treeWeight;
-            var prediction = tree.Predict(regularizedInput);
+            var prediction = tree.Predict(input);
             return (prediction, weight);
         }));
 
@@ -231,8 +265,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
             result[i] = NumOps.Divide(result[i], sumWeights);
         }
 
-        var finalPredictions = new Vector<T>(result);
-        return Regularization.Regularize(finalPredictions);
+        return new Vector<T>(result);
     }
 
     /// <summary>
@@ -293,6 +326,13 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     private T CalculateAverageError(Vector<T> errors, Vector<T> sampleWeights)
     {
         var maxError = errors.Max();
+
+        // If all predictions are perfect, return 0 (no error)
+        if (NumOps.Equals(maxError, NumOps.Zero))
+        {
+            return NumOps.Zero;
+        }
+
         var weightedErrors = errors.Select((e, i) =>
             NumOps.Multiply(NumOps.Divide(e, maxError), sampleWeights[i]));
 
@@ -332,9 +372,22 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     private Vector<T> UpdateSampleWeights(Vector<T> sampleWeights, Vector<T> errors, T beta)
     {
         var maxError = errors.Max();
+
+        // If all errors are 0, keep weights unchanged
+        if (NumOps.Equals(maxError, NumOps.Zero))
+        {
+            return sampleWeights;
+        }
+
         var updatedWeights = sampleWeights.Select((w, i) =>
             NumOps.Multiply(w, NumOps.Power(beta, NumOps.Subtract(NumOps.One, NumOps.Divide(errors[i], maxError)))));
         var sumWeights = updatedWeights.Aggregate(NumOps.Zero, NumOps.Add);
+
+        // Avoid division by 0 when normalizing
+        if (NumOps.Equals(sumWeights, NumOps.Zero))
+        {
+            return sampleWeights;
+        }
 
         return new Vector<T>(updatedWeights.Select(w => NumOps.Divide(w, sumWeights)));
     }

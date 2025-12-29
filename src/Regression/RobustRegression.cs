@@ -98,8 +98,8 @@ public class RobustRegression<T> : RegressionBase<T>
     {
         int n = x.Rows;
         int p = x.Columns;
-        // Apply regularization to the input matrix
-        x = Regularization.Regularize(x);
+        // Note: Robust regression handles regularization through the weight function,
+        // not through data transformation
 
         // Initial regression estimate
         IRegression<T> initialRegression = _options.InitialRegression ?? new MultipleRegression<T>();
@@ -143,9 +143,6 @@ public class RobustRegression<T> : RegressionBase<T>
             Coefficients = newCoefficients;
             Intercept = newIntercept;
         }
-
-        // Apply regularization to the coefficients
-        Coefficients = Regularization.Regularize(Coefficients);
     }
 
     /// <summary>

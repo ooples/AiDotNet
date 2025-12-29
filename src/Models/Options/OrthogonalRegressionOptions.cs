@@ -169,4 +169,21 @@ public class OrthogonalRegressionOptions<T> : RegressionOptions<T>
     /// </para>
     /// </remarks>
     public bool ScaleVariables { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the matrix decomposition type to use when solving the linear system.
+    /// </summary>
+    /// <value>The matrix decomposition type, defaulting to SVD decomposition.</value>
+    /// <remarks>
+    /// <para>
+    /// The decomposition type determines how the system of linear equations is solved during optimization.
+    /// SVD (Singular Value Decomposition) is particularly well-suited for orthogonal regression as it
+    /// naturally handles the total least squares formulation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This setting controls the mathematical method used to solve equations
+    /// during model fitting. The default SVD method is ideal for orthogonal regression as it handles
+    /// measurement errors in all variables properly.
+    /// </para>
+    /// </remarks>
+    public MatrixDecompositionType DecompositionType { get; set; } = MatrixDecompositionType.Svd;
 }

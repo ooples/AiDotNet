@@ -115,17 +115,10 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
-        // Apply regularization to the training data
-        if (Regularization != null)
-        {
-            _xTrain = Regularization.Regularize(x);
-            _yTrain = Regularization.Regularize(y);
-        }
-        else
-        {
-            _xTrain = x;
-            _yTrain = y;
-        }
+        // Note: KNN is a distance-based method that doesn't use regularization in the traditional sense.
+        // The training data is stored as-is for neighbor finding.
+        _xTrain = x;
+        _yTrain = y;
     }
 
     /// <summary>
@@ -157,13 +150,11 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        // Apply regularization to the input data if available
-        Matrix<T> regularizedInput = Regularization != null ? Regularization.Regularize(input) : input;
-
-        var predictions = new Vector<T>(regularizedInput.Rows);
-        for (int i = 0; i < regularizedInput.Rows; i++)
+        // Note: KNN is a distance-based method - no data transformation is applied
+        var predictions = new Vector<T>(input.Rows);
+        for (int i = 0; i < input.Rows; i++)
         {
-            predictions[i] = PredictSingle(regularizedInput.GetRow(i));
+            predictions[i] = PredictSingle(input.GetRow(i));
         }
 
         return predictions;
@@ -366,12 +357,7 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
         for (int i = 0; i < yLength; i++)
             _yTrain[i] = NumOps.FromDouble(reader.ReadDouble());
 
-        // Apply regularization to the deserialized data if available
-        if (Regularization != null)
-        {
-            _xTrain = Regularization.Regularize(_xTrain);
-            _yTrain = Regularization.Regularize(_yTrain);
-        }
+        // Note: KNN is a distance-based method - no data transformation is applied
     }
 
     /// <summary>

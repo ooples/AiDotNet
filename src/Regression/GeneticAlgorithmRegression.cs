@@ -219,10 +219,12 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     {
         Coefficients = _bestModel?.GetParameters() ?? Vector<T>.Empty();
 
-        if (HasIntercept)
+        if (HasIntercept && Coefficients.Length > 0)
         {
             Intercept = Coefficients[0];
-            Coefficients = Coefficients.Slice(1, Coefficients.Length - 1);
+            Coefficients = Coefficients.Length > 1
+                ? Coefficients.Slice(1, Coefficients.Length - 1)
+                : Vector<T>.Empty();
         }
         else
         {
