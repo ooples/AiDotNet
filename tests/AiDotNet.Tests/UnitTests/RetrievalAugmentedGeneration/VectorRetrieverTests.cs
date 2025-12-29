@@ -890,7 +890,7 @@ public class VectorRetrieverTests
         var retriever = new VectorRetriever<double>(documentStore, embeddingModel);
 
         // Act & Assert
-        Assert.Equal(1, retriever.Retrieve("q", 1).Count());
+        Assert.Single(retriever.Retrieve("q", 1));
         Assert.Equal(5, retriever.Retrieve("q", 5).Count());
         Assert.Equal(10, retriever.Retrieve("q", 10).Count());
         Assert.Equal(15, retriever.Retrieve("q", 15).Count());

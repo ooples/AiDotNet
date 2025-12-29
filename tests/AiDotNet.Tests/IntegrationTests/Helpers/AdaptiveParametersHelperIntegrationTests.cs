@@ -1,7 +1,7 @@
-using Xunit;
 using AiDotNet.Helpers;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Helpers;
 

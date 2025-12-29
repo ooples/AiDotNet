@@ -134,6 +134,8 @@ public class BIRCH<T> : ClusteringBase<T>
             }
         }
 
+        IsTrained = true;
+
         // Assign labels if requested
         if (_options.ComputeLabels)
         {
@@ -143,8 +145,6 @@ public class BIRCH<T> : ClusteringBase<T>
         {
             Labels = new Vector<T>(n);
         }
-
-        IsTrained = true;
     }
 
     private void InsertEntry(CFNode node, CFEntry entry)

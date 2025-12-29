@@ -1,9 +1,9 @@
-using Xunit;
-using AiDotNet.Helpers;
-using AiDotNet.Enums;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
+using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Helpers;
 
