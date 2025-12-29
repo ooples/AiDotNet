@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using AiDotNet.Enums;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.ReinforcementLearning.Agents.A3C;
 using AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;

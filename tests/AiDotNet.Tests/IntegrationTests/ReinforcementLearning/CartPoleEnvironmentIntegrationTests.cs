@@ -25,6 +25,7 @@ public class CartPoleEnvironmentIntegrationTests
     public void Step_MaxStepsReached_EndsEpisodeAndReturnsZeroReward()
     {
         var environment = new CartPoleEnvironment<double>(maxSteps: 1, seed: 7);
+        environment.Reset();
         var action = new Vector<double>(environment.ActionSpaceSize);
         action[1] = 1.0;
 
@@ -42,6 +43,7 @@ public class CartPoleEnvironmentIntegrationTests
     public void Step_InvalidActionIndex_Throws()
     {
         var environment = new CartPoleEnvironment<double>(maxSteps: 5, seed: 5);
+        environment.Reset();
         var invalidAction = new Vector<double>(1);
         invalidAction[0] = 3.0;
 

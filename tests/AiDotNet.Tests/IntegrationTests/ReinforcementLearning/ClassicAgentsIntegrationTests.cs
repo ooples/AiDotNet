@@ -1,4 +1,3 @@
-using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.ReinforcementLearning.Agents;

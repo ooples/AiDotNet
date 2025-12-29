@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.ReinforcementLearning.Agents;
@@ -121,7 +120,8 @@ public class DeepAgentsIntegrationTests
             UseDistributional = false,
             SharedLayers = new List<int> { 4 },
             ValueStreamLayers = new List<int> { 4 },
-            AdvantageStreamLayers = new List<int> { 4 }
+            AdvantageStreamLayers = new List<int> { 4 },
+            Seed = 29
         });
 
         ExerciseReplayAgent(rainbow, DiscreteStateSize, DiscreteActionSize, true, 2, true);
@@ -268,7 +268,8 @@ public class DeepAgentsIntegrationTests
             ActorHiddenLayers = new List<int> { 4 },
             CriticHiddenLayers = new List<int> { 4 },
             LearningRate = LearningRate,
-            LossFunction = CreateLoss()
+            LossFunction = CreateLoss(),
+            Seed = 65
         });
 
         ExerciseReplayAgent(td3, ContinuousStateSize, ContinuousActionSize, false, 2, true);
@@ -357,7 +358,8 @@ public class DeepAgentsIntegrationTests
             ContextLength = 4,
             EmbeddingDim = 8,
             NumLayers = 1,
-            NumHeads = 1
+            NumHeads = 1,
+            Seed = 101
         });
 
         decisionTransformer.LoadOfflineData(CreateTrajectoryDataset());
@@ -385,7 +387,8 @@ public class DeepAgentsIntegrationTests
             ReplayBufferSize = 4,
             LearningRate = LearningRate,
             DiscountFactor = DiscountFactor,
-            LossFunction = CreateLoss()
+            LossFunction = CreateLoss(),
+            Seed = 111
         });
 
         ExerciseReplayAgent(muzero, DiscreteStateSize, DiscreteActionSize, true, 1, true);
@@ -401,7 +404,8 @@ public class DeepAgentsIntegrationTests
             ImaginationHorizon = 1,
             LearningRate = LearningRate,
             DiscountFactor = DiscountFactor,
-            LossFunction = CreateLoss()
+            LossFunction = CreateLoss(),
+            Seed = 121
         });
 
         ExerciseReplayAgent(dreamer, ContinuousStateSize, ContinuousActionSize, false, 2, false);
@@ -423,7 +427,8 @@ public class DeepAgentsIntegrationTests
             ReplayBufferSize = 4,
             LearningRate = LearningRate,
             DiscountFactor = DiscountFactor,
-            LossFunction = CreateLoss()
+            LossFunction = CreateLoss(),
+            Seed = 131
         });
 
         ExerciseReplayAgent(worldModels, 4, ContinuousActionSize, false, 2, true);

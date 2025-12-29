@@ -34,15 +34,7 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     {
         get
         {
-            foreach (var layer in Layers)
-            {
-                if (layer.SupportsTraining)
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            return Layers.Any(layer => layer.SupportsTraining);
         }
     }
     /// <summary>

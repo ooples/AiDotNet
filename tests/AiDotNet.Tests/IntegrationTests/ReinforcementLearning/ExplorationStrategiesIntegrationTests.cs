@@ -140,15 +140,18 @@ public class ExplorationStrategiesIntegrationTests
         Assert.Equal(actionSize, action.Length);
 
         int nonZeroCount = 0;
+        double nonZeroValue = 0.0;
         for (int i = 0; i < action.Length; i++)
         {
             if (Math.Abs(action[i]) > 1e-6)
             {
                 nonZeroCount++;
+                nonZeroValue = action[i];
             }
         }
 
         Assert.Equal(1, nonZeroCount);
+        Assert.Equal(1.0, nonZeroValue, precision: 6);
     }
 
     private static void AssertVectorInRange(Vector<double> action, int actionSize, double min, double max)
