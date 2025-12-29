@@ -18224,7 +18224,7 @@ public class GpuEngine : IEngine, IDisposable
             }
 
             var resultData = new float[m * n];
-            gpuResult.View.BaseView.CopyToCPU(resultData);
+            gpuResult.View.BaseView.SubView(0, m * n).CopyToCPU(resultData);
             return new Tensor<float>([m, n], new Vector<float>(resultData));
         }
         catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
@@ -18268,7 +18268,7 @@ public class GpuEngine : IEngine, IDisposable
             }
 
             var resultData = new double[m * n];
-            gpuResult.View.BaseView.CopyToCPU(resultData);
+            gpuResult.View.BaseView.SubView(0, m * n).CopyToCPU(resultData);
             return new Tensor<double>([m, n], new Vector<double>(resultData));
         }
         catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
