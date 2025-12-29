@@ -1,8 +1,11 @@
 using System.Diagnostics;
 using AiDotNet.Diffusion.Audio;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.Models;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Tensors.Helpers;
-using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Audio.TextToSpeech;
@@ -30,16 +33,15 @@ namespace AiDotNet.Audio.TextToSpeech;
 ///     PitchShift = 0.0
 /// });
 ///
-/// var result = await tts.SynthesizeAsync("Hello, world!");
-/// SaveAudio(result.Audio, result.SampleRate);  // Your audio saving code
+/// var result = tts.Synthesize("Hello, world!");
+/// SaveAudio(result, 22050);  // Your audio saving code
 ///
 /// tts.Dispose();
 /// </code>
 /// </para>
 /// </remarks>
-public class TtsModel<T> : IDisposable
+public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
-    private readonly INumericOperations<T> _numOps;
     private readonly TtsOptions _options;
     private readonly OnnxModel<T>? _acousticModel;
     private readonly OnnxModel<T>? _vocoder;
@@ -59,6 +61,26 @@ public class TtsModel<T> : IDisposable
         (_vocoder?.IsLoaded == true || _options.UseGriffinLimFallback);
 
     /// <summary>
+    /// Gets the list of available built-in voices.
+    /// </summary>
+    public IReadOnlyList<VoiceInfo<T>> AvailableVoices { get; }
+
+    /// <summary>
+    /// Gets whether this model supports voice cloning from reference audio.
+    /// </summary>
+    public bool SupportsVoiceCloning => false;
+
+    /// <summary>
+    /// Gets whether this model supports emotional expression control.
+    /// </summary>
+    public bool SupportsEmotionControl => false;
+
+    /// <summary>
+    /// Gets whether this model supports streaming audio generation.
+    /// </summary>
+    public bool SupportsStreaming => false;
+
+    /// <summary>
     /// Creates a new TtsModel instance.
     /// </summary>
     private TtsModel(
@@ -66,13 +88,50 @@ public class TtsModel<T> : IDisposable
         OnnxModel<T>? acousticModel,
         OnnxModel<T>? vocoder,
         GriffinLim<T>? griffinLim)
+        : base(CreateMinimalArchitecture(options))
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
         _options = options;
         _acousticModel = acousticModel;
         _vocoder = vocoder;
         _griffinLim = griffinLim;
         _preprocessor = new TtsPreprocessor();
+
+        // Store vocoder as OnnxModel for base class
+        OnnxModel = vocoder;
+
+        // Set audio properties
+        SampleRate = options.SampleRate;
+        NumMels = options.NumMels;
+
+        // Initialize available voices
+        AvailableVoices = GetDefaultVoices();
+    }
+
+    private static NeuralNetworkArchitecture<T> CreateMinimalArchitecture(TtsOptions options)
+    {
+        // Create minimal architecture for ONNX-only model
+        return new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Generative,
+            complexity: NetworkComplexity.Deep,
+            inputSize: 256, // Max phoneme sequence length
+            outputSize: options.SampleRate * 30 // Max 30 seconds of audio
+        );
+    }
+
+    private static IReadOnlyList<VoiceInfo<T>> GetDefaultVoices()
+    {
+        return new[]
+        {
+            new VoiceInfo<T>
+            {
+                Id = "default",
+                Name = "Default Voice",
+                Language = "en",
+                Gender = VoiceGender.Neutral,
+                Style = "neutral"
+            }
+        };
     }
 
     /// <summary>
@@ -179,31 +238,38 @@ public class TtsModel<T> : IDisposable
         return new TtsModel<T>(options, acousticModel, vocoder, griffinLim);
     }
 
+    #region ITextToSpeech Implementation
+
     /// <summary>
     /// Synthesizes speech from text.
     /// </summary>
-    /// <param name="text">The text to synthesize.</param>
-    /// <returns>The synthesized audio.</returns>
-    public TtsResult<T> Synthesize(string text)
+    public Tensor<T> Synthesize(
+        string text,
+        string? voiceId = null,
+        double speakingRate = 1.0,
+        double pitch = 0.0)
     {
         ThrowIfDisposed();
 
         var stopwatch = Stopwatch.StartNew();
 
+        // Override options with parameters
+        double effectiveRate = Math.Abs(speakingRate - 1.0) > 0.01 ? speakingRate : _options.SpeakingRate;
+
         // Preprocess text to phonemes
         var phonemes = _preprocessor.TextToPhonemes(text);
 
         // Generate mel spectrogram
-        var melSpectrogram = GenerateMelSpectrogram(phonemes);
+        var melSpectrogram = GenerateMelSpectrogram(phonemes, voiceId);
 
-        // Apply rate/pitch modifications
-        if (Math.Abs(_options.SpeakingRate - 1.0) > 0.01)
+        // Apply rate modifications
+        if (Math.Abs(effectiveRate - 1.0) > 0.01)
         {
-            melSpectrogram = ModifyDuration(melSpectrogram, 1.0 / _options.SpeakingRate);
+            melSpectrogram = ModifyDuration(melSpectrogram, 1.0 / effectiveRate);
         }
 
         // Generate audio waveform
-        T[] audio;
+        Tensor<T> audio;
         if (_vocoder is not null)
         {
             audio = VocoderSynthesize(melSpectrogram);
@@ -220,34 +286,204 @@ public class TtsModel<T> : IDisposable
         // Apply energy/volume
         if (Math.Abs(_options.Energy - 1.0) > 0.01)
         {
+            var result = new Tensor<T>(audio.Shape);
             for (int i = 0; i < audio.Length; i++)
             {
-                audio[i] = _numOps.Multiply(audio[i], _numOps.FromDouble(_options.Energy));
+                result[i] = NumOps.Multiply(audio[i], NumOps.FromDouble(_options.Energy));
             }
+            audio = result;
         }
 
         stopwatch.Stop();
 
-        return new TtsResult<T>
-        {
-            Audio = audio,
-            SampleRate = _options.SampleRate,
-            Duration = (double)audio.Length / _options.SampleRate,
-            ProcessingTimeMs = stopwatch.ElapsedMilliseconds
-        };
+        return audio;
     }
 
     /// <summary>
     /// Synthesizes speech from text asynchronously.
     /// </summary>
-    public Task<TtsResult<T>> SynthesizeAsync(
+    public Task<Tensor<T>> SynthesizeAsync(
         string text,
+        string? voiceId = null,
+        double speakingRate = 1.0,
+        double pitch = 0.0,
         CancellationToken cancellationToken = default)
     {
-        return Task.Run(() => Synthesize(text), cancellationToken);
+        return Task.Run(() => Synthesize(text, voiceId, speakingRate, pitch), cancellationToken);
     }
 
-    private Tensor<T> GenerateMelSpectrogram(int[] phonemes)
+    /// <summary>
+    /// Synthesizes speech using a cloned voice from reference audio.
+    /// </summary>
+    public Tensor<T> SynthesizeWithVoiceCloning(
+        string text,
+        Tensor<T> referenceAudio,
+        double speakingRate = 1.0,
+        double pitch = 0.0)
+    {
+        throw new NotSupportedException("Voice cloning is not supported by this TTS model.");
+    }
+
+    /// <summary>
+    /// Synthesizes speech with emotional expression.
+    /// </summary>
+    public Tensor<T> SynthesizeWithEmotion(
+        string text,
+        string emotion,
+        double emotionIntensity = 0.5,
+        string? voiceId = null,
+        double speakingRate = 1.0)
+    {
+        throw new NotSupportedException("Emotion control is not supported by this TTS model.");
+    }
+
+    /// <summary>
+    /// Extracts speaker embedding from reference audio for voice cloning.
+    /// </summary>
+    public Tensor<T> ExtractSpeakerEmbedding(Tensor<T> referenceAudio)
+    {
+        throw new NotSupportedException("Speaker embedding extraction is not supported by this TTS model.");
+    }
+
+    /// <summary>
+    /// Starts a streaming synthesis session.
+    /// </summary>
+    public IStreamingSynthesisSession<T> StartStreamingSession(string? voiceId = null, double speakingRate = 1.0)
+    {
+        throw new NotSupportedException("Streaming synthesis is not supported by this TTS model.");
+    }
+
+    #endregion
+
+    #region AudioNeuralNetworkBase Implementation
+
+    /// <summary>
+    /// Preprocesses raw audio for model input.
+    /// </summary>
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
+    {
+        // For TTS, input is text not audio
+        // This method is used for reference audio in voice cloning scenarios
+        if (MelSpec is not null)
+        {
+            return MelSpec.Forward(rawAudio);
+        }
+
+        return rawAudio;
+    }
+
+    /// <summary>
+    /// Postprocesses model output into the final result format.
+    /// </summary>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        // For TTS, postprocessing is handled in Synthesize method
+        return modelOutput;
+    }
+
+    /// <summary>
+    /// Initializes the neural network layers.
+    /// </summary>
+    protected override void InitializeLayers()
+    {
+        // ONNX-only model - no native layers to initialize
+    }
+
+    /// <summary>
+    /// Makes a prediction using the model.
+    /// </summary>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        // For TTS, prediction means synthesis from phoneme input
+        if (_acousticModel is null)
+            throw new InvalidOperationException("Acoustic model not loaded.");
+
+        return _acousticModel.Run(input);
+    }
+
+    /// <summary>
+    /// Updates model parameters.
+    /// </summary>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (IsOnnxMode)
+        {
+            throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
+        }
+
+        // Native training mode - update layer parameters from the parameter vector
+        // This would be implemented when native training support is added
+        throw new NotImplementedException("Native parameter updates for TTS are not yet implemented.");
+    }
+
+    /// <summary>
+    /// Trains the model on input data.
+    /// </summary>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (IsOnnxMode)
+        {
+            throw new NotSupportedException("Cannot train in ONNX inference mode. Load the model in training mode instead.");
+        }
+
+        throw new NotImplementedException("Native training for TTS is not yet implemented.");
+    }
+
+    /// <summary>
+    /// Gets metadata about the model.
+    /// </summary>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            Name = "TtsModel-FastSpeech2-HiFiGAN",
+            Description = "Text-to-speech model using FastSpeech2 acoustic model and HiFi-GAN vocoder",
+            ModelType = ModelType.NeuralNetwork,
+            FeatureCount = 256,
+            Complexity = 2
+        };
+        metadata.AdditionalInfo["InputFormat"] = "Text/Phonemes";
+        metadata.AdditionalInfo["OutputFormat"] = $"Audio ({SampleRate}Hz)";
+        return metadata;
+    }
+
+    /// <summary>
+    /// Serializes network-specific data.
+    /// </summary>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_options.SampleRate);
+        writer.Write(_options.NumMels);
+        writer.Write(_options.SpeakingRate);
+        writer.Write(_options.Energy);
+        writer.Write(_options.UseGriffinLimFallback);
+    }
+
+    /// <summary>
+    /// Deserializes network-specific data.
+    /// </summary>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _options.SampleRate = reader.ReadInt32();
+        _options.NumMels = reader.ReadInt32();
+        _options.SpeakingRate = reader.ReadDouble();
+        _options.Energy = reader.ReadDouble();
+        _options.UseGriffinLimFallback = reader.ReadBoolean();
+    }
+
+    /// <summary>
+    /// Creates a new instance of this model for cloning.
+    /// </summary>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new TtsModel<T>(_options, null, null, null);
+    }
+
+    #endregion
+
+    #region Private Methods
+
+    private Tensor<T> GenerateMelSpectrogram(int[] phonemes, string? voiceId)
     {
         if (_acousticModel is null)
             throw new InvalidOperationException("Acoustic model not loaded.");
@@ -256,7 +492,7 @@ public class TtsModel<T> : IDisposable
         var phonemeTensor = new Tensor<T>([1, phonemes.Length]);
         for (int i = 0; i < phonemes.Length; i++)
         {
-            phonemeTensor[0, i] = _numOps.FromDouble(phonemes[i]);
+            phonemeTensor[0, i] = NumOps.FromDouble(phonemes[i]);
         }
 
         // Add speaker ID if multi-speaker
@@ -268,7 +504,7 @@ public class TtsModel<T> : IDisposable
         if (_options.SpeakerId.HasValue)
         {
             var speakerTensor = new Tensor<T>([1]);
-            speakerTensor[0] = _numOps.FromDouble(_options.SpeakerId.Value);
+            speakerTensor[0] = NumOps.FromDouble(_options.SpeakerId.Value);
             inputs["speaker_id"] = speakerTensor;
         }
 
@@ -300,16 +536,15 @@ public class TtsModel<T> : IDisposable
         return modified;
     }
 
-    private T[] VocoderSynthesize(Tensor<T> melSpectrogram)
+    private Tensor<T> VocoderSynthesize(Tensor<T> melSpectrogram)
     {
         if (_vocoder is null)
             throw new InvalidOperationException("Vocoder not loaded.");
 
-        var output = _vocoder.Run(melSpectrogram);
-        return output.ToArray();
+        return _vocoder.Run(melSpectrogram);
     }
 
-    private T[] GriffinLimSynthesize(Tensor<T> melSpectrogram)
+    private Tensor<T> GriffinLimSynthesize(Tensor<T> melSpectrogram)
     {
         if (_griffinLim is null)
             throw new InvalidOperationException("Griffin-Lim not available.");
@@ -335,8 +570,7 @@ public class TtsModel<T> : IDisposable
             mel2D = melSpectrogram;
         }
 
-        var audio = _griffinLim.Reconstruct(mel2D);
-        return audio.ToArray();
+        return _griffinLim.Reconstruct(mel2D);
     }
 
     private void ThrowIfDisposed()
@@ -345,28 +579,26 @@ public class TtsModel<T> : IDisposable
             throw new ObjectDisposedException(GetType().FullName);
     }
 
+    #endregion
+
+    #region IDisposable
+
     /// <summary>
     /// Disposes the model and releases resources.
     /// </summary>
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
-
-    /// <summary>
-    /// Disposes managed and unmanaged resources.
-    /// </summary>
-    protected virtual void Dispose(bool disposing)
+    protected override void Dispose(bool disposing)
     {
         if (_disposed) return;
 
         if (disposing)
         {
             _acousticModel?.Dispose();
-            _vocoder?.Dispose();
+            // _vocoder is stored as OnnxModel and disposed by base class
         }
 
         _disposed = true;
+        base.Dispose(disposing);
     }
+
+    #endregion
 }
