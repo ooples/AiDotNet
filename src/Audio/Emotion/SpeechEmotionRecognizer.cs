@@ -211,8 +211,10 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
         bool includeArousalValence = true)
         : base(architecture)
     {
-        ArgumentNullException.ThrowIfNull(architecture);
-        ArgumentException.ThrowIfNullOrWhiteSpace(modelPath);
+        if (architecture is null)
+            throw new ArgumentNullException(nameof(architecture));
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or whitespace", nameof(modelPath));
 
         _isOnnxMode = true;
         _modelPath = modelPath;
@@ -293,7 +295,8 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
         ILossFunction<T>? lossFunction = null)
         : base(architecture)
     {
-        ArgumentNullException.ThrowIfNull(architecture);
+        if (architecture is null)
+            throw new ArgumentNullException(nameof(architecture));
 
         _isOnnxMode = false;
         _modelPath = null;
@@ -527,7 +530,12 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
     public EmotionResult<T> RecognizeEmotion(Tensor<T> audio)
     {
         var probabilities = GetEmotionProbabilities(audio);
-        var (emotion, confidence) = GetPrediction(new Dictionary<string, T>(probabilities));
+        var probDict = new Dictionary<string, T>();
+        foreach (var kvp in probabilities)
+        {
+            probDict[kvp.Key] = kvp.Value;
+        }
+        var (emotion, confidence) = GetPrediction(probDict);
 
         // Get secondary emotion
         string? secondaryEmotion = null;
@@ -850,7 +858,7 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
     }
 
     /// <inheritdoc/>
-    protected override NeuralNetworkBase<T> CreateNewInstance()
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (_isOnnxMode && _modelPath is not null)
         {
