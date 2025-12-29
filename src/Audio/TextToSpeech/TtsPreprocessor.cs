@@ -88,7 +88,7 @@ public class TtsPreprocessor
         // Convert to phonemes
         var phonemes = new List<int> { StartPhoneme };
 
-        var words = normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var words = normalized.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
 
         foreach (var word in words)
         {
@@ -117,7 +117,7 @@ public class TtsPreprocessor
         // Expand abbreviations
         foreach (var (abbrev, expansion) in Abbreviations)
         {
-            result = result.Replace(abbrev, expansion, StringComparison.OrdinalIgnoreCase);
+            result = Regex.Replace(result, Regex.Escape(abbrev), expansion, RegexOptions.IgnoreCase, RegexTimeout);
         }
 
         // Expand numbers

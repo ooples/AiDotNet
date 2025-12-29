@@ -1,3 +1,4 @@
+using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -58,17 +59,7 @@ public class OnnxModelDownloader : IOnnxModelDownloader
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _ownsHttpClient = ownsHttpClient;
 
-        if (string.IsNullOrWhiteSpace(cacheDirectory))
-        {
-            var userHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            _cacheDirectory = Path.Combine(userHome, ".aidotnet", "models");
-        }
-        else
-        {
-            _cacheDirectory = cacheDirectory;
-        }
-
-        Directory.CreateDirectory(_cacheDirectory);
+if (cacheDirectory is not null && !string.IsNullOrWhiteSpace(cacheDirectory))        {            _cacheDirectory = cacheDirectory;        }        else        {            var userHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);            _cacheDirectory = Path.Combine(userHome, ".aidotnet", "models");        }        Directory.CreateDirectory(_cacheDirectory);
     }
 
     /// <inheritdoc/>
@@ -78,7 +69,8 @@ public class OnnxModelDownloader : IOnnxModelDownloader
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(modelId);
+        if (modelId is null)
+            throw new ArgumentNullException(nameof(modelId));
 
         // Check cache first
         var cachedPath = GetCachedPath(modelId, fileName);
@@ -111,8 +103,10 @@ public class OnnxModelDownloader : IOnnxModelDownloader
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(modelId);
-        ArgumentNullException.ThrowIfNull(fileNames);
+        if (modelId is null)
+            throw new ArgumentNullException(nameof(modelId));
+        if (fileNames is null)
+            throw new ArgumentNullException(nameof(fileNames));
 
         var fileList = fileNames.ToList();
         if (fileList.Count == 0)
@@ -272,7 +266,11 @@ public class OnnxModelDownloader : IOnnxModelDownloader
             totalBytes += existingLength;
         }
 
+        #if NET6_0_OR_GREATER
         using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+#else
+        using var contentStream = await response.Content.ReadAsStreamAsync();
+#endif
 
         var mode = existingLength > 0 ? FileMode.Append : FileMode.Create;
         using var fileStream = new FileStream(tempPath, mode, FileAccess.Write, FileShare.None, 8192, true);
@@ -281,9 +279,17 @@ public class OnnxModelDownloader : IOnnxModelDownloader
         long totalBytesRead = existingLength;
         int bytesRead;
 
+        #if NET6_0_OR_GREATER
         while ((bytesRead = await contentStream.ReadAsync(buffer, cancellationToken)) > 0)
+#else
+        while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+#endif
         {
+            #if NET6_0_OR_GREATER
             await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
+#else
+            await fileStream.WriteAsync(buffer, 0, bytesRead);
+#endif
             totalBytesRead += bytesRead;
 
             if (totalBytes.HasValue && totalBytes.Value > 0)
@@ -316,10 +322,11 @@ public class OnnxModelDownloader : IOnnxModelDownloader
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(url);
+        if (url is null)
+            throw new ArgumentNullException(nameof(url));
 
         // Create a cache key from the URL hash
-        var urlHash = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(url)))[..16];
+        var urlHash = ComputeHashString(System.Text.Encoding.UTF8.GetBytes(url)).Substring(0, 16);
         var fileName = Path.GetFileName(new Uri(url).LocalPath);
         if (string.IsNullOrEmpty(fileName))
         {
@@ -339,6 +346,13 @@ public class OnnxModelDownloader : IOnnxModelDownloader
 
         await DownloadFileAsync(url, localPath, progress, cancellationToken);
         return localPath;
+    }
+
+    private static string ComputeHashString(byte[] data)
+    {
+        using var sha256 = SHA256.Create();
+        var hashBytes = sha256.ComputeHash(data);
+        return BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
     }
 }
 

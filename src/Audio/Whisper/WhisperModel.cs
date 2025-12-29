@@ -108,7 +108,7 @@ public class WhisperModel<T> : IDisposable
         try
         {
             // Load or download encoder
-            if (!string.IsNullOrEmpty(options.EncoderModelPath))
+            if (options.EncoderModelPath is not null && options.EncoderModelPath.Length > 0)
             {
                 encoder = new OnnxModel<T>(options.EncoderModelPath, options.OnnxOptions);
             }
@@ -125,7 +125,7 @@ public class WhisperModel<T> : IDisposable
             }
 
             // Load or download decoder
-            if (!string.IsNullOrEmpty(options.DecoderModelPath))
+            if (options.DecoderModelPath is not null && options.DecoderModelPath.Length > 0)
             {
                 decoder = new OnnxModel<T>(options.DecoderModelPath, options.OnnxOptions);
             }
@@ -308,7 +308,7 @@ public class WhisperModel<T> : IDisposable
         // Start with special tokens
         tokens.Add(_tokenizer.StartOfTranscript);
 
-        if (!string.IsNullOrEmpty(_options.Language))
+        if (_options.Language is not null && _options.Language.Length > 0)
         {
             tokens.Add(_tokenizer.GetLanguageToken(_options.Language));
         }
@@ -401,7 +401,8 @@ public class WhisperModel<T> : IDisposable
 
     private void ThrowIfDisposed()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName);
     }
 
     /// <summary>

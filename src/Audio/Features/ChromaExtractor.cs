@@ -1,5 +1,6 @@
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Audio.Features;
@@ -174,7 +175,7 @@ public class ChromaExtractor<T> : AudioFeatureExtractorBase<T>
             // semitone = 12 * log2(f / A4) + 69
             // pitch class = semitone mod 12
 
-            double semitone = 12 * Math.Log2(hz / tuningFrequency) + 69;
+            double semitone = 12 * MathHelper.Log2(hz / tuningFrequency) + 69;
             int pitchClass = ((int)Math.Round(semitone) % 12 + 12) % 12;
 
             // Calculate weight based on how close frequency is to the pitch class center

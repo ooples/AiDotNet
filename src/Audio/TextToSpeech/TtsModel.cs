@@ -96,7 +96,7 @@ public class TtsModel<T> : IDisposable
         try
         {
             // Load acoustic model
-            if (!string.IsNullOrEmpty(options.AcousticModelPath))
+            if (options.AcousticModelPath is not null && options.AcousticModelPath.Length > 0)
             {
                 acousticModel = new OnnxModel<T>(options.AcousticModelPath, options.OnnxOptions);
             }
@@ -113,7 +113,7 @@ public class TtsModel<T> : IDisposable
             }
 
             // Load vocoder
-            if (!string.IsNullOrEmpty(options.VocoderModelPath))
+            if (options.VocoderModelPath is not null && options.VocoderModelPath.Length > 0)
             {
                 vocoder = new OnnxModel<T>(options.VocoderModelPath, options.OnnxOptions);
             }
@@ -163,7 +163,7 @@ public class TtsModel<T> : IDisposable
         OnnxModel<T>? vocoder = null;
         GriffinLim<T>? griffinLim = null;
 
-        if (!string.IsNullOrEmpty(vocoderPath))
+        if (vocoderPath is not null && vocoderPath.Length > 0)
         {
             vocoder = new OnnxModel<T>(vocoderPath, options.OnnxOptions);
         }
@@ -341,7 +341,8 @@ public class TtsModel<T> : IDisposable
 
     private void ThrowIfDisposed()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName);
     }
 
     /// <summary>

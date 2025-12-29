@@ -1,3 +1,4 @@
+using System.Net.Http;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
@@ -86,7 +87,8 @@ public class OnnxModel<T> : IOnnxModel<T>
     /// <param name="options">Optional configuration options.</param>
     public OnnxModel(byte[] modelBytes, OnnxModelOptions? options = null)
     {
-        ArgumentNullException.ThrowIfNull(modelBytes);
+        if (modelBytes is null)
+            throw new ArgumentNullException(nameof(modelBytes));
 
         _options = options ?? new OnnxModelOptions();
         _numOps = MathHelper.GetNumericOperations<T>();
@@ -456,7 +458,8 @@ public class OnnxModel<T> : IOnnxModel<T>
 
     private void ThrowIfDisposed()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName);
     }
 
     /// <summary>
@@ -504,18 +507,30 @@ public class OnnxModel<T> : IOnnxModel<T>
         {
             // Download model from URL
             using var httpClient = new HttpClient();
+#if NET6_0_OR_GREATER
             var response = await httpClient.GetAsync(modelPath, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+#else
+            var response = await httpClient.GetAsync(modelPath, cancellationToken);
+#endif
             response.EnsureSuccessStatusCode();
 
             var totalBytes = response.Content.Headers.ContentLength ?? -1;
             var bytes = new List<byte>();
 
+#if NET6_0_OR_GREATER
             using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+#else
+            using var stream = await response.Content.ReadAsStreamAsync();
+#endif
             var buffer = new byte[8192];
             int bytesRead;
             long totalBytesRead = 0;
 
+#if NET6_0_OR_GREATER
             while ((bytesRead = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken)) > 0)
+#else
+            while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
+#endif
             {
                 bytes.AddRange(buffer.Take(bytesRead));
                 totalBytesRead += bytesRead;
