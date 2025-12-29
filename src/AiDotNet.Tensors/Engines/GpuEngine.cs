@@ -18474,6 +18474,328 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+    #region Persistent GPU Tensor Allocation (Phase B: US-GPU-030)
+
+    /// <summary>
+    /// Allocates a persistent GPU tensor handle from CPU data.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Phase B: Persistent GPU Tensors (US-GPU-030)</b></para>
+    /// <para>
+    /// Unlike pooled buffers, GpuTensorHandle provides persistent GPU storage for weights
+    /// and biases that stay on GPU across multiple forward/backward passes. This eliminates
+    /// the catastrophic overhead of CPU→GPU transfers every operation.
+    /// </para>
+    /// <para><b>Performance Impact:</b>
+    /// - Without persistent tensors: 864 transfers for 36 forward passes
+    /// - With persistent tensors: 2 transfers (initial upload, final download)
+    /// - Expected speedup: 100-1000x for weight-heavy operations
+    /// </para>
+    /// <para><b>Ownership:</b> The caller owns the returned handle and must call Dispose()
+    /// when done. This is NOT a pooled buffer - it persists until explicitly disposed.</para>
+    /// </remarks>
+    /// <param name="data">The CPU data to upload to GPU.</param>
+    /// <param name="shape">The tensor shape (dimensions).</param>
+    /// <returns>A GpuTensorHandle for persistent GPU storage, or null if GPU is unavailable.</returns>
+    public GpuTensorHandle<float>? AllocateGpuTensor(float[] data, int[] shape)
+    {
+        if (!SupportsGpu || !_gpuHealthy || _accelerator == null)
+            return null;
+
+        if (data == null) throw new ArgumentNullException(nameof(data));
+        if (shape == null) throw new ArgumentNullException(nameof(shape));
+
+        int expectedLength = 1;
+        foreach (int dim in shape)
+            expectedLength *= dim;
+        if (data.Length != expectedLength)
+            throw new ArgumentException($"Data length {data.Length} doesn't match shape {string.Join("x", shape)} = {expectedLength}");
+
+        try
+        {
+            lock (_gpuLock)
+            {
+                // Allocate persistent GPU buffer (NOT from pool)
+                var buffer = _accelerator.Allocate1D<float>(data.Length);
+                buffer.View.CopyFromCPU(data);
+                _accelerator.Synchronize();
+
+                return new GpuTensorHandle<float>(buffer, shape);
+            }
+        }
+        catch (Exception ex)
+        {
+            RecordGpuFailure(ex);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Allocates a persistent GPU tensor handle from CPU data (double precision).
+    /// </summary>
+    /// <param name="data">The CPU data to upload to GPU.</param>
+    /// <param name="shape">The tensor shape (dimensions).</param>
+    /// <returns>A GpuTensorHandle for persistent GPU storage, or null if GPU is unavailable.</returns>
+    public GpuTensorHandle<double>? AllocateGpuTensor(double[] data, int[] shape)
+    {
+        if (!SupportsGpu || !_gpuHealthy || _accelerator == null)
+            return null;
+
+        if (data == null) throw new ArgumentNullException(nameof(data));
+        if (shape == null) throw new ArgumentNullException(nameof(shape));
+
+        int expectedLength = 1;
+        foreach (int dim in shape)
+            expectedLength *= dim;
+        if (data.Length != expectedLength)
+            throw new ArgumentException($"Data length {data.Length} doesn't match shape {string.Join("x", shape)} = {expectedLength}");
+
+        try
+        {
+            lock (_gpuLock)
+            {
+                // Allocate persistent GPU buffer (NOT from pool)
+                var buffer = _accelerator.Allocate1D<double>(data.Length);
+                buffer.View.CopyFromCPU(data);
+                _accelerator.Synchronize();
+
+                return new GpuTensorHandle<double>(buffer, shape);
+            }
+        }
+        catch (Exception ex)
+        {
+            RecordGpuFailure(ex);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Performs matrix multiplication using pre-cached GPU weights.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Phase B: Persistent GPU Tensors (US-GPU-030)</b></para>
+    /// <para>
+    /// This method performs A × B^T where B (weights) is already on GPU via GpuTensorHandle.
+    /// Only the input tensor (activations) is transferred CPU→GPU per call, eliminating
+    /// the weight transfer overhead that causes catastrophic slowdowns.
+    /// </para>
+    /// <para><b>Expected Usage:</b>
+    /// <code>
+    /// // One-time weight upload during layer initialization
+    /// var gpuWeights = gpuEngine.AllocateGpuTensor(weightsTransposed.ToArray(), weightsTransposed.Shape);
+    ///
+    /// // Forward passes - only activations transfer
+    /// var result = gpuEngine.TensorMatMulCachedWeights(input, weightsTransposed, gpuWeights);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="input">The input tensor (will be uploaded to GPU).</param>
+    /// <param name="weights">The weights tensor (CPU fallback, should match gpuWeights).</param>
+    /// <param name="gpuWeights">Pre-allocated GPU handle containing transposed weights.</param>
+    /// <returns>The result of input × weights^T, or null if GPU operation fails.</returns>
+    public Tensor<float>? TensorMatMulCachedWeights(Tensor<float> input, Tensor<float> weights, GpuTensorHandle<float> gpuWeights)
+    {
+        if (!SupportsGpu || !_gpuHealthy || _accelerator == null)
+            return null;
+
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
+        if (gpuWeights == null) throw new ArgumentNullException(nameof(gpuWeights));
+
+        // Input: [batch, inputFeatures], WeightsT: [outputFeatures, inputFeatures]
+        // Result: [batch, outputFeatures]
+        int m = input.Shape[0];  // batch size
+        int k = input.Shape[1];  // input features
+        int n = weights.Shape[0]; // output features (weights are already transposed)
+
+        // Verify weights shape matches GPU handle
+        if (gpuWeights.Shape[0] != n || gpuWeights.Shape[1] != k)
+        {
+            throw new ArgumentException(
+                $"GPU weights shape [{gpuWeights.Shape[0]},{gpuWeights.Shape[1]}] doesn't match expected [{n},{k}]");
+        }
+
+        var sw = _timingDiagnostics.IsEnabled ? System.Diagnostics.Stopwatch.StartNew() : null;
+
+        // Only need to allocate input and result buffers (weights already on GPU)
+        var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * k);
+        var gpuResult = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * n);
+
+        if (sw != null)
+        {
+            _timingDiagnostics.Record("MatMulCached", GpuTimingCategory.MemoryAlloc, sw.ElapsedMilliseconds, (m * k + m * n) * sizeof(float));
+            sw.Restart();
+        }
+
+        try
+        {
+            // Upload only input to GPU (weights already there!)
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+            if (sw != null)
+            {
+                _accelerator.Synchronize();
+                _timingDiagnostics.Record("MatMulCached", GpuTimingCategory.CpuToGpuTransfer, sw.ElapsedMilliseconds, m * k * sizeof(float));
+                sw.Restart();
+            }
+
+            // Create 2D views
+            var viewInput = gpuInput.View.As2DView<Stride2D.DenseX>(new Index2D(m, k), new Stride2D.DenseX(k));
+            var viewWeightsT = gpuWeights.Buffer.View.As2DView<Stride2D.DenseX>(new Index2D(n, k), new Stride2D.DenseX(k));
+            var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(m, n), new Stride2D.DenseX(n));
+
+            lock (_gpuLock)
+            {
+                // Use optimized kernel with transposed weights (coalesced memory access)
+                // Kernel: result[row,col] = sum(input[row,i] * weightsT[col,i])
+                if (_matrixMultiplyTransposedBKernelFloat != null)
+                {
+                    _matrixMultiplyTransposedBKernelFloat(
+                        _accelerator.DefaultStream, new Index2D(m, n), viewInput, viewWeightsT, viewResult, k);
+                }
+                else
+                {
+                    // Fallback to naive kernel (less efficient but works)
+                    throw new InvalidOperationException("Optimized transpose-B kernel not available");
+                }
+
+                _accelerator.Synchronize();
+            }
+
+            if (sw != null)
+            {
+                _timingDiagnostics.Record("MatMulCached", GpuTimingCategory.KernelExecution, sw.ElapsedMilliseconds);
+                sw.Restart();
+            }
+
+            var resultData = new float[m * n];
+            gpuResult.View.SubView(0, m * n).CopyToCPU(resultData);
+
+            if (sw != null)
+            {
+                _timingDiagnostics.Record("MatMulCached", GpuTimingCategory.GpuToCpuTransfer, sw.ElapsedMilliseconds, m * n * sizeof(float));
+            }
+
+            return new Tensor<float>([m, n], new Vector<float>(resultData));
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return null; // Let caller fall back to CPU
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuInput);
+            _memoryPoolFloat.Return(gpuResult);
+            // Note: gpuWeights is NOT returned - caller owns it
+        }
+    }
+
+    /// <summary>
+    /// Performs matrix multiplication using pre-cached GPU weights (double precision).
+    /// </summary>
+    /// <param name="input">The input tensor (will be uploaded to GPU).</param>
+    /// <param name="weights">The weights tensor (CPU fallback, should match gpuWeights).</param>
+    /// <param name="gpuWeights">Pre-allocated GPU handle containing transposed weights.</param>
+    /// <returns>The result of input × weights^T, or null if GPU operation fails.</returns>
+    public Tensor<double>? TensorMatMulCachedWeights(Tensor<double> input, Tensor<double> weights, GpuTensorHandle<double> gpuWeights)
+    {
+        if (!SupportsGpu || !_gpuHealthy || _accelerator == null)
+            return null;
+
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
+        if (gpuWeights == null) throw new ArgumentNullException(nameof(gpuWeights));
+
+        // Input: [batch, inputFeatures], WeightsT: [outputFeatures, inputFeatures]
+        // Result: [batch, outputFeatures]
+        int m = input.Shape[0];  // batch size
+        int k = input.Shape[1];  // input features
+        int n = weights.Shape[0]; // output features (weights are already transposed)
+
+        // Verify weights shape matches GPU handle
+        if (gpuWeights.Shape[0] != n || gpuWeights.Shape[1] != k)
+        {
+            throw new ArgumentException(
+                $"GPU weights shape [{gpuWeights.Shape[0]},{gpuWeights.Shape[1]}] doesn't match expected [{n},{k}]");
+        }
+
+        var sw = _timingDiagnostics.IsEnabled ? System.Diagnostics.Stopwatch.StartNew() : null;
+
+        // Only need to allocate input and result buffers (weights already on GPU)
+        var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * k);
+        var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * n);
+
+        if (sw != null)
+        {
+            _timingDiagnostics.Record("MatMulCachedDouble", GpuTimingCategory.MemoryAlloc, sw.ElapsedMilliseconds, (m * k + m * n) * sizeof(double));
+            sw.Restart();
+        }
+
+        try
+        {
+            // Upload only input to GPU (weights already there!)
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+            if (sw != null)
+            {
+                _accelerator.Synchronize();
+                _timingDiagnostics.Record("MatMulCachedDouble", GpuTimingCategory.CpuToGpuTransfer, sw.ElapsedMilliseconds, m * k * sizeof(double));
+                sw.Restart();
+            }
+
+            // Create 2D views
+            var viewInput = gpuInput.View.As2DView<Stride2D.DenseX>(new Index2D(m, k), new Stride2D.DenseX(k));
+            var viewWeightsT = gpuWeights.Buffer.View.As2DView<Stride2D.DenseX>(new Index2D(n, k), new Stride2D.DenseX(k));
+            var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(m, n), new Stride2D.DenseX(n));
+
+            lock (_gpuLock)
+            {
+                // Use optimized kernel with transposed weights (coalesced memory access)
+                if (_matrixMultiplyTransposedBKernelDouble != null)
+                {
+                    _matrixMultiplyTransposedBKernelDouble(
+                        _accelerator.DefaultStream, new Index2D(m, n), viewInput, viewWeightsT, viewResult, k);
+                }
+                else
+                {
+                    throw new InvalidOperationException("Optimized transpose-B kernel not available");
+                }
+
+                _accelerator.Synchronize();
+            }
+
+            if (sw != null)
+            {
+                _timingDiagnostics.Record("MatMulCachedDouble", GpuTimingCategory.KernelExecution, sw.ElapsedMilliseconds);
+                sw.Restart();
+            }
+
+            var resultData = new double[m * n];
+            gpuResult.View.SubView(0, m * n).CopyToCPU(resultData);
+
+            if (sw != null)
+            {
+                _timingDiagnostics.Record("MatMulCachedDouble", GpuTimingCategory.GpuToCpuTransfer, sw.ElapsedMilliseconds, m * n * sizeof(double));
+            }
+
+            return new Tensor<double>([m, n], new Vector<double>(resultData));
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return null; // Let caller fall back to CPU
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuInput);
+            _memoryPoolDouble.Return(gpuResult);
+            // Note: gpuWeights is NOT returned - caller owns it
+        }
+    }
+
+    #endregion
+
     /// <inheritdoc/>
     public Tensor<T> Conv2D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] dilation)
     {

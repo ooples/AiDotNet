@@ -25,7 +25,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public abstract class LayerBase<T> : ILayer<T>
+public abstract class LayerBase<T> : ILayer<T>, IDisposable
 {
     /// <summary>
     /// Gets the global execution engine for vector operations.
@@ -249,17 +249,22 @@ public abstract class LayerBase<T> : ILayer<T>
     /// Some layers behave differently during training versus inference, such as Dropout or BatchNormalization.
     /// </para>
     /// <para><b>For Beginners:</b> This tells the layer whether it's currently training or being used for predictions.
-    /// 
+    ///
     /// This mode flag:
     /// - Affects how certain layers behave
     /// - Can turn on/off special training features
     /// - Helps the network switch between learning and using what it learned
-    /// 
+    ///
     /// For example, dropout layers randomly turn off neurons during training to improve
     /// generalization, but during inference they don't drop anything.
     /// </para>
     /// </remarks>
     protected bool IsTrainingMode = true;
+
+    /// <summary>
+    /// Tracks whether Dispose has been called.
+    /// </summary>
+    private bool _disposed;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -1772,5 +1777,82 @@ public abstract class LayerBase<T> : ILayer<T>
         }
 
         return metadata;
+    }
+
+    /// <summary>
+    /// Releases all resources used by this layer, including any GPU resources.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method releases any resources allocated by the layer, including GPU memory for
+    /// persistent tensors. All layers that allocate resources should override Dispose(bool)
+    /// to properly release them.
+    /// </para>
+    /// <para><b>For Beginners:</b> GPU memory is limited and precious.
+    ///
+    /// When you're done with a layer:
+    /// - Call Dispose() or use a 'using' statement
+    /// - This frees up GPU memory for other operations
+    /// - Failing to dispose can cause memory leaks
+    ///
+    /// Example:
+    /// <code>
+    /// using var layer = new DenseLayer&lt;float&gt;(784, 128);
+    /// // ... use layer ...
+    /// // Automatically disposed when out of scope
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases resources used by this layer.
+    /// </summary>
+    /// <param name="disposing">True if called from Dispose(), false if called from finalizer.</param>
+    /// <remarks>
+    /// <para>
+    /// Override this method in derived classes to release layer-specific resources.
+    /// Always call base.Dispose(disposing) after releasing your resources.
+    /// </para>
+    /// <para><b>For Beginners:</b> When creating a custom layer with resources:
+    ///
+    /// <code>
+    /// protected override void Dispose(bool disposing)
+    /// {
+    ///     if (disposing)
+    ///     {
+    ///         // Release your managed resources here
+    ///         _myGpuHandle?.Dispose();
+    ///         _myGpuHandle = null;
+    ///     }
+    ///     base.Dispose(disposing);
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+
+        if (disposing)
+        {
+            // Base class has no managed resources that need explicit disposal
+            // Derived classes should override to dispose their GPU handles
+        }
+
+        _disposed = true;
+    }
+
+    /// <summary>
+    /// Finalizer to ensure resources are released if Dispose is not called.
+    /// </summary>
+    ~LayerBase()
+    {
+        Dispose(disposing: false);
     }
 }
