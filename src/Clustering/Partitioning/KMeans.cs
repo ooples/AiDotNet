@@ -3,6 +3,7 @@ using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
 
@@ -423,6 +424,18 @@ public class KMeans<T> : ClusteringBase<T>
             {
                 throw new ArgumentException(
                     $"Initial centers columns ({_options.InitialCenters.Columns}) must equal data columns ({x.Columns}).");
+            }
+        }
+
+        for (int i = 0; i < x.Rows; i++)
+        {
+            for (int j = 0; j < x.Columns; j++)
+            {
+                T value = x[i, j];
+                if (NumericalStabilityHelper.IsNaN(value) || NumericalStabilityHelper.IsInfinity(value))
+                {
+                    throw new ArgumentException("Input data contains NaN or Infinity values.", nameof(x));
+                }
             }
         }
     }

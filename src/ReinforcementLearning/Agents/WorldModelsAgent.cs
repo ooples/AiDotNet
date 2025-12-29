@@ -101,7 +101,12 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private NeuralNetwork<T> CreateEncoderNetwork(int inputSize, int outputSize)
     {
-        var architecture = new NeuralNetworkArchitecture<T>(inputSize, outputSize, NetworkComplexity.Medium);
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: inputSize,
+            outputSize: outputSize);
         var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
         int previousSize = inputSize;
 
@@ -119,7 +124,12 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private NeuralNetwork<T> CreateDecoderNetwork(int inputSize, int outputSize)
     {
-        var architecture = new NeuralNetworkArchitecture<T>(inputSize, outputSize, NetworkComplexity.Medium);
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: inputSize,
+            outputSize: outputSize);
         var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
         int previousSize = inputSize;
 
@@ -145,7 +155,12 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         // This simplified version uses single-mode prediction (NumMixtures parameter is for future MDN support)
         int inputSize = _options.LatentSize + _options.ActionSize + _options.RNNHiddenSize;
         int outputSize = _options.LatentSize + _options.RNNHiddenSize;  // Single prediction + hidden state
-        var architecture = new NeuralNetworkArchitecture<T>(inputSize, outputSize, NetworkComplexity.Medium);
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: inputSize,
+            outputSize: outputSize);
         var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
 
         network.AddLayer(LayerType.Dense, _options.RNNHiddenSize, ActivationFunction.Tanh);

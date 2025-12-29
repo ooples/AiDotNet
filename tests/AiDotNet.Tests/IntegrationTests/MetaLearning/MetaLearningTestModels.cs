@@ -222,6 +222,12 @@ internal class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<dou
         }
 
         var parts = content.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+        int expectedCount = _inputFeatures + 1;
+        if (parts.Length != expectedCount)
+        {
+            throw new InvalidDataException($"Parameter count mismatch: expected {expectedCount}, got {parts.Length}");
+        }
+
         var vector = new Vector<double>(parts.Length);
         for (int i = 0; i < parts.Length; i++)
         {
@@ -467,6 +473,12 @@ internal class TensorEmbeddingModel : IFullModel<double, Matrix<double>, Tensor<
         }
 
         var parts = content.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+        int expectedCount = _inputFeatures * _embeddingDim + _embeddingDim;
+        if (parts.Length != expectedCount)
+        {
+            throw new InvalidDataException($"Parameter count mismatch: expected {expectedCount}, got {parts.Length}");
+        }
+
         var vector = new Vector<double>(parts.Length);
         for (int i = 0; i < parts.Length; i++)
         {
