@@ -204,6 +204,15 @@ public class FlattenLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
+
+        // Handle unbatched input (3D: [C, H, W] or 2D: [H, W])
+        if (input.Rank <= 3)
+        {
+            // Unbatched input: flatten to 1D vector
+            return Engine.Reshape(input, [input.Length]);
+        }
+
+        // Batched input: flatten spatial dimensions keeping batch dimension
         int batchSize = input.Shape[0];
         return Engine.Reshape(input, [batchSize, _outputSize]);
     }

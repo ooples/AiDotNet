@@ -1190,6 +1190,47 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Gets all parameter gradients of the layer as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all parameter gradients (kernel gradients followed by bias gradients).</returns>
+    public override Vector<T> GetParameterGradients()
+    {
+        int totalParams = _kernels.Length + _biases.Shape[0];
+        var gradients = new Vector<T>(totalParams);
+
+        // If gradients haven't been computed yet, return zero gradients
+        if (_kernelsGradient == null || _biasesGradient == null)
+        {
+            return gradients;
+        }
+
+        int index = 0;
+
+        // Copy kernel gradients in the same order as GetParameters
+        for (int o = 0; o < OutputDepth; o++)
+        {
+            for (int i = 0; i < InputDepth; i++)
+            {
+                for (int ky = 0; ky < KernelSize; ky++)
+                {
+                    for (int kx = 0; kx < KernelSize; kx++)
+                    {
+                        gradients[index++] = _kernelsGradient[o, i, ky, kx];
+                    }
+                }
+            }
+        }
+
+        // Copy bias gradients
+        for (int o = 0; o < OutputDepth; o++)
+        {
+            gradients[index++] = _biasesGradient[o];
+        }
+
+        return gradients;
+    }
+
+    /// <summary>
     /// Sets all trainable parameters of the layer from a single vector.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters to set.</param>

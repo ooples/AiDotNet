@@ -1936,8 +1936,9 @@ public static class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreateDefaultRNNLayers(NeuralNetworkArchitecture<T> architecture)
     {
         // Get input and output dimensions from the architecture
+        // For 2D input [seqLen, features], the input size is the feature dimension
         var inputShape = architecture.GetInputShape();
-        int inputSize = inputShape[0];
+        int inputSize = inputShape.Length >= 2 ? inputShape[1] : inputShape[0];
         int outputSize = architecture.OutputSize;
 
         // Default hidden layer size
@@ -1969,6 +1970,10 @@ public static class LayerHelper<T>
 
             yield return new ActivationLayer<T>([hiddenSize], new TanhActivation<T>() as IActivationFunction<T>);
         }
+
+        // Extract the last timestep from the sequence for classification tasks
+        // RNN layers output [seqLen, hiddenSize], but Dense layer expects [hiddenSize]
+        yield return new SequenceLastLayer<T>(hiddenSize);
 
         // Add the final Dense Layer to map to output size
         yield return new DenseLayer<T>(

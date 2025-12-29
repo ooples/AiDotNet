@@ -108,7 +108,8 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
         else
         {
             // Use default layer configuration if no layers are provided
-            Layers.AddRange(LayerHelper<T>.CreateDefaultCNNLayers(Architecture));
+            // Pass the architecture's output size to ensure the output layer has correct dimensions
+            Layers.AddRange(LayerHelper<T>.CreateDefaultCNNLayers(Architecture, outputSize: Architecture.OutputSize));
         }
     }
 

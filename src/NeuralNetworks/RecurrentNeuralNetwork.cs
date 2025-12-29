@@ -81,6 +81,7 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _learningRate = NumOps.FromDouble(learningRate);
+        InitializeLayers();
     }
 
     /// <summary>
