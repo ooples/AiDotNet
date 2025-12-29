@@ -127,7 +127,7 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
     private void ValidateSymmetric(Matrix<T> matrix)
     {
         int n = matrix.Rows;
-        // Use a relative tolerance for floating-point comparison
+        // Use an absolute tolerance for floating-point comparison
         // This is necessary because computations like A^T*A may have tiny numerical errors
         T tolerance = NumOps.FromDouble(1e-10);
 
