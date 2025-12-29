@@ -167,8 +167,16 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
         // Split the data
         var (xTrain, yTrain, xVal, yVal, xTest, yTest) = _dataPreprocessor.SplitData(preprocessedX, preprocessedY);
 
+        // If HasIntercept is true, prepend a column of 1s to each matrix for the intercept term
+        if (HasIntercept)
+        {
+            xTrain = PrependInterceptColumn(xTrain);
+            xVal = PrependInterceptColumn(xVal);
+            xTest = PrependInterceptColumn(xTest);
+        }
+
         // Initialize optimizer with proper dimensions based on input data
-        int featureCount = xTrain.Columns + (HasIntercept ? 1 : 0);
+        int featureCount = xTrain.Columns;
         _bestModel = new VectorModel<T>(new Vector<T>(featureCount));
         _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(_bestModel, _gaOptions);
 
@@ -176,6 +184,23 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
 
         _bestModel = result.BestSolution;
         UpdateCoefficientsAndIntercept();
+    }
+
+    /// <summary>
+    /// Prepends a column of 1s to the matrix for the intercept term.
+    /// </summary>
+    private Matrix<T> PrependInterceptColumn(Matrix<T> matrix)
+    {
+        var result = new Matrix<T>(matrix.Rows, matrix.Columns + 1);
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            result[i, 0] = NumOps.One;
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                result[i, j + 1] = matrix[i, j];
+            }
+        }
+        return result;
     }
 
     /// <summary>
@@ -203,7 +228,12 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> x)
     {
-        return _bestModel?.Predict(x) ?? Vector<T>.Empty();
+        if (_bestModel == null)
+            return Vector<T>.Empty();
+
+        // If HasIntercept is true, prepend a column of 1s to match the model's expected input
+        var input = HasIntercept ? PrependInterceptColumn(x) : x;
+        return _bestModel.Predict(input);
     }
 
     /// <summary>

@@ -107,26 +107,29 @@ public class LogisticRegression<T> : RegressionBase<T>
         int p = x.Columns;
         Coefficients = new Vector<T>(p);
         Intercept = NumOps.Zero;
-        // Apply regularization to the input matrix
-        Matrix<T> regularizedX = Regularization != null ? Regularization.Regularize(x) : x;
-        T learningRate = NumOps.FromDouble(_options.LearningRate);
+        // Note: Do NOT apply Regularize(x) to the input matrix - it returns a penalty, not regularized data
+        // Scale learning rate by sample count for stable convergence
+        T scaledLearningRate = NumOps.Divide(NumOps.FromDouble(_options.LearningRate), NumOps.FromDouble(n));
+        T interceptLearningRate = NumOps.FromDouble(_options.LearningRate);
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
-            Vector<T> predictions = Predict(regularizedX);
+            Vector<T> predictions = Predict(x);
             Vector<T> errors = y.Subtract(predictions);
             // Calculate gradient: X^T * (y - predictions)
-            Vector<T> gradient = regularizedX.Transpose().Multiply(errors);
-            // Apply regularization to the gradient
+            Matrix<T> xTranspose = x.Transpose();
+            Vector<T> gradient = xTranspose.Multiply(errors);
+            // Apply regularization to the gradient (adds penalty term)
             if (Regularization != null)
             {
                 gradient = ApplyRegularizationGradient(gradient);
             }
-            // Update coefficients: coef += learning_rate * gradient
-            Coefficients = Coefficients.Add(gradient.Multiply(learningRate));
-            // Update intercept: intercept += learning_rate * sum(errors)
-            T interceptGrad = errors.Sum();
-            Intercept = NumOps.Add(Intercept, NumOps.Multiply(learningRate, interceptGrad));
-            if (HasConverged(gradient))
+            // Update coefficients with scaled learning rate for stable convergence
+            Vector<T> gradientUpdate = gradient.Multiply(scaledLearningRate);
+            Coefficients = Coefficients.Add(gradientUpdate);
+            // Update intercept with original learning rate (averaged error)
+            T avgError = NumOps.Divide(errors.Sum(), NumOps.FromDouble(n));
+            Intercept = NumOps.Add(Intercept, NumOps.Multiply(interceptLearningRate, avgError));
+            if (HasConvergedScaled(gradient, n))
                 break;
         }
         // Apply final regularization to coefficients
@@ -253,6 +256,17 @@ public class LogisticRegression<T> : RegressionBase<T>
     {
         T maxGradient = gradient.Max(NumOps.Abs) ?? NumOps.Zero;
         return NumOps.LessThan(maxGradient, NumOps.FromDouble(_options.Tolerance));
+    }
+
+    /// <summary>
+    /// Checks convergence using scaled gradient (accounts for sample size).
+    /// </summary>
+    private bool HasConvergedScaled(Vector<T> gradient, int n)
+    {
+        // Scale tolerance by sample count to match gradient scaling
+        T maxGradient = gradient.Max(NumOps.Abs) ?? NumOps.Zero;
+        T scaledMaxGradient = NumOps.Divide(maxGradient, NumOps.FromDouble(n));
+        return NumOps.LessThan(scaledMaxGradient, NumOps.FromDouble(_options.Tolerance));
     }
 
     /// <summary>
