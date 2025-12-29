@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
 
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -231,6 +232,16 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastOutput; // Pre-activation output for proper gradient computation
+
+    // === GPU Weight Caching (Phase B: US-GPU-030 - Persistent GPU Tensors) ===
+    // Cached transposed weights to avoid re-transposing every forward pass
+    private Tensor<T>? _weightsTransposedCache;
+    // Persistent GPU handles for weights - stay on GPU across forward/backward passes
+    // Only one will be non-null based on T being float or double
+#if !NET462
+    private GpuTensorHandle<float>? _gpuWeightsTransposedFloat;
+    private GpuTensorHandle<double>? _gpuWeightsTransposedDouble;
+#endif
 
     /// <summary>
     /// Gets the total number of trainable parameters in the layer.
@@ -585,7 +596,105 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Set the weights directly
         _weights = weights;
+
+        // Invalidate cached weights since they've changed
+        InvalidateWeightCaches();
     }
+
+    /// <summary>
+    /// Invalidates all cached weight data (CPU transposed and GPU handles).
+    /// Call this whenever weights are modified.
+    /// </summary>
+    private void InvalidateWeightCaches()
+    {
+        _weightsTransposedCache = null;
+
+#if !NET462
+        // Dispose and clear GPU handles
+        _gpuWeightsTransposedFloat?.Dispose();
+        _gpuWeightsTransposedFloat = null;
+
+        _gpuWeightsTransposedDouble?.Dispose();
+        _gpuWeightsTransposedDouble = null;
+#endif
+    }
+
+    /// <summary>
+    /// Gets the transposed weights, caching the result for reuse.
+    /// </summary>
+    /// <returns>The transposed weight tensor.</returns>
+    private Tensor<T> GetWeightsTransposed()
+    {
+        if (_weightsTransposedCache == null)
+        {
+            _weightsTransposedCache = Engine.TensorTranspose(_weights);
+        }
+        return _weightsTransposedCache;
+    }
+
+#if !NET462
+    /// <summary>
+    /// Attempts to perform matrix multiplication using GPU-cached weights.
+    /// Returns null if GPU is not available or operation fails.
+    /// </summary>
+    /// <param name="input">The input tensor (uploaded to GPU per call).</param>
+    /// <param name="weightsTransposed">The transposed weights tensor for fallback.</param>
+    /// <returns>The result tensor, or null if GPU operation failed.</returns>
+    private Tensor<T>? TryTensorMatMulWithCachedWeights(Tensor<T> input, Tensor<T> weightsTransposed)
+    {
+        // Check if engine is GpuEngine
+        if (Engine is not GpuEngine gpuEngine || !gpuEngine.SupportsGpu)
+            return null;
+
+        // Handle float type
+        if (typeof(T) == typeof(float))
+        {
+            // Allocate GPU handle if needed
+            if (_gpuWeightsTransposedFloat == null)
+            {
+                var weightsData = weightsTransposed.ToArray();
+                var floatData = weightsData as float[];
+                if (floatData == null) return null;
+
+                _gpuWeightsTransposedFloat = gpuEngine.AllocateGpuTensor(floatData, weightsTransposed.Shape);
+                if (_gpuWeightsTransposedFloat == null) return null;
+            }
+
+            // Perform GPU mat mul with cached weights
+            var inputTensor = input as Tensor<float>;
+            var weightsTensor = weightsTransposed as Tensor<float>;
+            if (inputTensor == null || weightsTensor == null) return null;
+
+            var result = gpuEngine.TensorMatMulCachedWeights(inputTensor, weightsTensor, _gpuWeightsTransposedFloat);
+            return result as Tensor<T>;
+        }
+
+        // Handle double type
+        if (typeof(T) == typeof(double))
+        {
+            // Allocate GPU handle if needed
+            if (_gpuWeightsTransposedDouble == null)
+            {
+                var weightsData = weightsTransposed.ToArray();
+                var doubleData = weightsData as double[];
+                if (doubleData == null) return null;
+
+                _gpuWeightsTransposedDouble = gpuEngine.AllocateGpuTensor(doubleData, weightsTransposed.Shape);
+                if (_gpuWeightsTransposedDouble == null) return null;
+            }
+
+            // Perform GPU mat mul with cached weights
+            var inputTensor = input as Tensor<double>;
+            var weightsTensor = weightsTransposed as Tensor<double>;
+            if (inputTensor == null || weightsTensor == null) return null;
+
+            var result = gpuEngine.TensorMatMulCachedWeights(inputTensor, weightsTensor, _gpuWeightsTransposedDouble);
+            return result as Tensor<T>;
+        }
+
+        return null; // Unsupported type
+    }
+#endif
 
     /// <summary>
     /// Gets the weights tensor of the layer.
@@ -686,8 +795,17 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // weights: [outputSize, inputSize]
         // weights.T: [inputSize, outputSize]
         // result: [batchDim, outputSize]
-        var weightsTransposed = Engine.TensorTranspose(_weights);
-        var matmul = Engine.TensorMatMul(flattenedInput, weightsTransposed);
+
+        // Get cached transposed weights (avoids re-transposing every forward pass)
+        var weightsTransposed = GetWeightsTransposed();
+
+        // Try GPU-cached mat mul path first (weights stay on GPU, only input transfers)
+        Tensor<T>? matmul = null;
+#if !NET462
+        matmul = TryTensorMatMulWithCachedWeights(flattenedInput, weightsTransposed);
+#endif
+        // Fall back to standard mat mul if GPU path failed
+        matmul ??= Engine.TensorMatMul(flattenedInput, weightsTransposed);
 
         // Add biases with broadcasting support ([batchDim, outputSize] + [outputSize])
         var output = Engine.TensorBroadcastAdd(matmul, _biases);
@@ -1022,6 +1140,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         _weights = _weights.Subtract(_weightsGradient.Multiply(learningRate));
         _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));
+
+        // Invalidate cached weights since they've changed
+        InvalidateWeightCaches();
     }
 
     /// <summary>
@@ -1104,6 +1225,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _weights = new Tensor<T>(_weights.Shape, parameters.Slice(index, _weights.Length));
         index += _weights.Length;
         _biases = new Tensor<T>(_biases.Shape, parameters.Slice(index, _biases.Length));
+
+        // Invalidate cached weights since they've changed
+        InvalidateWeightCaches();
     }
 
     /// <summary>

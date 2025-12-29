@@ -1,6 +1,6 @@
 # Benchmarks
 
-This repository includes GPU and CPU benchmark suites for the Phase B GPU acceleration work.
+This repository includes GPU benchmark suites for the Phase B GPU acceleration work.
 
 ## GPU acceleration benchmarks
 

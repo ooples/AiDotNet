@@ -68,7 +68,10 @@ public class GpuMemoryPool<T> : IDisposable where T : unmanaged
     /// </summary>
     /// <param name="accelerator">The GPU accelerator to allocate buffers on.</param>
     /// <param name="bucketSizes">Custom bucket sizes in ascending order.</param>
-    /// <param name="clearOnRent">Whether to clear reused buffers before handing them out.</param>
+    /// <param name="clearOnRent">Whether to clear reused buffers before handing them out.
+    /// Set to false only in performance-critical scenarios where data leakage between operations is acceptable.
+    /// <b>WARNING:</b> Setting to false may expose sensitive data from previous operations. Keep true for
+    /// any workloads processing sensitive data (credentials, personal information, model weights, etc.).</param>
     public GpuMemoryPool(Accelerator accelerator, int[] bucketSizes, bool clearOnRent)
     {
         _accelerator = accelerator ?? throw new ArgumentNullException(nameof(accelerator));
@@ -133,6 +136,9 @@ public class GpuMemoryPool<T> : IDisposable where T : unmanaged
             if (_clearOnRent)
             {
                 buffer.MemSetToZero();
+                // MemSetToZero is asynchronous - synchronize to ensure clear completes
+                // before returning the buffer to prevent race conditions
+                _accelerator.Synchronize();
             }
 
             // Buffer is reused as-is for performance when clearing is disabled

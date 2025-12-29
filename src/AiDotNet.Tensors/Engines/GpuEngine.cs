@@ -2489,6 +2489,163 @@ public class GpuEngine : IEngine, IDisposable
     /// </summary>
     internal Accelerator? GetAccelerator() => _accelerator;
 
+    /// <summary>
+    /// Performs tensor matrix multiplication using a cached GPU weights tensor.
+    /// Input tensor is uploaded per-call, but weights stay on GPU (persistent).
+    /// </summary>
+    /// <param name="input">Input tensor [batchSize, inputSize] - uploaded per call.</param>
+    /// <param name="weights">Weights tensor (for CPU fallback validation).</param>
+    /// <param name="gpuWeights">Cached GPU weights handle (already on GPU).</param>
+    /// <returns>Result tensor [batchSize, outputSize], or null if GPU operation failed.</returns>
+    /// <remarks>
+    /// <para><b>Phase B: US-GPU-030 - Cached Weights MatMul</b></para>
+    /// <para>
+    /// This is the KEY optimization for DenseLayer forward pass:
+    /// - Weights stay on GPU (persistent via GpuTensorHandle)
+    /// - Only input is uploaded per forward pass
+    /// - Result is downloaded after computation
+    /// - Eliminates 2 of 3 memory transfers per forward pass
+    /// </para>
+    /// </remarks>
+    internal Tensor<float>? TensorMatMulCachedWeights(Tensor<float> input, Tensor<float> weights, GpuTensorHandle<float> gpuWeights)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
+        if (gpuWeights == null) throw new ArgumentNullException(nameof(gpuWeights));
+
+        if (input.Rank != 2 || weights.Rank != 2)
+            return null; // Fall back to CPU
+
+        int m = input.Shape[0];
+        int k = input.Shape[1];
+        int n = weights.Shape[1];
+
+        if (k != weights.Shape[0])
+            throw new ArgumentException($"Matrix dimensions incompatible: [{m},{k}] x [{weights.Shape[0]},{n}]");
+
+        if (!SupportsGpu || !_gpuHealthy || _accelerator == null || _matrixMultiplyKernelFloat == null)
+            return null;
+
+        // Validate cached weights match expected dimensions
+        if (gpuWeights.Length != weights.Length)
+            return null;
+
+        // Check threshold
+        int totalOps = m * k * n;
+        if (totalOps < _thresholds.MatrixMultiply)
+            return null;
+
+        var gpuA = _memoryPoolFloat?.Rent(m * k);
+        var gpuResult = _memoryPoolFloat?.Rent(m * n);
+
+        if (gpuA == null || gpuResult == null)
+        {
+            gpuA?.Dispose();
+            gpuResult?.Dispose();
+            return null;
+        }
+
+        try
+        {
+            // Upload input (only transfer per forward pass)
+            gpuA.View.BaseView.CopyFromCPU(input.AsSpan());
+
+            // Create 2D views - use DenseX to match current kernel declaration
+            var viewA = gpuA.View.As2DView<Stride2D.DenseX>(new Index2D(m, k), new Stride2D.DenseX(k));
+            var viewB = gpuWeights.View1D.As2DView<Stride2D.DenseX>(new Index2D(k, n), new Stride2D.DenseX(n));
+            var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(m, n), new Stride2D.DenseX(n));
+
+            lock (_gpuLock)
+            {
+                _matrixMultiplyKernelFloat(_accelerator.DefaultStream, new Index2D(m, n), viewA, viewB, viewResult, k);
+                _accelerator.Synchronize();
+            }
+
+            var result = new Tensor<float>(new[] { m, n });
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] TensorMatMulCachedWeights failed: {ex.Message}");
+            return null;
+        }
+        finally
+        {
+            _memoryPoolFloat?.Return(gpuA);
+            _memoryPoolFloat?.Return(gpuResult);
+        }
+    }
+
+    /// <summary>
+    /// Performs tensor matrix multiplication using a cached GPU weights tensor (double precision).
+    /// </summary>
+    internal Tensor<double>? TensorMatMulCachedWeights(Tensor<double> input, Tensor<double> weights, GpuTensorHandle<double> gpuWeights)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
+        if (gpuWeights == null) throw new ArgumentNullException(nameof(gpuWeights));
+
+        if (input.Rank != 2 || weights.Rank != 2)
+            return null;
+
+        int m = input.Shape[0];
+        int k = input.Shape[1];
+        int n = weights.Shape[1];
+
+        if (k != weights.Shape[0])
+            throw new ArgumentException($"Matrix dimensions incompatible: [{m},{k}] x [{weights.Shape[0]},{n}]");
+
+        if (!SupportsGpu || !_gpuHealthy || _accelerator == null || _matrixMultiplyKernelDouble == null)
+            return null;
+
+        if (gpuWeights.Length != weights.Length)
+            return null;
+
+        int totalOps = m * k * n;
+        if (totalOps < _thresholds.MatrixMultiply)
+            return null;
+
+        var gpuA = _memoryPoolDouble?.Rent(m * k);
+        var gpuResult = _memoryPoolDouble?.Rent(m * n);
+
+        if (gpuA == null || gpuResult == null)
+        {
+            gpuA?.Dispose();
+            gpuResult?.Dispose();
+            return null;
+        }
+
+        try
+        {
+            gpuA.View.BaseView.CopyFromCPU(input.AsSpan());
+
+            var viewA = gpuA.View.As2DView<Stride2D.DenseX>(new Index2D(m, k), new Stride2D.DenseX(k));
+            var viewB = gpuWeights.View1D.As2DView<Stride2D.DenseX>(new Index2D(k, n), new Stride2D.DenseX(n));
+            var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(m, n), new Stride2D.DenseX(n));
+
+            lock (_gpuLock)
+            {
+                _matrixMultiplyKernelDouble(_accelerator.DefaultStream, new Index2D(m, n), viewA, viewB, viewResult, k);
+                _accelerator.Synchronize();
+            }
+
+            var result = new Tensor<double>(new[] { m, n });
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] TensorMatMulCachedWeights failed: {ex.Message}");
+            return null;
+        }
+        finally
+        {
+            _memoryPoolDouble?.Return(gpuA);
+            _memoryPoolDouble?.Return(gpuResult);
+        }
+    }
+
     #endregion
 
     #region Helper Methods
@@ -18507,7 +18664,7 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Tensor<T> Conv2D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] dilation)
     {
-        if (!IsPositivePair(stride) || !IsPositivePair(dilation) || !IsPair(padding))
+        if (!IsPositivePair(stride) || !IsPositivePair(dilation) || !IsNonNegativePair(padding))
             return _cpuFallback.Conv2D(input, kernel, stride, padding, dilation);
 
         if (!IsUniformPair(stride) || !IsUniformPair(padding) || !IsUniformPair(dilation))
@@ -18522,7 +18679,7 @@ public class GpuEngine : IEngine, IDisposable
         if (gradOutput.Length < _thresholds.VectorAdd)
             return _cpuFallback.Conv2DBackwardInput(gradOutput, kernel, inputShape, stride, padding, dilation);
 
-        if (!IsPositivePair(stride) || !IsPositivePair(dilation) || !IsPair(padding))
+        if (!IsPositivePair(stride) || !IsPositivePair(dilation) || !IsNonNegativePair(padding))
             return _cpuFallback.Conv2DBackwardInput(gradOutput, kernel, inputShape, stride, padding, dilation);
 
         if (!IsUniformPair(stride) || !IsUniformPair(padding) || !IsUniformPair(dilation))
@@ -18636,7 +18793,7 @@ public class GpuEngine : IEngine, IDisposable
         if (gradOutput.Length < _thresholds.VectorAdd)
             return _cpuFallback.Conv2DBackwardKernel(gradOutput, input, kernelShape, stride, padding, dilation);
 
-        if (!IsPositivePair(stride) || !IsPositivePair(dilation) || !IsPair(padding))
+        if (!IsPositivePair(stride) || !IsPositivePair(dilation) || !IsNonNegativePair(padding))
             return _cpuFallback.Conv2DBackwardKernel(gradOutput, input, kernelShape, stride, padding, dilation);
 
         if (!IsUniformPair(stride) || !IsUniformPair(padding) || !IsUniformPair(dilation))
