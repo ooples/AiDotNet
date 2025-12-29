@@ -273,7 +273,7 @@ public class TakagiDecompositionIntegrationTests
     [InlineData(2)]
     [InlineData(3)]
     [InlineData(4)]
-    public void TakagiDecomposition_Solve_ProducesFiniteResult(int size)
+    public void TakagiDecomposition_Solve_ProducesCorrectSolution(int size)
     {
         // Arrange
         var A = CreatePositiveDefiniteMatrix(size);
@@ -285,12 +285,13 @@ public class TakagiDecompositionIntegrationTests
         var takagi = new TakagiDecomposition<double>(A);
         var x = takagi.Solve(b);
 
-        // Assert
+        // Assert - Verify A * x ≈ b
         Assert.Equal(size, x.Length);
+        var Ax = A.Multiply(x);
         for (int i = 0; i < size; i++)
         {
-            Assert.False(double.IsNaN(x[i]), $"x[{i}] should not be NaN");
-            Assert.False(double.IsInfinity(x[i]), $"x[{i}] should not be infinity");
+            Assert.True(Math.Abs(Ax[i] - b[i]) < LooseTolerance,
+                $"A*x[{i}] = {Ax[i]} should equal b[{i}] = {b[i]}");
         }
     }
 
@@ -321,7 +322,7 @@ public class TakagiDecompositionIntegrationTests
     [InlineData(2)]
     [InlineData(3)]
     [InlineData(4)]
-    public void TakagiDecomposition_Invert_ProducesFiniteResult(int size)
+    public void TakagiDecomposition_Invert_ProducesCorrectInverse(int size)
     {
         // Arrange
         var A = CreatePositiveDefiniteMatrix(size);
@@ -330,18 +331,18 @@ public class TakagiDecompositionIntegrationTests
         var takagi = new TakagiDecomposition<double>(A);
         var AInv = takagi.Invert();
 
-        // Assert
+        // Assert - Verify A * A^-1 ≈ I
         Assert.Equal(size, AInv.Rows);
         Assert.Equal(size, AInv.Columns);
 
+        var product = A.Multiply(AInv);
         for (int i = 0; i < size; i++)
         {
             for (int j = 0; j < size; j++)
             {
-                Assert.False(double.IsNaN(AInv[i, j]),
-                    $"AInv[{i},{j}] should not be NaN");
-                Assert.False(double.IsInfinity(AInv[i, j]),
-                    $"AInv[{i},{j}] should not be infinity");
+                double expected = (i == j) ? 1.0 : 0.0;
+                Assert.True(Math.Abs(product[i, j] - expected) < LooseTolerance,
+                    $"(A * A^-1)[{i},{j}] = {product[i, j]}, expected {expected}");
             }
         }
     }
