@@ -18448,18 +18448,22 @@ public class GpuEngine : IEngine, IDisposable
         bool useTransposeKernel = !useTiledKernel && k >= TransposeThreshold && _matrixMultiplyTransposedBKernelFloat != null;
         bool needsTranspose = useTiledKernel || useTransposeKernel;
 
+        // Extract null checks upfront to avoid redundant checks throughout method
+        var memoryPool = _memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized");
+        var accelerator = _accelerator ?? throw new InvalidOperationException("GPU not initialized");
+
         // Timing instrumentation for debugging large matrix performance
         var sw = _timingDiagnostics.IsEnabled ? System.Diagnostics.Stopwatch.StartNew() : null;
 
-        var gpuA = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * k);
-        var gpuB = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(k * n);
-        var gpuResult = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * n);
+        var gpuA = memoryPool.Rent(m * k);
+        var gpuB = memoryPool.Rent(k * n);
+        var gpuResult = memoryPool.Rent(m * n);
 
         // For optimized kernels (tiled and transpose-B), we need a buffer for B^T
         MemoryBuffer1D<float, Stride1D.Dense>? gpuBT = null;
         if (needsTranspose)
         {
-            gpuBT = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(k * n);
+            gpuBT = memoryPool.Rent(k * n);
         }
 
         if (sw != null)
@@ -18477,7 +18481,7 @@ public class GpuEngine : IEngine, IDisposable
             if (sw != null)
             {
                 // Synchronize to measure actual transfer time
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                accelerator.Synchronize();
                 _timingDiagnostics.Record("MatMul", GpuTimingCategory.CpuToGpuTransfer, sw.ElapsedMilliseconds, (m * k + k * n) * sizeof(float));
                 sw.Restart();
             }
@@ -18489,7 +18493,6 @@ public class GpuEngine : IEngine, IDisposable
 
             lock (_gpuLock)
             {
-                var accelerator = _accelerator ?? throw new InvalidOperationException("GPU not initialized");
 
                 if (needsTranspose && gpuBT != null)
                 {
@@ -18559,12 +18562,12 @@ public class GpuEngine : IEngine, IDisposable
         }
         finally
         {
-            _memoryPoolFloat.Return(gpuA);
-            _memoryPoolFloat.Return(gpuB);
-            _memoryPoolFloat.Return(gpuResult);
+            memoryPool.Return(gpuA);
+            memoryPool.Return(gpuB);
+            memoryPool.Return(gpuResult);
             if (gpuBT != null)
             {
-                _memoryPoolFloat.Return(gpuBT);
+                memoryPool.Return(gpuBT);
             }
         }
     }
@@ -18586,18 +18589,22 @@ public class GpuEngine : IEngine, IDisposable
         bool useTransposeKernel = !useTiledKernel && k >= TransposeThreshold && _matrixMultiplyTransposedBKernelDouble != null;
         bool needsTranspose = useTiledKernel || useTransposeKernel;
 
+        // Extract null checks upfront to avoid redundant checks throughout method
+        var memoryPool = _memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized");
+        var accelerator = _accelerator ?? throw new InvalidOperationException("GPU not initialized");
+
         // Timing instrumentation for debugging large matrix performance
         var sw = _timingDiagnostics.IsEnabled ? System.Diagnostics.Stopwatch.StartNew() : null;
 
-        var gpuA = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * k);
-        var gpuB = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(k * n);
-        var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * n);
+        var gpuA = memoryPool.Rent(m * k);
+        var gpuB = memoryPool.Rent(k * n);
+        var gpuResult = memoryPool.Rent(m * n);
 
         // For optimized kernels (tiled and transpose-B), we need a buffer for B^T
         MemoryBuffer1D<double, Stride1D.Dense>? gpuBT = null;
         if (needsTranspose)
         {
-            gpuBT = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(k * n);
+            gpuBT = memoryPool.Rent(k * n);
         }
 
         if (sw != null)
@@ -18615,7 +18622,7 @@ public class GpuEngine : IEngine, IDisposable
             if (sw != null)
             {
                 // Synchronize to measure actual transfer time
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                accelerator.Synchronize();
                 _timingDiagnostics.Record("MatMulDouble", GpuTimingCategory.CpuToGpuTransfer, sw.ElapsedMilliseconds, (m * k + k * n) * sizeof(double));
                 sw.Restart();
             }
@@ -18627,8 +18634,6 @@ public class GpuEngine : IEngine, IDisposable
 
             lock (_gpuLock)
             {
-                var accelerator = _accelerator ?? throw new InvalidOperationException("GPU not initialized");
-
                 if (needsTranspose && gpuBT != null)
                 {
                     // Transpose B on GPU: B[k,n] -> B^T[n,k]
@@ -18697,12 +18702,12 @@ public class GpuEngine : IEngine, IDisposable
         }
         finally
         {
-            _memoryPoolDouble.Return(gpuA);
-            _memoryPoolDouble.Return(gpuB);
-            _memoryPoolDouble.Return(gpuResult);
+            memoryPool.Return(gpuA);
+            memoryPool.Return(gpuB);
+            memoryPool.Return(gpuResult);
             if (gpuBT != null)
             {
-                _memoryPoolDouble.Return(gpuBT);
+                memoryPool.Return(gpuBT);
             }
         }
     }
