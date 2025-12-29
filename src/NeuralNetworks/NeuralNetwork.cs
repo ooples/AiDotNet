@@ -30,6 +30,21 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class NeuralNetwork<T> : NeuralNetworkBase<T>
 {
+    public override bool SupportsTraining
+    {
+        get
+        {
+            foreach (var layer in Layers)
+            {
+                if (layer.SupportsTraining)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
     /// <summary>
     /// Creates a new neural network with the specified architecture.
     /// </summary>

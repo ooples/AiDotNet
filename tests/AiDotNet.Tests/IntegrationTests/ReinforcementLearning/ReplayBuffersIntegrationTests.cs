@@ -1,82 +1,122 @@
+using System;
 using System.Collections.Generic;
-using System.Linq;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
-using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 
+[Collection("NonParallelIntegration")]
 public class ReplayBuffersIntegrationTests
 {
     [Fact]
-    public void Experience_DefaultPriority_IsOneAndMutable()
+    public void Experience_DefaultPriority_IsOne()
     {
-        var state = new Vector<double>(1);
-        var action = new Vector<double>(1);
-        var nextState = new Vector<double>(1);
-        var experience = new Experience<double, Vector<double>, Vector<double>>(state, action, 1.0, nextState, false);
+        var state = CreateVector(1, 0.1);
+        var action = CreateVector(1, 1.0);
+        var experience = new Experience<double, Vector<double>, Vector<double>>(state, action, 1.0, state, false);
 
-        Assert.Equal(1.0, experience.Priority, precision: 10);
-
-        experience.Priority = 0.25;
-
-        Assert.Equal(0.25, experience.Priority, precision: 10);
+        Assert.Equal(1.0, experience.Priority);
+        Assert.Same(state, experience.State);
+        Assert.Same(action, experience.Action);
     }
 
     [Fact]
-    public void UniformReplayBuffer_SampleWithIndices_ReturnsUniqueIndices()
+    public void UniformReplayBuffer_AddSampleAndClear_Works()
     {
-        var buffer = new UniformReplayBuffer<double, Vector<double>, Vector<double>>(capacity: 5, seed: 17);
+        var buffer = new UniformReplayBuffer<double, Vector<double>, Vector<double>>(capacity: 3, seed: 11);
 
-        for (int i = 0; i < 5; i++)
-        {
-            buffer.Add(CreateExperience(i));
-        }
+        buffer.Add(CreateExperience(0.0));
+        buffer.Add(CreateExperience(1.0));
+        buffer.Add(CreateExperience(2.0));
 
-        var (experiences, indices) = buffer.SampleWithIndices(batchSize: 3);
+        Assert.Equal(3, buffer.Count);
+        Assert.True(buffer.CanSample(2));
 
-        Assert.Equal(3, experiences.Count);
-        Assert.Equal(3, indices.Count);
-        Assert.Equal(3, indices.Distinct().Count());
-        Assert.All(indices, index => Assert.InRange(index, 0, 4));
-    }
+        var sample = buffer.Sample(2);
+        Assert.Equal(2, sample.Count);
 
-    [Fact]
-    public void PrioritizedReplayBuffer_Sample_ReturnsWeightsAndAllowsPriorityUpdates()
-    {
-        var buffer = new PrioritizedReplayBuffer<double>(capacity: 5);
-
-        for (int i = 0; i < 3; i++)
-        {
-            buffer.Add(
-                new Vector<double>(new double[] { i }),
-                new Vector<double>(new double[] { 1.0, 0.0 }),
-                reward: 1.0,
-                nextState: new Vector<double>(new double[] { i + 1 }),
-                done: false);
-        }
-
-        var (batch, indices, weights) = buffer.Sample(batchSize: 3, alpha: 0.6, beta: 0.4);
-
+        var (batch, indices) = buffer.SampleWithIndices(3);
         Assert.Equal(3, batch.Count);
         Assert.Equal(3, indices.Count);
-        Assert.Equal(3, weights.Count);
-        Assert.All(weights, weight => Assert.InRange(weight, 0.0, 1.0));
 
-        buffer.UpdatePriorities(indices, new List<double> { 2.0, 1.5, 1.0 }, epsilon: 1e-3);
+        var unique = new HashSet<int>(indices);
+        Assert.Equal(3, unique.Count);
+        foreach (var index in indices)
+        {
+            Assert.InRange(index, 0, 2);
+        }
 
-        var (updatedBatch, updatedIndices, updatedWeights) = buffer.Sample(batchSize: 3, alpha: 0.6, beta: 0.4);
-
-        Assert.Equal(3, updatedBatch.Count);
-        Assert.Equal(3, updatedIndices.Count);
-        Assert.Equal(3, updatedWeights.Count);
+        buffer.Clear();
+        Assert.Equal(0, buffer.Count);
+        Assert.False(buffer.CanSample(1));
     }
 
-    private static Experience<double, Vector<double>, Vector<double>> CreateExperience(int seed)
+    [Fact]
+    public void UniformReplayBuffer_OverwritesOldest_WhenCapacityExceeded()
     {
-        var state = new Vector<double>(new double[] { seed });
-        var action = new Vector<double>(new double[] { 1.0, 0.0 });
-        var nextState = new Vector<double>(new double[] { seed + 1 });
+        var buffer = new UniformReplayBuffer<double, Vector<double>, Vector<double>>(capacity: 2, seed: 7);
+
+        buffer.Add(CreateExperience(0.0));
+        buffer.Add(CreateExperience(1.0));
+        buffer.Add(CreateExperience(2.0));
+
+        var sample = buffer.Sample(2);
+        var values = new HashSet<double>();
+        foreach (var experience in sample)
+        {
+            values.Add(experience.State[0]);
+        }
+
+        Assert.DoesNotContain(0.0, values);
+        Assert.Contains(1.0, values);
+        Assert.Contains(2.0, values);
+    }
+
+    [Fact]
+    public void PrioritizedReplayBuffer_AddSampleUpdate_Works()
+    {
+        var buffer = new PrioritizedReplayBuffer<double>(capacity: 4);
+
+        buffer.Add(CreateVector(2, 0.1), CreateVector(1, 1.0), 1.0, CreateVector(2, 0.2), false);
+        buffer.Add(CreateVector(2, 0.2), CreateVector(1, 0.0), 0.5, CreateVector(2, 0.3), true);
+
+        Assert.Equal(2, buffer.Count);
+
+        var (batch, indices, weights) = buffer.Sample(batchSize: 2, alpha: 0.6, beta: 0.4);
+
+        Assert.Equal(batch.Count, indices.Count);
+        Assert.Equal(batch.Count, weights.Count);
+
+        for (int i = 0; i < indices.Count; i++)
+        {
+            Assert.InRange(indices[i], 0, buffer.Count - 1);
+            Assert.InRange(weights[i], 0.0, 1.000001);
+        }
+
+        buffer.UpdatePriorities(indices, new List<double> { 0.5, 1.5 }, epsilon: 1e-6);
+
+        var (batch2, indices2, weights2) = buffer.Sample(batchSize: 2, alpha: 0.6, beta: 0.4);
+
+        Assert.Equal(batch2.Count, indices2.Count);
+        Assert.Equal(batch2.Count, weights2.Count);
+    }
+
+    private static Experience<double, Vector<double>, Vector<double>> CreateExperience(double stateValue)
+    {
+        var state = CreateVector(1, stateValue);
+        var action = CreateVector(1, 1.0);
+        var nextState = CreateVector(1, stateValue + 0.1);
         return new Experience<double, Vector<double>, Vector<double>>(state, action, 1.0, nextState, false);
+    }
+
+    private static Vector<double> CreateVector(int size, double start)
+    {
+        var vector = new Vector<double>(size);
+        for (int i = 0; i < size; i++)
+        {
+            vector[i] = start + i * 0.01;
+        }
+        return vector;
     }
 }

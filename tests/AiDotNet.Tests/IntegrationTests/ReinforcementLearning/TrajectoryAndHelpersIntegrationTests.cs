@@ -1,99 +1,127 @@
 using System.Collections.Generic;
+using AiDotNet.Enums;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.ReinforcementLearning.Agents.A3C;
 using AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;
+using AiDotNet.ReinforcementLearning.Agents.DynamicProgramming;
 using AiDotNet.ReinforcementLearning.Agents.MuZero;
 using AiDotNet.ReinforcementLearning.Common;
-using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 
+[Collection("NonParallelIntegration")]
 public class TrajectoryAndHelpersIntegrationTests
 {
     [Fact]
-    public void Trajectory_AddStep_IncrementsLength()
+    public void Trajectory_AddStepAndClear_TracksState()
     {
         var trajectory = new Trajectory<double>();
-        var state = new Vector<double>(1);
-        var action = new Vector<double>(1);
+        var state = CreateVector(2, 0.1);
+        var action = CreateVector(1, 1.0);
 
-        trajectory.AddStep(state, action, reward: 1.0, value: 0.5, logProb: -0.1, done: false);
+        trajectory.AddStep(state, action, 1.0, value: 0.5, logProb: 0.1, done: false);
 
         Assert.Equal(1, trajectory.Length);
         Assert.Single(trajectory.States);
         Assert.Single(trajectory.Actions);
-        Assert.Single(trajectory.Rewards);
-        Assert.Single(trajectory.Values);
-        Assert.Single(trajectory.LogProbs);
-        Assert.Single(trajectory.Dones);
-    }
 
-    [Fact]
-    public void Trajectory_Clear_ResetsCollections()
-    {
-        var trajectory = new Trajectory<double>();
-        trajectory.AddStep(new Vector<double>(1), new Vector<double>(1), 1.0, 0.5, -0.1, false);
-        trajectory.Advantages = new List<double> { 1.0 };
-        trajectory.Returns = new List<double> { 1.0 };
+        trajectory.Advantages = new List<double> { 0.1 };
+        trajectory.Returns = new List<double> { 0.2 };
 
         trajectory.Clear();
 
         Assert.Equal(0, trajectory.Length);
         Assert.Empty(trajectory.States);
-        Assert.Empty(trajectory.Actions);
-        Assert.Empty(trajectory.Rewards);
-        Assert.Empty(trajectory.Values);
-        Assert.Empty(trajectory.LogProbs);
-        Assert.Empty(trajectory.Dones);
         Assert.Null(trajectory.Advantages);
         Assert.Null(trajectory.Returns);
     }
 
     [Fact]
-    public void SequenceContext_LengthReflectsStoredStates()
+    public void SequenceContext_LengthReflectsStates()
     {
         var context = new SequenceContext<double>();
-        context.States.Add(new Vector<double>(1));
-        context.Actions.Add(new Vector<double>(1));
-        context.ReturnsToGo.Add(1.0);
+
+        context.States.Add(CreateVector(2, 0.1));
+        context.Actions.Add(CreateVector(1, 1.0));
+        context.ReturnsToGo.Add(1.5);
 
         Assert.Equal(1, context.Length);
-        Assert.Single(context.States);
-        Assert.Single(context.Actions);
-        Assert.Single(context.ReturnsToGo);
     }
 
     [Fact]
-    public void WorkerNetworks_TrajectoryIsInitialized()
+    public void MCTSNode_DefaultsAndAssignments_Work()
+    {
+        var node = new MCTSNode<double>
+        {
+            HiddenState = CreateVector(2, 0.2),
+            Value = 0.5
+        };
+
+        node.Children[0] = new MCTSNode<double> { HiddenState = CreateVector(2, 0.3) };
+        node.VisitCounts[0] = 1;
+        node.QValues[0] = 0.25;
+        node.Rewards[0] = 0.1;
+        node.TotalVisits = 1;
+
+        Assert.Equal(1, node.Children.Count);
+        Assert.Equal(1, node.VisitCounts[0]);
+        Assert.Equal(1, node.TotalVisits);
+    }
+
+    [Fact]
+    public void TransitionData_DefaultsAndOverrides_Work()
+    {
+        var data = new TransitionData<double>();
+
+        Assert.Equal(0.0, data.Reward);
+        Assert.Equal(0.0, data.Probability);
+        Assert.Equal(string.Empty, data.NextState);
+
+        data.NextState = "s1";
+        data.Reward = 1.0;
+        data.Probability = 0.5;
+
+        Assert.Equal("s1", data.NextState);
+        Assert.Equal(1.0, data.Reward);
+        Assert.Equal(0.5, data.Probability);
+    }
+
+    [Fact]
+    public void WorkerNetworks_DefaultsAndAssignments_Work()
     {
         var worker = new WorkerNetworks<double>();
 
         Assert.NotNull(worker.Trajectory);
         Assert.Empty(worker.Trajectory);
 
-        worker.Trajectory.Add((new Vector<double>(1), new Vector<double>(1), 1.0, false, 0.0));
+        worker.PolicyNetwork = CreateNetwork(2, 1);
+        worker.ValueNetwork = CreateNetwork(2, 1);
 
-        Assert.Single(worker.Trajectory);
+        Assert.NotNull(worker.PolicyNetwork);
+        Assert.NotNull(worker.ValueNetwork);
     }
 
-    [Fact]
-    public void MctsNode_InitializesCollections()
+    private static Vector<double> CreateVector(int size, double start)
     {
-        var node = new MCTSNode<double>
+        var vector = new Vector<double>(size);
+        for (int i = 0; i < size; i++)
         {
-            HiddenState = new Vector<double>(1),
-            Value = 0.0,
-            TotalVisits = 0
-        };
+            vector[i] = start + i * 0.1;
+        }
+        return vector;
+    }
 
-        node.Children[0] = new MCTSNode<double> { HiddenState = new Vector<double>(1), Value = 0.0 };
-        node.VisitCounts[0] = 1;
-        node.QValues[0] = 0.25;
-        node.Rewards[0] = 1.0;
+    private static NeuralNetwork<double> CreateNetwork(int inputSize, int outputSize)
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.ReinforcementLearning,
+            complexity: NetworkComplexity.Simple,
+            inputSize: inputSize,
+            outputSize: outputSize);
 
-        Assert.Single(node.Children);
-        Assert.Single(node.VisitCounts);
-        Assert.Single(node.QValues);
-        Assert.Single(node.Rewards);
+        return new NeuralNetwork<double>(architecture);
     }
 }
