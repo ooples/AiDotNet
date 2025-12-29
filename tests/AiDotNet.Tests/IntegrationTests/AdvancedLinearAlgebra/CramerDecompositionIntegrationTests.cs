@@ -317,12 +317,23 @@ public class CramerDecompositionIntegrationTests
     }
 
     [Fact]
+    public void CramerDecomposition_1x1Matrix_Invert_WorksCorrectly()
+    {
+        // Arrange - 1x1 matrix inversion now works after the 0x0 determinant fix
+        var A = new Matrix<double>(1, 1);
+        A[0, 0] = 4.0;
+
+        // Act
+        var cramer = new CramerDecomposition<double>(A);
+        var AInv = cramer.Invert();
+
+        // Assert - Inverse of [4] is [0.25]
+        Assert.True(Math.Abs(AInv[0, 0] - 0.25) < Tolerance, "1/4 = 0.25");
+    }
+
+    [Fact]
     public void CramerDecomposition_2x2Matrix_Invert_WorksCorrectly()
     {
-        // Note: 1x1 matrix inversion with Cramer's rule has a known limitation
-        // due to how cofactors are computed (creates 0x0 minor matrix).
-        // Testing with 2x2 instead.
-
         // Arrange
         var A = new Matrix<double>(2, 2);
         A[0, 0] = 4.0; A[0, 1] = 0.0;

@@ -311,7 +311,7 @@ public class IcaDecompositionIntegrationTests
     #region Convergence Tests
 
     [Fact]
-    public void IcaDecomposition_MoreIterations_DoesNotDegradeSolution()
+    public void IcaDecomposition_VaryingIterations_ProducesValidResults()
     {
         // Arrange
         var X = CreateMixedSignals(150, 3);

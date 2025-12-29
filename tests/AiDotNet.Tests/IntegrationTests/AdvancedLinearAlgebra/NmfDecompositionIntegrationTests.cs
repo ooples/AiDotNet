@@ -113,10 +113,10 @@ public class NmfDecompositionIntegrationTests
     }
 
     [Theory]
-    [InlineData(6, 6, 2)]
-    [InlineData(8, 8, 3)]
-    [InlineData(10, 10, 4)]
-    public void NmfDecomposition_Reconstruct_ApproximatesOriginal(int size, int _, int components)
+    [InlineData(6, 2)]
+    [InlineData(8, 3)]
+    [InlineData(10, 4)]
+    public void NmfDecomposition_Reconstruct_ApproximatesOriginal(int size, int components)
     {
         // Arrange
         var V = CreateNonNegativeMatrix(size, size);
@@ -174,8 +174,8 @@ public class NmfDecompositionIntegrationTests
         double errorFew = RelativeReconstructionError(V, reconFew);
         double errorMany = RelativeReconstructionError(V, reconMany);
 
-        Assert.True(errorMany <= errorFew + 0.1,
-            $"More iterations should not significantly worsen error. Few: {errorFew}, Many: {errorMany}");
+        Assert.True(errorMany <= errorFew * 1.01,
+            $"More iterations should improve or maintain error. Few: {errorFew}, Many: {errorMany}");
     }
 
     [Fact]
@@ -195,8 +195,8 @@ public class NmfDecompositionIntegrationTests
         double errorFew = RelativeReconstructionError(V, reconFew);
         double errorMore = RelativeReconstructionError(V, reconMore);
 
-        Assert.True(errorMore <= errorFew + 0.05,
-            $"More components should give better reconstruction. Few: {errorFew}, More: {errorMore}");
+        Assert.True(errorMore <= errorFew * 1.01,
+            $"More components should improve or maintain reconstruction. Few: {errorFew}, More: {errorMore}");
     }
 
     #endregion

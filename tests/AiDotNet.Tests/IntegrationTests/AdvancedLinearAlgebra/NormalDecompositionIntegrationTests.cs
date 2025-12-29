@@ -87,10 +87,10 @@ public class NormalDecompositionIntegrationTests
     #region Basic Solve Tests
 
     [Theory]
-    [InlineData(3, 3)]
-    [InlineData(4, 4)]
-    [InlineData(5, 5)]
-    public void NormalDecomposition_Solve_SquareMatrix_ProducesCorrectSolution(int size, int _)
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    public void NormalDecomposition_Solve_SquareMatrix_ProducesCorrectSolution(int size)
     {
         // Arrange
         var A = CreateFullRankMatrix(size, size);

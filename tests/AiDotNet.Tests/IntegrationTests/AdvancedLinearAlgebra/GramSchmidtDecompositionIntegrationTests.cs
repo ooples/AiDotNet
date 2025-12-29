@@ -338,7 +338,7 @@ public class GramSchmidtDecompositionIntegrationTests
     #region Numerical Stability Tests
 
     [Fact]
-    public void GramSchmidt_Modified_MoreStableThanClassical_OnIllConditionedMatrix()
+    public void GramSchmidt_Modified_HandlesIllConditionedMatrix()
     {
         // Arrange - Create a Hilbert-like matrix that can cause numerical issues
         int n = 5;
