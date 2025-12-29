@@ -199,9 +199,9 @@ public sealed class GpuTensorHandle<T> : IDisposable where T : unmanaged
             {
                 _buffer.Dispose();
             }
-            catch
+            catch (Exception)
             {
-                // Swallow exceptions in finalizer
+                // Swallow exceptions in finalizer - throwing from finalizers is dangerous
             }
             _disposed = true;
         }

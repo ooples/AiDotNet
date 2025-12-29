@@ -226,18 +226,13 @@ internal static class TiledMatMulKernels
         {
             // Load tile of A into shared memory
             int aCol = t * TileSize + ty;
-            if (row < p.M && aCol < p.K)
-                tileA[tx, ty] = a[row, aCol];
-            else
-                tileA[tx, ty] = 0.0f;
+            tileA[tx, ty] = (row < p.M && aCol < p.K) ? a[row, aCol] : 0.0f;
 
             // Load tile of B^T into shared memory
             // B^T[col, k] - we load row 'col' of B^T
-            int bCol = t * TileSize + ty;
-            if (col < p.N && bCol < p.K)
-                tileBT[tx, ty] = bT[col, bCol];
-            else
-                tileBT[tx, ty] = 0.0f;
+            // Thread (tx, ty) loads element for col at k-offset tx
+            int bCol = t * TileSize + tx;
+            tileBT[ty, tx] = (col < p.N && bCol < p.K) ? bT[col, bCol] : 0.0f;
 
             // Synchronize to ensure all threads have loaded their tiles
             Group.Barrier();
@@ -289,17 +284,12 @@ internal static class TiledMatMulKernels
         {
             // Load tile of A into shared memory
             int aCol = t * TileSize + ty;
-            if (row < p.M && aCol < p.K)
-                tileA[tx, ty] = a[row, aCol];
-            else
-                tileA[tx, ty] = 0.0;
+            tileA[tx, ty] = (row < p.M && aCol < p.K) ? a[row, aCol] : 0.0;
 
             // Load tile of B^T into shared memory
-            int bCol = t * TileSize + ty;
-            if (col < p.N && bCol < p.K)
-                tileBT[tx, ty] = bT[col, bCol];
-            else
-                tileBT[tx, ty] = 0.0;
+            // Thread (tx, ty) loads element for col at k-offset tx
+            int bCol = t * TileSize + tx;
+            tileBT[ty, tx] = (col < p.N && bCol < p.K) ? bT[col, bCol] : 0.0;
 
             // Synchronize to ensure all threads have loaded their tiles
             Group.Barrier();
@@ -1800,8 +1790,8 @@ public class GpuEngine : IEngine, IDisposable
     // Tiled matrix multiply kernels using shared memory for large matrices (Phase B: Performance)
     // These use explicitly grouped kernels with 32x32 thread tiles for optimal cache reuse
     // LoadStreamKernel is used for explicit grid/group configuration required by shared memory
-    private Action<KernelConfig, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, TiledMatMulParams>? _tiledMatMulKernelFloat;
-    private Action<KernelConfig, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, TiledMatMulParams>? _tiledMatMulKernelDouble;
+    private readonly Action<KernelConfig, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, TiledMatMulParams>? _tiledMatMulKernelFloat;
+    private readonly Action<KernelConfig, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, TiledMatMulParams>? _tiledMatMulKernelDouble;
 
     // Kernel cache for matrix operations - double (Phase B: Epic 2)
     private readonly Action<AcceleratorStream, Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, int>? _matrixMultiplyKernelDouble;
@@ -18748,9 +18738,15 @@ public class GpuEngine : IEngine, IDisposable
         if (data == null) throw new ArgumentNullException(nameof(data));
         if (shape == null) throw new ArgumentNullException(nameof(shape));
 
-        int expectedLength = 1;
+        long expectedLength = 1;
         foreach (int dim in shape)
+        {
+            if (dim <= 0)
+                throw new ArgumentException($"Shape dimensions must be positive, got {dim}");
+            if (expectedLength > int.MaxValue / dim)
+                throw new ArgumentException($"Shape dimensions too large: {string.Join("x", shape)} would overflow");
             expectedLength *= dim;
+        }
         if (data.Length != expectedLength)
             throw new ArgumentException($"Data length {data.Length} doesn't match shape {string.Join("x", shape)} = {expectedLength}");
 
@@ -18787,9 +18783,15 @@ public class GpuEngine : IEngine, IDisposable
         if (data == null) throw new ArgumentNullException(nameof(data));
         if (shape == null) throw new ArgumentNullException(nameof(shape));
 
-        int expectedLength = 1;
+        long expectedLength = 1;
         foreach (int dim in shape)
+        {
+            if (dim <= 0)
+                throw new ArgumentException($"Shape dimensions must be positive, got {dim}");
+            if (expectedLength > int.MaxValue / dim)
+                throw new ArgumentException($"Shape dimensions too large: {string.Join("x", shape)} would overflow");
             expectedLength *= dim;
+        }
         if (data.Length != expectedLength)
             throw new ArgumentException($"Data length {data.Length} doesn't match shape {string.Join("x", shape)} = {expectedLength}");
 
@@ -18844,6 +18846,14 @@ public class GpuEngine : IEngine, IDisposable
         if (input == null) throw new ArgumentNullException(nameof(input));
         if (weights == null) throw new ArgumentNullException(nameof(weights));
         if (gpuWeights == null) throw new ArgumentNullException(nameof(gpuWeights));
+
+        // Validate tensor ranks
+        if (input.Shape.Length != 2)
+            throw new ArgumentException($"Input must be 2D tensor, got {input.Shape.Length}D", nameof(input));
+        if (weights.Shape.Length != 2)
+            throw new ArgumentException($"Weights must be 2D tensor, got {weights.Shape.Length}D", nameof(weights));
+        if (gpuWeights.Shape.Length != 2)
+            throw new ArgumentException($"GPU weights must be 2D tensor, got {gpuWeights.Shape.Length}D", nameof(gpuWeights));
 
         // Input: [batch, inputFeatures], WeightsT: [outputFeatures, inputFeatures]
         // Result: [batch, outputFeatures]
@@ -18949,6 +18959,14 @@ public class GpuEngine : IEngine, IDisposable
         if (input == null) throw new ArgumentNullException(nameof(input));
         if (weights == null) throw new ArgumentNullException(nameof(weights));
         if (gpuWeights == null) throw new ArgumentNullException(nameof(gpuWeights));
+
+        // Validate tensor ranks
+        if (input.Shape.Length != 2)
+            throw new ArgumentException($"Input must be 2D tensor, got {input.Shape.Length}D", nameof(input));
+        if (weights.Shape.Length != 2)
+            throw new ArgumentException($"Weights must be 2D tensor, got {weights.Shape.Length}D", nameof(weights));
+        if (gpuWeights.Shape.Length != 2)
+            throw new ArgumentException($"GPU weights must be 2D tensor, got {gpuWeights.Shape.Length}D", nameof(gpuWeights));
 
         // Input: [batch, inputFeatures], WeightsT: [outputFeatures, inputFeatures]
         // Result: [batch, outputFeatures]

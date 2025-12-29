@@ -36,6 +36,13 @@ class Program
             CuBlasGemmBenchmark.Run();
             return;
         }
+
+        // Run OpenCL GEMM benchmark (AMD/Intel GPUs)
+        if (args[0] == "--opencl")
+        {
+            OpenClGemmBenchmark.Run();
+            return;
+        }
 #endif
 
         Console.WriteLine("Usage:");
@@ -43,5 +50,6 @@ class Program
         Console.WriteLine("  --full   : Run full BenchmarkDotNet suite (trigonometric)");
         Console.WriteLine("  --linalg : Run linear algebra benchmarks vs MathNet.Numerics");
         Console.WriteLine("  --cublas : Run cuBLAS vs ILGPU GEMM benchmark");
+        Console.WriteLine("  --opencl : Run OpenCL GEMM benchmark (AMD/Intel GPUs)");
     }
 }

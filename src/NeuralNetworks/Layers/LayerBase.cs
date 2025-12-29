@@ -1848,11 +1848,8 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         _disposed = true;
     }
 
-    /// <summary>
-    /// Finalizer to ensure resources are released if Dispose is not called.
-    /// </summary>
-    ~LayerBase()
-    {
-        Dispose(disposing: false);
-    }
+    // Note: No finalizer in base class - derived classes should implement their own
+    // finalizer only if they have unmanaged resources that need cleanup.
+    // Calling virtual methods from finalizers is unsafe because the derived class
+    // may have already been finalized.
 }
