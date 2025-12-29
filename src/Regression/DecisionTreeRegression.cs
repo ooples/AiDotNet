@@ -116,9 +116,10 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     /// <param name="y">A vector of target values corresponding to each sample in x.</param>
     /// <remarks>
     /// <para>
-    /// This method builds the decision tree model by recursively splitting the data based on features and thresholds 
-    /// that best reduce the prediction error. It applies any specified regularization to the input data and 
-    /// calculates feature importances after training.
+    /// This method builds the decision tree model by recursively splitting the data based on features and thresholds
+    /// that best reduce the prediction error. Unlike traditional regression models, decision trees do not apply data
+    /// regularization transformations. Instead, they control model complexity through structural parameters such as
+    /// MaxDepth, MinSamplesSplit, and MinSamplesLeaf. After building the tree, feature importances are calculated.
     /// </para>
     /// <para><b>For Beginners:</b> This method teaches the decision tree how to make predictions using your data.
     /// 

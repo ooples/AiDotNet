@@ -132,7 +132,7 @@ public class KernelRegressionIntegrationTests
     }
 
     [Fact]
-    public void KernelRidgeRegression_Train_SinusoidalData_CapuresNonLinearPattern()
+    public void KernelRidgeRegression_Train_SinusoidalData_CapturesNonLinearPattern()
     {
         // Arrange
         var options = new KernelRidgeRegressionOptions

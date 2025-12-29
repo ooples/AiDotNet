@@ -129,8 +129,9 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     /// <remarks>
     /// <para>
     /// This method predicts target values for new input data by finding the K nearest neighbors from the
-    /// training data for each input sample and computing the average of their target values. The method
-    /// applies any specified regularization to the input data before making predictions.
+    /// training data for each input sample and computing the average of their target values. Unlike
+    /// parametric models, KNN is a distance-based method that does not apply data regularization
+    /// transformations. The prediction relies entirely on the stored training data and distance calculations.
     /// </para>
     /// <para><b>For Beginners:</b> This method uses your trained model to make predictions on new data.
     /// 
@@ -150,6 +151,11 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        if (_xTrain.Rows == 0 || _yTrain.Length == 0)
+        {
+            throw new InvalidOperationException("The model must be trained before making predictions. Call Train() first.");
+        }
+
         // Note: KNN is a distance-based method - no data transformation is applied
         var predictions = new Vector<T>(input.Rows);
         for (int i = 0; i < input.Rows; i++)

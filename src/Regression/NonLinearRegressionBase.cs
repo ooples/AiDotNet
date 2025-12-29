@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Serialization;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Regression;
@@ -551,7 +552,12 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         using var writer = new BinaryWriter(ms);
 
         // Serialize options with type information for proper polymorphic deserialization
-        var serializerSettings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.All };
+        // Use TypeNameHandling.Auto with SafeSerializationBinder for security
+        var serializerSettings = new JsonSerializerSettings
+        {
+            TypeNameHandling = TypeNameHandling.Auto,
+            SerializationBinder = new SafeSerializationBinder()
+        };
         var optionsJson = JsonConvert.SerializeObject(Options, serializerSettings);
         writer.Write(optionsJson);
 
@@ -626,7 +632,12 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         using var reader = new BinaryReader(ms);
 
         // Deserialize options with type information for proper polymorphic deserialization
-        var serializerSettings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.All };
+        // Use TypeNameHandling.Auto with SafeSerializationBinder to prevent deserialization attacks
+        var serializerSettings = new JsonSerializerSettings
+        {
+            TypeNameHandling = TypeNameHandling.Auto,
+            SerializationBinder = new SafeSerializationBinder()
+        };
         var optionsJson = reader.ReadString();
         Options = JsonConvert.DeserializeObject<NonLinearRegressionOptions>(optionsJson, serializerSettings) ?? new NonLinearRegressionOptions();
 

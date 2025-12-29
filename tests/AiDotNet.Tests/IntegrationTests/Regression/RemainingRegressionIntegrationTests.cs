@@ -873,7 +873,7 @@ public class RemainingRegressionIntegrationTests
     }
 
     [Fact]
-    public void SymbolicRegression_Train_QuadraticData_DiscoversPatter()
+    public void SymbolicRegression_Train_QuadraticData_DiscoversPattern()
     {
         // Arrange - y = x^2 data
         var options = new SymbolicRegressionOptions

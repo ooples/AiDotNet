@@ -269,22 +269,26 @@ public class BayesianRegression<T> : RegressionBase<T>
     /// </remarks>
     public (Vector<T> Mean, Vector<T> Variance) PredictWithUncertainty(Matrix<T> input)
     {
+        // Call Predict with original input - it handles its own augmentation
+        var mean = Predict(input);
+
+        // Now augment input for variance calculation
+        var augmentedInput = input;
         if (Options.UseIntercept)
         {
-            input = input.AddConstantColumn(NumOps.One);
+            augmentedInput = augmentedInput.AddConstantColumn(NumOps.One);
         }
 
         if (_bayesOptions.KernelType != KernelType.Linear)
         {
-            input = ApplyKernel(input);
+            augmentedInput = ApplyKernel(augmentedInput);
         }
 
-        var mean = Predict(input);
-        var variance = new Vector<T>(input.Rows);
+        var variance = new Vector<T>(augmentedInput.Rows);
 
-        for (int i = 0; i < input.Rows; i++)
+        for (int i = 0; i < augmentedInput.Rows; i++)
         {
-            var x = input.GetRow(i);
+            var x = augmentedInput.GetRow(i);
             var xCov = x.DotProduct(_posteriorCovariance.Multiply(x));
             variance[i] = NumOps.Add(xCov, NumOps.FromDouble(1.0 / _bayesOptions.Beta));
         }

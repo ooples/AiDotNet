@@ -98,8 +98,10 @@ public class RobustRegression<T> : RegressionBase<T>
     {
         int n = x.Rows;
         int p = x.Columns;
-        // Note: Robust regression handles regularization through the weight function,
-        // not through data transformation
+        // Note: Robust regression achieves robustness through iteratively reweighted least squares (IRLS),
+        // which down-weights outliers based on residuals. The regularization parameter from the base class
+        // is not used here because IRLS already provides inherent regularization by reducing the influence
+        // of extreme values. For additional regularization, use a regularized regression as the InitialRegression.
 
         // Initial regression estimate
         IRegression<T> initialRegression = _options.InitialRegression ?? new MultipleRegression<T>();

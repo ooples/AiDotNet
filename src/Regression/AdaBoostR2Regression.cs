@@ -233,7 +233,6 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
         {
             // Use unweighted average instead
             sumWeights = NumOps.FromDouble(_ensemble.Count);
-            var uniformWeight = NumOps.One;
 
             var result0 = new T[input.Rows];
             foreach (var (tree, _) in _ensemble)

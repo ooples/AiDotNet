@@ -77,11 +77,15 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
         // Use training set for model stats if validation set is not available
         var statsForModelCalc = validationSet ?? trainingSet;
 
+        // Note: We do NOT fall back to training data for validation/test sets.
+        // Showing training metrics as validation/test would mislead users about model generalization.
+        // If validation or test data is not provided, an empty DataSetStats is used to make it clear
+        // that those metrics are unavailable.
         var evaluationData = new ModelEvaluationData<T, TInput, TOutput>
         {
             TrainingSet = trainingSet,
-            ValidationSet = validationSet ?? trainingSet, // Fall back to training if no validation
-            TestSet = testSet ?? trainingSet, // Fall back to training if no test
+            ValidationSet = validationSet ?? new DataSetStats<T, TInput, TOutput>(),
+            TestSet = testSet ?? new DataSetStats<T, TInput, TOutput>(),
             ModelStats = TryCalculateModelStats(input.Model, statsForModelCalc.Features, statsForModelCalc.Actual, statsForModelCalc.Predicted, input.NormInfo)
         };
 

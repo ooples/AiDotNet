@@ -284,7 +284,7 @@ public class NeuralNetworkRegressionOptions<T, TInput, TOutput> : NonLinearRegre
     /// which is more intuitive and works for all scenarios.
     /// </para>
     /// </remarks>
-    public IVectorActivationFunction<T> HiddenVectorActivation { get; set; } = new ReLUActivation<T>();
+    public IVectorActivationFunction<T>? HiddenVectorActivation { get; set; }
 
     /// <summary>
     /// Gets or sets the vector activation function applied to the outputs of the final layer neurons.
@@ -313,7 +313,7 @@ public class NeuralNetworkRegressionOptions<T, TInput, TOutput> : NonLinearRegre
     /// which is more intuitive and works for all scenarios.
     /// </para>
     /// </remarks>
-    public IVectorActivationFunction<T> OutputVectorActivation { get; set; } = new IdentityActivation<T>();
+    public IVectorActivationFunction<T>? OutputVectorActivation { get; set; }
 
     /// <summary>
     /// Gets or sets the function used to calculate the error between predicted and actual values.

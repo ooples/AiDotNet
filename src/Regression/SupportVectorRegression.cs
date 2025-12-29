@@ -134,21 +134,19 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     /// <returns>A vector of predicted values, one for each row in the input matrix.</returns>
     /// <remarks>
     /// <para>
-    /// This method makes predictions for multiple input samples. It:
-    /// 1. Applies regularization to the input data
-    /// 2. Predicts each sample individually using the PredictSingle method
-    /// 3. Returns a vector of all predictions
+    /// This method makes predictions for multiple input samples. It predicts each sample individually
+    /// using the PredictSingle method, computing kernel similarities with support vectors. Note that
+    /// SVR regularization is controlled through the C parameter during training, not through data
+    /// transformation during prediction.
     /// </para>
     /// <para><b>For Beginners:</b> This method uses your trained model to predict values for new data.
-    /// 
+    ///
     /// The prediction process works like this:
-    /// 1. The model first prepares your input data (regularization)
-    /// 2. For each row of data (like each house you want to price):
-    ///    - It calculates how similar this house is to each support vector
-    ///    - It combines these similarities using the trained weights (alphas)
-    ///    - It adds the bias term (B) to get the final prediction
-    /// 3. It returns all the predictions together
-    /// 
+    /// For each row of data (like each house you want to price):
+    /// - It calculates how similar this house is to each support vector
+    /// - It combines these similarities using the trained weights (alphas)
+    /// - It adds the bias term (B) to get the final prediction
+    ///
     /// This lets you predict many values at once, like estimating prices for multiple houses simultaneously.
     /// </para>
     /// </remarks>
