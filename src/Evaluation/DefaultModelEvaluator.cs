@@ -59,15 +59,30 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
             ?? TryInferPredictionType(input.InputData.YTrain);
 
         var trainingSet = CalculateDataSetStats(input.InputData.XTrain, input.InputData.YTrain, input.Model, inferredPredictionType);
-        var validationSet = CalculateDataSetStats(input.InputData.XValidation, input.InputData.YValidation, input.Model, inferredPredictionType);
-        var testSet = CalculateDataSetStats(input.InputData.XTest, input.InputData.YTest, input.Model, inferredPredictionType);
+
+        // Only calculate validation stats if validation data is provided and has content
+        DataSetStats<T, TInput, TOutput>? validationSet = null;
+        if (input.InputData.XValidation != null && InputHelper<T, TInput>.GetInputSize(input.InputData.XValidation) > 0)
+        {
+            validationSet = CalculateDataSetStats(input.InputData.XValidation, input.InputData.YValidation, input.Model, inferredPredictionType);
+        }
+
+        // Only calculate test stats if test data is provided and has content
+        DataSetStats<T, TInput, TOutput>? testSet = null;
+        if (input.InputData.XTest != null && InputHelper<T, TInput>.GetInputSize(input.InputData.XTest) > 0)
+        {
+            testSet = CalculateDataSetStats(input.InputData.XTest, input.InputData.YTest, input.Model, inferredPredictionType);
+        }
+
+        // Use training set for model stats if validation set is not available
+        var statsForModelCalc = validationSet ?? trainingSet;
 
         var evaluationData = new ModelEvaluationData<T, TInput, TOutput>
         {
             TrainingSet = trainingSet,
-            ValidationSet = validationSet,
-            TestSet = testSet,
-            ModelStats = TryCalculateModelStats(input.Model, validationSet.Features, validationSet.Actual, validationSet.Predicted, input.NormInfo)
+            ValidationSet = validationSet ?? trainingSet, // Fall back to training if no validation
+            TestSet = testSet ?? trainingSet, // Fall back to training if no test
+            ModelStats = TryCalculateModelStats(input.Model, statsForModelCalc.Features, statsForModelCalc.Actual, statsForModelCalc.Predicted, input.NormInfo)
         };
 
         return evaluationData;

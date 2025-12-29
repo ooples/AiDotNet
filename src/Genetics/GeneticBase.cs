@@ -372,9 +372,6 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     {
         var model = IndividualToModel(individual);
 
-        // Generate predictions for training data
-        TOutput predictedOutput = model.Predict(trainingInput);
-
         var subsetInputData = new OptimizationInputData<T, TInput, TOutput>
         {
             XTrain = trainingInput,
@@ -387,10 +384,12 @@ public abstract class GeneticBase<T, TInput, TOutput> :
             InputData = subsetInputData
         };
 
-        // Train the model
-        input.Model?.Train(input.InputData.XTrain, input.InputData.YTrain);
+        // Note: We do NOT call Train here because in a genetic algorithm context,
+        // the model parameters are already set from the individual's genes via IndividualToModel.
+        // The genetic algorithm evolves parameters through mutation/crossover, not through
+        // traditional training methods like the normal equation.
 
-        // Evaluate the trained model
+        // Evaluate the model with its gene-based parameters
         if (validationInput != null && validationOutput != null)
         {
             input.InputData.XValidation = validationInput;
