@@ -75,6 +75,9 @@ Mean time (ms):
 | Add | 1,000,000 elems | 8.260 | 0.661 |
 | Multiply | 1,000,000 elems | 8.142 | 0.655 |
 
+Notes:
+- 2025-12-28: Re-ran after removing duplicate kernel launches and explicit accelerator synchronizations; results were within noise of the prior run (transfer overhead still dominates).
+
 
 ## Expected trends
 

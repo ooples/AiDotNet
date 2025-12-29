@@ -14,6 +14,10 @@
 - Forcing GPU execution on small/medium workloads amplifies launch and transfer overhead, masking any kernel-level speedups.
 - GC allocations for AiDotNet ops are high (BDN shows Gen0/Gen1 pressure), indicating significant managed allocation overhead in hot paths.
 
+## Changes applied in this branch
+- Removed duplicate kernel launches that were executing once before and once inside the `_gpuLock` in `GpuEngine`.
+- Removed explicit `_accelerator.Synchronize()` calls; rely on blocking CPU copies to avoid redundant device-wide barriers.
+
 ## Benchmark highlights (TorchSharp CPU vs AiDotNet GPU, mean time)
 - ReLU: 21.174 ms vs 0.090 ms (235x slower)
 - Sigmoid: 22.408 ms vs 0.368 ms (61x slower)
@@ -25,9 +29,12 @@
 - Add 1,000,000: 8.260 ms vs 0.661 ms (12.5x slower)
 - Multiply 1,000,000: 8.142 ms vs 0.655 ms (12.4x slower)
 
+## Post-change benchmark observation
+- After removing duplicate kernel launches and explicit synchronizations, TorchSharp comparison results were statistically unchanged. Host-device transfers still dominate.
+
 ## Likely bottlenecks (code evidence)
 - Per-op host/device transfers: `GpuEngine` allocates GPU buffers and copies for each call (`Allocate1D`, `CopyFromCPU`, `CopyToCPU`) in `src/AiDotNet.Tensors/Engines/GpuEngine.cs`.
-- Synchronization after every kernel: frequent `_accelerator.Synchronize()` and `_gpuLock` serialize execution, preventing overlap and increasing latency.
+- Synchronization and serialization: `_gpuLock` serializes kernel launches; explicit synchronizations were removed but transfers still block.
 - Kernel launch overhead: even with precompilation, many operations still dispatch separate kernels and cannot amortize the cost for smaller ops.
 - Naive kernel implementations: Conv2D and MatMul are not using tiling/shared memory or vendor-tuned kernels, leaving bandwidth and occupancy on the table.
 - Managed allocations: new `Tensor<T>` objects and arrays are created per operation, driving GC activity.

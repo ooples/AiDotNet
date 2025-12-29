@@ -6741,7 +6741,6 @@ public class GpuEngine : IEngine, IDisposable
             {
                 // Use pre-compiled cached kernel (Phase B: US-GPU-001)
                 (_addKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             // Zero-copy: Write directly to result's internal storage (Phase B: US-GPU-003)
@@ -6790,12 +6789,10 @@ public class GpuEngine : IEngine, IDisposable
         {
             gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
             gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
-            (_subtractKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
                 (_subtractKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -6822,12 +6819,10 @@ public class GpuEngine : IEngine, IDisposable
         {
             gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
             gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
-            (_multiplyKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
                 (_multiplyKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -6849,12 +6844,10 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             gpuVector.View.BaseView.CopyFromCPU(vector.AsSpan());
-            (_multiplyScalarKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
                 (_multiplyScalarKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -6880,12 +6873,10 @@ public class GpuEngine : IEngine, IDisposable
         {
             gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
             gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
-            (_divideKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
                 (_divideKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -6907,12 +6898,10 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             gpuVector.View.BaseView.CopyFromCPU(vector.AsSpan());
-            (_divideScalarKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
                 (_divideScalarKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -6933,12 +6922,10 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             gpuVector.View.BaseView.CopyFromCPU(vector.AsSpan());
-            (_sqrtKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
                 (_sqrtKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -6963,7 +6950,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_powerKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, exponent, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -6994,7 +6980,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_maxKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -7032,7 +7017,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_minKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -7065,7 +7049,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_absKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -7097,7 +7080,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_expKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -7129,7 +7111,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_logKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -7161,7 +7142,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_signKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -7199,7 +7179,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             // Zero-copy: Write directly to result
@@ -7246,7 +7225,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -7292,7 +7270,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -7338,7 +7315,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -7384,7 +7360,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -7430,7 +7405,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -7477,7 +7451,6 @@ public class GpuEngine : IEngine, IDisposable
                     gpuInput.View,
                     alpha,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -7521,7 +7494,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_tanhKernelDouble ?? throw new InvalidOperationException("Tanh kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     input.Length, gpuInput.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -7547,7 +7519,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_sigmoidKernelDouble ?? throw new InvalidOperationException("Sigmoid kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     input.Length, gpuInput.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -7573,7 +7544,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_reluKernelDouble ?? throw new InvalidOperationException("ReLU kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     input.Length, gpuInput.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -7599,7 +7569,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_geluKernelDouble ?? throw new InvalidOperationException("GELU kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     input.Length, gpuInput.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -7625,7 +7594,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_mishKernelDouble ?? throw new InvalidOperationException("Mish kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     input.Length, gpuInput.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -7651,7 +7619,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_swishKernelDouble ?? throw new InvalidOperationException("Swish kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     input.Length, gpuInput.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -7677,7 +7644,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_eluKernelDouble ?? throw new InvalidOperationException("ELU kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     input.Length, gpuInput.View, alpha, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -7708,7 +7674,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(destination);
@@ -7754,7 +7719,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(destination);
@@ -7800,7 +7764,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(destination);
@@ -7846,7 +7809,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(destination);
@@ -7892,7 +7854,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(destination);
@@ -7938,7 +7899,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(destination);
@@ -7984,7 +7944,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(destination);
@@ -8030,7 +7989,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(destination);
@@ -8076,7 +8034,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(destination);
@@ -8122,7 +8079,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(destination);
@@ -8168,7 +8124,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(destination);
@@ -8214,7 +8169,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(destination);
@@ -8260,7 +8214,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(destination);
@@ -8306,7 +8259,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(destination);
@@ -8352,7 +8304,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(destination);
@@ -8398,7 +8349,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(destination);
@@ -8444,7 +8394,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(destination);
@@ -8490,7 +8439,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(destination);
@@ -8536,7 +8484,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(destination);
@@ -8582,7 +8529,6 @@ public class GpuEngine : IEngine, IDisposable
                     input.Length,
                     gpuInput.View,
                     gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(destination);
@@ -8623,7 +8569,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_log2KernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -8654,7 +8599,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_exp2KernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -8685,7 +8629,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_exp10KernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -8716,7 +8659,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_expM1KernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -8747,7 +8689,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_log1PKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -8778,7 +8719,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_negateKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -8809,7 +8749,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_clampKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, min, max, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -8842,7 +8781,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_lerpKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, t, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -8874,7 +8812,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_reciprocalKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -8905,7 +8842,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_rsqrtKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -8938,7 +8874,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_minMagnitudeKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -8972,7 +8907,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_maxMagnitudeKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -9004,7 +8938,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_roundKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -9035,7 +8968,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_floorKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -9066,7 +8998,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_ceilingKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -9097,7 +9028,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_truncateKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -9125,7 +9055,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_fillKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, length, gpuResult.View, value);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -9157,7 +9086,6 @@ public class GpuEngine : IEngine, IDisposable
             {
                 // Compute partial dot products (x dot x = sum of squares)
                 (_partialDotProductKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, numBlocks, gpuVector.View, gpuVector.View, gpuPartialSums.View, vector.Length);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             // Sum partial results on CPU
@@ -9197,7 +9125,6 @@ public class GpuEngine : IEngine, IDisposable
                 // Compute (x - mean)^2 in temp buffer using available kernels
                 // This is a simplified approach - for production, a dedicated variance kernel would be more efficient
                 (_partialSumKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, numBlocks, gpuVector.View, gpuPartialSums.View, vector.Length);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             // Compute variance on CPU with the mean
@@ -9243,7 +9170,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_subtractKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuDiff.View);
                 // Compute sum of (a-b)^2
                 (_partialDotProductKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, numBlocks, gpuDiff.View, gpuDiff.View, gpuPartialSums.View, a.Length);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             // Sum partial results on CPU
@@ -9281,7 +9207,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_sinKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -9312,7 +9237,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_cosKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -9343,7 +9267,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_sinhKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -9374,7 +9297,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_coshKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -9406,7 +9328,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_partialSumKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, numBlocks, gpuVector.View, gpuPartialSums.View, vector.Length);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             // Sum partial results on CPU
@@ -9445,7 +9366,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_partialDotProductKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, numBlocks, gpuA.View, gpuB.View, gpuPartialSums.View, a.Length);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             // Sum partial results on CPU
@@ -9493,7 +9413,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_softmaxKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View, maxVal, sumExp);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -9530,12 +9449,10 @@ public class GpuEngine : IEngine, IDisposable
         {
             gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
             gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
-            (_addKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
                 (_addKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -9565,7 +9482,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_subtractKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -9595,7 +9511,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_multiplyKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -9620,7 +9535,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_multiplyScalarKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -9649,7 +9563,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_divideKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -9674,7 +9587,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_divideScalarKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -9698,7 +9610,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_sqrtKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -9722,7 +9633,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_powerKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, exponent, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -9753,7 +9663,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_maxKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -9791,7 +9700,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_minKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -9824,7 +9732,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_absKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -9856,7 +9763,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_expKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -9888,7 +9794,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_logKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -9920,7 +9825,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_signKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -9952,7 +9856,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_log2KernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -9983,7 +9886,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_exp2KernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -10014,7 +9916,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_exp10KernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -10045,7 +9946,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_expM1KernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -10076,7 +9976,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_log1PKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -10107,7 +10006,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_negateKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -10138,7 +10036,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_clampKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, min, max, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -10171,7 +10068,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_lerpKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, t, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -10203,7 +10099,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_reciprocalKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -10234,7 +10129,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_rsqrtKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -10267,7 +10161,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_minMagnitudeKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -10301,7 +10194,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_maxMagnitudeKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -10333,7 +10225,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_roundKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -10364,7 +10255,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_floorKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -10395,7 +10285,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_ceilingKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -10426,7 +10315,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_truncateKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -10454,7 +10342,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_fillKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, length, gpuResult.View, value);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -10486,7 +10373,6 @@ public class GpuEngine : IEngine, IDisposable
             {
                 // Compute partial dot products (x dot x = sum of squares)
                 (_partialDotProductKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, numBlocks, gpuVector.View, gpuVector.View, gpuPartialSums.View, vector.Length);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             // Sum partial results on CPU
@@ -10525,7 +10411,6 @@ public class GpuEngine : IEngine, IDisposable
             {
                 // This is a simplified approach - for production, a dedicated variance kernel would be more efficient
                 (_partialSumKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, numBlocks, gpuVector.View, gpuPartialSums.View, vector.Length);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             // Compute variance on CPU with the mean
@@ -10571,7 +10456,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_subtractKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuDiff.View);
                 // Compute sum of (a-b)^2
                 (_partialDotProductKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, numBlocks, gpuDiff.View, gpuDiff.View, gpuPartialSums.View, a.Length);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             // Sum partial results on CPU
@@ -10609,7 +10493,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_sinKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -10640,7 +10523,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_cosKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -10671,7 +10553,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_sinhKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -10702,7 +10583,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_coshKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -10734,7 +10614,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_partialSumKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, numBlocks, gpuVector.View, gpuPartialSums.View, vector.Length);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             // Sum partial results on CPU
@@ -10773,7 +10652,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_partialDotProductKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, numBlocks, gpuA.View, gpuB.View, gpuPartialSums.View, a.Length);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             // Sum partial results on CPU
@@ -10821,7 +10699,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_softmaxKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View, maxVal, sumExp);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -10854,12 +10731,10 @@ public class GpuEngine : IEngine, IDisposable
         {
             gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
             gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
-            (_addKernelInt ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
                 (_addKernelInt ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -10887,12 +10762,10 @@ public class GpuEngine : IEngine, IDisposable
         {
             gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
             gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
-            (_addKernelLong ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
                 (_addKernelLong ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -10923,7 +10796,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_subtractKernelInt ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -10953,7 +10825,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_multiplyKernelInt ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -10978,7 +10849,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_multiplyScalarKernelInt ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -11007,7 +10877,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_divideKernelInt ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -11032,7 +10901,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_divideScalarKernelInt ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -11062,7 +10930,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_subtractKernelLong ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -11092,7 +10959,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_multiplyKernelLong ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -11117,7 +10983,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_multiplyScalarKernelLong ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -11146,7 +11011,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_divideKernelLong ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -11171,7 +11035,6 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 (_divideScalarKernelLong ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
             gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -11342,7 +11205,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_tensorSubtractKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         size, gpuA.View, gpuB.View, gpuResult.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -11390,7 +11252,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_tensorSubtractKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         size, gpuA.View, gpuB.View, gpuResult.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -11447,7 +11308,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_partialSumOfSquaresKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numBlocks, gpuInput.View, gpuPartials.View, length);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 var partials = new float[numBlocks];
@@ -11489,7 +11349,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_partialSumOfSquaresKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numBlocks, gpuInput.View, gpuPartials.View, length);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 var partials = new double[numBlocks];
@@ -11560,7 +11419,6 @@ public class GpuEngine : IEngine, IDisposable
                 {
                     (_swapColumnsKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))
                         ((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, rows, view2D, gpuTemp.View, col1, col2);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 // Copy result back
@@ -11619,7 +11477,6 @@ public class GpuEngine : IEngine, IDisposable
                 {
                     (_swapColumnsKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))
                         ((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, rows, view2D, gpuTemp.View, col1, col2);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 // Copy result back
@@ -11701,7 +11558,6 @@ public class GpuEngine : IEngine, IDisposable
                 {
                     (_swapRowsKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))
                         ((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, cols, gpuRow1.View, gpuRow2.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 // Copy swapped rows back (row1 gets gpuRow2, row2 gets gpuRow1)
@@ -11759,7 +11615,6 @@ public class GpuEngine : IEngine, IDisposable
                 {
                     (_swapRowsKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))
                         ((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, cols, gpuRow1.View, gpuRow2.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 // Copy swapped rows back (row1 gets gpuRow2, row2 gets gpuRow1)
@@ -11847,7 +11702,6 @@ public class GpuEngine : IEngine, IDisposable
                 {
                     (_outerProductKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))
                         ((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(m, n), gpuA.View, gpuB.View, viewResult, m, n);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 // Copy result back
@@ -11899,7 +11753,6 @@ public class GpuEngine : IEngine, IDisposable
                 {
                     (_outerProductKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))
                         ((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(m, n), gpuA.View, gpuB.View, viewResult, m, n);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 // Copy result back
@@ -12076,7 +11929,6 @@ public class GpuEngine : IEngine, IDisposable
                 {
                     // Execute pre-compiled kernel (Phase B: US-GPU-001, US-GPU-007)
                     (_matrixMultiplyKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(m, n), viewA, viewB, viewResult, k);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 // Zero-copy result transfer
@@ -12132,12 +11984,10 @@ public class GpuEngine : IEngine, IDisposable
                 gpuVector.View.BaseView.CopyFromCPU(vector.AsSpan());
 
                 var viewMatrix = gpuMatrix.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
-                (_matrixVectorMultiplyKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
                     (_matrixVectorMultiplyKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -12176,12 +12026,10 @@ public class GpuEngine : IEngine, IDisposable
                 var viewInput = gpuInput.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
                 var viewOutput = gpuOutput.View.As2DView<Stride2D.DenseX>(new Index2D(cols, rows), new Stride2D.DenseX(rows));
 
-                (_matrixTransposeKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(rows, cols), viewInput, viewOutput);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
                     (_matrixTransposeKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(rows, cols), viewInput, viewOutput);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -12227,12 +12075,10 @@ public class GpuEngine : IEngine, IDisposable
                 var viewB = gpuB.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
                 var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
 
-                (_matrixAddKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(rows, cols), viewA, viewB, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
                     (_matrixAddKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(rows, cols), viewA, viewB, viewResult);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -12271,12 +12117,10 @@ public class GpuEngine : IEngine, IDisposable
                 var viewMatrix = gpuMatrix.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
                 var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
 
-                (_matrixMultiplyScalarKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(rows, cols), viewMatrix, scalar, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
                     (_matrixMultiplyScalarKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(rows, cols), viewMatrix, scalar, viewResult);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -12326,12 +12170,10 @@ public class GpuEngine : IEngine, IDisposable
                 var viewB = gpuB.View.As2DView<Stride2D.DenseX>(new Index2D(k, n), new Stride2D.DenseX(n));
                 var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(m, n), new Stride2D.DenseX(n));
 
-                (_matrixMultiplyKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(m, n), viewA, viewB, viewResult, k);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
                     (_matrixMultiplyKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(m, n), viewA, viewB, viewResult, k);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -12376,12 +12218,10 @@ public class GpuEngine : IEngine, IDisposable
                 gpuVector.View.BaseView.CopyFromCPU(vector.AsSpan());
 
                 var viewMatrix = gpuMatrix.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
-                (_matrixVectorMultiplyKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
                     (_matrixVectorMultiplyKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -12420,12 +12260,10 @@ public class GpuEngine : IEngine, IDisposable
                 var viewInput = gpuInput.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
                 var viewOutput = gpuOutput.View.As2DView<Stride2D.DenseX>(new Index2D(cols, rows), new Stride2D.DenseX(rows));
 
-                (_matrixTransposeKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(rows, cols), viewInput, viewOutput);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
                     (_matrixTransposeKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(rows, cols), viewInput, viewOutput);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -12471,12 +12309,10 @@ public class GpuEngine : IEngine, IDisposable
                 var viewB = gpuB.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
                 var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
 
-                (_matrixAddKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(rows, cols), viewA, viewB, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
                     (_matrixAddKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(rows, cols), viewA, viewB, viewResult);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -12515,12 +12351,10 @@ public class GpuEngine : IEngine, IDisposable
                 var viewMatrix = gpuMatrix.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
                 var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
 
-                (_matrixMultiplyScalarKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(rows, cols), viewMatrix, scalar, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
                     (_matrixMultiplyScalarKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(rows, cols), viewMatrix, scalar, viewResult);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -12621,12 +12455,10 @@ public class GpuEngine : IEngine, IDisposable
                 gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
 
                 // Execute pre-compiled kernel (Phase B: US-GPU-001, US-GPU-013)
-                (_batchMatMulKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
                     (_batchMatMulKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 // Zero-copy result transfer
@@ -12703,12 +12535,10 @@ public class GpuEngine : IEngine, IDisposable
                 gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
 
                 // Execute pre-compiled kernel (Phase B: US-GPU-001, US-GPU-013)
-                (_batchMatMulKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
                     (_batchMatMulKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 // Zero-copy result transfer
@@ -12776,12 +12606,10 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
                 gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
 
-                (_tensorAddKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
                     (_tensorAddKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -12817,12 +12645,10 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
                 gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
 
-                (_tensorAddKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
                     (_tensorAddKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -12922,7 +12748,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         input.Length, gpuInput.View, gpuBias.View, gpuResult.View,
                         batchSize, channels, height, width);
-                    _accelerator.Synchronize();
                 }
 
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -12971,7 +12796,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         input.Length, gpuInput.View, gpuBias.View, gpuResult.View,
                         batchSize, channels, height, width);
-                    _accelerator.Synchronize();
                 }
 
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -13079,7 +12903,6 @@ public class GpuEngine : IEngine, IDisposable
                         // Swap accumulator and temp for next iteration
                         (gpuAccumulator, gpuTemp) = (gpuTemp, gpuAccumulator);
                     }
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 // Download final result (now in gpuAccumulator after all swaps)
@@ -13161,7 +12984,6 @@ public class GpuEngine : IEngine, IDisposable
                         // Swap accumulator and temp for next iteration
                         (gpuAccumulator, gpuTemp) = (gpuTemp, gpuAccumulator);
                     }
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 // Download final result (now in gpuAccumulator after all swaps)
@@ -13280,7 +13102,6 @@ public class GpuEngine : IEngine, IDisposable
                         // Swap accumulator and temp for next iteration
                         (gpuAccumulator, gpuTemp) = (gpuTemp, gpuAccumulator);
                     }
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 // Download final result (now in gpuAccumulator after all swaps)
@@ -13362,7 +13183,6 @@ public class GpuEngine : IEngine, IDisposable
                         // Swap accumulator and temp for next iteration
                         (gpuAccumulator, gpuTemp) = (gpuTemp, gpuAccumulator);
                     }
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 // Download final result (now in gpuAccumulator after all swaps)
@@ -13428,12 +13248,10 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
                 gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
 
-                (_tensorSubtractKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
                     (_tensorSubtractKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -13469,12 +13287,10 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
                 gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
 
-                (_tensorSubtractKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
                     (_tensorSubtractKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -13529,12 +13345,10 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
                 gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
 
-                (_tensorMultiplyKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
                     (_tensorMultiplyKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -13570,12 +13384,10 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
                 gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
 
-                (_tensorMultiplyKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
                     (_tensorMultiplyKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -13626,12 +13438,10 @@ public class GpuEngine : IEngine, IDisposable
             {
                 gpuTensor.View.BaseView.CopyFromCPU(tensor.AsSpan());
 
-                (_tensorMultiplyScalarKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, tensor.Length, gpuTensor.View, scalar, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
                     (_tensorMultiplyScalarKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, tensor.Length, gpuTensor.View, scalar, gpuResult.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -13662,12 +13472,10 @@ public class GpuEngine : IEngine, IDisposable
             {
                 gpuTensor.View.BaseView.CopyFromCPU(tensor.AsSpan());
 
-                (_tensorMultiplyScalarKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, tensor.Length, gpuTensor.View, scalar, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
                     (_tensorMultiplyScalarKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, tensor.Length, gpuTensor.View, scalar, gpuResult.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -13721,12 +13529,10 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
                 gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
 
-                (_tensorDivideKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
                     (_tensorDivideKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -13762,12 +13568,10 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
                 gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
 
-                (_tensorDivideKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
                     (_tensorDivideKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -14110,7 +13914,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_logKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -14145,7 +13948,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_logKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -14201,7 +14003,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_expKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -14236,7 +14037,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_expKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -14292,7 +14092,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_sqrtKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -14327,7 +14126,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_sqrtKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -14383,7 +14181,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_absKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -14418,7 +14215,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_absKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -14476,7 +14272,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_negateKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -14511,7 +14306,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_negateKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -14576,7 +14370,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_powerScalarKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, exponent, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -14611,7 +14404,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_powerScalarKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, exponent, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -14674,7 +14466,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_floorKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -14709,7 +14500,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_floorKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -14765,7 +14555,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_ceilingKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -14800,7 +14589,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_ceilingKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -14856,7 +14644,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_fracKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -14891,7 +14678,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_fracKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -14947,7 +14733,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_sinKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -14982,7 +14767,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_sinKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -15038,7 +14822,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_cosKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -15073,7 +14856,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_cosKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -15149,7 +14931,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         result.Length, gpuGrid.View, gpuPositions.View, gpuOutput.View,
                         depth, height, width, channels);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -15194,7 +14975,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         result.Length, gpuGrid.View, gpuPositions.View, gpuOutput.View,
                         depth, height, width, channels);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -15274,7 +15054,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         gradOutput.Length, gpuGradOutput.View, gpuPositions.View, gpuGradGrid.View,
                         depth, height, width, channels);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradGrid.View.BaseView.CopyToCPU(gradGrid.AsWritableSpan());
@@ -15322,7 +15101,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         gradOutput.Length, gpuGradOutput.View, gpuPositions.View, gpuGradGrid.View,
                         depth, height, width, channels);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradGrid.View.BaseView.CopyToCPU(gradGrid.AsWritableSpan());
@@ -15387,7 +15165,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_powerKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, exponent, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -15422,7 +15199,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_powerKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, exponent, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -15483,7 +15259,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_maxKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         a.Length, gpuA.View, gpuB.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -15523,7 +15298,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_maxKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         a.Length, gpuA.View, gpuB.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -15636,7 +15410,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_minKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         a.Length, gpuA.View, gpuB.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -15676,7 +15449,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_minKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         a.Length, gpuA.View, gpuB.View, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -15790,7 +15562,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_clampKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, min, max, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -15825,7 +15596,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_clampKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, min, max, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -15885,7 +15655,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_partialSumKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numBlocks, gpuInput.View, gpuPartialSums.View, length);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 // Copy partial sums back and finish reduction on CPU
@@ -15930,7 +15699,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_partialSumKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numBlocks, gpuInput.View, gpuPartialSums.View, length);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 var partialSums = new double[numBlocks];
@@ -16075,7 +15843,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_reduceSumAxisKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputSize, gpuInput.View, gpuOutput.View, outerSize, reduceSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -16169,7 +15936,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_reduceSumAxisKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputSize, gpuInput.View, gpuOutput.View, outerSize, reduceSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -16229,7 +15995,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_partialMaxKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numBlocks, gpuInput.View, gpuPartialMaxes.View, length);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 var partialMaxes = new float[numBlocks];
@@ -16275,7 +16040,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_partialMaxKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numBlocks, gpuInput.View, gpuPartialMaxes.View, length);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 var partialMaxes = new double[numBlocks];
@@ -16343,7 +16107,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_partialMinKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numBlocks, gpuInput.View, gpuPartialMins.View, length);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 var partialMins = new float[numBlocks];
@@ -16389,7 +16152,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_partialMinKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numBlocks, gpuInput.View, gpuPartialMins.View, length);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 var partialMins = new double[numBlocks];
@@ -16510,7 +16272,6 @@ public class GpuEngine : IEngine, IDisposable
                 {
                     (_maxPool2DKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, outputSize, gpuInput.View, gpuOutput.View,
                         batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -16564,7 +16325,6 @@ public class GpuEngine : IEngine, IDisposable
                 {
                     (_maxPool2DKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, outputSize, gpuInput.View, gpuOutput.View,
                         batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -16637,7 +16397,6 @@ public class GpuEngine : IEngine, IDisposable
                 {
                     (_avgPool2DKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, outputSize, gpuInput.View, gpuOutput.View,
                         batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -16691,7 +16450,6 @@ public class GpuEngine : IEngine, IDisposable
                 {
                     (_avgPool2DKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, outputSize, gpuInput.View, gpuOutput.View,
                         batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -16777,7 +16535,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_conv2DKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputSize, gpuInput.View, gpuKernel.View, gpuOutput.View, parameters);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -16843,7 +16600,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_conv2DKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputSize, gpuInput.View, gpuKernel.View, gpuOutput.View, parameters);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -16941,7 +16697,6 @@ public class GpuEngine : IEngine, IDisposable
                 lock (_gpuLock)
                 {
                     // Try to synchronize - if this works, GPU is healthy again
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 // Recovery successful!
@@ -17199,7 +16954,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_asinKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     x.Length, gpuInput.View, gpuOutput.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuOutput.View.BaseView.CopyToCPU(destination);
@@ -17241,7 +16995,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_asinKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     x.Length, gpuInput.View, gpuOutput.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuOutput.View.BaseView.CopyToCPU(destination);
@@ -17309,7 +17062,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_acosKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     x.Length, gpuInput.View, gpuOutput.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuOutput.View.BaseView.CopyToCPU(destination);
@@ -17351,7 +17103,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_acosKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     x.Length, gpuInput.View, gpuOutput.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuOutput.View.BaseView.CopyToCPU(destination);
@@ -17419,7 +17170,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_atanKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     x.Length, gpuInput.View, gpuOutput.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuOutput.View.BaseView.CopyToCPU(destination);
@@ -17461,7 +17211,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_atanKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     x.Length, gpuInput.View, gpuOutput.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuOutput.View.BaseView.CopyToCPU(destination);
@@ -17693,7 +17442,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_asinhKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     x.Length, gpuInput.View, gpuOutput.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuOutput.View.BaseView.CopyToCPU(destination);
@@ -17735,7 +17483,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_asinhKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     x.Length, gpuInput.View, gpuOutput.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuOutput.View.BaseView.CopyToCPU(destination);
@@ -17777,7 +17524,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_acoshKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     x.Length, gpuInput.View, gpuOutput.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuOutput.View.BaseView.CopyToCPU(destination);
@@ -17819,7 +17565,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_acoshKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     x.Length, gpuInput.View, gpuOutput.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuOutput.View.BaseView.CopyToCPU(destination);
@@ -17861,7 +17606,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_atanhKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     x.Length, gpuInput.View, gpuOutput.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuOutput.View.BaseView.CopyToCPU(destination);
@@ -17903,7 +17647,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_atanhKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     x.Length, gpuInput.View, gpuOutput.View);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuOutput.View.BaseView.CopyToCPU(destination);
@@ -18112,7 +17855,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_tensorTransposeKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     new Index2D(rows, cols), gpuInput.View.BaseView, gpuOutput.View.BaseView, rows, cols);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             var resultData = new float[tensor.Length];
@@ -18148,7 +17890,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_tensorTransposeKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     new Index2D(rows, cols), gpuInput.View.BaseView, gpuOutput.View.BaseView, rows, cols);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             var resultData = new double[tensor.Length];
@@ -18220,7 +17961,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_matrixMultiplyKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     new Index2D(m, n), viewA, viewB, viewResult, k);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             var resultData = new float[m * n];
@@ -18264,7 +18004,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_matrixMultiplyKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     new Index2D(m, n), viewA, viewB, viewResult, k);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             var resultData = new double[m * n];
@@ -18346,7 +18085,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_conv2DBackwardInputKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         inputLength, gpuGradOutput.View, gpuKernel.View, gpuGradInput.View, p);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(gradInput.AsWritableSpan());
@@ -18392,7 +18130,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_conv2DBackwardInputKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         inputLength, gpuGradOutput.View, gpuKernel.View, gpuGradInput.View, p);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(gradInput.AsWritableSpan());
@@ -18462,7 +18199,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_conv2DBackwardKernelKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         kernelLength, gpuGradOutput.View, gpuInput.View, gpuGradKernel.View, p);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradKernel.View.BaseView.CopyToCPU(gradKernel.AsWritableSpan());
@@ -18508,7 +18244,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_conv2DBackwardKernelKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         kernelLength, gpuGradOutput.View, gpuInput.View, gpuGradKernel.View, p);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradKernel.View.BaseView.CopyToCPU(gradKernel.AsWritableSpan());
@@ -18581,7 +18316,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputLength, gpuInput.View, gpuOutput.View, gpuMaxIndices.View,
                         batch, channels, inH, inW, outH, outW, poolH, poolW, strideVal);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(output.AsWritableSpan());
@@ -18644,7 +18378,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputLength, gpuInput.View, gpuOutput.View, gpuMaxIndices.View,
                         batch, channels, inH, inW, outH, outW, poolH, poolW, strideVal);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(output.AsWritableSpan());
@@ -18734,7 +18467,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputLength, gpuGradOutput.View, gpuMaxIndices.View, gpuGradInput.View,
                         batch, channels, inH, inW, outH, outW);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(gradInput.AsWritableSpan());
@@ -18792,7 +18524,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputLength, gpuGradOutput.View, gpuMaxIndices.View, gpuGradInput.View,
                         batch, channels, inH, inW, outH, outW);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(gradInput.AsWritableSpan());
@@ -18872,7 +18603,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         inputLength, gpuGradOutput.View, gpuGradInput.View,
                         batch, channels, inH, inW, outH, outW, poolH, poolW, strideVal);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(gradInput.AsWritableSpan());
@@ -18916,7 +18646,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         inputLength, gpuGradOutput.View, gpuGradInput.View,
                         batch, channels, inH, inW, outH, outW, poolH, poolW, strideVal);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(gradInput.AsWritableSpan());
@@ -18985,7 +18714,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputLength, gpuInput.View, gpuKernel.View, gpuOutput.View,
                         batch, channels, inH, inW, outH, outW, kH, kW, strideVal, paddingVal);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(output.AsWritableSpan());
@@ -19034,7 +18762,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputLength, gpuInput.View, gpuKernel.View, gpuOutput.View,
                         batch, channels, inH, inW, outH, outW, kH, kW, strideVal, paddingVal);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(output.AsWritableSpan());
@@ -19102,7 +18829,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         inputLength, gpuGradOutput.View, gpuKernel.View, gpuGradInput.View,
                         batch, channels, inH, inW, outH, outW, kH, kW, strideVal, paddingVal);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(gradInput.AsWritableSpan());
@@ -19149,7 +18875,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         inputLength, gpuGradOutput.View, gpuKernel.View, gpuGradInput.View,
                         batch, channels, inH, inW, outH, outW, kH, kW, strideVal, paddingVal);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(gradInput.AsWritableSpan());
@@ -19218,7 +18943,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         kernelLength, gpuGradOutput.View, gpuInput.View, gpuGradKernel.View,
                         batch, channels, inH, inW, outH, outW, kH, kW, strideVal, paddingVal);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradKernel.View.BaseView.CopyToCPU(gradKernel.AsWritableSpan());
@@ -19266,7 +18990,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         kernelLength, gpuGradOutput.View, gpuInput.View, gpuGradKernel.View,
                         batch, channels, inH, inW, outH, outW, kH, kW, strideVal, paddingVal);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradKernel.View.BaseView.CopyToCPU(gradKernel.AsWritableSpan());
@@ -19340,7 +19063,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputLength, gpuInput.View, gpuKernel.View, gpuOutput.View,
                         batch, channels, inH, inW, outH, outW, outChannels, kH, kW, strideVal, paddingVal);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(output.AsWritableSpan());
@@ -19390,7 +19112,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputLength, gpuInput.View, gpuKernel.View, gpuOutput.View,
                         batch, channels, inH, inW, outH, outW, outChannels, kH, kW, strideVal, paddingVal);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(output.AsWritableSpan());
@@ -19459,7 +19180,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         inputLength, gpuGradOutput.View, gpuKernel.View, gpuGradInput.View,
                         batch, channels, inH, inW, outH, outW, outChannels, kH, kW, strideVal);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(gradInput.AsWritableSpan());
@@ -19507,7 +19227,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         inputLength, gpuGradOutput.View, gpuKernel.View, gpuGradInput.View,
                         batch, channels, inH, inW, outH, outW, outChannels, kH, kW, strideVal);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(gradInput.AsWritableSpan());
@@ -19576,7 +19295,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         kernelLength, gpuGradOutput.View, gpuInput.View, gpuGradKernel.View,
                         batch, channels, inH, inW, outH, outW, outChannels, kH, kW, strideVal);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradKernel.View.BaseView.CopyToCPU(gradKernel.AsWritableSpan());
@@ -19624,7 +19342,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         kernelLength, gpuGradOutput.View, gpuInput.View, gpuGradKernel.View,
                         batch, channels, inH, inW, outH, outW, outChannels, kH, kW, strideVal);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradKernel.View.BaseView.CopyToCPU(gradKernel.AsWritableSpan());
@@ -19742,7 +19459,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_conv3DKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputSize, gpuInput.View, gpuKernel.View, gpuOutput.View, parameters);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -19820,7 +19536,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_conv3DKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputSize, gpuInput.View, gpuKernel.View, gpuOutput.View, parameters);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -19933,7 +19648,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_maxPool3DKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputSize, gpuInput.View, gpuOutput.View, parameters);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -19989,7 +19703,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_maxPool3DKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputSize, gpuInput.View, gpuOutput.View, parameters);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -20101,7 +19814,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_avgPool3DKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputSize, gpuInput.View, gpuOutput.View, parameters);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -20157,7 +19869,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_avgPool3DKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputSize, gpuInput.View, gpuOutput.View, parameters);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -20275,7 +19986,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_tensorSoftmaxKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numWorkItems, gpuInput.View, gpuOutput.View, outerSize, axisSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -20321,7 +20031,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_tensorSoftmaxKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numWorkItems, gpuInput.View, gpuOutput.View, outerSize, axisSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -20392,7 +20101,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_softmaxBackwardKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     numWorkItems, gpuGradOutput.View, gpuOutput.View, gpuGradInput.View, outerSize, axisSize, innerSize);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -20431,7 +20139,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_softmaxBackwardKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     numWorkItems, gpuGradOutput.View, gpuOutput.View, gpuGradInput.View, outerSize, axisSize, innerSize);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -20517,7 +20224,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_gumbelSoftmaxKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numWorkItems, gpuInput.View, gpuNoise.View, gpuOutput.View, temperature, outerSize, axisSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -20609,7 +20315,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_gumbelSoftmaxKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numWorkItems, gpuInput.View, gpuNoise.View, gpuOutput.View, temperature, outerSize, axisSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -20711,7 +20416,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_gumbelSoftmaxBackwardKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numWorkItems, gpuGradOutput.View, gpuOutput.View, gpuGradInput.View, temperature, outerSize, axisSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -20760,7 +20464,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_gumbelSoftmaxBackwardKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numWorkItems, gpuGradOutput.View, gpuOutput.View, gpuGradInput.View, temperature, outerSize, axisSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -20830,7 +20533,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_taylorSoftmaxKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numWorkItems, gpuInput.View, gpuOutput.View, order, outerSize, axisSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -20876,7 +20578,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_taylorSoftmaxKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numWorkItems, gpuInput.View, gpuOutput.View, order, outerSize, axisSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -20949,7 +20650,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_taylorSoftmaxBackwardKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numWorkItems, gpuGradOutput.View, gpuInput.View, gpuOutput.View, gpuGradInput.View, order, outerSize, axisSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -21001,7 +20701,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_taylorSoftmaxBackwardKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numWorkItems, gpuGradOutput.View, gpuInput.View, gpuOutput.View, gpuGradInput.View, order, outerSize, axisSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -21070,7 +20769,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_sparsemaxKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numWorkItems, gpuInput.View, gpuOutput.View, outerSize, axisSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -21116,7 +20814,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_sparsemaxKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numWorkItems, gpuInput.View, gpuOutput.View, outerSize, axisSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -21186,7 +20883,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_sparsemaxBackwardKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numWorkItems, gpuGradOutput.View, gpuOutput.View, gpuGradInput.View, outerSize, axisSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -21235,7 +20931,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_sparsemaxBackwardKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numWorkItems, gpuGradOutput.View, gpuOutput.View, gpuGradInput.View, outerSize, axisSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -21303,7 +20998,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_sphericalSoftmaxKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numWorkItems, gpuInput.View, gpuOutput.View, outerSize, axisSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -21349,7 +21043,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_sphericalSoftmaxKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numWorkItems, gpuInput.View, gpuOutput.View, outerSize, axisSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -21422,7 +21115,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_sphericalSoftmaxBackwardKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numWorkItems, gpuGradOutput.View, gpuInput.View, gpuOutput.View, gpuGradInput.View, outerSize, axisSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -21474,7 +21166,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_sphericalSoftmaxBackwardKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numWorkItems, gpuGradOutput.View, gpuInput.View, gpuOutput.View, gpuGradInput.View, outerSize, axisSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -21584,7 +21275,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         input.Length, gpuInput.View, gpuOutput.View, gpuGamma.View, gpuBeta.View,
                         gpuMean.View, gpuVar.View, epsilon, batch, features);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -21663,7 +21353,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         input.Length, gpuInput.View, gpuOutput.View, gpuGamma.View, gpuBeta.View,
                         gpuMean.View, gpuVar.View, epsilon, batch, features);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -21758,7 +21447,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         totalSize, gpuGradOutput.View, gpuInput.View, gpuGamma.View, gpuMean.View, gpuVariance.View,
                         gpuGradInput.View, gpuGradGamma.View, gpuGradBeta.View, epsilon, batchSize, featureSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(gradInput.AsWritableSpan());
@@ -21822,7 +21510,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         totalSize, gpuGradOutput.View, gpuInput.View, gpuGamma.View, gpuMean.View, gpuVariance.View,
                         gpuGradInput.View, gpuGradGamma.View, gpuGradBeta.View, epsilon, batchSize, featureSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(gradInput.AsWritableSpan());
@@ -21937,7 +21624,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         input.Length, gpuInput.View, gpuOutput.View, gpuGamma.View, gpuBeta.View,
                         gpuMean.View, gpuVar.View, epsilon, batch, features);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -22016,7 +21702,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         input.Length, gpuInput.View, gpuOutput.View, gpuGamma.View, gpuBeta.View,
                         gpuMean.View, gpuVar.View, epsilon, batch, features);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -22110,7 +21795,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         totalSize, gpuGradOutput.View, gpuInput.View, gpuGamma.View, gpuMean.View, gpuVariance.View,
                         gpuGradInput.View, gpuGradGamma.View, gpuGradBeta.View, epsilon, batchSize, featureSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(gradInput.AsWritableSpan());
@@ -22174,7 +21858,6 @@ public class GpuEngine : IEngine, IDisposable
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         totalSize, gpuGradOutput.View, gpuInput.View, gpuGamma.View, gpuMean.View, gpuVariance.View,
                         gpuGradInput.View, gpuGradGamma.View, gpuGradBeta.View, epsilon, batchSize, featureSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(gradInput.AsWritableSpan());
@@ -22276,7 +21959,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_reduceMaxKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputSize, gpuInput.View, gpuOutput.View, gpuIndices.View, outerSize, reduceSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(output.AsWritableSpan());
@@ -22329,7 +22011,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_reduceMaxKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputSize, gpuInput.View, gpuOutput.View, gpuIndices.View, outerSize, reduceSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(output.AsWritableSpan());
@@ -22411,7 +22092,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_reduceMeanKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputSize, gpuInput.View, gpuOutput.View, outerSize, reduceSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(output.AsWritableSpan());
@@ -22460,7 +22140,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_reduceMeanKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputSize, gpuInput.View, gpuOutput.View, outerSize, reduceSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(output.AsWritableSpan());
@@ -22527,7 +22206,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_reduceMeanBackwardKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputSize, gpuGradOutput.View, gpuGradInput.View, outerSize, reduceSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(output.AsWritableSpan());
@@ -22571,7 +22249,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_reduceMeanBackwardKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         outputSize, gpuGradOutput.View, gpuGradInput.View, outerSize, reduceSize, innerSize);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuGradInput.View.BaseView.CopyToCPU(output.AsWritableSpan());
@@ -22900,7 +22577,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     outputSize, gpuInput.View.BaseView, gpuOutput.View.BaseView,
                     batch, channels, height, width, scaleH, scaleW);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             var resultData = new float[outputSize];
@@ -22943,7 +22619,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     outputSize, gpuInput.View.BaseView, gpuOutput.View.BaseView,
                     batch, channels, height, width, scaleH, scaleW);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             var resultData = new double[outputSize];
@@ -22998,7 +22673,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     outputSize, gpuInput.View.BaseView, gpuOutput.View.BaseView,
                     flatBatch, 1, height, width, scaleH, scaleW);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             var resultData = new float[outputSize];
@@ -23053,7 +22727,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     outputSize, gpuInput.View.BaseView, gpuOutput.View.BaseView,
                     flatBatch, 1, height, width, scaleH, scaleW);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             var resultData = new double[outputSize];
@@ -23133,7 +22806,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_upsampleBackwardKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     inputSize, gpuGradOutput.View, gpuGradInput.View, batch, channels, inH, inW, scaleH, scaleW);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -23173,7 +22845,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_upsampleBackwardKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     inputSize, gpuGradOutput.View, gpuGradInput.View, batch, channels, inH, inW, scaleH, scaleW);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -23228,7 +22899,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_upsampleBackwardKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     totalInput, gpuGradOutput.View, gpuGradInput.View, flatBatch, 1, height, width, scaleH, scaleW);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -23283,7 +22953,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_upsampleBackwardKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     totalInput, gpuGradOutput.View, gpuGradInput.View, flatBatch, 1, height, width, scaleH, scaleW);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -23357,7 +23026,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     outputSize, gpuInput.View.BaseView, gpuOutput.View.BaseView,
                     batch, channels, height, width, upscaleFactor);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             var resultData = new float[outputSize];
@@ -23402,7 +23070,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     outputSize, gpuInput.View.BaseView, gpuOutput.View.BaseView,
                     batch, channels, height, width, upscaleFactor);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             var resultData = new double[outputSize];
@@ -23466,7 +23133,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_pixelShuffleBackwardKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     inputSize, gpuGradOutput.View, gpuGradInput.View, batch, channels, height, width, upscaleFactor);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -23506,7 +23172,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_pixelShuffleBackwardKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     inputSize, gpuGradOutput.View, gpuGradInput.View, batch, channels, height, width, upscaleFactor);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -23572,7 +23237,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_cropKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     outputSize, gpuInput.View, gpuOutput.View, batch, channels, inH, inW, top, left, cropH, cropW);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -23613,7 +23277,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_cropKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     outputSize, gpuInput.View, gpuOutput.View, batch, channels, inH, inW, top, left, cropH, cropW);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -23788,7 +23451,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_padKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     outputSize, gpuInput.View, gpuOutput.View, batch, channels, inH, inW, padTop, padBottom, padLeft, padRight, padValue);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -23831,7 +23493,6 @@ public class GpuEngine : IEngine, IDisposable
                 (_padKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                     outputSize, gpuInput.View, gpuOutput.View, batch, channels, inH, inW, padTop, padBottom, padLeft, padRight, padValue);
-                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
             }
 
             gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -24030,7 +23691,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_partialSumOfSquaresKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numBlocks, gpuInput.View, gpuPartialSums.View, length);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 // Copy partial sums back and finish reduction on CPU
@@ -24074,7 +23734,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_partialSumOfSquaresKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         numBlocks, gpuInput.View, gpuPartialSums.View, length);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 // Copy partial sums back and finish reduction on CPU
@@ -24159,7 +23818,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_embeddingLookupKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         totalOutputElements, gpuEmbeddings.View, gpuIndices.View, gpuOutput.View, embeddingDim);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 var outputData = new float[totalOutputElements];
@@ -24216,7 +23874,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_embeddingLookupKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         totalOutputElements, gpuEmbeddings.View, gpuIndices.View, gpuOutput.View, embeddingDim);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 var outputData = new double[totalOutputElements];
@@ -24304,7 +23961,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_embeddingLookupBackwardKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         totalGradElements, gpuGradOutput.View, gpuIndices.View, gpuGradEmbeddings.View, embeddingDim, numIndices);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 var gradEmbeddingsData = new float[totalEmbeddingElements];
@@ -24357,7 +24013,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_embeddingLookupBackwardKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         totalGradElements, gpuGradOutput.View, gpuIndices.View, gpuGradEmbeddings.View, embeddingDim, numIndices);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 var gradEmbeddingsData = new double[totalEmbeddingElements];
@@ -24488,7 +24143,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_locallyConnectedConv2DKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         totalOutputElements, gpuInput.View, gpuWeights.View, gpuBias.View, gpuOutput.View, p, hasBias);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 var outputData = new float[totalOutputElements];
@@ -24551,7 +24205,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_locallyConnectedConv2DKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         totalOutputElements, gpuInput.View, gpuWeights.View, gpuBias.View, gpuOutput.View, p, hasBias);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 var outputData = new double[totalOutputElements];
@@ -24643,7 +24296,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_locallyConnectedConv2DBackwardInputKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         totalInputElements, gpuGradOutput.View, gpuWeights.View, gpuGradInput.View, p);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 var outputData = new float[totalInputElements];
@@ -24702,7 +24354,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_locallyConnectedConv2DBackwardInputKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         totalInputElements, gpuGradOutput.View, gpuWeights.View, gpuGradInput.View, p);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 var outputData = new double[totalInputElements];
@@ -24793,7 +24444,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_locallyConnectedConv2DBackwardWeightsKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         totalWeightElements, gpuGradOutput.View, gpuInput.View, gpuGradWeights.View, p);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 var outputData = new float[totalWeightElements];
@@ -24852,7 +24502,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_locallyConnectedConv2DBackwardWeightsKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         totalWeightElements, gpuGradOutput.View, gpuInput.View, gpuGradWeights.View, p);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 var outputData = new double[totalWeightElements];
@@ -24936,7 +24585,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_locallyConnectedConv2DBackwardBiasKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         totalBiasElements, gpuGradOutput.View, gpuGradBias.View, p);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 var outputData = new float[totalBiasElements];
@@ -24987,7 +24635,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_locallyConnectedConv2DBackwardBiasKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         totalBiasElements, gpuGradOutput.View, gpuGradBias.View, p);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 var outputData = new double[totalBiasElements];
@@ -27145,7 +26792,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_scalarMinusTensorKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, scalar, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -27180,7 +26826,6 @@ public class GpuEngine : IEngine, IDisposable
                     (_scalarMinusTensorKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
                         (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
                         tensor.Length, gpuInput.View, scalar, gpuOutput.View);
-                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
 
                 gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
@@ -30687,7 +30332,6 @@ public class GpuEngine : IEngine, IDisposable
                 outputBuffer.View,
                 parameters);
 
-            _accelerator.Synchronize();
 
             var outputData = outputBuffer.GetAsArray1D();
             return new Tensor<float>(outputShape, new Vector<float>(outputData));
@@ -30720,7 +30364,6 @@ public class GpuEngine : IEngine, IDisposable
                 outputBuffer.View,
                 parameters);
 
-            _accelerator.Synchronize();
 
             var outputData = outputBuffer.GetAsArray1D();
             return new Tensor<double>(outputShape, new Vector<double>(outputData));
@@ -30793,7 +30436,6 @@ public class GpuEngine : IEngine, IDisposable
                 outputBuffer.View,
                 parameters);
 
-            _accelerator.Synchronize();
 
             var outputData = outputBuffer.GetAsArray1D();
             return new Tensor<float>(outputShape, new Vector<float>(outputData));
@@ -30829,7 +30471,6 @@ public class GpuEngine : IEngine, IDisposable
                 outputBuffer.View,
                 parameters);
 
-            _accelerator.Synchronize();
 
             var outputData = outputBuffer.GetAsArray1D();
             return new Tensor<double>(outputShape, new Vector<double>(outputData));
@@ -30918,7 +30559,6 @@ public class GpuEngine : IEngine, IDisposable
                 outputBuffer.View,
                 parameters);
 
-            _accelerator.Synchronize();
 
             var outputData = outputBuffer.GetAsArray1D();
             return new Tensor<float>(outputShape, new Vector<float>(outputData));
@@ -30960,7 +30600,6 @@ public class GpuEngine : IEngine, IDisposable
                 outputBuffer.View,
                 parameters);
 
-            _accelerator.Synchronize();
 
             var outputData = outputBuffer.GetAsArray1D();
             return new Tensor<double>(outputShape, new Vector<double>(outputData));
@@ -31294,7 +30933,6 @@ public class GpuEngine : IEngine, IDisposable
                 ArrayView1D<float, Stride1D.Dense>, int, int, int>(PairwiseDistanceSquaredKernelFloat);
 
             kernel(n * m, xBuffer.View, yBuffer.View, resultBuffer.View, n, m, d);
-            _accelerator!.Synchronize();
 
             resultBuffer.CopyToCPU(rf!.Data);
         }
@@ -31316,7 +30954,6 @@ public class GpuEngine : IEngine, IDisposable
                 ArrayView1D<double, Stride1D.Dense>, int, int, int>(PairwiseDistanceSquaredKernelDouble);
 
             kernel(n * m, xBuffer.View, yBuffer.View, resultBuffer.View, n, m, d);
-            _accelerator!.Synchronize();
 
             resultBuffer.CopyToCPU(rd!.Data);
         }
@@ -31441,7 +31078,6 @@ public class GpuEngine : IEngine, IDisposable
 
             kernel(numSlices, inputBuffer.View, valuesBuffer.View, indicesBuffer.View,
                    k, outerSize, axisSize, innerSize, largest ? 1 : 0);
-            _accelerator!.Synchronize();
 
             valuesBuffer.CopyToCPU(values.Data);
             indicesBuffer.CopyToCPU(indices.Data);
@@ -31467,7 +31103,6 @@ public class GpuEngine : IEngine, IDisposable
 
             kernel(numSlices, inputBuffer.View, valuesBuffer.View, indicesBuffer.View,
                    k, outerSize, axisSize, innerSize, largest ? 1 : 0);
-            _accelerator!.Synchronize();
 
             valuesBuffer.CopyToCPU(values.Data);
             indicesBuffer.CopyToCPU(indices.Data);
@@ -31629,7 +31264,6 @@ public class GpuEngine : IEngine, IDisposable
 
             kernel(numSlices, inputBuffer.View, resultBuffer.View,
                    outerSize, axisSize, innerSize, descending ? 1 : 0);
-            _accelerator!.Synchronize();
 
             resultBuffer.CopyToCPU(result.Data);
         }
@@ -31653,7 +31287,6 @@ public class GpuEngine : IEngine, IDisposable
 
             kernel(numSlices, inputBuffer.View, resultBuffer.View,
                    outerSize, axisSize, innerSize, descending ? 1 : 0);
-            _accelerator!.Synchronize();
 
             resultBuffer.CopyToCPU(result.Data);
         }
@@ -31810,7 +31443,6 @@ public class GpuEngine : IEngine, IDisposable
 
             kernel(result.Length, inputBuffer.View, indicesBuffer.View, resultBuffer.View,
                    outerSize, axisSize, innerSize, numIndices);
-            _accelerator!.Synchronize();
 
             resultBuffer.CopyToCPU(result.Data);
         }
@@ -31836,7 +31468,6 @@ public class GpuEngine : IEngine, IDisposable
 
             kernel(result.Length, inputBuffer.View, indicesBuffer.View, resultBuffer.View,
                    outerSize, axisSize, innerSize, numIndices);
-            _accelerator!.Synchronize();
 
             resultBuffer.CopyToCPU(result.Data);
         }
@@ -31933,7 +31564,6 @@ public class GpuEngine : IEngine, IDisposable
             var copyKernel = _accelerator!.LoadAutoGroupedStreamKernel<
                 Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>>(CopyKernelFloat);
             copyKernel(input.Length, inputBuffer.View, resultBuffer.View);
-            _accelerator!.Synchronize();
 
             // Then scatter values
             var scatterKernel = _accelerator!.LoadAutoGroupedStreamKernel<
@@ -31942,7 +31572,6 @@ public class GpuEngine : IEngine, IDisposable
 
             scatterKernel(values.Length, indicesBuffer.View, valuesBuffer.View, resultBuffer.View,
                           outerSize, axisSize, innerSize, numIndices);
-            _accelerator!.Synchronize();
 
             resultBuffer.CopyToCPU(result.Data);
         }
@@ -31967,7 +31596,6 @@ public class GpuEngine : IEngine, IDisposable
             var copyKernel = _accelerator!.LoadAutoGroupedStreamKernel<
                 Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>>(CopyKernelDouble);
             copyKernel(input.Length, inputBuffer.View, resultBuffer.View);
-            _accelerator!.Synchronize();
 
             var scatterKernel = _accelerator!.LoadAutoGroupedStreamKernel<
                 Index1D, ArrayView1D<int, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>,
@@ -31975,7 +31603,6 @@ public class GpuEngine : IEngine, IDisposable
 
             scatterKernel(values.Length, indicesBuffer.View, valuesBuffer.View, resultBuffer.View,
                           outerSize, axisSize, innerSize, numIndices);
-            _accelerator!.Synchronize();
 
             resultBuffer.CopyToCPU(result.Data);
         }
@@ -32088,7 +31715,6 @@ public class GpuEngine : IEngine, IDisposable
             var copyKernel = _accelerator!.LoadAutoGroupedStreamKernel<
                 Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>>(CopyKernelFloat);
             copyKernel(input.Length, inputBuffer.View, resultBuffer.View);
-            _accelerator!.Synchronize();
 
             // Use atomic add for scatter add
             var scatterAddKernel = _accelerator!.LoadAutoGroupedStreamKernel<
@@ -32097,7 +31723,6 @@ public class GpuEngine : IEngine, IDisposable
 
             scatterAddKernel(values.Length, indicesBuffer.View, valuesBuffer.View, resultBuffer.View,
                              outerSize, axisSize, innerSize, numIndices);
-            _accelerator!.Synchronize();
 
             resultBuffer.CopyToCPU(result.Data);
         }
@@ -32122,7 +31747,6 @@ public class GpuEngine : IEngine, IDisposable
             var copyKernel = _accelerator!.LoadAutoGroupedStreamKernel<
                 Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>>(CopyKernelDouble);
             copyKernel(input.Length, inputBuffer.View, resultBuffer.View);
-            _accelerator!.Synchronize();
 
             var scatterAddKernel = _accelerator!.LoadAutoGroupedStreamKernel<
                 Index1D, ArrayView1D<int, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>,
@@ -32130,7 +31754,6 @@ public class GpuEngine : IEngine, IDisposable
 
             scatterAddKernel(values.Length, indicesBuffer.View, valuesBuffer.View, resultBuffer.View,
                              outerSize, axisSize, innerSize, numIndices);
-            _accelerator!.Synchronize();
 
             resultBuffer.CopyToCPU(result.Data);
         }
@@ -32195,7 +31818,6 @@ public class GpuEngine : IEngine, IDisposable
                 Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>>(CoshKernelFloat);
 
             kernel(length, inputBuffer.View, outputBuffer.View);
-            _accelerator!.Synchronize();
 
             outputBuffer.CopyToCPU(rf!.Data);
         }
@@ -32213,7 +31835,6 @@ public class GpuEngine : IEngine, IDisposable
                 Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>>(CoshKernelDouble);
 
             kernel(length, inputBuffer.View, outputBuffer.View);
-            _accelerator!.Synchronize();
 
             outputBuffer.CopyToCPU(rd!.Data);
         }
@@ -32269,7 +31890,6 @@ public class GpuEngine : IEngine, IDisposable
                 Index1D, ArrayView1D<float, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>>(SinhKernelFloat);
 
             kernel(length, inputBuffer.View, outputBuffer.View);
-            _accelerator!.Synchronize();
 
             outputBuffer.CopyToCPU(rf!.Data);
         }
@@ -32287,7 +31907,6 @@ public class GpuEngine : IEngine, IDisposable
                 Index1D, ArrayView1D<double, Stride1D.Dense>, ArrayView1D<double, Stride1D.Dense>>(SinhKernelDouble);
 
             kernel(length, inputBuffer.View, outputBuffer.View);
-            _accelerator!.Synchronize();
 
             outputBuffer.CopyToCPU(rd!.Data);
         }
@@ -32351,7 +31970,6 @@ public class GpuEngine : IEngine, IDisposable
                 ArrayView1D<float, Stride1D.Dense>, int, int>(OuterKernelFloat);
 
             kernel(n * m, aBuffer.View, bBuffer.View, resultBuffer.View, n, m);
-            _accelerator!.Synchronize();
 
             resultBuffer.CopyToCPU(rf!.Data);
         }
@@ -32373,7 +31991,6 @@ public class GpuEngine : IEngine, IDisposable
                 ArrayView1D<double, Stride1D.Dense>, int, int>(OuterKernelDouble);
 
             kernel(n * m, aBuffer.View, bBuffer.View, resultBuffer.View, n, m);
-            _accelerator!.Synchronize();
 
             resultBuffer.CopyToCPU(rd!.Data);
         }
