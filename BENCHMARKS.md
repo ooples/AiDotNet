@@ -43,6 +43,38 @@ Mean time (ms):
 | Multiply | 100,000 elems | 1.628 | 0.181 |
 | Add | 1,000,000 elems | 7.953 | 1.445 |
 | Multiply | 1,000,000 elems | 8.052 | 1.398 |
+## TorchSharp comparison benchmarks
+
+Location:
+- `AiDotNetBenchmarkTests/TorchSharpComparisonBenchmarks.cs`
+
+Run:
+```bash
+cd AiDotNetBenchmarkTests
+dotnet run -c Release -f net8.0 -- --filter *TorchSharpComparison*
+```
+
+Latest run (2025-12-28, short-run config: IterationCount=5, WarmupCount=3, LaunchCount=1):
+- Host: AMD Ryzen 7 4800H, Windows 11, .NET 8.0.22
+- GPU: ILGPU reported gfx902 during AiDotNet runs
+- TorchSharp device: CPU (torch.cuda.is_available() returned false with TorchSharp-cuda-windows)
+
+Mean time (ms):
+
+| Operation | Size | AiDotNet | TorchSharp |
+|---|---:|---:|---:|
+| ReLU | 1,000,000 elems | 21.174 | 0.090 |
+| Sigmoid | 1,000,000 elems | 22.408 | 0.368 |
+| ReduceSum | 1,000,000 elems | 11.190 | 0.052 |
+| ReduceMean | 1,000,000 elems | 6.272 | 0.058 |
+| Conv2D | [1,16,64,64] x [32,16,3,3] | 2.662 | 0.293 |
+| MatMul | 256x256 | 2.429 | 0.127 |
+| MatMul | 512x512 | 10.166 | 1.037 |
+| Add | 100,000 elems | 1.574 | 0.011 |
+| Multiply | 100,000 elems | 1.758 | 0.010 |
+| Add | 1,000,000 elems | 8.260 | 0.661 |
+| Multiply | 1,000,000 elems | 8.142 | 0.655 |
+
 
 ## Expected trends
 
