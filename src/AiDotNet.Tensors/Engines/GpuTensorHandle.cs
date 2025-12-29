@@ -154,11 +154,16 @@ public sealed class GpuTensorHandle<T> : IDisposable where T : unmanaged
     /// <summary>
     /// Sets all elements in the GPU buffer to zero.
     /// </summary>
+    /// <remarks>
+    /// MemSetToZero is asynchronous on the default stream. We explicitly synchronize
+    /// to ensure the buffer is zeroed before setting the dirty flag.
+    /// </remarks>
     public void Clear()
     {
         ThrowIfDisposed();
         _buffer.MemSetToZero();
-        // Note: MemSetToZero is synchronous, no explicit sync needed
+        // MemSetToZero is asynchronous by default - explicitly sync to ensure completion
+        _buffer.Accelerator.Synchronize();
         _gpuDirty = true;
     }
 
