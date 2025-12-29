@@ -21,7 +21,7 @@ public class RegressionHelperIntegrationTests
         });
         var y = new Vector<double>(new[] { 100.0, 200.0, 300.0 });
 
-        var (xScaled, yScaled, xMean, xStd, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
+        var (xScaled, yScaled, xMean, xStd, yMean, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
 
         // xMean should be [2, 20] (mean of each column)
         Assert.Equal(2.0, xMean[0]);
@@ -39,7 +39,7 @@ public class RegressionHelperIntegrationTests
         });
         var y = new Vector<double>(new[] { 100.0, 200.0, 300.0 });
 
-        var (xScaled, yScaled, xMean, xStd, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
+        var (xScaled, yScaled, xMean, xStd, yMean, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
 
         // Standard deviation of [1,2,3] is 1.0 and [10,20,30] is 10.0
         Assert.Equal(1.0, xStd[0], 5);
@@ -58,7 +58,7 @@ public class RegressionHelperIntegrationTests
         });
         var y = new Vector<double>(new[] { 100.0, 200.0, 300.0 });
 
-        var (xScaled, yScaled, xMean, xStd, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
+        var (xScaled, yScaled, xMean, xStd, yMean, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
 
         // Each column of xScaled should have mean ≈ 0
         double col0Mean = (xScaled[0, 0] + xScaled[1, 0] + xScaled[2, 0]) / 3.0;
@@ -79,7 +79,7 @@ public class RegressionHelperIntegrationTests
         });
         var y = new Vector<double>(new[] { 100.0, 200.0, 300.0 });
 
-        var (xScaled, yScaled, xMean, xStd, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
+        var (xScaled, yScaled, xMean, xStd, yMean, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
 
         double yScaledMean = yScaled.Sum() / yScaled.Length;
         Assert.True(Math.Abs(yScaledMean) < 1e-10, $"yScaled mean should be 0, got {yScaledMean}");
@@ -96,7 +96,7 @@ public class RegressionHelperIntegrationTests
         });
         var y = new Vector<double>(new[] { 100.0, 200.0, 300.0 });
 
-        var (xScaled, yScaled, xMean, xStd, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
+        var (xScaled, yScaled, xMean, xStd, yMean, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
 
         // Each column of xScaled should have std ≈ 1
         var col0 = new Vector<double>(new[] { xScaled[0, 0], xScaled[1, 0], xScaled[2, 0] });
@@ -124,7 +124,7 @@ public class RegressionHelperIntegrationTests
         });
         var y = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
 
-        var (xScaled, yScaled, xMean, xStd, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
+        var (xScaled, yScaled, xMean, xStd, yMean, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
 
         Assert.Equal(x.Rows, xScaled.Rows);
         Assert.Equal(x.Columns, xScaled.Columns);
@@ -143,7 +143,7 @@ public class RegressionHelperIntegrationTests
         });
         var y = new Vector<double>(new[] { 100.0 });
 
-        var (xScaled, yScaled, xMean, xStd, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
+        var (xScaled, yScaled, xMean, xStd, yMean, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
 
         // With single row, mean equals the values
         Assert.Equal(5.0, xMean[0]);
@@ -167,7 +167,7 @@ public class RegressionHelperIntegrationTests
         });
         var y = new Vector<double>(new[] { 10.0, 20.0, 30.0 });
 
-        var (xScaled, yScaled, xMean, xStd, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
+        var (xScaled, yScaled, xMean, xStd, yMean, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
 
         Assert.Equal(1, xScaled.Columns);
         Assert.Equal(3, xScaled.Rows);
@@ -189,7 +189,7 @@ public class RegressionHelperIntegrationTests
         });
         var y = new Vector<float>(new[] { 100f, 200f, 300f });
 
-        var (xScaled, yScaled, xMean, xStd, yStd) = RegressionHelper<float>.CenterAndScale(x, y);
+        var (xScaled, yScaled, xMean, xStd, yMean, yStd) = RegressionHelper<float>.CenterAndScale(x, y);
 
         Assert.Equal(2f, xMean[0], 4);
         Assert.Equal(20f, xMean[1], 4);
@@ -212,7 +212,7 @@ public class RegressionHelperIntegrationTests
         });
         var y = new Vector<double>(new[] { -50.0, 0.0, 50.0 });
 
-        var (xScaled, yScaled, xMean, xStd, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
+        var (xScaled, yScaled, xMean, xStd, yMean, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
 
         // Mean of symmetric distribution should be 0
         Assert.Equal(0.0, xMean[0], 5);
@@ -234,7 +234,7 @@ public class RegressionHelperIntegrationTests
         });
         var y = new Vector<double>(new[] { 1e12, 2e12, 3e12 });
 
-        var (xScaled, yScaled, xMean, xStd, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
+        var (xScaled, yScaled, xMean, xStd, yMean, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
 
         // Should still center correctly
         Assert.Equal(2e6, xMean[0], 0);
@@ -256,7 +256,7 @@ public class RegressionHelperIntegrationTests
         });
         var y = new Vector<double>(new[] { 1e-12, 2e-12, 3e-12 });
 
-        var (xScaled, yScaled, xMean, xStd, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
+        var (xScaled, yScaled, xMean, xStd, yMean, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
 
         // Should still center correctly with small values
         Assert.Equal(2e-6, xMean[0], 10);
@@ -279,7 +279,7 @@ public class RegressionHelperIntegrationTests
         });
         var y = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
 
-        var (xScaled, yScaled, xMean, xStd, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
+        var (xScaled, yScaled, xMean, xStd, yMean, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
 
         // After scaling, both columns should have similar ranges
         var col0 = new Vector<double>(new[] { xScaled[0, 0], xScaled[1, 0], xScaled[2, 0] });
@@ -308,7 +308,7 @@ public class RegressionHelperIntegrationTests
         });
         var y = new Vector<double>(new[] { 0.0, 2.0 });
 
-        var (xScaled, yScaled, xMean, xStd, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
+        var (xScaled, yScaled, xMean, xStd, yMean, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
 
         // Mean of [0, 2] is 1, mean of [0, 4] is 2
         Assert.Equal(1.0, xMean[0]);
@@ -349,7 +349,7 @@ public class RegressionHelperIntegrationTests
             }
         }
 
-        var (xScaled, yScaled, xMean, xStd, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
+        var (xScaled, yScaled, xMean, xStd, yMean, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
 
         // Verify shapes
         Assert.Equal(rows, xScaled.Rows);
@@ -385,7 +385,7 @@ public class RegressionHelperIntegrationTests
         });
         var y = new Vector<double>(new[] { 25.0, 50.0, 75.0 });
 
-        var (xScaled, yScaled, xMean, xStd, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
+        var (xScaled, yScaled, xMean, xStd, yMean, yStd) = RegressionHelper<double>.CenterAndScale(x, y);
 
         // Reverse the scaling: original = scaled * std + mean
         var xRecovered = new Matrix<double>(x.Rows, x.Columns);
