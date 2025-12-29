@@ -656,6 +656,7 @@ public sealed class OpenClContext : IDisposable
     private uint _maxComputeUnits;
     private ulong _globalMemSize;
     private ulong _localMemSize;
+    private ulong _maxWorkGroupSize;
 
     /// <summary>Gets whether OpenCL is available on this system.</summary>
     public static bool IsAvailable
@@ -700,6 +701,9 @@ public sealed class OpenClContext : IDisposable
 
     /// <summary>Gets the local memory size in bytes.</summary>
     public ulong LocalMemSize => _localMemSize;
+
+    /// <summary>Gets the maximum work group size supported by the device.</summary>
+    public ulong MaxWorkGroupSize => _maxWorkGroupSize;
 
     /// <summary>Creates a new OpenCL context with the first available GPU.</summary>
     public OpenClContext() : this(OpenClNative.ClDeviceType.Gpu)
@@ -814,6 +818,12 @@ public sealed class OpenClContext : IDisposable
         // Get local memory size
         error = OpenClNative.clGetDeviceInfo(_device, OpenClNative.ClDeviceInfo.LocalMemSize,
             (UIntPtr)sizeof(ulong), out _localMemSize, out returnSize);
+
+        // Get max work group size
+        error = OpenClNative.clGetDeviceInfo(_device, OpenClNative.ClDeviceInfo.MaxWorkGroupSize,
+            (UIntPtr)sizeof(ulong), out _maxWorkGroupSize, out returnSize);
+        if (_maxWorkGroupSize == 0)
+            _maxWorkGroupSize = 256; // Safe default
     }
 
     private static bool CheckAvailability()
@@ -1250,14 +1260,15 @@ public sealed class OpenClMatMul : IDisposable
     private OpenClProgram? _gemmProgram;
     private OpenClKernel? _gemmKernel;
     private bool _disposed;
+    private int _tileSize = 16; // Default to 16x16 = 256 threads, safe for most GPUs
 
-    // Optimized GEMM kernel source
-    private const string GemmKernelSource = @"
+    // Optimized GEMM kernel source template (TILE_SIZE is replaced at runtime)
+    private const string GemmKernelSourceTemplate = @"
 // Tiled SGEMM kernel for OpenCL
 // C = alpha * A * B + beta * C
 // A: M x K, B: K x N, C: M x N (row-major)
 
-#define TILE_SIZE 32
+#define TILE_SIZE __TILE_SIZE_PLACEHOLDER__
 
 __kernel void sgemm(
     const int M, const int N, const int K,
@@ -1344,7 +1355,22 @@ __kernel void sgemm(
 
     private void InitializeKernel()
     {
-        _gemmProgram = new OpenClProgram(_context, GemmKernelSource);
+        // Query device max work group size to determine optimal tile size
+        ulong maxWorkGroupSize = _context.MaxWorkGroupSize;
+
+        // Calculate tile size: we need tileSize^2 <= maxWorkGroupSize
+        // Use largest power of 2 that satisfies this constraint
+        if (maxWorkGroupSize >= 1024)
+            _tileSize = 32; // 32x32 = 1024 threads
+        else if (maxWorkGroupSize >= 256)
+            _tileSize = 16; // 16x16 = 256 threads
+        else
+            _tileSize = 8;  // 8x8 = 64 threads (fallback)
+
+        // Generate kernel source with appropriate tile size
+        string kernelSource = GemmKernelSourceTemplate.Replace("__TILE_SIZE_PLACEHOLDER__", _tileSize.ToString());
+
+        _gemmProgram = new OpenClProgram(_context, kernelSource);
         _gemmProgram.Build("-cl-fast-relaxed-math -cl-mad-enable");
         _gemmKernel = new OpenClKernel(_context, _gemmProgram, "sgemm");
     }
@@ -1362,8 +1388,9 @@ __kernel void sgemm(
     /// <returns>Result matrix C (M x N)</returns>
     public float[]? MatMulFloat(float[] A, int M, int K, float[] B, int N, float alpha = 1.0f, float beta = 0.0f)
     {
+        LastError = null;
         if (_disposed) throw new ObjectDisposedException(nameof(OpenClMatMul));
-        if (_gemmKernel is null) return null;
+        if (_gemmKernel is null) { LastError = "Kernel not initialized"; return null; }
 
         try
         {
@@ -1383,13 +1410,13 @@ __kernel void sgemm(
             _gemmKernel.SetArg(6, bufferB.Handle);
             _gemmKernel.SetArg(7, bufferC.Handle);
 
-            // Calculate work sizes
-            const int tileSize = 32;
+            // Calculate work sizes using adaptive tile size
+            int tileSize = _tileSize;
             ulong globalM = (ulong)((M + tileSize - 1) / tileSize * tileSize);
             ulong globalN = (ulong)((N + tileSize - 1) / tileSize * tileSize);
 
             var globalWorkSize = new ulong[] { globalN, globalM };
-            var localWorkSize = new ulong[] { tileSize, tileSize };
+            var localWorkSize = new ulong[] { (ulong)tileSize, (ulong)tileSize };
 
             // Execute kernel
             _gemmKernel.Enqueue(globalWorkSize, localWorkSize);
@@ -1400,11 +1427,15 @@ __kernel void sgemm(
             // Read result
             return bufferC.ToArray();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            LastError = ex.Message;
             return null;
         }
     }
+
+    /// <summary>Gets the last error message from a failed operation.</summary>
+    public string? LastError { get; private set; }
 
     /// <summary>
     /// Performs matrix multiplication for DenseLayer (input * weightsT).

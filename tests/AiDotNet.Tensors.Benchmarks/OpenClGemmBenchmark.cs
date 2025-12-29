@@ -87,7 +87,8 @@ public static class OpenClGemmBenchmark
                 var result = matmul.MatMulFloat(A, m, k, B, n);
                 if (result == null)
                 {
-                    Console.WriteLine($"{size,5}x{size,-4} |  FAILED           |  Kernel execution failed");
+                    string error = matmul.LastError ?? "Unknown error";
+                    Console.WriteLine($"{size,5}x{size,-4} |  FAILED           |  {error}");
                     return;
                 }
             }
