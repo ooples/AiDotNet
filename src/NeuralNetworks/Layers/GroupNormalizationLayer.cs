@@ -80,19 +80,56 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         _beta = Tensor<T>.CreateDefault([numChannels], NumOps.Zero);
     }
 
+    /// <summary>
+    /// Tracks whether we added a batch dimension to a 3D input.
+    /// </summary>
+    private bool _addedBatchDimension;
+
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
 
         var shape = input.Shape;
-        int channels = shape.Length > 1 ? shape[1] : 1;
+
+        // Determine channel count based on input rank:
+        // 4D [N, C, H, W]: channels = shape[1]
+        // 3D [C, H, W]: channels = shape[0]
+        // 2D [N, C]: channels = shape[1]
+        int channels;
+        Tensor<T> input4D;
+
+        if (shape.Length == 4)
+        {
+            // Standard NCHW format
+            channels = shape[1];
+            input4D = input;
+            _addedBatchDimension = false;
+        }
+        else if (shape.Length == 3)
+        {
+            // CHW format without batch - add batch dimension
+            channels = shape[0];
+            input4D = input.Reshape(1, shape[0], shape[1], shape[2]);
+            _addedBatchDimension = true;
+        }
+        else if (shape.Length == 2)
+        {
+            // [N, C] format
+            channels = shape[1];
+            input4D = input;
+            _addedBatchDimension = false;
+        }
+        else
+        {
+            throw new ArgumentException($"GroupNormalization expects 2D, 3D, or 4D input, got {shape.Length}D.");
+        }
 
         if (channels != _numChannels)
             throw new ArgumentException($"Input has {channels} channels but layer expects {_numChannels} channels.");
 
         // Use Engine for GPU/CPU accelerated Group Normalization
         var output = Engine.GroupNorm(
-            input,
+            input4D,
             _numGroups,
             _gamma,
             _beta,
@@ -103,6 +140,12 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         _lastMean = mean;
         _lastVariance = variance;
 
+        // Remove batch dimension if we added it
+        if (_addedBatchDimension)
+        {
+            return output.Reshape(output.Shape[1], output.Shape[2], output.Shape[3]);
+        }
+
         return output;
     }
 
@@ -111,10 +154,32 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastMean == null || _lastVariance == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Handle 3D gradients by adding batch dimension if needed
+        Tensor<T> grad4D;
+        if (_addedBatchDimension && outputGradient.Shape.Length == 3)
+        {
+            grad4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
+        }
+        else
+        {
+            grad4D = outputGradient;
+        }
+
+        // Get input with batch dimension for backward pass
+        Tensor<T> input4D;
+        if (_addedBatchDimension && _lastInput.Shape.Length == 3)
+        {
+            input4D = _lastInput.Reshape(1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2]);
+        }
+        else
+        {
+            input4D = _lastInput;
+        }
+
         // Use Engine for GPU/CPU accelerated backward pass
         var inputGradient = Engine.GroupNormBackward(
-            outputGradient,
-            _lastInput,
+            grad4D,
+            input4D,
             _numGroups,
             _gamma,
             _lastMean,
@@ -125,6 +190,12 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
 
         _gammaGradient = gradGamma;
         _betaGradient = gradBeta;
+
+        // Remove batch dimension if we added it
+        if (_addedBatchDimension)
+        {
+            return inputGradient.Reshape(inputGradient.Shape[1], inputGradient.Shape[2], inputGradient.Shape[3]);
+        }
 
         return inputGradient;
     }
@@ -164,6 +235,7 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         _lastVariance = null;
         _gammaGradient = null;
         _betaGradient = null;
+        _addedBatchDimension = false;
     }
 
     /// <summary>

@@ -1120,29 +1120,38 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int numHeads = _headCount;
         int seqLen = _sequenceLength;
 
-        for (int h = 0; h < numHeads; h++)
+        // _lastAttentionScores has shape [batchSize, headCount, seqLen, seqLen]
+        int batchSize = _lastAttentionScores.Shape[0];
+
+        for (int b = 0; b < batchSize; b++)
         {
-            for (int i = 0; i < seqLen; i++)
+            for (int h = 0; h < numHeads; h++)
             {
-                T entropy = NumOps.Zero;
-                for (int j = 0; j < seqLen; j++)
+                for (int i = 0; i < seqLen; i++)
                 {
-                    // Get attention weight for this head and position
-                    T attnWeight = _lastAttentionScores[h, i, j];
+                    T entropy = NumOps.Zero;
+                    for (int j = 0; j < seqLen; j++)
+                    {
+                        // Get attention weight for this batch, head, and position
+                        T attnWeight = _lastAttentionScores[new int[] { b, h, i, j }];
 
-                    // Skip zero or very small values to avoid log(0)
-                    if (NumOps.LessThan(attnWeight, NumOps.FromDouble(1e-10)))
-                        continue;
+                        // Skip zero or very small values to avoid log(0)
+                        if (NumOps.LessThan(attnWeight, NumOps.FromDouble(1e-10)))
+                            continue;
 
-                    // H = -Σ(p * log(p))
-                    T logWeight = NumOps.Log(attnWeight);
-                    T term = NumOps.Multiply(attnWeight, logWeight);
-                    entropy = NumOps.Subtract(entropy, term);
+                        // H = -Σ(p * log(p))
+                        T logWeight = NumOps.Log(attnWeight);
+                        T term = NumOps.Multiply(attnWeight, logWeight);
+                        entropy = NumOps.Subtract(entropy, term);
+                    }
+                    // We want low entropy (focused attention), so we minimize -H
+                    totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);
                 }
-                // We want low entropy (focused attention), so we minimize -H
-                totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);
             }
         }
+
+        // Average over batch size
+        totalNegativeEntropy = NumOps.Divide(totalNegativeEntropy, NumOps.FromDouble(batchSize));
 
         // Store unweighted loss for diagnostics
         _lastEntropyLoss = totalNegativeEntropy;

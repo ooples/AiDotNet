@@ -497,9 +497,21 @@ public class Conv3DLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastPreActivation == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var delta = ApplyActivationDerivative(_lastOutput, outputGradient);
-
+        // Handle any-rank gradient: reshape to match _lastOutput rank before ApplyActivationDerivative
         bool hasBatch = _lastInput.Rank == 5;
+        Tensor<T> outGrad5D;
+        if (outputGradient.Rank == 4 && _lastOutput.Rank == 5)
+        {
+            // 4D gradient [C, D, H, W] -> 5D [1, C, D, H, W]
+            outGrad5D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2], outputGradient.Shape[3]);
+        }
+        else
+        {
+            outGrad5D = outputGradient;
+        }
+
+        var delta = ApplyActivationDerivative(_lastOutput, outGrad5D);
+
         Tensor<T> batchedDelta;
         Tensor<T> batchedInput;
 
