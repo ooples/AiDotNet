@@ -1124,15 +1124,18 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// The parameters include:
     /// - All values from all pattern detectors (kernels)
     /// - All bias values
-    /// 
+    ///
     /// These are combined into a single long list (vector), which can be used for:
     /// - Saving the model
     /// - Sharing parameters between layers
     /// - Advanced optimization techniques
-    /// 
+    ///
     /// This provides access to all the "knowledge" the layer has learned.
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _kernels.Length + _biases.Shape[0];
+
+    /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
         // Calculate total number of parameters
