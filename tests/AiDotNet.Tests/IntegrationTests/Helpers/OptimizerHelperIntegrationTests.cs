@@ -1,10 +1,10 @@
-using Xunit;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models;
 using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Results;
 using AiDotNet.Statistics;
-using AiDotNet.Enums;
+using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Helpers;
 

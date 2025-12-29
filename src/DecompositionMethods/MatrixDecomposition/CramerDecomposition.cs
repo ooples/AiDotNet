@@ -137,6 +137,13 @@ public class CramerDecomposition<T> : MatrixDecompositionBase<T>
     /// <returns>The determinant value.</returns>
     private T Determinant(Matrix<T> matrix)
     {
+        // Base case: 0x0 matrix (empty matrix) has determinant 1 by convention
+        // This is needed for cofactor expansion of 1x1 matrices to work correctly
+        if (matrix.Rows == 0)
+        {
+            return NumOps.One;
+        }
+
         if (matrix.Rows == 1)
         {
             return matrix[0, 0];

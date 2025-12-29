@@ -1,5 +1,5 @@
-using Xunit;
 using AiDotNet.Helpers;
+using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Helpers;
 

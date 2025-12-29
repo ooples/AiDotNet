@@ -241,7 +241,7 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
             Vector<T> u = x.Clone();
             u[0] = NumOps.Add(u[0], alpha);
             T uDotU = u.DotProduct(u);
-            
+
             // Only apply Householder if the vector is non-zero
             if (!NumOps.Equals(uDotU, NumOps.Zero))
             {
@@ -292,7 +292,7 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
                 Vector<T> v = x.Clone();
                 v[0] = NumOps.Add(v[0], alpha);
                 T vDotV = v.DotProduct(v);
-                
+
                 // Only apply Householder if the vector is non-zero
                 if (!NumOps.Equals(vDotV, NumOps.Zero))
                 {
@@ -652,7 +652,7 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
             var colI = Engine.GetColumn(A, i);
             T norm = colI.Norm();
             S[i] = norm;
-            
+
             // Normalize the column to get U
             if (!NumOps.Equals(norm, NumOps.Zero))
             {

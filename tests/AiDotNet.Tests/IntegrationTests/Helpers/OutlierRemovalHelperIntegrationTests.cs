@@ -1,5 +1,5 @@
-using Xunit;
 using AiDotNet.Helpers;
+using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Helpers;
 
@@ -327,7 +327,7 @@ public class OutlierRemovalHelperIntegrationTests
                 typeof(Tensor<double>),
                 typeof(Tensor<double>));
 
-        Assert.Equal(1, resultOutputs.Shape.Length);
+        Assert.Single(resultOutputs.Shape);
         Assert.Equal(3, resultOutputs.Shape[0]);
     }
 
@@ -519,7 +519,7 @@ public class OutlierRemovalHelperIntegrationTests
         Assert.Equal(2, resultInputTensor.Shape.Length);
         Assert.Equal(5, resultInputTensor.Shape[0]);
         Assert.Equal(7, resultInputTensor.Shape[1]);
-        Assert.Equal(1, resultOutputTensor.Shape.Length);
+        Assert.Single(resultOutputTensor.Shape);
         Assert.Equal(5, resultOutputTensor.Shape[0]);
     }
 

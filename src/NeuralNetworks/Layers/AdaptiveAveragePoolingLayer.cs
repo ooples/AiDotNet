@@ -113,7 +113,7 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
         int channels = input.Shape[rank - 3];
         int inputHeight = input.Shape[rank - 2];
         int inputWidth = input.Shape[rank - 1];
-        
+
         // Calculate total batch size (product of all dims except last 3)
         int batchSize = 1;
         for (int d = 0; d < rank - 3; d++)
@@ -186,7 +186,7 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
         int channels = _lastInputShape[rank - 3];
         int inputHeight = _lastInputShape[rank - 2];
         int inputWidth = _lastInputShape[rank - 1];
-        
+
         // Calculate total batch size (product of all dims except last 3)
         int batchSize = 1;
         for (int d = 0; d < rank - 3; d++)
