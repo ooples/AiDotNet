@@ -38,7 +38,7 @@ public class LionOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// Lion moves more carefully but more reliably. You may need to tune this based on your problem,
     /// but 0.0001 (or 1e-4) is a good starting point for most applications.</para>
     /// </remarks>
-    public new double InitialLearningRate { get; set; } = 1e-4;
+    public override double InitialLearningRate { get; set; } = 1e-4;
 
     /// <summary>
     /// Gets or sets the exponential decay rate for the momentum interpolation (used for computing the update).
