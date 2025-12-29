@@ -118,6 +118,11 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private Tensor<T>? _adjacencyMatrix;
 
     /// <summary>
+    /// The adjacency matrix reshaped to 3D for batched operations.
+    /// </summary>
+    private Tensor<T>? _adjForBatch;
+
+    /// <summary>
     /// Cached values for backward pass.
     /// </summary>
     private Tensor<T>? _lastInput;
@@ -391,6 +396,9 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             adjForBatch = _adjacencyMatrix;
         }
 
+        // Store for backward pass
+        _adjForBatch = adjForBatch;
+
         // Step 1: Aggregate incoming edges (nodes that point TO this node)
         // A[i,j] = 1 means edge from j to i (j→i)
         // For incoming: multiply A @ X @ W_in
@@ -438,6 +446,19 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         output = Engine.TensorAdd(output, combinationBiasBroadcast);
 
         _lastOutput = ApplyActivation(output);
+
+        // Reshape output to match original input shape (except for feature dimension)
+        if (_originalInputShape != null && _originalInputShape.Length == 2)
+        {
+            // Original was 2D [N, F] -> return [N, outputFeatures]
+            return _lastOutput.Reshape([numNodes, _outputFeatures]);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 1)
+        {
+            // Original was 1D [F] -> return [outputFeatures]
+            return _lastOutput.Reshape([_outputFeatures]);
+        }
+
         return _lastOutput;
     }
 
@@ -514,7 +535,7 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null)
+        if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null || _adjForBatch == null)
         {
             throw new InvalidOperationException("Forward pass must be called before Backward.");
         }
@@ -524,7 +545,14 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             throw new InvalidOperationException("Forward pass data incomplete.");
         }
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        // Reshape outputGradient to match _lastOutput shape if needed
+        var gradForBackward = outputGradient;
+        if (_originalInputShape != null && _originalInputShape.Length != _lastOutput.Shape.Length)
+        {
+            gradForBackward = outputGradient.Reshape(_lastOutput.Shape);
+        }
+
+        var activationGradient = ApplyActivationDerivative(_lastOutput, gradForBackward);
 
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
@@ -609,7 +637,7 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var inputGradient = new Tensor<T>(_lastInput.Shape);
         inputGradient.Fill(NumOps.Zero);
 
-        var adjTransposed = Engine.TensorTranspose(_adjacencyMatrix);
+        var adjTransposed = Engine.TensorPermute(_adjForBatch, [0, 2, 1]); // Batched transpose
 
         // Incoming path: A @ (X @ W_in)
         // dL/dW_in = X^T @ A^T @ dL/dincoming
@@ -636,7 +664,7 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         for (int b = 0; b < batchSize; b++)
         {
             var inputBatch = Engine.TensorSlice(_lastInput, [b, 0, 0], [1, numNodes, inputFeatures]).Reshape([numNodes, inputFeatures]);
-            var adjBatch = Engine.TensorSlice(_adjacencyMatrix, [b, 0, 0], [1, numNodes, numNodes]).Reshape([numNodes, numNodes]);
+            var adjBatch = Engine.TensorSlice(_adjForBatch, [b, 0, 0], [1, numNodes, numNodes]).Reshape([numNodes, numNodes]);
             var outGradBatch = Engine.TensorSlice(outgoingGrad, [b, 0, 0], [1, numNodes, _outputFeatures]).Reshape([numNodes, _outputFeatures]);
 
             var inputT = Engine.TensorTranspose(inputBatch);
@@ -668,6 +696,12 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             var existingGrad = Engine.TensorSlice(inputGradient, [b, 0, 0], [1, numNodes, inputFeatures]).Reshape([numNodes, inputFeatures]);
             var summedGrad = Engine.TensorAdd(existingGrad, inputGradBatch);
             inputGradient = Engine.TensorSetSlice(inputGradient, summedGrad.Reshape([1, numNodes, inputFeatures]), [b, 0, 0]);
+        }
+
+        // Reshape to match original input shape
+        if (_originalInputShape != null && _originalInputShape.Length != inputGradient.Shape.Length)
+        {
+            return inputGradient.Reshape(_originalInputShape);
         }
 
         return inputGradient;
@@ -919,6 +953,7 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _lastSelf = null;
         _lastCombined = null;
         _lastGates = null;
+        _adjForBatch = null;
         _incomingWeightsGradient = null;
         _outgoingWeightsGradient = null;
         _selfWeightsGradient = null;

@@ -113,6 +113,9 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
+    public override int ParameterCount => _weights.Length + _attentionWeights.Length + _bias.Length;
+
+    /// <inheritdoc/>
     public int InputFeatures => _inputFeatures;
 
     /// <inheritdoc/>

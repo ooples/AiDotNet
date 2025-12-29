@@ -122,6 +122,9 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
+    public override int ParameterCount => _selfWeights.Length + _neighborWeights.Length + _bias.Length;
+
+    /// <inheritdoc/>
     public int InputFeatures => _inputFeatures;
 
     /// <inheritdoc/>
