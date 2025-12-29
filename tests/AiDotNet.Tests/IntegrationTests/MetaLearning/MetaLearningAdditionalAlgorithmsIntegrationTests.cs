@@ -97,17 +97,15 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
         int numShots = Math.Max(1, supportRows / Math.Max(1, numWays));
         int numQueryPerClass = Math.Max(1, queryRows / Math.Max(1, numWays));
 
-        return new MetaLearningTask<double, Matrix<double>, Tensor<double>>
-        {
-            SupportSetX = supportX,
-            SupportSetY = supportY,
-            QuerySetX = queryX,
-            QuerySetY = queryY,
-            NumWays = numWays,
-            NumShots = numShots,
-            NumQueryPerClass = numQueryPerClass,
-            Name = $"tensor-label-task-{seed}"
-        };
+        return new TestMetaLearningTask<double, Matrix<double>, Tensor<double>>(
+            supportX,
+            supportY,
+            queryX,
+            queryY,
+            numWays,
+            numShots,
+            numQueryPerClass,
+            $"tensor-label-task-{seed}");
     }
 
     private static IMetaLearningTask<double, Matrix<double>, Tensor<double>> CreateFixedTensorOutputTask(
@@ -140,17 +138,15 @@ public class MetaLearningAdditionalAlgorithmsIntegrationTests
             queryY[new[] { i }] = i == queryLabel ? 1.0 : 0.0;
         }
 
-        return new MetaLearningTask<double, Matrix<double>, Tensor<double>>
-        {
-            SupportSetX = supportX,
-            SupportSetY = supportY,
-            QuerySetX = queryX,
-            QuerySetY = queryY,
-            NumWays = Math.Max(1, numClasses),
-            NumShots = 1,
-            NumQueryPerClass = 1,
-            Name = $"fixed-tensor-task-{seed}"
-        };
+        return new TestMetaLearningTask<double, Matrix<double>, Tensor<double>>(
+            supportX,
+            supportY,
+            queryX,
+            queryY,
+            Math.Max(1, numClasses),
+            1,
+            1,
+            $"fixed-tensor-task-{seed}");
     }
 
     [Fact]

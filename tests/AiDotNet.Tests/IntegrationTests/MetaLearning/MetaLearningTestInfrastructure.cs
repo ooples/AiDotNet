@@ -326,3 +326,44 @@ internal sealed class ResetTrackingOptimizer : IGradientBasedOptimizer<double, M
         throw new NotSupportedException();
     }
 }
+
+/// <summary>
+/// Test implementation of IMetaLearningTask for testing purposes.
+/// </summary>
+internal sealed class TestMetaLearningTask<T, TInput, TOutput> : IMetaLearningTask<T, TInput, TOutput>
+{
+    public TestMetaLearningTask(
+        TInput supportInput,
+        TOutput supportOutput,
+        TInput queryInput,
+        TOutput queryOutput,
+        int numWays,
+        int numShots,
+        int numQueryPerClass,
+        string? name = null)
+    {
+        SupportInput = supportInput;
+        SupportOutput = supportOutput;
+        QueryInput = queryInput;
+        QueryOutput = queryOutput;
+        NumWays = numWays;
+        NumShots = numShots;
+        NumQueryPerClass = numQueryPerClass;
+        Name = name;
+    }
+
+    public TInput SupportInput { get; }
+    public TOutput SupportOutput { get; }
+    public TInput QueryInput { get; }
+    public TOutput QueryOutput { get; }
+    public string? Name { get; }
+    public Dictionary<string, object>? Metadata { get; } = null;
+    public int NumWays { get; }
+    public int NumShots { get; }
+    public int NumQueryPerClass { get; }
+    public TInput QuerySetX => QueryInput;
+    public TOutput QuerySetY => QueryOutput;
+    public TInput SupportSetX => SupportInput;
+    public TOutput SupportSetY => SupportOutput;
+    public int? TaskId { get; set; }
+}
