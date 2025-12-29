@@ -43,7 +43,10 @@ namespace AiDotNet.Audio.Classification;
 /// </remarks>
 public class AudioEventDetector<T> : IDisposable
 {
-    private readonly INumericOperations<T> _numOps;
+    /// <summary>
+    /// Gets numeric operations for type T.
+    /// </summary>
+    protected readonly INumericOperations<T> NumOps;
     private readonly AudioEventDetectorOptions _options;
     private readonly MelSpectrogram<T> _melSpectrogram;
     private readonly OnnxModel<T>? _model;
@@ -89,7 +92,7 @@ public class AudioEventDetector<T> : IDisposable
     /// <param name="options">Detection options.</param>
     public AudioEventDetector(AudioEventDetectorOptions? options = null)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
+        NumOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new AudioEventDetectorOptions();
 
         _melSpectrogram = new MelSpectrogram<T>(
@@ -289,7 +292,7 @@ public class AudioEventDetector<T> : IDisposable
         var scores = new double[EventLabels.Length];
         for (int i = 0; i < Math.Min(output.Length, scores.Length); i++)
         {
-            double logit = _numOps.ToDouble(output[i]);
+            double logit = NumOps.ToDouble(output[i]);
             scores[i] = 1.0 / (1.0 + Math.Exp(-logit)); // Sigmoid
         }
 
@@ -323,7 +326,7 @@ public class AudioEventDetector<T> : IDisposable
         double sum = 0;
         for (int i = 0; i < audio.Length; i++)
         {
-            double val = _numOps.ToDouble(audio[i]);
+            double val = NumOps.ToDouble(audio[i]);
             sum += val * val;
         }
         return sum / audio.Length;
@@ -334,8 +337,8 @@ public class AudioEventDetector<T> : IDisposable
         int crossings = 0;
         for (int i = 1; i < audio.Length; i++)
         {
-            double prev = _numOps.ToDouble(audio[i - 1]);
-            double curr = _numOps.ToDouble(audio[i]);
+            double prev = NumOps.ToDouble(audio[i - 1]);
+            double curr = NumOps.ToDouble(audio[i]);
             if ((prev >= 0 && curr < 0) || (prev < 0 && curr >= 0))
                 crossings++;
         }
@@ -351,7 +354,7 @@ public class AudioEventDetector<T> : IDisposable
         {
             for (int f = 0; f < melSpec.Shape[1]; f++)
             {
-                double mag = _numOps.ToDouble(melSpec[t, f]);
+                double mag = NumOps.ToDouble(melSpec[t, f]);
                 weightedSum += f * mag;
                 totalSum += mag;
             }
@@ -370,7 +373,7 @@ public class AudioEventDetector<T> : IDisposable
         {
             for (int f = 0; f < melSpec.Shape[1]; f++)
             {
-                double mag = Math.Max(_numOps.ToDouble(melSpec[t, f]), 1e-10);
+                double mag = Math.Max(NumOps.ToDouble(melSpec[t, f]), 1e-10);
                 logSum += Math.Log(mag);
                 sum += mag;
                 count++;
@@ -394,7 +397,7 @@ public class AudioEventDetector<T> : IDisposable
         {
             for (int f = startBin; f < endBin && f < melSpec.Shape[1]; f++)
             {
-                sum += _numOps.ToDouble(melSpec[t, f]);
+                sum += NumOps.ToDouble(melSpec[t, f]);
                 count++;
             }
         }

@@ -40,7 +40,10 @@ namespace AiDotNet.Audio.Classification;
 /// </remarks>
 public class SceneClassifier<T> : IDisposable
 {
-    private readonly INumericOperations<T> _numOps;
+    /// <summary>
+    /// Gets numeric operations for type T.
+    /// </summary>
+    protected readonly INumericOperations<T> NumOps;
     private readonly SceneClassifierOptions _options;
     private readonly MelSpectrogram<T> _melSpectrogram;
     private readonly MfccExtractor<T> _mfccExtractor;
@@ -105,7 +108,7 @@ public class SceneClassifier<T> : IDisposable
     /// <param name="options">Classification options.</param>
     public SceneClassifier(SceneClassifierOptions? options = null)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
+        NumOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new SceneClassifierOptions();
 
         _melSpectrogram = new MelSpectrogram<T>(
@@ -257,14 +260,14 @@ public class SceneClassifier<T> : IDisposable
             double sum = 0;
             for (int t = 0; t < numFrames; t++)
             {
-                sum += _numOps.ToDouble(mfccs[t, c]);
+                sum += NumOps.ToDouble(mfccs[t, c]);
             }
             mfccMean[c] = sum / numFrames;
 
             double sumSq = 0;
             for (int t = 0; t < numFrames; t++)
             {
-                double diff = _numOps.ToDouble(mfccs[t, c]) - mfccMean[c];
+                double diff = NumOps.ToDouble(mfccs[t, c]) - mfccMean[c];
                 sumSq += diff * diff;
             }
             mfccStd[c] = Math.Sqrt(sumSq / numFrames);
@@ -273,8 +276,8 @@ public class SceneClassifier<T> : IDisposable
             double sumDelta = 0;
             for (int t = 1; t < numFrames; t++)
             {
-                double prev = _numOps.ToDouble(mfccs[t - 1, c]);
-                double curr = _numOps.ToDouble(mfccs[t, c]);
+                double prev = NumOps.ToDouble(mfccs[t - 1, c]);
+                double curr = NumOps.ToDouble(mfccs[t, c]);
                 sumDelta += Math.Abs(curr - prev);
             }
             mfccDelta[c] = sumDelta / (numFrames - 1);
@@ -319,7 +322,7 @@ public class SceneClassifier<T> : IDisposable
         {
             for (int f = 0; f < melSpec.Shape[1]; f++)
             {
-                double mag = _numOps.ToDouble(melSpec[t, f]);
+                double mag = NumOps.ToDouble(melSpec[t, f]);
                 weightedSum += f * mag;
                 totalSum += mag;
             }
@@ -337,7 +340,7 @@ public class SceneClassifier<T> : IDisposable
         {
             for (int f = 0; f < melSpec.Shape[1]; f++)
             {
-                double mag = _numOps.ToDouble(melSpec[t, f]);
+                double mag = NumOps.ToDouble(melSpec[t, f]);
                 double diff = f - centroid;
                 sum += diff * diff * mag;
                 totalMag += mag;
@@ -357,7 +360,7 @@ public class SceneClassifier<T> : IDisposable
         {
             for (int f = 0; f < melSpec.Shape[1]; f++)
             {
-                double mag = Math.Max(_numOps.ToDouble(melSpec[t, f]), 1e-10);
+                double mag = Math.Max(NumOps.ToDouble(melSpec[t, f]), 1e-10);
                 logSum += Math.Log(mag);
                 sum += mag;
                 count++;
@@ -393,7 +396,7 @@ public class SceneClassifier<T> : IDisposable
 
                 for (int f = startBin; f < endBin; f++)
                 {
-                    double val = _numOps.ToDouble(melSpec[t, f]);
+                    double val = NumOps.ToDouble(melSpec[t, f]);
                     if (val > maxVal) maxVal = val;
                     if (val < minVal) minVal = val;
                 }
@@ -410,7 +413,7 @@ public class SceneClassifier<T> : IDisposable
         double sum = 0;
         for (int i = 0; i < audio.Length; i++)
         {
-            double val = _numOps.ToDouble(audio[i]);
+            double val = NumOps.ToDouble(audio[i]);
             sum += val * val;
         }
         return Math.Sqrt(sum / audio.Length);
@@ -421,8 +424,8 @@ public class SceneClassifier<T> : IDisposable
         int crossings = 0;
         for (int i = 1; i < audio.Length; i++)
         {
-            double prev = _numOps.ToDouble(audio[i - 1]);
-            double curr = _numOps.ToDouble(audio[i]);
+            double prev = NumOps.ToDouble(audio[i - 1]);
+            double curr = NumOps.ToDouble(audio[i]);
             if ((prev >= 0 && curr < 0) || (prev < 0 && curr >= 0))
                 crossings++;
         }
@@ -438,7 +441,7 @@ public class SceneClassifier<T> : IDisposable
             double sum = 0;
             for (int f = 0; f < melSpec.Shape[1]; f++)
             {
-                sum += _numOps.ToDouble(melSpec[t, f]);
+                sum += NumOps.ToDouble(melSpec[t, f]);
             }
             frameEnergies[t] = sum;
         }
@@ -467,7 +470,7 @@ public class SceneClassifier<T> : IDisposable
             {
                 for (int f = startBin; f < endBin; f++)
                 {
-                    sum += _numOps.ToDouble(melSpec[t, f]);
+                    sum += NumOps.ToDouble(melSpec[t, f]);
                     count++;
                 }
             }
@@ -488,24 +491,24 @@ public class SceneClassifier<T> : IDisposable
         var input = new Tensor<T>([1, numFeatures]);
 
         int idx = 0;
-        foreach (var val in features.MfccMean) input[0, idx++] = _numOps.FromDouble(val);
-        foreach (var val in features.MfccStd) input[0, idx++] = _numOps.FromDouble(val);
-        foreach (var val in features.MfccDelta) input[0, idx++] = _numOps.FromDouble(val);
-        input[0, idx++] = _numOps.FromDouble(features.SpectralCentroid / 100);
-        input[0, idx++] = _numOps.FromDouble(features.SpectralBandwidth / 100);
-        input[0, idx++] = _numOps.FromDouble(features.SpectralFlatness);
-        input[0, idx++] = _numOps.FromDouble(features.SpectralContrast);
-        input[0, idx++] = _numOps.FromDouble(features.RmsEnergy * 10);
-        input[0, idx++] = _numOps.FromDouble(features.ZeroCrossingRate * 100);
-        input[0, idx++] = _numOps.FromDouble(features.EnergyVariance);
-        foreach (var val in features.BandEnergies) input[0, idx++] = _numOps.FromDouble(val);
+        foreach (var val in features.MfccMean) input[0, idx++] = NumOps.FromDouble(val);
+        foreach (var val in features.MfccStd) input[0, idx++] = NumOps.FromDouble(val);
+        foreach (var val in features.MfccDelta) input[0, idx++] = NumOps.FromDouble(val);
+        input[0, idx++] = NumOps.FromDouble(features.SpectralCentroid / 100);
+        input[0, idx++] = NumOps.FromDouble(features.SpectralBandwidth / 100);
+        input[0, idx++] = NumOps.FromDouble(features.SpectralFlatness);
+        input[0, idx++] = NumOps.FromDouble(features.SpectralContrast);
+        input[0, idx++] = NumOps.FromDouble(features.RmsEnergy * 10);
+        input[0, idx++] = NumOps.FromDouble(features.ZeroCrossingRate * 100);
+        input[0, idx++] = NumOps.FromDouble(features.EnergyVariance);
+        foreach (var val in features.BandEnergies) input[0, idx++] = NumOps.FromDouble(val);
 
         var output = _model.Run(input);
 
         var probs = new double[Scenes.Length];
         for (int i = 0; i < Math.Min(output.Length, Scenes.Length); i++)
         {
-            probs[i] = _numOps.ToDouble(output[i]);
+            probs[i] = NumOps.ToDouble(output[i]);
         }
 
         // Apply softmax

@@ -43,7 +43,10 @@ namespace AiDotNet.Audio.Classification;
 /// </remarks>
 public class GenreClassifier<T> : IDisposable
 {
-    private readonly INumericOperations<T> _numOps;
+    /// <summary>
+    /// Gets numeric operations for type T.
+    /// </summary>
+    protected readonly INumericOperations<T> NumOps;
     private readonly GenreClassifierOptions _options;
     private readonly MfccExtractor<T> _mfccExtractor;
     private readonly SpectralFeatureExtractor<T> _spectralExtractor;
@@ -68,7 +71,7 @@ public class GenreClassifier<T> : IDisposable
     /// <param name="options">Classification options.</param>
     public GenreClassifier(GenreClassifierOptions? options = null)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
+        NumOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new GenreClassifierOptions();
 
         _mfccExtractor = new MfccExtractor<T>(new MfccOptions
@@ -210,14 +213,14 @@ public class GenreClassifier<T> : IDisposable
             double sum = 0;
             for (int t = 0; t < numFrames; t++)
             {
-                sum += _numOps.ToDouble(mfccs[t, c]);
+                sum += NumOps.ToDouble(mfccs[t, c]);
             }
             mfccMean[c] = sum / numFrames;
 
             double sumSq = 0;
             for (int t = 0; t < numFrames; t++)
             {
-                double diff = _numOps.ToDouble(mfccs[t, c]) - mfccMean[c];
+                double diff = NumOps.ToDouble(mfccs[t, c]) - mfccMean[c];
                 sumSq += diff * diff;
             }
             mfccStd[c] = Math.Sqrt(sumSq / numFrames);
@@ -234,7 +237,7 @@ public class GenreClassifier<T> : IDisposable
         for (int t = 0; t < spectralFrames; t++)
         {
             spectralCentroid[t] = spectralResult[t, 0]; // Centroid is first
-            spectralRolloff[t] = spectralResult.Shape[1] > 1 ? spectralResult[t, 1] : _numOps.Zero; // Rolloff is second
+            spectralRolloff[t] = spectralResult.Shape[1] > 1 ? spectralResult[t, 1] : NumOps.Zero; // Rolloff is second
         }
 
         // Compute temporal features
@@ -260,7 +263,7 @@ public class GenreClassifier<T> : IDisposable
         double sum = 0;
         for (int i = 0; i < tensor.Length; i++)
         {
-            sum += _numOps.ToDouble(tensor[i]);
+            sum += NumOps.ToDouble(tensor[i]);
         }
         return sum / tensor.Length;
     }
@@ -271,7 +274,7 @@ public class GenreClassifier<T> : IDisposable
         double sumSq = 0;
         for (int i = 0; i < tensor.Length; i++)
         {
-            double diff = _numOps.ToDouble(tensor[i]) - mean;
+            double diff = NumOps.ToDouble(tensor[i]) - mean;
             sumSq += diff * diff;
         }
         return Math.Sqrt(sumSq / tensor.Length);
@@ -282,8 +285,8 @@ public class GenreClassifier<T> : IDisposable
         int crossings = 0;
         for (int i = 1; i < audio.Length; i++)
         {
-            double prev = _numOps.ToDouble(audio[i - 1]);
-            double curr = _numOps.ToDouble(audio[i]);
+            double prev = NumOps.ToDouble(audio[i - 1]);
+            double curr = NumOps.ToDouble(audio[i]);
             if ((prev >= 0 && curr < 0) || (prev < 0 && curr >= 0))
             {
                 crossings++;
@@ -297,7 +300,7 @@ public class GenreClassifier<T> : IDisposable
         double sumSq = 0;
         for (int i = 0; i < audio.Length; i++)
         {
-            double val = _numOps.ToDouble(audio[i]);
+            double val = NumOps.ToDouble(audio[i]);
             sumSq += val * val;
         }
         return Math.Sqrt(sumSq / audio.Length);
@@ -316,7 +319,7 @@ public class GenreClassifier<T> : IDisposable
             double sum = 0;
             for (int i = 0; i < frameSize && f * frameSize + i < audio.Length; i++)
             {
-                double val = _numOps.ToDouble(audio[f * frameSize + i]);
+                double val = NumOps.ToDouble(audio[f * frameSize + i]);
                 sum += val * val;
             }
             energies[f] = sum;
@@ -371,14 +374,14 @@ public class GenreClassifier<T> : IDisposable
 
         int idx = 0;
         foreach (var val in features.MfccMean)
-            input[0, idx++] = _numOps.FromDouble(val);
+            input[0, idx++] = NumOps.FromDouble(val);
         foreach (var val in features.MfccStd)
-            input[0, idx++] = _numOps.FromDouble(val);
-        input[0, idx++] = _numOps.FromDouble(features.SpectralCentroidMean);
-        input[0, idx++] = _numOps.FromDouble(features.SpectralCentroidStd);
-        input[0, idx++] = _numOps.FromDouble(features.ZeroCrossingRate);
-        input[0, idx++] = _numOps.FromDouble(features.RmsEnergy);
-        input[0, idx++] = _numOps.FromDouble(features.Tempo / 200.0); // Normalize
+            input[0, idx++] = NumOps.FromDouble(val);
+        input[0, idx++] = NumOps.FromDouble(features.SpectralCentroidMean);
+        input[0, idx++] = NumOps.FromDouble(features.SpectralCentroidStd);
+        input[0, idx++] = NumOps.FromDouble(features.ZeroCrossingRate);
+        input[0, idx++] = NumOps.FromDouble(features.RmsEnergy);
+        input[0, idx++] = NumOps.FromDouble(features.Tempo / 200.0); // Normalize
 
         // Run model
         var output = _model.Run(input);
@@ -387,7 +390,7 @@ public class GenreClassifier<T> : IDisposable
         var probs = new double[Genres.Length];
         for (int i = 0; i < Math.Min(output.Length, Genres.Length); i++)
         {
-            probs[i] = _numOps.ToDouble(output[i]);
+            probs[i] = NumOps.ToDouble(output[i]);
         }
 
         // Apply softmax
