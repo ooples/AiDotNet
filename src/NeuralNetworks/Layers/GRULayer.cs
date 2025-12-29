@@ -131,6 +131,11 @@ public class GRULayer<T> : LayerBase<T>
     private List<Tensor<T>>? _allHiddenStates;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// The size of the input feature vector at each time step.
     /// </summary>
     /// <remarks>
@@ -497,9 +502,41 @@ public class GRULayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-        int batchSize = input.Shape[0];
-        int sequenceLength = input.Shape[1];
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: collapse leading dims into batch for rank > 3
+        Tensor<T> input3D;
+        int batchSize;
+        int sequenceLength;
+
+        if (rank == 2)
+        {
+            // 2D input [sequenceLength, inputSize] -> add batch dim
+            batchSize = 1;
+            sequenceLength = input.Shape[0];
+            input3D = input.Reshape([1, sequenceLength, _inputSize]);
+        }
+        else if (rank == 3)
+        {
+            // Standard 3D input [batchSize, sequenceLength, inputSize]
+            batchSize = input.Shape[0];
+            sequenceLength = input.Shape[1];
+            input3D = input;
+        }
+        else
+        {
+            // Higher-rank tensor: collapse leading dims into batch
+            sequenceLength = input.Shape[rank - 2];
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            input3D = input.Reshape([flatBatch, sequenceLength, _inputSize]);
+        }
+
+        _lastInput = input3D;
 
         // Reset hidden state if needed
         if (_lastHiddenState == null)
@@ -566,15 +603,47 @@ public class GRULayer<T> : LayerBase<T>
         _lastHiddenState = currentHiddenState;
 
         // Return either the sequence of hidden states or just the final state
+        Tensor<T> output;
         if (_returnSequences && _allHiddenStates != null)
         {
             // Concatenate all hidden states along time dimension
-            return Tensor<T>.Concatenate([.. _allHiddenStates], 1);
+            output = Tensor<T>.Concatenate([.. _allHiddenStates], 1);
         }
         else
         {
-            return currentHiddenState;
+            output = currentHiddenState;
         }
+
+        // Restore original batch dimensions for any-rank support
+        if (_originalInputShape != null && _originalInputShape.Length > 3)
+        {
+            int[] newShape;
+            if (_returnSequences)
+            {
+                // Output shape: [...leadingDims, sequenceLength, hiddenSize]
+                newShape = new int[_originalInputShape.Length];
+                for (int d = 0; d < _originalInputShape.Length - 2; d++)
+                    newShape[d] = _originalInputShape[d];
+                newShape[_originalInputShape.Length - 2] = sequenceLength;
+                newShape[_originalInputShape.Length - 1] = _hiddenSize;
+            }
+            else
+            {
+                // Output shape: [...leadingDims, hiddenSize]
+                newShape = new int[_originalInputShape.Length - 1];
+                for (int d = 0; d < _originalInputShape.Length - 2; d++)
+                    newShape[d] = _originalInputShape[d];
+                newShape[_originalInputShape.Length - 2] = _hiddenSize;
+            }
+            output = output.Reshape(newShape);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 2 && !_returnSequences)
+        {
+            // 2D input -> 1D output (remove batch dim)
+            output = output.Reshape([_hiddenSize]);
+        }
+
+        return output;
     }
 
     /// <summary>

@@ -132,6 +132,11 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// Stores the output tensor from the most recent forward pass.
     /// </summary>
     /// <remarks>
@@ -508,11 +513,40 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-        int batchSize = input.Shape[0];
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: collapse to 2D for processing
+        Tensor<T> processInput;
+        int batchSize;
+
+        if (rank == 1)
+        {
+            // 1D: add batch dim
+            batchSize = 1;
+            processInput = input.Reshape([1, input.Shape[0]]);
+        }
+        else if (rank == 2)
+        {
+            // Standard 2D
+            batchSize = input.Shape[0];
+            processInput = input;
+        }
+        else
+        {
+            // Higher-rank: collapse leading dims into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 1; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            processInput = input.Reshape([flatBatch, input.Shape[rank - 1]]);
+        }
+
+        _lastInput = processInput;
 
         // Localization network using Engine operations
-        var flattenedInput = input.Reshape([batchSize, _inputHeight * _inputWidth]);
+        var flattenedInput = processInput.Reshape([batchSize, _inputHeight * _inputWidth]);
         _lastFlattenedInput = flattenedInput;
 
         // First layer: localization1 = flattenedInput @ _localizationWeights1 + _localizationBias1
@@ -538,9 +572,28 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Grid generator + sampler via engine ops
         var grid = Engine.AffineGrid(theta, _outputHeight, _outputWidth);
-        var output = Engine.GridSample(input, grid);
+        var output = Engine.GridSample(processInput, grid);
 
         _lastOutput = output;
+
+        // Restore output shape to match original input rank
+        if (_originalInputShape != null && _originalInputShape.Length != 2)
+        {
+            if (_originalInputShape.Length == 1)
+            {
+                return _lastOutput.Reshape([_lastOutput.Shape[1]]);
+            }
+            else
+            {
+                // Restore higher-rank: reconstruct leading dims
+                var outShape = new int[_originalInputShape.Length];
+                for (int d = 0; d < _originalInputShape.Length - 1; d++)
+                    outShape[d] = _originalInputShape[d];
+                outShape[_originalInputShape.Length - 1] = _lastOutput.Shape[1];
+                return _lastOutput.Reshape(outShape);
+            }
+        }
+
         return _lastOutput;
     }
 
@@ -728,7 +781,15 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             }
         }
 
-        return inputNode.Gradient ?? throw new InvalidOperationException("Spatial transformer backward failed.");
+        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Spatial transformer backward failed.");
+
+        // Restore gradient to original input shape
+        if (_originalInputShape != null && _originalInputShape.Length != 2)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     /// <summary>
@@ -860,7 +921,15 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Return input gradient
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+
+        // Restore gradient to original input shape
+        if (_originalInputShape != null && _originalInputShape.Length != 2)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     // Removed BackwardSampler (unused)

@@ -118,10 +118,30 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// </remarks>
     private static int[] CalculateOutputShape(int[] inputShape, int poolSize, int stride)
     {
-        int outputHeight = (inputShape[1] - poolSize) / stride + 1;
-        int outputWidth = (inputShape[2] - poolSize) / stride + 1;
+        // Industry-standard: support tensors of any rank
+        // The last two dimensions are always height and width for pooling
+        // Supports: 2D [H, W], 3D [C, H, W], 4D [B, C, H, W], etc.
+        if (inputShape.Length < 2)
+        {
+            throw new ArgumentException("Input shape must have at least 2 dimensions for pooling.");
+        }
 
-        return [inputShape[0], outputHeight, outputWidth];
+        int heightIdx = inputShape.Length - 2;
+        int widthIdx = inputShape.Length - 1;
+
+        int outputHeight = (inputShape[heightIdx] - poolSize) / stride + 1;
+        int outputWidth = (inputShape[widthIdx] - poolSize) / stride + 1;
+
+        // Create output shape preserving all leading dimensions
+        var outputShape = new int[inputShape.Length];
+        for (int i = 0; i < inputShape.Length - 2; i++)
+        {
+            outputShape[i] = inputShape[i];
+        }
+        outputShape[heightIdx] = outputHeight;
+        outputShape[widthIdx] = outputWidth;
+
+        return outputShape;
     }
 
     /// <summary>

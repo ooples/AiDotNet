@@ -137,6 +137,11 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// Stores the output tensor from the most recent forward pass for use in backpropagation.
     /// </summary>
     /// <remarks>
@@ -420,14 +425,53 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-        int batchSize = input.Shape[0];
-        int sequenceLength = input.Shape[1];
-        int embeddingDimension = input.Shape[2];
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: need at least 2D [seqLen, embedDim]
+        Tensor<T> input3D;
+        int batchSize;
+        int sequenceLength;
+        int embeddingDimension;
+
+        if (rank == 2)
+        {
+            // 2D: [seqLen, embedDim] -> add batch dim
+            batchSize = 1;
+            sequenceLength = input.Shape[0];
+            embeddingDimension = input.Shape[1];
+            input3D = input.Reshape([1, sequenceLength, embeddingDimension]);
+        }
+        else if (rank == 3)
+        {
+            // Standard 3D: [batch, seqLen, embedDim]
+            batchSize = input.Shape[0];
+            sequenceLength = input.Shape[1];
+            embeddingDimension = input.Shape[2];
+            input3D = input;
+        }
+        else if (rank > 3)
+        {
+            // Higher-rank: collapse leading dims into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 2; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            sequenceLength = input.Shape[rank - 2];
+            embeddingDimension = input.Shape[rank - 1];
+            input3D = input.Reshape([flatBatch, sequenceLength, embeddingDimension]);
+        }
+        else
+        {
+            throw new ArgumentException($"SelfAttentionLayer requires at least 2D input, got {rank}D");
+        }
+
+        _lastInput = input3D;
 
         // 1. Project Input to Q, K, V
         // Reshape input to 2D [Batch*Seq, EmbedDim] for efficient MatrixMultiply
-        var input2D = input.Reshape(batchSize * sequenceLength, _embeddingDimension);
+        var input2D = input3D.Reshape(batchSize * sequenceLength, _embeddingDimension);
 
         // Compute Projections: [B*S, E] @ [E, E] -> [B*S, E]
         // Using Engine.TensorMatMul for GPU acceleration
@@ -484,7 +528,25 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var biasBroadcast = _outputBias.Reshape(1, 1, embeddingDimension);
         var outputBiased = Engine.TensorBroadcastAdd(outputFlat, biasBroadcast);
 
-        _lastOutput = ApplyActivation(outputBiased);
+        var output = ApplyActivation(outputBiased);
+
+        // Restore original batch dimensions for any-rank support
+        if (_originalInputShape != null && _originalInputShape.Length > 3)
+        {
+            int[] newShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 2; d++)
+                newShape[d] = _originalInputShape[d];
+            newShape[_originalInputShape.Length - 2] = sequenceLength;
+            newShape[_originalInputShape.Length - 1] = embeddingDimension;
+            output = output.Reshape(newShape);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 2)
+        {
+            // 2D input -> 2D output (remove batch dim)
+            output = output.Reshape([sequenceLength, embeddingDimension]);
+        }
+
+        _lastOutput = output;
         return _lastOutput;
     }
 

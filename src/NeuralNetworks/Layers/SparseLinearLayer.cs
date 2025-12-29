@@ -105,8 +105,9 @@ public class SparseLinearLayer<T> : LayerBase<T>
     /// JIT compilation is supported by converting sparse weights to dense format at export time.
     /// This enables JIT compilation while preserving correct functionality, though the sparse
     /// memory benefits are not retained in the compiled graph.
+    /// Returns true only if the activation function also supports JIT compilation.
     /// </remarks>
-    public override bool SupportsJitCompilation => true;
+    public override bool SupportsJitCompilation => CanActivationBeJitted();
 
     /// <summary>
     /// Initializes a new instance of the SparseLinearLayer.
@@ -548,15 +549,17 @@ public class SparseLinearLayer<T> : LayerBase<T>
         if (ScalarActivation is null)
             throw new InvalidOperationException("ScalarActivation cannot be null when applying activation to computation node.");
 
-        // Use ApplyToGraph if the activation supports JIT compilation
+        // Use ApplyToGraph - the layer's SupportsJitCompilation property ensures this is only
+        // called when the activation supports JIT compilation
         if (ScalarActivation.SupportsJitCompilation)
         {
             return ScalarActivation.ApplyToGraph(node);
         }
 
-        // Fallback: apply activation directly to values and wrap as constant
-        var activated = ScalarActivation.Activate(node.Value);
-        return TensorOperations<T>.Constant(activated, "activated_output");
+        // This should never be reached if SupportsJitCompilation is checked before ExportComputationGraph
+        throw new InvalidOperationException(
+            $"Internal error: Activation function '{ScalarActivation.GetType().Name}' does not support JIT compilation. " +
+            "This indicates the layer's SupportsJitCompilation property was not checked before calling ExportComputationGraph.");
     }
 
     /// <summary>

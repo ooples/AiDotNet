@@ -58,6 +58,11 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     private Tensor<T> _biasO; // Output gate bias
 
     private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
     private Tensor<T>? _lastHiddenState;
     private Tensor<T>? _lastCellState;
     private Dictionary<string, object> _gradients = new Dictionary<string, object>();
@@ -364,11 +369,57 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-        int batchSize = input.Shape[0];
-        int timeSteps = input.Shape[1];
-        int height = input.Shape[2];
-        int width = input.Shape[3];
+        // Store original shape for any-rank tensor support
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+
+        // Handle any-rank tensor: collapse leading dims for rank > 5
+        Tensor<T> input5D;
+        int batchSize;
+        int timeSteps;
+        int height;
+        int width;
+        int channels;
+
+        if (rank == 4)
+        {
+            // 4D: [timeSteps, height, width, channels] -> add batch dim
+            batchSize = 1;
+            timeSteps = input.Shape[0];
+            height = input.Shape[1];
+            width = input.Shape[2];
+            channels = input.Shape[3];
+            input5D = input.Reshape([1, timeSteps, height, width, channels]);
+        }
+        else if (rank == 5)
+        {
+            // Standard 5D: [batchSize, timeSteps, height, width, channels]
+            batchSize = input.Shape[0];
+            timeSteps = input.Shape[1];
+            height = input.Shape[2];
+            width = input.Shape[3];
+            // channels not needed - input5D is already properly shaped
+            input5D = input;
+        }
+        else if (rank > 5)
+        {
+            // Higher-rank: collapse leading dims into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 4; d++)
+                flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            timeSteps = input.Shape[rank - 4];
+            height = input.Shape[rank - 3];
+            width = input.Shape[rank - 2];
+            channels = input.Shape[rank - 1];
+            input5D = input.Reshape([flatBatch, timeSteps, height, width, channels]);
+        }
+        else
+        {
+            throw new ArgumentException($"ConvLSTMLayer requires at least 4D input, got {rank}D");
+        }
+
+        _lastInput = input5D;
 
         var output = new Tensor<T>([batchSize, timeSteps, height, width, _filters]);
         _lastHiddenState = new Tensor<T>([batchSize, height, width, _filters]);
@@ -376,9 +427,28 @@ public class ConvLSTMLayer<T> : LayerBase<T>
 
         for (int t = 0; t < timeSteps; t++)
         {
-            var xt = input.GetSlice(t);
+            var xt = input5D.GetSlice(t);
             (_lastHiddenState, _lastCellState) = ConvLSTMCell(xt, _lastHiddenState, _lastCellState);
             output.SetSlice(t, _lastHiddenState);
+        }
+
+        // Restore original batch dimensions for any-rank support
+        if (_originalInputShape != null && _originalInputShape.Length > 5)
+        {
+            // Output shape: [...leadingDims, timeSteps, height, width, filters]
+            int[] newShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 4; d++)
+                newShape[d] = _originalInputShape[d];
+            newShape[_originalInputShape.Length - 4] = timeSteps;
+            newShape[_originalInputShape.Length - 3] = height;
+            newShape[_originalInputShape.Length - 2] = width;
+            newShape[_originalInputShape.Length - 1] = _filters;
+            output = output.Reshape(newShape);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 4)
+        {
+            // 4D input -> 4D output (remove batch dim)
+            output = output.Reshape([timeSteps, height, width, _filters]);
         }
 
         return output;
@@ -511,6 +581,22 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Normalize outputGradient to 5D to match canonical _lastInput shape
+        var outGrad5D = outputGradient;
+        if (_originalInputShape != null && _originalInputShape.Length == 4)
+        {
+            // 4D output gradient -> 5D (add batch dim)
+            outGrad5D = outputGradient.Reshape([1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2], outputGradient.Shape[3]]);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length > 5)
+        {
+            // Higher-rank output gradient -> 5D (flatten leading dims)
+            int flatBatch = 1;
+            for (int d = 0; d < _originalInputShape.Length - 4; d++)
+                flatBatch *= _originalInputShape[d];
+            outGrad5D = outputGradient.Reshape([flatBatch, outputGradient.Shape[_originalInputShape.Length - 4], outputGradient.Shape[_originalInputShape.Length - 3], outputGradient.Shape[_originalInputShape.Length - 2], outputGradient.Shape[_originalInputShape.Length - 1]]);
+        }
+
         // 1. Create Variables for all parameters
         var wFi = Autodiff.TensorOperations<T>.Variable(_weightsFi, "weightsFi", true);
         var wIi = Autodiff.TensorOperations<T>.Variable(_weightsIi, "weightsIi", true);
@@ -632,7 +718,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         var finalOutput = Autodiff.TensorOperations<T>.Concat(outputNodes, axis: 1);
 
         // 5. Backward Pass
-        finalOutput.Gradient = outputGradient;
+        finalOutput.Gradient = outGrad5D;
 
         // Topo sort and execute backward
         finalOutput.Backward(); // Uses built-in topo sort and execution
@@ -654,7 +740,15 @@ public class ConvLSTMLayer<T> : LayerBase<T>
             ["biasO"] = bO.Gradient ?? Tensor<T>.CreateDefault(_biasO.Shape, NumOps.Zero)
         };
 
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+
+        // Restore higher-rank gradients to their original shape
+        if (_originalInputShape != null && _originalInputShape.Length != 5)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     /// <summary>
@@ -679,6 +773,22 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
+        // Normalize outputGradient to 5D to match canonical _lastInput shape
+        var outGrad5D = outputGradient;
+        if (_originalInputShape != null && _originalInputShape.Length == 4)
+        {
+            // 4D output gradient -> 5D (add batch dim)
+            outGrad5D = outputGradient.Reshape([1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2], outputGradient.Shape[3]]);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length > 5)
+        {
+            // Higher-rank output gradient -> 5D (flatten leading dims)
+            int flatBatch = 1;
+            for (int d = 0; d < _originalInputShape.Length - 4; d++)
+                flatBatch *= _originalInputShape[d];
+            outGrad5D = outputGradient.Reshape([flatBatch, outputGradient.Shape[_originalInputShape.Length - 4], outputGradient.Shape[_originalInputShape.Length - 3], outputGradient.Shape[_originalInputShape.Length - 2], outputGradient.Shape[_originalInputShape.Length - 1]]);
+        }
+
         int batchSize = _lastInput!.Shape[0];
         int timeSteps = _lastInput.Shape[1];
 
@@ -701,7 +811,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
 
         for (int t = timeSteps - 1; t >= 0; t--)
         {
-            var currentDh = outputGradient.GetSlice(t).Add(dNextH);
+            var currentDh = outGrad5D.GetSlice(t).Add(dNextH);
             var xt = _lastInput.GetSlice(t);
             var prevH = t > 0 ? _lastHiddenState.GetSlice(t - 1) : new Tensor<T>(_lastHiddenState.Shape);
             var prevC = t > 0 ? _lastCellState.GetSlice(t - 1) : new Tensor<T>(_lastCellState.Shape);
@@ -746,6 +856,12 @@ public class ConvLSTMLayer<T> : LayerBase<T>
             ["biasC"] = dBiasC,
             ["biasO"] = dBiasO
         };
+
+        // Restore higher-rank gradients to their original shape
+        if (_originalInputShape != null && _originalInputShape.Length != 5)
+        {
+            return dInput.Reshape(_originalInputShape);
+        }
 
         return dInput;
     }
