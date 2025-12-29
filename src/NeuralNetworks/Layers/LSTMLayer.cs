@@ -1398,14 +1398,17 @@ public class LSTMLayer<T> : LayerBase<T>
         // After transpose: W_fi^T = [inputSize, hiddenSize], W_fh^T = [hiddenSize, hiddenSize]
         // Concatenate along axis 0: [inputSize + hiddenSize, hiddenSize]
         // concat @ W_combined = [batchSize, inputSize + hiddenSize] @ [inputSize + hiddenSize, hiddenSize] = [batchSize, hiddenSize]
+        // Gate computations with proper bias broadcasting
+        // concat @ W_combined = [batchSize, inputSize + hiddenSize] @ [inputSize + hiddenSize, hiddenSize] = [batchSize, hiddenSize]
+        // _biasF is [hiddenSize], need to broadcast across batch dimension
         var f = ActivateTensorConditional(_sigmoidVectorActivation, _sigmoidActivation,
-            concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsFi.Transpose(new[] { 1, 0 }), _weightsFh.Transpose(new[] { 1, 0 }) }, 0)).Add(_biasF));
+            Engine.TensorBroadcastAdd(concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsFi.Transpose(new[] { 1, 0 }), _weightsFh.Transpose(new[] { 1, 0 }) }, 0)), _biasF));
         var i = ActivateTensorConditional(_sigmoidVectorActivation, _sigmoidActivation,
-            concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsIi.Transpose(new[] { 1, 0 }), _weightsIh.Transpose(new[] { 1, 0 }) }, 0)).Add(_biasI));
+            Engine.TensorBroadcastAdd(concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsIi.Transpose(new[] { 1, 0 }), _weightsIh.Transpose(new[] { 1, 0 }) }, 0)), _biasI));
         var c_bar = ActivateTensorConditional(_tanhVectorActivation, _tanhActivation,
-            concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsCi.Transpose(new[] { 1, 0 }), _weightsCh.Transpose(new[] { 1, 0 }) }, 0)).Add(_biasC));
+            Engine.TensorBroadcastAdd(concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsCi.Transpose(new[] { 1, 0 }), _weightsCh.Transpose(new[] { 1, 0 }) }, 0)), _biasC));
         var o = ActivateTensorConditional(_sigmoidVectorActivation, _sigmoidActivation,
-            concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsOi.Transpose(new[] { 1, 0 }), _weightsOh.Transpose(new[] { 1, 0 }) }, 0)).Add(_biasO));
+            Engine.TensorBroadcastAdd(concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsOi.Transpose(new[] { 1, 0 }), _weightsOh.Transpose(new[] { 1, 0 }) }, 0)), _biasO));
         var c = f.PointwiseMultiply(prev_c).Add(i.PointwiseMultiply(c_bar));
         var h = o.PointwiseMultiply(ActivateTensor(_tanhActivation, c));
 
