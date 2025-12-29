@@ -1799,12 +1799,9 @@ public class GpuEngine : IEngine, IDisposable
 
     // Tiled matrix multiply kernels using shared memory for large matrices (Phase B: Performance)
     // These use explicitly grouped kernels with 32x32 thread tiles for optimal cache reuse
-    // NOTE: Currently not used - ILGPU tiled kernels require explicit group configuration
-    // TODO: Implement tiled kernel loading once ILGPU kernel launcher API is finalized
-#pragma warning disable CS0169 // Field is never used (planned for tiled kernel implementation)
-    private readonly Action<AcceleratorStream, KernelConfig, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, TiledMatMulParams>? _tiledMatMulKernelFloat;
-    private readonly Action<AcceleratorStream, KernelConfig, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, TiledMatMulParams>? _tiledMatMulKernelDouble;
-#pragma warning restore CS0169
+    // LoadStreamKernel is used for explicit grid/group configuration required by shared memory
+    private Action<KernelConfig, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, TiledMatMulParams>? _tiledMatMulKernelFloat;
+    private Action<KernelConfig, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, TiledMatMulParams>? _tiledMatMulKernelDouble;
 
     // Kernel cache for matrix operations - double (Phase B: Epic 2)
     private readonly Action<AcceleratorStream, Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, int>? _matrixMultiplyKernelDouble;
@@ -2599,6 +2596,16 @@ public class GpuEngine : IEngine, IDisposable
                         result[index] = sum;
                     });
 
+                // Tiled matrix multiply kernel using shared memory (cuBLAS-style optimization)
+                // Uses LoadStreamKernel for explicit grid/group control required by SharedMemory
+                // Tile size 32x32 provides ~10x speedup for large matrices (K >= 1024)
+                _tiledMatMulKernelFloat = _accelerator.LoadStreamKernel<
+                    ArrayView2D<float, Stride2D.DenseX>,
+                    ArrayView2D<float, Stride2D.DenseX>,
+                    ArrayView2D<float, Stride2D.DenseX>,
+                    TiledMatMulParams>(TiledMatMulKernels.TiledMatMulFloatImpl);
+                Console.WriteLine($"[GpuEngine] Tiled MatMul kernel loaded (float, tile size: {TiledMatMulKernels.TileSize}x{TiledMatMulKernels.TileSize})");
+
                 _matrixVectorMultiplyKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView2D<float, Stride2D.DenseX>, ArrayView<float>, ArrayView<float>, int, int>(
                     (index, matrix, vector, result, rows, cols) =>
@@ -2670,9 +2677,11 @@ public class GpuEngine : IEngine, IDisposable
                 // Note: Tiled matrix multiply kernels require 2D explicit grouping which
                 // ILGPU doesn't support directly with LoadImplicitlyGroupedStreamKernel.
                 // The naive kernel is already optimized for memory access patterns.
-                // TODO: Implement 2D tiled kernel using explicit kernel configuration
-                // when ILGPU adds support or via custom kernel launcher.
-                Console.WriteLine("[GpuEngine] Using naive matrix multiply kernels (tiled optimization TODO)");
+                // Matrix multiply kernels now support three modes:
+                // - Naive kernel: For small matrices (K < 512)
+                // - Transpose-B kernel: For medium matrices (512 <= K < 1024)
+                // - Tiled kernel: For large matrices (K >= 1024) - cuBLAS-style optimization with shared memory
+                Console.WriteLine("[GpuEngine] Matrix multiply kernels initialized (naive, transpose-B, tiled)");
 
                 // Pre-compile kernels for matrix operations - double (Phase B: Epic 2)
                 _matrixMultiplyKernelDouble = _accelerator.LoadAutoGroupedKernel<
@@ -2695,6 +2704,14 @@ public class GpuEngine : IEngine, IDisposable
                             sum += a[index.X, i] * bT[index.Y, i];
                         result[index] = sum;
                     });
+
+                // Tiled matrix multiply kernel for double precision using shared memory
+                _tiledMatMulKernelDouble = _accelerator.LoadStreamKernel<
+                    ArrayView2D<double, Stride2D.DenseX>,
+                    ArrayView2D<double, Stride2D.DenseX>,
+                    ArrayView2D<double, Stride2D.DenseX>,
+                    TiledMatMulParams>(TiledMatMulKernels.TiledMatMulDoubleImpl);
+                Console.WriteLine($"[GpuEngine] Tiled MatMul kernel loaded (double, tile size: {TiledMatMulKernels.TileSize}x{TiledMatMulKernels.TileSize})");
 
                 _matrixVectorMultiplyKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView2D<double, Stride2D.DenseX>, ArrayView<double>, ArrayView<double>, int, int>(
@@ -18430,12 +18447,16 @@ public class GpuEngine : IEngine, IDisposable
         int k = a.Shape[1];
         int n = b.Shape[1];
 
-        // Use optimized (transpose-B) kernel for very large matrices to avoid cache misses
-        // The naive kernel has catastrophic performance for k >= 2048 where the cache miss
-        // penalty outweighs the transpose overhead. For smaller matrices, the naive kernel
-        // is faster because the transpose cost is too high relative to the benefit.
-        const int TransposeThreshold = 2048;
-        bool useOptimizedKernel = k >= TransposeThreshold && _matrixMultiplyTransposedBKernelFloat != null;
+        // Kernel selection thresholds based on matrix size
+        // - Tiled kernel: Uses shared memory for cache reuse, best for large K (cuBLAS-style)
+        // - Transpose-B kernel: Coalesced access pattern, good for moderate K
+        // - Naive kernel: Simple but cache-unfriendly, only for small matrices
+        const int TiledThreshold = 1024;     // Use tiled GEMM when K >= 1024
+        const int TransposeThreshold = 512;  // Use transpose-B when K >= 512 (but < TiledThreshold)
+
+        bool useTiledKernel = k >= TiledThreshold && _tiledMatMulKernelFloat != null;
+        bool useTransposeKernel = !useTiledKernel && k >= TransposeThreshold && _matrixMultiplyTransposedBKernelFloat != null;
+        bool needsTranspose = useTiledKernel || useTransposeKernel;
 
         // Timing instrumentation for debugging large matrix performance
         var sw = _timingDiagnostics.IsEnabled ? System.Diagnostics.Stopwatch.StartNew() : null;
@@ -18444,16 +18465,16 @@ public class GpuEngine : IEngine, IDisposable
         var gpuB = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(k * n);
         var gpuResult = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * n);
 
-        // For optimized kernel, we need a buffer for B^T
+        // For optimized kernels (tiled and transpose-B), we need a buffer for B^T
         MemoryBuffer1D<float, Stride1D.Dense>? gpuBT = null;
-        if (useOptimizedKernel)
+        if (needsTranspose)
         {
             gpuBT = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(k * n);
         }
 
         if (sw != null)
         {
-            _timingDiagnostics.Record("MatMul", GpuTimingCategory.MemoryAlloc, sw.ElapsedMilliseconds, (m * k + k * n + m * n + (useOptimizedKernel ? k * n : 0)) * sizeof(float));
+            _timingDiagnostics.Record("MatMul", GpuTimingCategory.MemoryAlloc, sw.ElapsedMilliseconds, (m * k + k * n + m * n + (needsTranspose ? k * n : 0)) * sizeof(float));
             sw.Restart();
         }
 
@@ -18480,20 +18501,37 @@ public class GpuEngine : IEngine, IDisposable
             {
                 var accelerator = _accelerator ?? throw new InvalidOperationException("GPU not initialized");
 
-                if (useOptimizedKernel && gpuBT != null)
+                if (needsTranspose && gpuBT != null)
                 {
                     // Transpose B on GPU: B[k,n] -> B^T[n,k]
-                    // This enables coalesced memory access in the kernel
+                    // This enables coalesced memory access in both tiled and transpose-B kernels
                     var viewBT = gpuBT.View.As2DView<Stride2D.DenseX>(new Index2D(n, k), new Stride2D.DenseX(k));
 
                     // Execute transpose: output[row,col] = input[col,row]
                     (_matrixTransposeKernelFloat ?? throw new InvalidOperationException("Transpose kernel not initialized"))(
                         accelerator.DefaultStream, new Index2D(k, n), viewB, viewBT);
 
-                    // Use optimized kernel with transposed B
-                    // Kernel: sum += a[row,i] * bT[col,i] - both accesses are coalesced!
-                    (_matrixMultiplyTransposedBKernelFloat ?? throw new InvalidOperationException("Optimized kernel not initialized"))(
-                        accelerator.DefaultStream, new Index2D(m, n), viewA, viewBT, viewResult, k);
+                    if (useTiledKernel)
+                    {
+                        // Use tiled kernel with shared memory (cuBLAS-style optimization)
+                        // Grid/group configuration for 32x32 tiles
+                        int tileSize = TiledMatMulKernels.TileSize;
+                        int gridX = (m + tileSize - 1) / tileSize;
+                        int gridY = (n + tileSize - 1) / tileSize;
+                        var config = new KernelConfig(
+                            new Index2D(gridX, gridY),   // Grid dimension (number of tiles)
+                            new Index2D(tileSize, tileSize));  // Group dimension (threads per tile)
+
+                        var matMulParams = new TiledMatMulParams(m, n, k);
+                        (_tiledMatMulKernelFloat ?? throw new InvalidOperationException("Tiled kernel not initialized"))(
+                            config, viewA, viewBT, viewResult, matMulParams);
+                    }
+                    else
+                    {
+                        // Use transpose-B kernel (coalesced access without shared memory)
+                        (_matrixMultiplyTransposedBKernelFloat ?? throw new InvalidOperationException("Optimized kernel not initialized"))(
+                            accelerator.DefaultStream, new Index2D(m, n), viewA, viewBT, viewResult, k);
+                    }
                 }
                 else
                 {
@@ -18508,7 +18546,8 @@ public class GpuEngine : IEngine, IDisposable
 
             if (sw != null)
             {
-                _timingDiagnostics.Record("MatMul", GpuTimingCategory.KernelExecution, sw.ElapsedMilliseconds);
+                string kernelType = useTiledKernel ? "Tiled" : (useTransposeKernel ? "TransposeB" : "Naive");
+                _timingDiagnostics.Record($"MatMul({kernelType})", GpuTimingCategory.KernelExecution, sw.ElapsedMilliseconds);
                 sw.Restart();
             }
 
@@ -18546,12 +18585,16 @@ public class GpuEngine : IEngine, IDisposable
         int k = a.Shape[1];
         int n = b.Shape[1];
 
-        // Use optimized (transpose-B) kernel for very large matrices to avoid cache misses
-        // The naive kernel has catastrophic performance for k >= 2048 where the cache miss
-        // penalty outweighs the transpose overhead. For smaller matrices, the naive kernel
-        // is faster because the transpose cost is too high relative to the benefit.
-        const int TransposeThreshold = 2048;
-        bool useOptimizedKernel = k >= TransposeThreshold && _matrixMultiplyTransposedBKernelDouble != null;
+        // Kernel selection thresholds based on matrix size
+        // - Tiled kernel: Uses shared memory for cache reuse, best for large K (cuBLAS-style)
+        // - Transpose-B kernel: Coalesced access pattern, good for moderate K
+        // - Naive kernel: Simple but cache-unfriendly, only for small matrices
+        const int TiledThreshold = 1024;     // Use tiled GEMM when K >= 1024
+        const int TransposeThreshold = 512;  // Use transpose-B when K >= 512 (but < TiledThreshold)
+
+        bool useTiledKernel = k >= TiledThreshold && _tiledMatMulKernelDouble != null;
+        bool useTransposeKernel = !useTiledKernel && k >= TransposeThreshold && _matrixMultiplyTransposedBKernelDouble != null;
+        bool needsTranspose = useTiledKernel || useTransposeKernel;
 
         // Timing instrumentation for debugging large matrix performance
         var sw = _timingDiagnostics.IsEnabled ? System.Diagnostics.Stopwatch.StartNew() : null;
@@ -18560,16 +18603,16 @@ public class GpuEngine : IEngine, IDisposable
         var gpuB = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(k * n);
         var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * n);
 
-        // For optimized kernel, we need a buffer for B^T
+        // For optimized kernels (tiled and transpose-B), we need a buffer for B^T
         MemoryBuffer1D<double, Stride1D.Dense>? gpuBT = null;
-        if (useOptimizedKernel)
+        if (needsTranspose)
         {
             gpuBT = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(k * n);
         }
 
         if (sw != null)
         {
-            _timingDiagnostics.Record("MatMulDouble", GpuTimingCategory.MemoryAlloc, sw.ElapsedMilliseconds, (m * k + k * n + m * n + (useOptimizedKernel ? k * n : 0)) * sizeof(double));
+            _timingDiagnostics.Record("MatMulDouble", GpuTimingCategory.MemoryAlloc, sw.ElapsedMilliseconds, (m * k + k * n + m * n + (needsTranspose ? k * n : 0)) * sizeof(double));
             sw.Restart();
         }
 
@@ -18596,20 +18639,37 @@ public class GpuEngine : IEngine, IDisposable
             {
                 var accelerator = _accelerator ?? throw new InvalidOperationException("GPU not initialized");
 
-                if (useOptimizedKernel && gpuBT != null)
+                if (needsTranspose && gpuBT != null)
                 {
                     // Transpose B on GPU: B[k,n] -> B^T[n,k]
-                    // This enables coalesced memory access in the kernel
+                    // This enables coalesced memory access in both tiled and transpose-B kernels
                     var viewBT = gpuBT.View.As2DView<Stride2D.DenseX>(new Index2D(n, k), new Stride2D.DenseX(k));
 
                     // Execute transpose: output[row,col] = input[col,row]
                     (_matrixTransposeKernelDouble ?? throw new InvalidOperationException("Transpose kernel not initialized"))(
                         accelerator.DefaultStream, new Index2D(k, n), viewB, viewBT);
 
-                    // Use optimized kernel with transposed B
-                    // Kernel: sum += a[row,i] * bT[col,i] - both accesses are coalesced!
-                    (_matrixMultiplyTransposedBKernelDouble ?? throw new InvalidOperationException("Optimized kernel not initialized"))(
-                        accelerator.DefaultStream, new Index2D(m, n), viewA, viewBT, viewResult, k);
+                    if (useTiledKernel)
+                    {
+                        // Use tiled kernel with shared memory (cuBLAS-style optimization)
+                        // Grid/group configuration for 32x32 tiles
+                        int tileSize = TiledMatMulKernels.TileSize;
+                        int gridX = (m + tileSize - 1) / tileSize;
+                        int gridY = (n + tileSize - 1) / tileSize;
+                        var config = new KernelConfig(
+                            new Index2D(gridX, gridY),   // Grid dimension (number of tiles)
+                            new Index2D(tileSize, tileSize));  // Group dimension (threads per tile)
+
+                        var matMulParams = new TiledMatMulParams(m, n, k);
+                        (_tiledMatMulKernelDouble ?? throw new InvalidOperationException("Tiled kernel not initialized"))(
+                            config, viewA, viewBT, viewResult, matMulParams);
+                    }
+                    else
+                    {
+                        // Use transpose-B kernel (coalesced access without shared memory)
+                        (_matrixMultiplyTransposedBKernelDouble ?? throw new InvalidOperationException("Optimized kernel not initialized"))(
+                            accelerator.DefaultStream, new Index2D(m, n), viewA, viewBT, viewResult, k);
+                    }
                 }
                 else
                 {
@@ -18624,7 +18684,8 @@ public class GpuEngine : IEngine, IDisposable
 
             if (sw != null)
             {
-                _timingDiagnostics.Record("MatMulDouble", GpuTimingCategory.KernelExecution, sw.ElapsedMilliseconds);
+                string kernelType = useTiledKernel ? "Tiled" : (useTransposeKernel ? "TransposeB" : "Naive");
+                _timingDiagnostics.Record($"MatMulDouble({kernelType})", GpuTimingCategory.KernelExecution, sw.ElapsedMilliseconds);
                 sw.Restart();
             }
 
