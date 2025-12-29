@@ -43,6 +43,13 @@ class Program
             OpenClGemmBenchmark.Run();
             return;
         }
+
+        // Run CLBlast vs AiDotNet OpenCL comparison benchmark
+        if (args[0] == "--clblast")
+        {
+            ClBlastBenchmark.Run();
+            return;
+        }
 #endif
 
         Console.WriteLine("Usage:");
@@ -51,5 +58,6 @@ class Program
         Console.WriteLine("  --linalg : Run linear algebra benchmarks vs MathNet.Numerics");
         Console.WriteLine("  --cublas : Run cuBLAS vs ILGPU GEMM benchmark");
         Console.WriteLine("  --opencl : Run OpenCL GEMM benchmark (AMD/Intel GPUs)");
+        Console.WriteLine("  --clblast: Run CLBlast vs AiDotNet OpenCL comparison (AMD/Intel)");
     }
 }
