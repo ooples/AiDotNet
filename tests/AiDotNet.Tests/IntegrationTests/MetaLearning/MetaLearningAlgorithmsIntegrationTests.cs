@@ -144,7 +144,7 @@ public class MetaLearningAlgorithmsIntegrationTests
         bool changed = false;
         for (int i = 0; i < updated.Length; i++)
         {
-            if (Math.Abs(updated[i] - initial[i]) > 1e-12)
+            if (Math.Abs(updated[i] - initial[i]) > 1e-9)
             {
                 changed = true;
                 break;
@@ -179,9 +179,10 @@ public class MetaLearningAlgorithmsIntegrationTests
 
         Assert.False(double.IsNaN(loss));
         bool changed = false;
+        const double tolerance = 1e-9;
         for (int i = 0; i < updated.Length; i++)
         {
-            if (Math.Abs(updated[i] - initial[i]) > 1e-12)
+            if (Math.Abs(updated[i] - initial[i]) > tolerance)
             {
                 changed = true;
                 break;
@@ -240,6 +241,8 @@ public class MetaLearningAlgorithmsIntegrationTests
 
         Assert.False(double.IsNaN(loss));
         Assert.Equal(MetaLearningAlgorithmType.ProtoNets, algorithm.AlgorithmType);
+
+        // ProtoNets returns 1D tensor of class probabilities for single query
         Assert.Equal(1, predictions.Shape.Length);
         Assert.Equal(task.NumWays, predictions.Shape[0]);
     }
