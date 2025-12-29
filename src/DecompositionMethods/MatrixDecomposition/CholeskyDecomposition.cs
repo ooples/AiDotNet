@@ -127,11 +127,16 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
     private void ValidateSymmetric(Matrix<T> matrix)
     {
         int n = matrix.Rows;
+        // Use a relative tolerance for floating-point comparison
+        // This is necessary because computations like A^T*A may have tiny numerical errors
+        T tolerance = NumOps.FromDouble(1e-10);
+
         for (int i = 0; i < n; i++)
         {
             for (int j = i + 1; j < n; j++)
             {
-                if (!NumOps.Equals(matrix[i, j], matrix[j, i]))
+                T diff = NumOps.Abs(NumOps.Subtract(matrix[i, j], matrix[j, i]));
+                if (NumOps.GreaterThan(diff, tolerance))
                 {
                     throw new ArgumentException("Matrix must be symmetric for Cholesky decomposition.");
                 }
@@ -168,9 +173,14 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
         {
             for (int j = 0; j <= i; j++)
             {
-                if (i != j && !NumOps.Equals(matrix[i, j], matrix[j, i]))
+                if (i != j)
                 {
-                    throw new ArgumentException("Matrix must be symmetric for Cholesky decomposition.");
+                    T diff = NumOps.Abs(NumOps.Subtract(matrix[i, j], matrix[j, i]));
+                    T tolerance = NumOps.FromDouble(1e-10);
+                    if (NumOps.GreaterThan(diff, tolerance))
+                    {
+                        throw new ArgumentException("Matrix must be symmetric for Cholesky decomposition.");
+                    }
                 }
 
                 if (j == i) // Diagonal elements

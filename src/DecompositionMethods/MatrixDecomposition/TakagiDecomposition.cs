@@ -358,7 +358,9 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
         // VECTORIZED: Process each column of eigenvectors as a vector operation
         for (int i = 0; i < rows; i++)
         {
-            S[i, i] = NumOps.Sqrt(NumOps.Abs(eigenValues[i]));
+            // For symmetric matrices, singular values = |eigenvalues|
+            // (not sqrt(|eigenvalues|) since singular values = sqrt(eigenvalues of A^T A) = sqrt(λ²) = |λ|)
+            S[i, i] = NumOps.Abs(eigenValues[i]);
 
             Vector<T> eigenVector = eigenVectors.GetColumn(i);
             Vector<Complex<T>> complexVector = new Vector<Complex<T>>(eigenVector.Select(val => new Complex<T>(val, NumOps.Zero)));
@@ -541,15 +543,69 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
     /// but with matrices instead of simple numbers. Using the decomposition makes
     /// this process much more efficient than directly inverting the matrix.
     /// </para>
+    /// <para>
+    /// For Takagi decomposition A = U * S * U^T, solve x = U * S^(-1) * U^T * b
+    /// </para>
     /// </remarks>
     public override Vector<T> Solve(Vector<T> bVector)
     {
-        // VECTORIZED: Convert to complex vector using Select
-        var bComplex = new Vector<Complex<T>>(bVector.Select(val => new Complex<T>(val, NumOps.Zero)));
+        int n = bVector.Length;
 
-        var yVector = UnitaryMatrix.ForwardSubstitution(bComplex);
+        // For Takagi decomposition A = U * S * U^T, solve x = U * S^(-1) * U^T * b
+        // Step 1: Compute y = U^H * b (conjugate transpose of U times b)
+        var yVector = new Vector<Complex<T>>(n);
+        for (int i = 0; i < n; i++)
+        {
+            Complex<T> sum = new Complex<T>(NumOps.Zero, NumOps.Zero);
+            for (int j = 0; j < n; j++)
+            {
+                // U^H[i,j] = conj(U[j,i])
+                var uConjugate = new Complex<T>(UnitaryMatrix[j, i].Real, NumOps.Negate(UnitaryMatrix[j, i].Imaginary));
+                var bVal = new Complex<T>(bVector[j], NumOps.Zero);
+                var product = new Complex<T>(
+                    NumOps.Subtract(NumOps.Multiply(uConjugate.Real, bVal.Real), NumOps.Multiply(uConjugate.Imaginary, bVal.Imaginary)),
+                    NumOps.Add(NumOps.Multiply(uConjugate.Real, bVal.Imaginary), NumOps.Multiply(uConjugate.Imaginary, bVal.Real)));
+                sum = new Complex<T>(NumOps.Add(sum.Real, product.Real), NumOps.Add(sum.Imaginary, product.Imaginary));
+            }
+            yVector[i] = sum;
+        }
 
-        var result = SigmaMatrix.ToComplexMatrix().BackwardSubstitution(yVector);
-        return result.ToRealVector();
+        // Step 2: Compute z = S^(-1) * y (divide by diagonal singular values)
+        var zVector = new Vector<Complex<T>>(n);
+        for (int i = 0; i < n; i++)
+        {
+            T sigma = SigmaMatrix[i, i];
+            if (NumOps.Equals(sigma, NumOps.Zero))
+            {
+                // Handle zero singular value - set to zero (pseudoinverse behavior)
+                zVector[i] = new Complex<T>(NumOps.Zero, NumOps.Zero);
+            }
+            else
+            {
+                zVector[i] = new Complex<T>(
+                    NumOps.Divide(yVector[i].Real, sigma),
+                    NumOps.Divide(yVector[i].Imaginary, sigma));
+            }
+        }
+
+        // Step 3: Compute x = U * z
+        var xVector = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            Complex<T> sum = new Complex<T>(NumOps.Zero, NumOps.Zero);
+            for (int j = 0; j < n; j++)
+            {
+                var u = UnitaryMatrix[i, j];
+                var z = zVector[j];
+                var product = new Complex<T>(
+                    NumOps.Subtract(NumOps.Multiply(u.Real, z.Real), NumOps.Multiply(u.Imaginary, z.Imaginary)),
+                    NumOps.Add(NumOps.Multiply(u.Real, z.Imaginary), NumOps.Multiply(u.Imaginary, z.Real)));
+                sum = new Complex<T>(NumOps.Add(sum.Real, product.Real), NumOps.Add(sum.Imaginary, product.Imaginary));
+            }
+            // Take real part of result
+            xVector[i] = sum.Real;
+        }
+
+        return xVector;
     }
 }
