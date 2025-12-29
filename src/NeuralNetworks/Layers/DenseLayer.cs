@@ -894,6 +894,24 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // 1. Calculate activation gradient: dL/dz = dL/dy * f'(z)
         // The activation was applied to _lastOutput (pre-activation), so use it for derivative computation
+        bool shapeMatches = outputGradient.Rank == _lastOutput.Rank;
+        if (shapeMatches)
+        {
+            for (int i = 0; i < _lastOutput.Shape.Length; i++)
+            {
+                if (_lastOutput.Shape[i] != outputGradient.Shape[i])
+                {
+                    shapeMatches = false;
+                    break;
+                }
+            }
+        }
+
+        if (!shapeMatches && outputGradient.Length == _lastOutput.Length)
+        {
+            outputGradient = outputGradient.Reshape(_lastOutput.Shape);
+        }
+
         Tensor<T> activationGradient;
 
         if (UsingVectorActivation && VectorActivation != null)

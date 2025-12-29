@@ -188,9 +188,10 @@ public class RotationPredictionLoss<T> : ISelfSupervisedLoss<T>
                 var (destI, destJ) = transform(i, j);
 
                 // Handle 3D tensors [N, H, W] (grayscale)
+                // Note: dest is always 4D [N, H, W, C] but source may be 3D
                 if (source.Shape.Length == 3)
                 {
-                    dest[destIdx, destI, destJ] = source[srcIdx, i, j];
+                    dest[destIdx, destI, destJ, 0] = source[srcIdx, i, j];
                 }
                 // Handle 4D tensors [N, H, W, C] (color images)
                 else
