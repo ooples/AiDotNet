@@ -946,30 +946,32 @@ public class LSTMLayer<T> : LayerBase<T>
 
         for (int t = 0; t < timeSteps; t++)
         {
-            var xt = input3D.GetSlice(t);
+            // Slice along the time dimension (dim 1), keeping batch dimension
+            // For input [batchSize, timeSteps, inputSize], this returns [batchSize, inputSize]
+            var xt = input3D.GetSliceAlongDimension(t, 1);
 
-            // Forget Gate - using Engine.TensorAdd for bias addition
+            // Forget Gate - using TensorBroadcastAdd for bias (supports [batch, hidden] + [hidden] broadcasting)
             var f = Engine.TensorMatMul(xt, WfiT);
             f = Engine.TensorAdd(f, Engine.TensorMatMul(currentH, WfhT));
-            f = Engine.TensorAdd(f, _biasF);
+            f = Engine.TensorBroadcastAdd(f, _biasF);
             f = Engine.Sigmoid(f);
 
             // Input Gate
             var i = Engine.TensorMatMul(xt, WiiT);
             i = Engine.TensorAdd(i, Engine.TensorMatMul(currentH, WihT));
-            i = Engine.TensorAdd(i, _biasI);
+            i = Engine.TensorBroadcastAdd(i, _biasI);
             i = Engine.Sigmoid(i);
 
             // Cell Candidate
             var c_tilde = Engine.TensorMatMul(xt, WciT);
             c_tilde = Engine.TensorAdd(c_tilde, Engine.TensorMatMul(currentH, WchT));
-            c_tilde = Engine.TensorAdd(c_tilde, _biasC);
+            c_tilde = Engine.TensorBroadcastAdd(c_tilde, _biasC);
             c_tilde = Engine.Tanh(c_tilde);
 
             // Output Gate
             var o = Engine.TensorMatMul(xt, WoiT);
             o = Engine.TensorAdd(o, Engine.TensorMatMul(currentH, WohT));
-            o = Engine.TensorAdd(o, _biasO);
+            o = Engine.TensorBroadcastAdd(o, _biasO);
             o = Engine.Sigmoid(o);
 
             // Update Cell State
@@ -981,10 +983,10 @@ public class LSTMLayer<T> : LayerBase<T>
             var tanhC = Engine.Tanh(currentC);
             currentH = Engine.TensorMultiply(o, tanhC);
 
-            // Store results
-            output.SetSlice(t, currentH);
-            _cachedHiddenStates.SetSlice(t, currentH);
-            _cachedCellStates.SetSlice(t, currentC);
+            // Store results along the time dimension (dimension 1)
+            output.SetSlice(1, t, currentH);
+            _cachedHiddenStates.SetSlice(1, t, currentH);
+            _cachedCellStates.SetSlice(1, t, currentC);
         }
 
         _lastHiddenState = currentH;
@@ -1106,16 +1108,17 @@ public class LSTMLayer<T> : LayerBase<T>
 
         for (int t = timeSteps - 1; t >= 0; t--)
         {
-            var dh = outGrad3D.GetSlice(t).Add(dNextH);
-            var xt = _lastInput.GetSlice(t);
-            // Use cached states
-            var prevH = t > 0 ? _cachedHiddenStates.GetSlice(t - 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
-            var prevC = t > 0 ? _cachedCellStates.GetSlice(t - 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
+            // Slice along time dimension (dim 1) for all 3D tensors
+            var dh = outGrad3D.GetSliceAlongDimension(t, 1).Add(dNextH);
+            var xt = _lastInput.GetSliceAlongDimension(t, 1);
+            // Use cached states - slice along time dimension
+            var prevH = t > 0 ? _cachedHiddenStates.GetSliceAlongDimension(t - 1, 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
+            var prevC = t > 0 ? _cachedCellStates.GetSliceAlongDimension(t - 1, 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
 
             var (dxt, dprevH, dprevC, dWfi, dWii, dWci, dWoi, dWfh, dWih, dWch, dWoh, dbf, dbi, dbc, dbo) =
                 BackwardStep(dh, dNextC, xt, prevH, prevC);
 
-            inputGradient.SetSlice(t, dxt);
+            inputGradient.SetSlice(1, t, dxt);
             dNextH = dprevH;
             dNextC = dprevC;
 
@@ -1171,7 +1174,8 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastHiddenState == null || _lastCellState == null)
+        if (_lastInput == null || _lastHiddenState == null || _lastCellState == null ||
+            _cachedHiddenStates == null || _cachedCellStates == null)
         {
             throw new InvalidOperationException("Backward pass called before forward pass.");
         }
@@ -1215,11 +1219,12 @@ public class LSTMLayer<T> : LayerBase<T>
         // Process each time step using autodiff
         for (int t = timeSteps - 1; t >= 0; t--)
         {
-            // Get input and states for this time step
-            var xt = _lastInput.GetSlice(t);
-            var prevH = t > 0 ? _lastHiddenState.GetSlice(t - 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
-            var prevC = t > 0 ? _lastCellState.GetSlice(t - 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
-            var gradSlice = outGrad3D.GetSlice(t);
+            // Get input and states for this time step - slice along time dimension (dim 1)
+            var xt = _lastInput.GetSliceAlongDimension(t, 1);
+            // Use cached states for previous time step (they are 3D: [batch, time, hidden])
+            var prevH = t > 0 ? _cachedHiddenStates.GetSliceAlongDimension(t - 1, 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
+            var prevC = t > 0 ? _cachedCellStates.GetSliceAlongDimension(t - 1, 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
+            var gradSlice = outGrad3D.GetSliceAlongDimension(t, 1);
 
             // Convert parameters to computation nodes with gradient tracking
             var inputNode = Autodiff.TensorOperations<T>.Variable(xt, "input", requiresGradient: true);
@@ -1316,10 +1321,10 @@ public class LSTMLayer<T> : LayerBase<T>
                 }
             }
 
-            // Accumulate gradients
+            // Accumulate gradients - set along time dimension (dim 1)
             if (inputNode.Gradient != null)
             {
-                inputGradient.SetSlice(t, inputNode.Gradient);
+                inputGradient.SetSlice(1, t, inputNode.Gradient);
             }
 
             if (weightsFiNode.Gradient != null) dWeightsFi = dWeightsFi.Add(weightsFiNode.Gradient);
@@ -1385,15 +1390,22 @@ public class LSTMLayer<T> : LayerBase<T>
         BackwardStep(Tensor<T> dh, Tensor<T> dc_next, Tensor<T> x, Tensor<T> prev_h, Tensor<T> prev_c)
     {
         // Forward pass calculations (needed for backward pass)
+        // concat has shape [batchSize, inputSize + hiddenSize]
         var concat = Tensor<T>.Concatenate(new[] { x, prev_h }, 1);
+
+        // For LSTM gate computation: f = σ(concat @ W^T + b)
+        // W_fi has shape [hiddenSize, inputSize], W_fh has shape [hiddenSize, hiddenSize]
+        // After transpose: W_fi^T = [inputSize, hiddenSize], W_fh^T = [hiddenSize, hiddenSize]
+        // Concatenate along axis 0: [inputSize + hiddenSize, hiddenSize]
+        // concat @ W_combined = [batchSize, inputSize + hiddenSize] @ [inputSize + hiddenSize, hiddenSize] = [batchSize, hiddenSize]
         var f = ActivateTensorConditional(_sigmoidVectorActivation, _sigmoidActivation,
-            concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsFi, _weightsFh }, 0)).Add(_biasF));
+            concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsFi.Transpose(new[] { 1, 0 }), _weightsFh.Transpose(new[] { 1, 0 }) }, 0)).Add(_biasF));
         var i = ActivateTensorConditional(_sigmoidVectorActivation, _sigmoidActivation,
-            concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsIi, _weightsIh }, 0)).Add(_biasI));
+            concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsIi.Transpose(new[] { 1, 0 }), _weightsIh.Transpose(new[] { 1, 0 }) }, 0)).Add(_biasI));
         var c_bar = ActivateTensorConditional(_tanhVectorActivation, _tanhActivation,
-            concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsCi, _weightsCh }, 0)).Add(_biasC));
+            concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsCi.Transpose(new[] { 1, 0 }), _weightsCh.Transpose(new[] { 1, 0 }) }, 0)).Add(_biasC));
         var o = ActivateTensorConditional(_sigmoidVectorActivation, _sigmoidActivation,
-            concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsOi, _weightsOh }, 0)).Add(_biasO));
+            concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsOi.Transpose(new[] { 1, 0 }), _weightsOh.Transpose(new[] { 1, 0 }) }, 0)).Add(_biasO));
         var c = f.PointwiseMultiply(prev_c).Add(i.PointwiseMultiply(c_bar));
         var h = o.PointwiseMultiply(ActivateTensor(_tanhActivation, c));
 
@@ -1422,20 +1434,30 @@ public class LSTMLayer<T> : LayerBase<T>
         var dWch = dWeights.Slice(0, _inputSize, _inputSize + _hiddenSize).Slice(1, _hiddenSize * 2, _hiddenSize * 3);
         var dWoh = dWeights.Slice(0, _inputSize, _inputSize + _hiddenSize).Slice(1, _hiddenSize * 3, _hiddenSize * 4);
 
-        var dBiases = Tensor<T>.Concatenate(new[] { di_input.Sum(new[] { 0 }), df_input.Sum(new[] { 0 }), dc_bar_input.Sum(new[] { 0 }), do_input.Sum(new[] { 0 }) }, 1);
-        var dbf = dBiases.Slice(1, 0, _hiddenSize);
-        var dbi = dBiases.Slice(1, _hiddenSize, _hiddenSize * 2);
-        var dbc = dBiases.Slice(1, _hiddenSize * 2, _hiddenSize * 3);
-        var dbo = dBiases.Slice(1, _hiddenSize * 3, _hiddenSize * 4);
+        // Sum over batch dimension (0), results are 1D tensors [hiddenSize]
+        // Concatenate along axis 0 since these are 1D tensors
+        var dBiases = Tensor<T>.Concatenate(new[] { di_input.Sum(new[] { 0 }), df_input.Sum(new[] { 0 }), dc_bar_input.Sum(new[] { 0 }), do_input.Sum(new[] { 0 }) }, 0);
+        var dbf = dBiases.Slice(0, 0, _hiddenSize);
+        var dbi = dBiases.Slice(0, _hiddenSize, _hiddenSize * 2);
+        var dbc = dBiases.Slice(0, _hiddenSize * 2, _hiddenSize * 3);
+        var dbo = dBiases.Slice(0, _hiddenSize * 3, _hiddenSize * 4);
 
-        // Compute gradient for input
-        var dInputs = di_input.Multiply(_weightsIi.Transpose(new[] { 1, 0 }))
-            .Add(df_input.Multiply(_weightsFi.Transpose(new[] { 1, 0 })))
-            .Add(dc_bar_input.Multiply(_weightsCi.Transpose(new[] { 1, 0 })))
-            .Add(do_input.Multiply(_weightsOi.Transpose(new[] { 1, 0 })));
+        // Compute gradient for input (using input-to-hidden weights)
+        // Forward: gate = concat @ W^T + b, so backward: dx = d_gate @ W (no transpose needed)
+        // _weightsIi has shape [hiddenSize, inputSize], di_input has shape [batch, hiddenSize]
+        // dx = [batch, hiddenSize] @ [hiddenSize, inputSize] = [batch, inputSize]
+        var dx = di_input.Multiply(_weightsIi)
+            .Add(df_input.Multiply(_weightsFi))
+            .Add(dc_bar_input.Multiply(_weightsCi))
+            .Add(do_input.Multiply(_weightsOi));
 
-        var dx = dInputs.Slice(1, 0, _inputSize);
-        var dprev_h = dInputs.Slice(1, _inputSize, _inputSize + _hiddenSize);
+        // Compute gradient for previous hidden state (using hidden-to-hidden weights)
+        // _weightsIh has shape [hiddenSize, hiddenSize], di_input has shape [batch, hiddenSize]
+        // dprev_h = [batch, hiddenSize] @ [hiddenSize, hiddenSize] = [batch, hiddenSize]
+        var dprev_h = di_input.Multiply(_weightsIh)
+            .Add(df_input.Multiply(_weightsFh))
+            .Add(dc_bar_input.Multiply(_weightsCh))
+            .Add(do_input.Multiply(_weightsOh));
 
         return (dx, dprev_h, dprev_c, dWfi, dWii, dWci, dWoi, dWfh, dWih, dWch, dWoh, dbf, dbi, dbc, dbo);
     }

@@ -1162,14 +1162,18 @@ public abstract class LayerBase<T> : ILayer<T>
         copy.InputShape = (int[])InputShape.Clone();
         copy.OutputShape = (int[])OutputShape.Clone();
 
-        // Copy activation functions
+        // Copy activation functions (use same instance if not cloneable since they're typically stateless)
         if (ScalarActivation != null)
         {
-            copy.ScalarActivation = (IActivationFunction<T>)((ICloneable)ScalarActivation).Clone();
+            copy.ScalarActivation = ScalarActivation is ICloneable cloneable
+                ? (IActivationFunction<T>)cloneable.Clone()
+                : ScalarActivation;
         }
         if (VectorActivation != null)
         {
-            copy.VectorActivation = (IVectorActivationFunction<T>)((ICloneable)VectorActivation).Clone();
+            copy.VectorActivation = VectorActivation is ICloneable vectorCloneable
+                ? (IVectorActivationFunction<T>)vectorCloneable.Clone()
+                : VectorActivation;
         }
 
         return copy;

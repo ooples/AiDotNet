@@ -370,7 +370,10 @@ public class BidirectionalLayer<T> : LayerBase<T>
 
         for (int i = 0; i < timeSteps; i++)
         {
-            reversed.SetSlice(i, input.Slice(timeSteps - 1 - i));
+            // Slice along dimension 1 (time axis), getting a [batch, features] tensor
+            var slice = input.GetSliceAlongDimension(timeSteps - 1 - i, 1);
+            // Set into reversed tensor at position i along dimension 1
+            reversed.SetSlice(1, i, slice);
         }
 
         return reversed;

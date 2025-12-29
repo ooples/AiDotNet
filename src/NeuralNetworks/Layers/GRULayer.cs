@@ -558,14 +558,22 @@ public class GRULayer<T> : LayerBase<T>
         Tensor<T>? lastR = null;
         Tensor<T>? lastH_candidate = null;
 
+        // Pre-transpose weights for efficiency (weights are [hiddenSize, inputSize], need [inputSize, hiddenSize] for matmul)
+        var WzT = Engine.TensorTranspose(_Wz);
+        var WrT = Engine.TensorTranspose(_Wr);
+        var WhT = Engine.TensorTranspose(_Wh);
+        var UzT = Engine.TensorTranspose(_Uz);
+        var UrT = Engine.TensorTranspose(_Ur);
+        var UhT = Engine.TensorTranspose(_Uh);
+
         for (int t = 0; t < sequenceLength; t++)
         {
-            // Extract current time step input
-            var xt = input.Slice(0, t).Reshape([batchSize, _inputSize]);
+            // Extract current time step input: slice axis 1 (sequence) at timestep t
+            var xt = input3D.Slice(1, t, t + 1).Reshape([batchSize, _inputSize]);
 
-            var z = ApplyActivation(xt.Multiply(_Wz).Add(currentHiddenState.Multiply(_Uz)).Add(_bz), true);
-            var r = ApplyActivation(xt.Multiply(_Wr).Add(currentHiddenState.Multiply(_Ur)).Add(_br), true);
-            var h_candidate = ApplyActivation(xt.Multiply(_Wh).Add(r.ElementwiseMultiply(currentHiddenState.Multiply(_Uh))).Add(_bh), false);
+            var z = ApplyActivation(Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WzT), Engine.TensorMatMul(currentHiddenState, UzT)), _bz), true);
+            var r = ApplyActivation(Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WrT), Engine.TensorMatMul(currentHiddenState, UrT)), _br), true);
+            var h_candidate = ApplyActivation(Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WhT), Engine.TensorMatMul(r.ElementwiseMultiply(currentHiddenState), UhT)), _bh), false);
             // Vectorized: compute (1 - z) using Tensor operations
 
             var ones = new Tensor<T>(z.Shape);
@@ -606,8 +614,9 @@ public class GRULayer<T> : LayerBase<T>
         Tensor<T> output;
         if (_returnSequences && _allHiddenStates != null)
         {
-            // Concatenate all hidden states along time dimension
-            output = Tensor<T>.Concatenate([.. _allHiddenStates], 1);
+            // Each hidden state is [batchSize, hiddenSize]
+            // Concatenate along axis 1, then reshape to [batchSize, sequenceLength, hiddenSize]
+            output = Tensor<T>.Concatenate([.. _allHiddenStates], 1).Reshape([batchSize, sequenceLength, _hiddenSize]);
         }
         else
         {

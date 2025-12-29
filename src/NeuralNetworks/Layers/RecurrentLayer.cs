@@ -336,7 +336,7 @@ public class RecurrentLayer<T> : LayerBase<T>
 
             // Sum contributions and add biases using Engine operations
             var preActivation = Engine.TensorAdd(inputContribution, hiddenContribution);
-            preActivation = Engine.TensorAdd(preActivation, _biases); // Broadcasting biases across batch
+            preActivation = Engine.TensorBroadcastAdd(preActivation, _biases); // Broadcasting biases across batch
 
             // Apply activation
             var newHidden = ApplyActivation(preActivation);
