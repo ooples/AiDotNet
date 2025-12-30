@@ -295,10 +295,12 @@ public class MusicSourceSeparator<T> : IDisposable
         int numBins = input.Shape[1];
         var output = new Tensor<T>([numFrames, numBins]);
         int halfKernel = kernelSize / 2;
+        // Window size must accommodate all elements from -halfKernel to +halfKernel (inclusive)
+        int windowSize = (2 * halfKernel) + 1;
 
         for (int f = 0; f < numBins; f++)
         {
-            var window = new double[kernelSize];
+            var window = new double[windowSize];
 
             for (int t = 0; t < numFrames; t++)
             {
@@ -323,10 +325,12 @@ public class MusicSourceSeparator<T> : IDisposable
         int numBins = input.Shape[1];
         var output = new Tensor<T>([numFrames, numBins]);
         int halfKernel = kernelSize / 2;
+        // Window size must accommodate all elements from -halfKernel to +halfKernel (inclusive)
+        int windowSize = (2 * halfKernel) + 1;
 
         for (int t = 0; t < numFrames; t++)
         {
-            var window = new double[kernelSize];
+            var window = new double[windowSize];
 
             for (int f = 0; f < numBins; f++)
             {
