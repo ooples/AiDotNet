@@ -588,8 +588,12 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
                 x = ConcatenateChannels(x, _encoderOutputs[i]);
             }
 
-            // Decoder layers: 2 per stage (DeconvT + BN) except last stage which has 1 (DeconvT only)
-            // This mirrors the initialization: stages 0 to numStages-2 have 2 layers, last stage has 1
+            // Decoder layers: 2 per stage (DeconvT + BN) except last output stage which has 1 (DeconvT only)
+            // Initialization creates layers in stage order: stages 0 to numStages-2 have 2 layers each,
+            // stage numStages-1 has 1 layer. The loop iterates i from (numStages-1) down to 0,
+            // but decoderLayerIdx increases from 0, so we process decoder stages in order 0, 1, ..., numStages-1.
+            // When i > 0: we're NOT yet at the last loop iteration, process 2 layers (stages 0 to numStages-2)
+            // When i == 0: we're at the last loop iteration, process 1 layer (stage numStages-1, final output)
             int layersThisStage = (i > 0) ? 2 : 1;
             for (int j = 0; j < layersThisStage; j++)
             {

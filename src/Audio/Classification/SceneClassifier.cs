@@ -863,7 +863,11 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
     {
         int numBins = melSpec.Shape[1];
         int numBands = 6;
-        int bandSize = numBins / numBands;
+
+        // Guard against division by zero
+        if (numBins == 0 || melSpec.Shape[0] == 0) return 0;
+
+        int bandSize = Math.Max(1, numBins / numBands);
 
         double totalContrast = 0;
 
@@ -884,15 +888,22 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
                     if (val < minVal) minVal = val;
                 }
 
-                totalContrast += maxVal - minVal;
+                if (maxVal > double.MinValue && minVal < double.MaxValue)
+                {
+                    totalContrast += maxVal - minVal;
+                }
             }
         }
 
-        return totalContrast / (melSpec.Shape[0] * numBands);
+        int denominator = melSpec.Shape[0] * numBands;
+        return denominator > 0 ? totalContrast / denominator : 0;
     }
 
     private double ComputeRmsEnergy(Tensor<T> audio)
     {
+        // Guard against division by zero for empty audio
+        if (audio.Length == 0) return 0;
+
         double sum = 0;
         for (int i = 0; i < audio.Length; i++)
         {
@@ -904,6 +915,9 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
 
     private double ComputeZeroCrossingRate(Tensor<T> audio)
     {
+        // Guard against division by zero for empty audio
+        if (audio.Length == 0) return 0;
+
         int crossings = 0;
         for (int i = 1; i < audio.Length; i++)
         {
@@ -917,6 +931,9 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
 
     private double ComputeEnergyVariance(Tensor<T> melSpec)
     {
+        // Guard against division by zero for empty input
+        if (melSpec.Shape[0] == 0) return 0;
+
         var frameEnergies = new double[melSpec.Shape[0]];
 
         for (int t = 0; t < melSpec.Shape[0]; t++)
@@ -929,8 +946,10 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
             frameEnergies[t] = sum;
         }
 
-        double mean = frameEnergies.Average();
-        double variance = frameEnergies.Sum(e => (e - mean) * (e - mean)) / frameEnergies.Length;
+        double mean = frameEnergies.Length > 0 ? frameEnergies.Average() : 0;
+        double variance = frameEnergies.Length > 0
+            ? frameEnergies.Sum(e => (e - mean) * (e - mean)) / frameEnergies.Length
+            : 0;
 
         return variance;
     }

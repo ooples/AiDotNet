@@ -1357,11 +1357,17 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// </summary>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadBoolean();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadDouble();
+        // Restore deserialized values to the options (must not discard with _ =)
+        _ = reader.ReadBoolean(); // useNativeMode is readonly, cannot restore
+        _options.ModelSize = (AudioLDMModelSize)reader.ReadInt32();
+        _options.SampleRate = reader.ReadInt32();
+        _options.NumInferenceSteps = reader.ReadInt32();
+        _options.GuidanceScale = reader.ReadDouble();
+
+        // Note: SampleRate property is expression-bodied and returns _options.SampleRate,
+        // so setting _options.SampleRate above is sufficient.
+        // _useNativeMode is readonly and set in constructor, so we can't restore it here.
+        // The CreateNewInstance method should be used for proper cloning.
     }
 
     /// <summary>

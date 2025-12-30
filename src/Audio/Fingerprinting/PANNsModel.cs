@@ -822,16 +822,24 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         using var stream = new MemoryStream(data);
         using var reader = new BinaryReader(stream);
 
+        // Restore configuration values (must assign to class fields, not local variables)
         SampleRate = reader.ReadInt32();
-        int archType = reader.ReadInt32();
-        int numClasses = reader.ReadInt32();
-        int embeddingDim = reader.ReadInt32();
-        int numMelBands = reader.ReadInt32();
+        _architectureType = (PANNsArchitecture)reader.ReadInt32();
+        _numClasses = reader.ReadInt32();
+        _embeddingDim = reader.ReadInt32();
+        _numMelBands = reader.ReadInt32();
 
+        // Restore weight arrays
         _embeddingWeight = ReadArray(reader);
         _embeddingBias = ReadArray(reader);
         _fcWeight = ReadArray(reader);
         _fcBias = ReadArray(reader);
+
+        // Reinitialize conv blocks if needed
+        if (_convBlocks is null || _convBlocks.Count == 0)
+        {
+            _convBlocks = CreateConvBlocks(_architectureType, _numMelBands);
+        }
     }
 
     private void WriteArray(BinaryWriter writer, T[] array)
