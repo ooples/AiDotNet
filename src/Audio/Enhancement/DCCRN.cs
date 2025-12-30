@@ -50,47 +50,47 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// <summary>
     /// Number of encoder/decoder stages.
     /// </summary>
-    private readonly int _numStages;
+    private int _numStages;
 
     /// <summary>
     /// Base number of channels.
     /// </summary>
-    private readonly int _baseChannels;
+    private int _baseChannels;
 
     /// <summary>
     /// LSTM hidden dimension.
     /// </summary>
-    private readonly int _lstmHiddenDim;
+    private int _lstmHiddenDim;
 
     /// <summary>
     /// Number of LSTM layers.
     /// </summary>
-    private readonly int _numLstmLayers;
+    private int _numLstmLayers;
 
     /// <summary>
     /// FFT size for STFT.
     /// </summary>
-    private readonly int _fftSize;
+    private int _fftSize;
 
     /// <summary>
     /// Hop size for STFT.
     /// </summary>
-    private readonly int _hopSize;
+    private int _hopSize;
 
     /// <summary>
     /// Whether to use complex mask estimation.
     /// </summary>
-    private readonly bool _useComplexMask;
+    private bool _useComplexMask;
 
     /// <summary>
     /// Kernel size for convolutions.
     /// </summary>
-    private readonly int _kernelSize;
+    private int _kernelSize;
 
     /// <summary>
     /// Stride for convolutions.
     /// </summary>
-    private readonly int _stride;
+    private int _stride;
 
     #endregion
 
@@ -801,25 +801,43 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     }
 
     /// <summary>
-    /// Concatenates tensors along channel dimension.
+    /// Concatenates tensors along channel dimension with dimension validation.
     /// </summary>
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
-        int newChannels = a.Shape[1] + b.Shape[1];
-        var result = new Tensor<T>([a.Shape[0], newChannels, a.Shape[2], a.Shape[3]]);
+        // Validate spatial dimensions match for skip connections
+        if (a.Shape[0] != b.Shape[0])
+        {
+            throw new ArgumentException(
+                $"Batch dimension mismatch in skip connection: encoder={a.Shape[0]}, decoder={b.Shape[0]}");
+        }
 
-        // Copy a
+        // Warn if spatial dimensions don't match (use minimum to avoid index errors)
+        if (a.Shape[2] != b.Shape[2] || a.Shape[3] != b.Shape[3])
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"DCCRN: Spatial dimension mismatch in skip connection. " +
+                $"Encoder: [{a.Shape[2]},{a.Shape[3]}], Decoder: [{b.Shape[2]},{b.Shape[3]}]. " +
+                "Using minimum dimensions.");
+        }
+
+        int height = Math.Min(a.Shape[2], b.Shape[2]);
+        int width = Math.Min(a.Shape[3], b.Shape[3]);
+        int newChannels = a.Shape[1] + b.Shape[1];
+        var result = new Tensor<T>([a.Shape[0], newChannels, height, width]);
+
+        // Copy a (use minimum dimensions for safety)
         for (int i = 0; i < a.Shape[0]; i++)
             for (int c = 0; c < a.Shape[1]; c++)
-                for (int h = 0; h < a.Shape[2]; h++)
-                    for (int w = 0; w < a.Shape[3]; w++)
+                for (int h = 0; h < height; h++)
+                    for (int w = 0; w < width; w++)
                         result[[i, c, h, w]] = a[[i, c, h, w]];
 
         // Copy b
         for (int i = 0; i < b.Shape[0]; i++)
             for (int c = 0; c < b.Shape[1]; c++)
-                for (int h = 0; h < Math.Min(a.Shape[2], b.Shape[2]); h++)
-                    for (int w = 0; w < Math.Min(a.Shape[3], b.Shape[3]); w++)
+                for (int h = 0; h < height; h++)
+                    for (int w = 0; w < width; w++)
                         result[[i, a.Shape[1] + c, h, w]] = b[[i, c, h, w]];
 
         return result;
@@ -870,19 +888,25 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // Read configuration values for validation
-        _ = reader.ReadBoolean(); // IsOnnxMode
-        _ = reader.ReadInt32();   // SampleRate
-        _ = reader.ReadInt32();   // _numStages
-        _ = reader.ReadInt32();   // _baseChannels
-        _ = reader.ReadInt32();   // _lstmHiddenDim
-        _ = reader.ReadInt32();   // _numLstmLayers
-        _ = reader.ReadInt32();   // _fftSize
-        _ = reader.ReadInt32();   // _hopSize
-        _ = reader.ReadBoolean(); // _useComplexMask
-        _ = reader.ReadInt32();   // _kernelSize
-        _ = reader.ReadInt32();   // _stride
+        // Restore configuration values
+        _ = reader.ReadBoolean(); // IsOnnxMode (determined by constructor, cannot change)
+        SampleRate = reader.ReadInt32();
+        _numStages = reader.ReadInt32();
+        _baseChannels = reader.ReadInt32();
+        _lstmHiddenDim = reader.ReadInt32();
+        _numLstmLayers = reader.ReadInt32();
+        _fftSize = reader.ReadInt32();
+        _hopSize = reader.ReadInt32();
+        _useComplexMask = reader.ReadBoolean();
+        _kernelSize = reader.ReadInt32();
+        _stride = reader.ReadInt32();
         EnhancementStrength = reader.ReadDouble();
+
+        // Re-initialize layers if needed for native mode
+        if (!IsOnnxMode)
+        {
+            InitializeNativeLayers();
+        }
     }
 
     /// <inheritdoc/>
