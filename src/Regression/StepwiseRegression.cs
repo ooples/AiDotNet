@@ -243,6 +243,30 @@ public class StepwiseRegression<T> : RegressionBase<T>
     }
 
     /// <summary>
+    /// Makes predictions using only the selected features from the input matrix.
+    /// </summary>
+    /// <param name="input">The input feature matrix to make predictions on.</param>
+    /// <returns>A vector of predicted values.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method filters the input matrix to only include the selected features
+    /// before making predictions. This is necessary because stepwise regression
+    /// selects a subset of features during training.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> Predict(Matrix<T> input)
+    {
+        if (_selectedFeatures.Count == 0 || Coefficients.Length == 0)
+        {
+            return new Vector<T>(input.Rows);
+        }
+
+        // Filter input to only use selected features
+        Matrix<T> filteredInput = input.GetColumns(_selectedFeatures);
+        return base.Predict(filteredInput);
+    }
+
+    /// <summary>
     /// Performs forward selection of features.
     /// </summary>
     /// <param name="x">The input feature matrix.</param>
@@ -395,6 +419,7 @@ public class StepwiseRegression<T> : RegressionBase<T>
 
             var input = new ModelEvaluationInput<T, Matrix<T>, Vector<T>>
             {
+                Model = regression,
                 InputData = OptimizerHelper<T, Matrix<T>, Vector<T>>.CreateOptimizationInputData(currentX, y, currentX, y, currentX, y)
             };
             var evaluationData = _modelEvaluator.EvaluateModel(input);

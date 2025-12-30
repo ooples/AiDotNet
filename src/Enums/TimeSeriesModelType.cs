@@ -91,18 +91,18 @@ public enum TimeSeriesModelType
     /// Auto-Regressive model - predicts future values based solely on past values of the same variable.
     /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> AR models predict the future based only on the past values of the data itself.
-    /// 
-    /// Think of AR like predicting tomorrow's temperature based only on today's and yesterday's temperatures.
+    /// <b>For Beginners:</b> AutoRegressive models predict the future based only on the past values of the data itself.
+    ///
+    /// Think of AutoRegressive like predicting tomorrow's temperature based only on today's and yesterday's temperatures.
     /// The model assumes that recent past values have the strongest influence on the next value.
-    /// 
+    ///
     /// AR(p) means we're using the previous p values to make our prediction.
-    /// 
+    ///
     /// When to use it: When you believe recent past values strongly influence future values.
-    /// 
+    ///
     /// Example: Predicting stock prices where recent price movements tend to influence short-term future prices.
     /// </remarks>
-    AR,
+    AutoRegressive,
 
     /// <summary>
     /// Moving Average model - predicts future values based on past forecast errors rather than past values.

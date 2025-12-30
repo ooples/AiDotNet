@@ -54,9 +54,9 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
     /// The mean of the target variable used for centering.
     /// </summary>
     /// <value>
-    /// A vector containing the mean value of the target variable.
+    /// The mean value of the target variable.
     /// </value>
-    private Vector<T> _yMean;
+    private T _yMean;
 
     /// <summary>
     /// The standard deviation of each predictor variable used for scaling.
@@ -95,7 +95,7 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
         _options = options ?? new PrincipalComponentRegressionOptions<T>();
         _components = new Matrix<T>(0, 0);
         _xMean = Vector<T>.Empty();
-        _yMean = Vector<T>.Empty();
+        _yMean = NumOps.Zero;
         _xStd = Vector<T>.Empty();
         _yStd = NumOps.Zero;
     }
@@ -130,7 +130,7 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
         ValidateInputs(x, y);
 
         // Center and scale the data
-        (Matrix<T> xScaled, Vector<T> yScaled, _xMean, _xStd, _yStd) = RegressionHelper<T>.CenterAndScale(x, y);
+        (Matrix<T> xScaled, Vector<T> yScaled, _xMean, _xStd, _yMean, _yStd) = RegressionHelper<T>.CenterAndScale(x, y);
 
         // Perform PCA
         (Matrix<T> components, Vector<T> explainedVariance) = PerformPCA(xScaled);
@@ -158,7 +158,7 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
         }
 
         // Calculate intercept
-        Intercept = NumOps.Subtract(_yMean[0], Coefficients.DotProduct(_xMean));
+        Intercept = NumOps.Subtract(_yMean, Coefficients.DotProduct(_xMean));
     }
 
     /// <summary>
@@ -287,7 +287,7 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
         Vector<T> predictions = scaledInput.Multiply(Coefficients);
         for (int i = 0; i < predictions.Length; i++)
         {
-            predictions[i] = NumOps.Add(NumOps.Multiply(predictions[i], _yStd), _yMean[0]);
+            predictions[i] = NumOps.Add(NumOps.Multiply(predictions[i], _yStd), _yMean);
         }
 
         return predictions;
@@ -389,7 +389,7 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
         writer.Write(_options.ExplainedVarianceRatio);
         SerializationHelper<T>.SerializeMatrix(writer, _components);
         SerializationHelper<T>.SerializeVector(writer, _xMean);
-        SerializationHelper<T>.SerializeVector(writer, _yMean);
+        SerializationHelper<T>.WriteValue(writer, _yMean);
         SerializationHelper<T>.SerializeVector(writer, _xStd);
         SerializationHelper<T>.WriteValue(writer, _yStd);
 
@@ -424,7 +424,7 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
         _options.ExplainedVarianceRatio = reader.ReadDouble();
         _components = SerializationHelper<T>.DeserializeMatrix(reader);
         _xMean = SerializationHelper<T>.DeserializeVector(reader);
-        _yMean = SerializationHelper<T>.DeserializeVector(reader);
+        _yMean = SerializationHelper<T>.ReadValue(reader);
         _xStd = SerializationHelper<T>.DeserializeVector(reader);
         _yStd = SerializationHelper<T>.ReadValue(reader);
     }
@@ -479,10 +479,7 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
             newModel._xMean = _xMean.Clone();
         }
 
-        if (_yMean != null)
-        {
-            newModel._yMean = _yMean.Clone();
-        }
+        newModel._yMean = _yMean;
 
         if (_xStd != null)
         {

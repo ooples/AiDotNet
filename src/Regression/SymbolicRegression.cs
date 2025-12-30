@@ -387,8 +387,24 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
         var (preprocessedX, preprocessedY, _) = _dataPreprocessor.PreprocessData(x, y);
         // Split the data
         var (XTrain, yTrain, XVal, yVal, XTest, yTest) = _dataPreprocessor.SplitData(preprocessedX, preprocessedY);
+
+        // Recreate the optimizer with proper dimensions based on actual input data
+        // The optimizer was initially created with an empty model in the constructor,
+        // but now we know the actual feature count from the training data
+        int featureCount = XTrain.Columns;
+        var properlyDimensionedModel = new VectorModel<T>(new Vector<T>(featureCount));
+        var optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(
+            properlyDimensionedModel,
+            new GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>>
+            {
+                PopulationSize = _options.PopulationSize,
+                MaxGenerations = _options.MaxGenerations,
+                MutationRate = _options.MutationRate,
+                CrossoverRate = _options.CrossoverRate
+            });
+
         // Optimize the model
-        var optimizationResult = _optimizer.Optimize(OptimizerHelper<T, Matrix<T>, Vector<T>>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
+        var optimizationResult = optimizer.Optimize(OptimizerHelper<T, Matrix<T>, Vector<T>>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
         _bestFitness = optimizationResult.BestFitnessScore;
         _bestModel = optimizationResult.BestSolution ?? throw new InvalidOperationException("Optimization result does not contain a valid symbolic model.");
     }

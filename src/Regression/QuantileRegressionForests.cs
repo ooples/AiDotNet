@@ -170,8 +170,9 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
             throw new ArgumentException("Quantile must be between 0 and 1", nameof(quantile));
         }
 
-        var regularizedInput = Regularization.Regularize(input);
-        var predictionTasks = _trees.Select(tree => new Func<Vector<T>>(() => tree.Predict(regularizedInput)));
+        // Note: Tree-based methods handle regularization through tree structure parameters
+        // (MaxDepth, MinSamplesSplit, etc.), not through data transformation
+        var predictionTasks = _trees.Select(tree => new Func<Vector<T>>(() => tree.Predict(input)));
         var predictions = await ParallelProcessingHelper.ProcessTasksInParallel(predictionTasks, _options.MaxDegreeOfParallelism);
 
         var result = new T[input.Rows];
@@ -182,8 +183,7 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
             result[i] = samplePredictions[index];
         }
 
-        var quantilePredictions = new Vector<T>(result);
-        return Regularization.Regularize(quantilePredictions);
+        return new Vector<T>(result);
     }
 
     /// <summary>
@@ -263,7 +263,8 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
         for (int i = 0; i < numFeatures; i++)
         {
             FeatureImportances[i] = NumOps.Divide(
-                allImportances.Aggregate(NumOps.Zero, (acc, imp) => NumOps.Add(acc, imp[i])),
+                allImportances.Aggregate(NumOps.Zero, (acc, imp) =>
+                    NumOps.Add(acc, i < imp.Length ? imp[i] : NumOps.Zero)),
                 NumOps.FromDouble(_trees.Count)
             );
         }

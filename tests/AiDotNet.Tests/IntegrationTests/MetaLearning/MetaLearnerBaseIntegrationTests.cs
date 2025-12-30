@@ -404,7 +404,7 @@ public class MetaLearnerBaseIntegrationTests
             0.1);
 
         Assert.Equal(model.ParameterCount, gradients.Length);
-        Assert.True(gradients.Any(value => Math.Abs(value) > 1e-12));
+        Assert.Contains(gradients, value => Math.Abs(value) > 1e-12);
     }
 
     [Fact]
