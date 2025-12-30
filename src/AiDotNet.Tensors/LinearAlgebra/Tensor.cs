@@ -2141,9 +2141,10 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
                 resultStrides[d] = resultStrides[d + 1] * newShape[d + 1];
         }
 
-        // Copy elements
+        // Copy elements - use Data property to access underlying array directly,
+        // avoiding implicit conversion from Vector<T> to T[] which creates copies
         int resultIdx = 0;
-        CopySliceRecursive(_data, result._data, Shape, newShape, strides, dimension, index, 0, 0, ref resultIdx);
+        CopySliceRecursive(Data, result.Data, Shape, newShape, strides, dimension, index, 0, 0, ref resultIdx);
 
         return result;
     }
@@ -2532,6 +2533,75 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     }
 
     /// <summary>
+    /// Subtracts another tensor from this tensor with NumPy-style broadcasting.
+    /// </summary>
+    /// <param name="other">The tensor to subtract.</param>
+    /// <returns>A new tensor containing the element-wise difference with broadcasting.</returns>
+    /// <remarks>
+    /// <para>
+    /// Broadcasting allows tensors of different shapes to be subtracted by automatically
+    /// expanding the smaller tensor. For example, [B,H,W,C] - [B,1,1,C] broadcasts the [B,1,1,C]
+    /// tensor across the spatial dimensions.
+    /// </para>
+    /// <para>
+    /// The rule is: dimensions are compatible if they're equal or one of them is 1.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> BroadcastSubtract(Tensor<T> other)
+    {
+        // Check if shapes are already identical - use fast path
+        if (Shape.SequenceEqual(other.Shape))
+        {
+            return Subtract(other);
+        }
+
+        // Get broadcast shape
+        int[] broadcastShape = GetBroadcastShape(this.Shape, other.Shape);
+        var result = new Tensor<T>(broadcastShape);
+
+        // Pad shapes to same rank for easier indexing
+        int maxRank = broadcastShape.Length;
+        int[] thisShape = new int[maxRank];
+        int[] otherShape = new int[maxRank];
+
+        // Right-align shapes (prepend 1s)
+        int thisOffset = maxRank - this.Rank;
+        int otherOffset = maxRank - other.Rank;
+
+        for (int i = 0; i < maxRank; i++)
+        {
+            thisShape[i] = i < thisOffset ? 1 : this.Shape[i - thisOffset];
+            otherShape[i] = i < otherOffset ? 1 : other.Shape[i - otherOffset];
+        }
+
+        // Iterate over the result tensor
+        int[] thisIndices = new int[this.Rank];
+        int[] otherIndices = new int[other.Rank];
+
+        foreach (var index in result.GetIndices())
+        {
+            // Map result index to this tensor's index (accounting for broadcasting)
+            for (int i = 0; i < this.Rank; i++)
+            {
+                int broadcastIdx = i + thisOffset;
+                thisIndices[i] = thisShape[broadcastIdx] == 1 ? 0 : index[broadcastIdx];
+            }
+
+            // Map result index to other tensor's index (accounting for broadcasting)
+            for (int i = 0; i < other.Rank; i++)
+            {
+                int broadcastIdx = i + otherOffset;
+                otherIndices[i] = otherShape[broadcastIdx] == 1 ? 0 : index[broadcastIdx];
+            }
+
+            // Perform subtraction
+            result[index] = _numOps.Subtract(this[thisIndices], other[otherIndices]);
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Multiplies this tensor by another tensor with NumPy-style broadcasting.
     /// </summary>
     /// <param name="other">The tensor to multiply by.</param>
@@ -2598,6 +2668,80 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
 
             // Perform multiplication
             result[index] = _numOps.Multiply(this[thisIndices], other[otherIndices]);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Divides this tensor by another tensor with NumPy-style broadcasting.
+    /// </summary>
+    /// <param name="other">The tensor to divide by.</param>
+    /// <returns>A new tensor containing the element-wise quotient with broadcasting.</returns>
+    /// <remarks>
+    /// <para>
+    /// Broadcasting allows tensors of different shapes to be divided by automatically
+    /// expanding the smaller tensor. For example, [B,H,W,C] / [B,1,1,C] broadcasts the [B,1,1,C]
+    /// tensor across the spatial dimensions.
+    /// </para>
+    /// <para>
+    /// The rule is: dimensions are compatible if they're equal or one of them is 1.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> BroadcastDivide(Tensor<T> other)
+    {
+        // Check if shapes are already identical - use fast path (element-wise divide)
+        if (Shape.SequenceEqual(other.Shape))
+        {
+            var fastResult = new Tensor<T>(Shape);
+            for (int i = 0; i < Length; i++)
+            {
+                fastResult.Data[i] = _numOps.Divide(this.Data[i], other.Data[i]);
+            }
+            return fastResult;
+        }
+
+        // Get broadcast shape
+        int[] broadcastShape = GetBroadcastShape(this.Shape, other.Shape);
+        var result = new Tensor<T>(broadcastShape);
+
+        // Pad shapes to same rank for easier indexing
+        int maxRank = broadcastShape.Length;
+        int[] thisShape = new int[maxRank];
+        int[] otherShape = new int[maxRank];
+
+        // Right-align shapes (prepend 1s)
+        int thisOffset = maxRank - this.Rank;
+        int otherOffset = maxRank - other.Rank;
+
+        for (int i = 0; i < maxRank; i++)
+        {
+            thisShape[i] = i < thisOffset ? 1 : this.Shape[i - thisOffset];
+            otherShape[i] = i < otherOffset ? 1 : other.Shape[i - otherOffset];
+        }
+
+        // Iterate over the result tensor
+        int[] thisIndices = new int[this.Rank];
+        int[] otherIndices = new int[other.Rank];
+
+        foreach (var index in result.GetIndices())
+        {
+            // Map result index to this tensor's index (accounting for broadcasting)
+            for (int i = 0; i < this.Rank; i++)
+            {
+                int broadcastIdx = i + thisOffset;
+                thisIndices[i] = thisShape[broadcastIdx] == 1 ? 0 : index[broadcastIdx];
+            }
+
+            // Map result index to other tensor's index (accounting for broadcasting)
+            for (int i = 0; i < other.Rank; i++)
+            {
+                int broadcastIdx = i + otherOffset;
+                otherIndices[i] = otherShape[broadcastIdx] == 1 ? 0 : index[broadcastIdx];
+            }
+
+            // Perform division
+            result[index] = _numOps.Divide(this[thisIndices], other[otherIndices]);
         }
 
         return result;
@@ -3075,8 +3219,10 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
             strides[d] = strides[d + 1] * Shape[d + 1];
 
         // Use recursive helper to copy elements
+        // Use Data property to access underlying T[] directly, avoiding implicit conversion
+        // from Vector<T> to T[] which creates copies and discards the writes
         int sliceIdx = 0;
-        SetSliceRecursive(_data, slice._data, Shape, expectedSliceShape, strides, dimension, index, 0, 0, ref sliceIdx);
+        SetSliceRecursive(Data, slice.Data, Shape, expectedSliceShape, strides, dimension, index, 0, 0, ref sliceIdx);
     }
 
     private void SetSliceRecursive(T[] dest, T[] source, int[] destShape, int[] sourceShape,

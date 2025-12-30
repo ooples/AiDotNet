@@ -1866,6 +1866,26 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
+    public Tensor<T> TensorBroadcastSubtract<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+
+        // Use optimized Tensor.BroadcastSubtract which handles broadcasting logic
+        return a.BroadcastSubtract(b);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorBroadcastDivide<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+
+        // Use optimized Tensor.BroadcastDivide which handles broadcasting logic
+        return a.BroadcastDivide(b);
+    }
+
+    /// <inheritdoc/>
     public Tensor<T> TensorBroadcastMultiply<T>(Tensor<T> a, Tensor<T> b)
     {
         if (a == null) throw new ArgumentNullException(nameof(a));

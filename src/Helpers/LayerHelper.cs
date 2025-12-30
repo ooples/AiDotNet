@@ -479,11 +479,112 @@ public static class LayerHelper<T>
 
         var inputShape = architecture.GetInputShape();
 
+        // Handle different input dimensionalities
+        if (inputShape.Length == 1)
+        {
+            // 1D input: Use Dense layers with residual connections (MLP-style ResNet)
+            foreach (var layer in CreateDefaultResNet1DLayers(architecture, inputShape[0], blockCount, blockSize))
+            {
+                yield return layer;
+            }
+        }
+        else if (inputShape.Length == 2)
+        {
+            // 2D input: Treat as single-channel image [1, height, width]
+            foreach (var layer in CreateDefaultResNet2DLayers(architecture, inputShape, blockCount, blockSize))
+            {
+                yield return layer;
+            }
+        }
+        else
+        {
+            // 3D input: Standard CNN-based ResNet
+            foreach (var layer in CreateDefaultResNet3DLayers(architecture, inputShape, blockCount, blockSize))
+            {
+                yield return layer;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Creates ResNet layers for 1D (flat vector) input using Dense layers with residual connections.
+    /// </summary>
+    private static IEnumerable<ILayer<T>> CreateDefaultResNet1DLayers(NeuralNetworkArchitecture<T> architecture, int inputSize, int blockCount, int blockSize)
+    {
+        int hiddenSize = Math.Max(64, inputSize);
+        int currentSize = inputSize;
+
+        // Initial projection layer
+        yield return new DenseLayer<T>(currentSize, hiddenSize, new ReLUActivation<T>() as IActivationFunction<T>);
+        currentSize = hiddenSize;
+
+        // Residual blocks using Dense layers
+        for (int i = 0; i < blockCount; i++)
+        {
+            for (int j = 0; j < blockSize; j++)
+            {
+                // Each "residual block" is a Dense layer with skip connection via ResidualLayer
+                yield return new ResidualLayer<T>(
+                    inputShape: [currentSize],
+                    innerLayer: new DenseLayer<T>(currentSize, currentSize, new ReLUActivation<T>() as IActivationFunction<T>),
+                    activationFunction: new ReLUActivation<T>()
+                );
+            }
+
+            // Optionally expand dimensions between blocks (except last)
+            if (i < blockCount - 1)
+            {
+                int newSize = Math.Min(currentSize * 2, 512);
+                yield return new DenseLayer<T>(currentSize, newSize, new ReLUActivation<T>() as IActivationFunction<T>);
+                currentSize = newSize;
+            }
+        }
+
+        // Final output layer
+        yield return new DenseLayer<T>(currentSize, architecture.OutputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates ResNet layers for 2D input by treating it as a single-channel image.
+    /// </summary>
+    private static IEnumerable<ILayer<T>> CreateDefaultResNet2DLayers(NeuralNetworkArchitecture<T> architecture, int[] inputShape, int blockCount, int blockSize)
+    {
+        // For 2D input [height, width], treat as single-channel image [1, height, width]
+        int inputDepth = 1;
+        int inputHeight = inputShape[0];
+        int inputWidth = inputShape[1];
+
+        foreach (var layer in CreateResNetConvLayers(architecture, inputDepth, inputHeight, inputWidth, blockCount, blockSize))
+        {
+            yield return layer;
+        }
+    }
+
+    /// <summary>
+    /// Creates ResNet layers for 3D input (standard CNN-based ResNet).
+    /// </summary>
+    private static IEnumerable<ILayer<T>> CreateDefaultResNet3DLayers(NeuralNetworkArchitecture<T> architecture, int[] inputShape, int blockCount, int blockSize)
+    {
+        int inputDepth = inputShape[0];
+        int inputHeight = inputShape[1];
+        int inputWidth = inputShape[2];
+
+        foreach (var layer in CreateResNetConvLayers(architecture, inputDepth, inputHeight, inputWidth, blockCount, blockSize))
+        {
+            yield return layer;
+        }
+    }
+
+    /// <summary>
+    /// Creates convolutional ResNet layers for 2D/3D image-like input.
+    /// </summary>
+    private static IEnumerable<ILayer<T>> CreateResNetConvLayers(NeuralNetworkArchitecture<T> architecture, int inputDepth, int inputHeight, int inputWidth, int blockCount, int blockSize)
+    {
         // Initial convolutional layer
         yield return new ConvolutionalLayer<T>(
-            inputDepth: inputShape[0],
-            inputHeight: inputShape[1],
-            inputWidth: inputShape[2],
+            inputDepth: inputDepth,
+            inputHeight: inputHeight,
+            inputWidth: inputWidth,
             outputDepth: 64,
             kernelSize: 7,
             stride: 2,
@@ -492,15 +593,15 @@ public static class LayerHelper<T>
         );
 
         yield return new MaxPoolingLayer<T>(
-            inputShape: [64, inputShape[1] / 2, inputShape[2] / 2],
+            inputShape: [64, inputHeight / 2, inputWidth / 2],
             poolSize: 3,
             stride: 2
         );
 
         // Residual blocks
         int currentDepth = 64;
-        int currentHeight = inputShape[1] / 4;
-        int currentWidth = inputShape[2] / 4;
+        int currentHeight = inputHeight / 4;
+        int currentWidth = inputWidth / 4;
 
         for (int i = 0; i < blockCount; i++)
         {
@@ -664,12 +765,18 @@ public static class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreateDefaultAutoEncoderLayers(NeuralNetworkArchitecture<T> architecture)
     {
         var inputShape = architecture.GetInputShape();
-        int inputSize = inputShape[0];
+        int inputSize = inputShape.Length > 0 ? inputShape.Aggregate(1, (a, b) => a * b) : architecture.CalculatedInputSize;
         int[] layerSizes = architecture.GetLayerSizes();
 
+        // If no layers specified, create a default symmetric autoencoder architecture
+        // Structure: input -> hidden1 -> bottleneck -> hidden2 -> output
         if (layerSizes.Length < 3)
         {
-            throw new InvalidOperationException("The autoencoder must have at least an input, encoded, and output layer.");
+            int outputSize = architecture.OutputSize > 0 ? architecture.OutputSize : inputSize;
+            int hidden1 = Math.Max(inputSize / 2, 8);
+            int bottleneck = Math.Max(inputSize / 4, 4);
+            int hidden2 = hidden1;
+            layerSizes = [inputSize, hidden1, bottleneck, hidden2, outputSize];
         }
 
         int middleIndex = layerSizes.Length / 2;
@@ -974,47 +1081,79 @@ public static class LayerHelper<T>
         int inputDepth = inputShape[0];
         int inputHeight = inputShape.Length > 1 ? inputShape[1] : 1;
         int inputWidth = inputShape.Length > 2 ? inputShape[2] : 1;
+        int flatInputSize = inputDepth * inputHeight * inputWidth;
 
-        // Encoder layers
-        yield return new DenseLayer<T>(inputDepth * inputHeight * inputWidth, (inputDepth * inputHeight * inputWidth) / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        // For 1D input or very small spatial dimensions, use dense-only architecture
+        // Pooling doesn't make sense for 1x1 spatial dimensions
+        bool use1DArchitecture = inputHeight <= 1 && inputWidth <= 1;
 
-        // Pooling layer to reduce dimensions
-        yield return new PoolingLayer<T>(
-            inputDepth: inputDepth,
-            inputHeight: inputHeight,
-            inputWidth: inputWidth,
-            poolSize: 2,
-            stride: 2,
-            type: PoolingType.Average
-        );
+        if (use1DArchitecture)
+        {
+            // 1D VAE: All dense layers, no pooling
+            int hidden1 = Math.Max(flatInputSize / 2, latentSize * 4);
+            int hidden2 = Math.Max(hidden1 / 2, latentSize * 2);
+            int encoderOutputSize = latentSize * 2;
 
-        // Calculate new dimensions after pooling
-        int pooledDepth = inputDepth;
-        int pooledHeight = (inputHeight - 2) / 2 + 1;
-        int pooledWidth = (inputWidth - 2) / 2 + 1;
-        int pooledSize = pooledDepth * pooledHeight * pooledWidth;
+            // Encoder layers
+            yield return new DenseLayer<T>(flatInputSize, hidden1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+            yield return new DenseLayer<T>(hidden1, hidden2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+            yield return new DenseLayer<T>(hidden2, encoderOutputSize, new IdentityActivation<T>() as IActivationFunction<T>);
 
-        yield return new DenseLayer<T>(pooledSize, pooledSize / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+            // Mean and LogVariance layers
+            yield return new MeanLayer<T>([encoderOutputSize], axis: 0);
+            yield return new LogVarianceLayer<T>([encoderOutputSize], axis: 0);
 
-        // Latent space layers
-        int encoderOutputSize = latentSize * 2; // For mean and log variance
-        yield return new DenseLayer<T>(pooledSize / 2, encoderOutputSize, new IdentityActivation<T>() as IActivationFunction<T>);
+            // Decoder layers (mirror of encoder)
+            yield return new DenseLayer<T>(latentSize, hidden2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+            yield return new DenseLayer<T>(hidden2, hidden1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
 
-        // Mean and LogVariance layers
-        yield return new MeanLayer<T>([encoderOutputSize], axis: 0);
-        yield return new LogVarianceLayer<T>([encoderOutputSize], axis: 0);
+            // Output layer
+            yield return new DenseLayer<T>(hidden1, flatInputSize, new SigmoidActivation<T>() as IActivationFunction<T>);
+        }
+        else
+        {
+            // 2D/3D VAE: With pooling and upsampling
+            // Encoder layers
+            yield return new DenseLayer<T>(flatInputSize, flatInputSize / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
 
-        // Decoder layers
-        yield return new DenseLayer<T>(latentSize, pooledSize / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
-        yield return new DenseLayer<T>(pooledSize / 2, pooledSize, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+            // Pooling layer to reduce dimensions
+            yield return new PoolingLayer<T>(
+                inputDepth: inputDepth,
+                inputHeight: inputHeight,
+                inputWidth: inputWidth,
+                poolSize: 2,
+                stride: 2,
+                type: PoolingType.Average
+            );
 
-        // Add an Upsampling layer to match the pooling in the encoder
-        yield return new UpsamplingLayer<T>([pooledDepth, pooledHeight, pooledWidth], 2);
+            // Calculate new dimensions after pooling
+            int pooledDepth = inputDepth;
+            int pooledHeight = (inputHeight - 2) / 2 + 1;
+            int pooledWidth = (inputWidth - 2) / 2 + 1;
+            int pooledSize = pooledDepth * pooledHeight * pooledWidth;
 
-        yield return new DenseLayer<T>(inputDepth * inputHeight * inputWidth, (inputDepth * inputHeight * inputWidth) / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+            yield return new DenseLayer<T>(pooledSize, pooledSize / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
 
-        // Output layer
-        yield return new DenseLayer<T>((inputDepth * inputHeight * inputWidth) / 2, inputDepth * inputHeight * inputWidth, new SigmoidActivation<T>() as IActivationFunction<T>);
+            // Latent space layers
+            int encoderOutputSize = latentSize * 2;
+            yield return new DenseLayer<T>(pooledSize / 2, encoderOutputSize, new IdentityActivation<T>() as IActivationFunction<T>);
+
+            // Mean and LogVariance layers
+            yield return new MeanLayer<T>([encoderOutputSize], axis: 0);
+            yield return new LogVarianceLayer<T>([encoderOutputSize], axis: 0);
+
+            // Decoder layers
+            yield return new DenseLayer<T>(latentSize, pooledSize / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+            yield return new DenseLayer<T>(pooledSize / 2, pooledSize, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+
+            // Add an Upsampling layer to match the pooling in the encoder
+            yield return new UpsamplingLayer<T>([pooledDepth, pooledHeight, pooledWidth], 2);
+
+            yield return new DenseLayer<T>(flatInputSize, flatInputSize / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+
+            // Output layer
+            yield return new DenseLayer<T>(flatInputSize / 2, flatInputSize, new SigmoidActivation<T>() as IActivationFunction<T>);
+        }
     }
 
     /// <summary>
@@ -1058,6 +1197,16 @@ public static class LayerHelper<T>
         if (vocabularySize > 0)
         {
             yield return new EmbeddingLayer<T>(vocabularySize, modelDimension);
+        }
+        else
+        {
+            // For continuous inputs (no embedding), add input projection layer if needed
+            // This projects the input from inputSize to modelDimension
+            int inputSize = architecture.InputSize;
+            if (inputSize > 0 && inputSize != modelDimension)
+            {
+                yield return new DenseLayer<T>(inputSize, modelDimension, new IdentityActivation<T>() as IActivationFunction<T>);
+            }
         }
 
         // Add positional encoding if specified
@@ -1645,8 +1794,17 @@ public static class LayerHelper<T>
             throw new InvalidOperationException("The network must have valid input and output dimensions.");
         }
 
-        // Define network structure with sensible defaults
-        int inputSize = architecture.CalculatedInputSize;
+        // Get input shape to determine feature dimension
+        var inputShape = architecture.GetInputShape();
+        if (inputShape == null || inputShape.Length == 0)
+        {
+            throw new InvalidOperationException("Input shape must be specified for GRU network.");
+        }
+
+        // For sequence input [seqLen, features], inputSize is the feature dimension (last dim)
+        // For 1D input [features], inputSize is the only dimension
+        // This matches the LSTM pattern for consistency
+        int inputSize = inputShape[inputShape.Length - 1];
         int outputSize = architecture.OutputSize;
 
         // Define default GRU architecture
@@ -1884,24 +2042,28 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(inputSize, embeddingSize);
 
         // Memory Read Layer
+        // Note: memoryDimension must match the memory vector dimension (embeddingSize),
+        // since memory in MemoryNetwork has shape [memorySize, embeddingSize]
         yield return new MemoryReadLayer<T>(
             inputDimension: embeddingSize,
-            memoryDimension: memorySize,
+            memoryDimension: embeddingSize,
             outputDimension: embeddingSize,
             activationFunction: new ReLUActivation<T>() as IActivationFunction<T>
         );
 
-        // Dense Layer for processing combined input and memory
+        // Dense Layer for processing memory read output
+        // Note: MemoryReadLayer outputs embeddingSize features
         yield return new DenseLayer<T>(
-            inputSize: embeddingSize * 2,
+            inputSize: embeddingSize,
             outputSize: hiddenSize,
             activationFunction: new ReLUActivation<T>()
         );
 
         // Memory Write Layer
+        // Note: memoryDimension must match the memory vector dimension (embeddingSize)
         yield return new MemoryWriteLayer<T>(
             inputDimension: hiddenSize,
-            memoryDimension: memorySize,
+            memoryDimension: embeddingSize,
             activationFunction: new TanhActivation<T>() as IActivationFunction<T>
         );
 
@@ -2468,12 +2630,12 @@ public static class LayerHelper<T>
             }
         }
 
-        // Input layer
+        // Input layer - projects input to reservoir size
         yield return new DenseLayer<T>(inputSize, reservoirSize, new TanhActivation<T>() as IActivationFunction<T>);
 
-        // Reservoir layer (liquid)
+        // Reservoir layer (liquid) - receives output from DenseLayer which is of size reservoirSize
         yield return new ReservoirLayer<T>(
-            inputSize,
+            reservoirSize,  // Input to reservoir is the output of the DenseLayer
             reservoirSize,
             connectionProbability,
             spectralRadius,
@@ -2545,7 +2707,9 @@ public static class LayerHelper<T>
             throw new InvalidOperationException("Input shape must be specified for LSTM network.");
         }
 
-        int inputSize = inputShape[0];
+        // For sequence input [seqLen, features], inputSize is the feature dimension (last dim)
+        // For 1D input [features], inputSize is the only dimension
+        int inputSize = inputShape[inputShape.Length - 1];
         int outputSize = architecture.OutputSize;
 
         if (inputSize <= 0)
