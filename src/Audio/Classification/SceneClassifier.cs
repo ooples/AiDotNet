@@ -49,7 +49,7 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
     private readonly MelSpectrogram<T> _melSpectrogram;
     private readonly MfccExtractor<T> _mfccExtractor;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
     private bool _disposed;
 
     /// <summary>Standard acoustic scene labels (DCASE-style).</summary>
@@ -590,7 +590,7 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
             Name = _useNativeMode ? "SceneClassifier-Native" : "SceneClassifier-ONNX",
             Description = "Acoustic scene classification model (DCASE-style)",
             ModelType = ModelType.NeuralNetwork,
-            FeatureCount = ClassLabels.Count,
+            FeatureCount = _options.NumMfccs,  // Input feature count, not output class count
             Complexity = 1
         };
         metadata.AdditionalInfo["SampleRate"] = _options.SampleRate.ToString();
@@ -631,7 +631,7 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
         _options.FftSize = reader.ReadInt32();
         _options.HopLength = reader.ReadInt32();
         _options.NumMfccs = reader.ReadInt32();
-        _ = reader.ReadBoolean(); // useNativeMode (readonly, cannot restore)
+        _useNativeMode = reader.ReadBoolean();
 
         // Read class labels
         int numLabels = reader.ReadInt32();
@@ -667,11 +667,24 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
         int numFrames = mfccs.Shape[0];
         int numCoeffs = mfccs.Shape[1];
 
-        // Guard against empty input
+        // Guard against empty input - return default features
         if (numFrames == 0 || numCoeffs == 0)
         {
-            numFrames = Math.Max(numFrames, 1);
-            numCoeffs = Math.Max(numCoeffs, 1);
+            int defaultCoeffs = _options.NumMfccs;
+            return new SceneFeatures
+            {
+                MfccMean = new double[defaultCoeffs],
+                MfccStd = new double[defaultCoeffs],
+                MfccDelta = new double[defaultCoeffs],
+                SpectralCentroid = 0.0,
+                SpectralBandwidth = 0.0,
+                SpectralFlatness = 0.0,
+                SpectralContrast = 0.0,
+                RmsEnergy = 0.0,
+                ZeroCrossingRate = 0.0,
+                EnergyVariance = 0.0,
+                BandEnergies = new double[6]  // Standard 6 frequency bands
+            };
         }
 
         var mfccMean = new double[numCoeffs];

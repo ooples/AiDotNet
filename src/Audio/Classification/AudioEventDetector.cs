@@ -60,7 +60,6 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
 
     private readonly AudioEventDetectorOptions _options;
     private readonly MelSpectrogram<T>? _melSpectrogram;
-    private readonly MfccExtractor<T>? _mfccExtractor;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -134,7 +133,6 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
         ClassLabels = _options.CustomLabels ?? CommonEventLabels;
 
         // Create feature extractors
-        _mfccExtractor = CreateMfccExtractor();
 
         // Optimizer not used in ONNX mode but required by interface
         _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -174,7 +172,6 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
             logMel: true);
 
         // Create feature extractors
-        _mfccExtractor = CreateMfccExtractor();
 
         InitializeLayers();
     }
@@ -1105,7 +1102,8 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
         private readonly Dictionary<string, T> _currentState;
         private readonly int _windowSamples;
         private double _processedTime;
-        private bool _disposed;
+        private volatile bool _disposed;
+        private readonly object _lock = new object();
 
         public event EventHandler<AudioEvent<T>>? EventDetected;
 
@@ -1137,11 +1135,18 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
                 throw new ObjectDisposedException(nameof(StreamingEventDetectionSession));
             }
 
-            // Add to buffer
-            for (int i = 0; i < audioChunk.Length; i++)
+            lock (_lock)
             {
-                _buffer.Add(audioChunk[i]);
-            }
+                if (_disposed)
+                {
+                    throw new ObjectDisposedException(nameof(StreamingEventDetectionSession));
+                }
+
+                // Add to buffer
+                for (int i = 0; i < audioChunk.Length; i++)
+                {
+                    _buffer.Add(audioChunk[i]);
+                }
 
             // Process complete windows
             while (_buffer.Count >= _windowSamples)
@@ -1184,28 +1189,40 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
                 int hopSamples = (int)(_windowSamples * (1 - _detector._options.WindowOverlap));
                 _buffer.RemoveRange(0, hopSamples);
                 _processedTime += hopSamples / (double)_sampleRate;
+                }
             }
         }
 
         public IReadOnlyList<AudioEvent<T>> GetNewEvents()
         {
-            var events = _newEvents.ToList();
-            _newEvents.Clear();
-            return events;
+            lock (_lock)
+            {
+                var events = _newEvents.ToList();
+                _newEvents.Clear();
+                return events;
+            }
         }
 
         public IReadOnlyDictionary<string, T> GetCurrentState()
         {
-            return new Dictionary<string, T>(_currentState);
+            lock (_lock)
+            {
+                return new Dictionary<string, T>(_currentState);
+            }
         }
 
         public void Dispose()
         {
             if (_disposed) return;
-            _disposed = true;
-            _buffer.Clear();
-            _newEvents.Clear();
-            _currentState.Clear();
+
+            lock (_lock)
+            {
+                if (_disposed) return;
+                _disposed = true;
+                _buffer.Clear();
+                _newEvents.Clear();
+                _currentState.Clear();
+            }
         }
     }
 
