@@ -197,6 +197,16 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     {
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (enhancementStrength < 0.0 || enhancementStrength > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(enhancementStrength), "Enhancement strength must be between 0.0 and 1.0.");
+        if (sampleRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(sampleRate), "Sample rate must be positive.");
+        if (fftSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(fftSize), "FFT size must be positive.");
+        if (hopSize <= 0 || hopSize > fftSize)
+            throw new ArgumentOutOfRangeException(nameof(hopSize), "Hop size must be positive and not exceed FFT size.");
+        if (numChannels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numChannels), "Number of channels must be positive.");
 
         _useNativeMode = false;
         _modelPath = modelPath;
@@ -248,6 +258,24 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanAbsoluteErrorLoss<T>())
     {
+        // Validate parameters
+        if (enhancementStrength < 0.0 || enhancementStrength > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(enhancementStrength), "Enhancement strength must be between 0.0 and 1.0.");
+        if (sampleRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(sampleRate), "Sample rate must be positive.");
+        if (fftSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(fftSize), "FFT size must be positive.");
+        if (hopSize <= 0 || hopSize > fftSize)
+            throw new ArgumentOutOfRangeException(nameof(hopSize), "Hop size must be positive and not exceed FFT size.");
+        if (numChannels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numChannels), "Number of channels must be positive.");
+        if (numStages <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numStages), "Number of stages must be positive.");
+        if (baseFilters <= 0)
+            throw new ArgumentOutOfRangeException(nameof(baseFilters), "Base filters must be positive.");
+        if (bottleneckDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(bottleneckDim), "Bottleneck dimension must be positive.");
+
         _useNativeMode = true;
         _modelPath = null;
         _lossFunction = lossFunction ?? new MeanAbsoluteErrorLoss<T>();
