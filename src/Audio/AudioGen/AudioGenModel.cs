@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -102,40 +103,6 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
     #endregion
 
-    #region Native Mode Fields
-
-    /// <summary>
-    /// Text encoder layers for native mode.
-    /// </summary>
-    private readonly List<ILayer<T>> _textEncoderLayers = [];
-
-    /// <summary>
-    /// Language model transformer layers for native mode.
-    /// </summary>
-    private readonly List<ILayer<T>> _languageModelLayers = [];
-
-    /// <summary>
-    /// Audio decoder layers for native mode.
-    /// </summary>
-    private readonly List<ILayer<T>> _audioDecoderLayers = [];
-
-    /// <summary>
-    /// Text token embedding layer.
-    /// </summary>
-    private ILayer<T>? _textEmbedding;
-
-    /// <summary>
-    /// Audio code embedding layer.
-    /// </summary>
-    private ILayer<T>? _audioCodeEmbedding;
-
-    /// <summary>
-    /// Output projection to audio codebook vocabulary.
-    /// </summary>
-    private ILayer<T>? _outputProjection;
-
-    #endregion
-
     #region Shared Fields
 
     /// <summary>
@@ -146,7 +113,7 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// <summary>
     /// Optimizer for training.
     /// </summary>
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <summary>
     /// Loss function for training.
@@ -337,7 +304,7 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         double guidanceScale = 3.0,
         int channels = 1,
         int? seed = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
@@ -400,7 +367,7 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
                 "Tokenizer is required for ONNX mode. AudioGen uses T5-based text encoders. " +
                 "Use AutoTokenizer.FromPretrained(\"t5-base\") or the tokenizer matching your text encoder.");
 
-            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
 
             _random = seed.HasValue
@@ -474,7 +441,7 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         int maxTextLength = 256,
         int? seed = null,
         ITokenizer? tokenizer = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
@@ -504,75 +471,71 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
         // Use T5-style tokenizer as default for AudioGen text encoder
         _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
 
         _random = seed.HasValue
             ? RandomHelper.CreateSeededRandom(seed.Value)
             : RandomHelper.CreateSecureRandom();
 
-        InitializeNativeLayers();
+        InitializeLayers();
     }
 
     #endregion
 
-    #region Initialization
+    #region Layer Initialization - Golden Standard Pattern
 
     /// <summary>
-    /// Initializes layers for ONNX mode (minimal initialization).
+    /// Initializes the neural network layers following the golden standard pattern.
     /// </summary>
     protected override void InitializeLayers()
     {
         // ONNX mode - layers are handled by ONNX runtime
+        if (!_useNativeMode)
+        {
+            return;
+        }
+
+        // Golden Standard Pattern:
+        // 1. Check if user provided custom layers
+        // 2. If yes, use them (full customization)
+        // 3. If no, use LayerHelper.CreateDefaultAudioGenLayers()
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            ValidateLayerConfiguration(Layers);
+        }
+        else
+        {
+            // Calculate max audio tokens: sample_rate * max_duration / encodec_framerate (~50 tokens/sec)
+            int maxAudioTokens = (int)(_sampleRate * _maxDurationSeconds / 640);
+
+            // Use default AudioGen architecture
+            Layers.AddRange(LayerHelper<T>.CreateDefaultAudioGenLayers(
+                textHiddenDim: _textHiddenDim,
+                lmHiddenDim: _lmHiddenDim,
+                numLmLayers: _numLmLayers,
+                numHeads: _numHeads,
+                numCodebooks: _numCodebooks,
+                codebookSize: _codebookSize,
+                maxTextLength: _maxTextLength,
+                maxAudioTokens: maxAudioTokens,
+                dropoutRate: 0.1));
+        }
     }
 
     /// <summary>
-    /// Initializes native mode layers for training from scratch.
+    /// Validates that custom layers meet AudioGen requirements.
     /// </summary>
-    private void InitializeNativeLayers()
+    private void ValidateLayerConfiguration(List<ILayer<T>> layers)
     {
-        // Text embedding layer
-        _textEmbedding = new EmbeddingLayer<T>(32128, _textHiddenDim); // T5 vocabulary size
-        _textEncoderLayers.Add(_textEmbedding);
-
-        // Text encoder transformer layers (simplified T5-style)
-        for (int i = 0; i < 6; i++)
+        if (layers.Count < 3)
         {
-            var selfAttn = new MultiHeadAttentionLayer<T>(_maxTextLength, _textHiddenDim, _numHeads);
-            var ff = new DenseLayer<T>(_textHiddenDim, _textHiddenDim * 4);
-            _textEncoderLayers.Add(selfAttn);
-            _textEncoderLayers.Add(ff);
+            throw new ArgumentException(
+                "AudioGen requires at least 3 layers: text encoder, language model, and output projection. " +
+                "Use LayerHelper.CreateDefaultAudioGenLayers() as a reference.",
+                nameof(layers));
         }
-
-        // Audio code embedding
-        _audioCodeEmbedding = new EmbeddingLayer<T>(_codebookSize * _numCodebooks, _lmHiddenDim);
-
-        // Language model transformer layers
-        // Calculate max audio tokens: sample_rate * max_duration / encodec_framerate (~50 tokens/sec)
-        int maxAudioTokens = (int)(_sampleRate * _maxDurationSeconds / 640);
-        for (int i = 0; i < _numLmLayers; i++)
-        {
-            var decoderLayer = new TransformerDecoderLayer<T>(
-                embeddingSize: _lmHiddenDim,
-                numHeads: _numHeads,
-                feedForwardDim: _lmHiddenDim * 4,
-                sequenceLength: maxAudioTokens,
-                ffnActivation: (IActivationFunction<T>?)null);
-            _languageModelLayers.Add(decoderLayer);
-        }
-
-        // Output projection to codebook logits
-        _outputProjection = new DenseLayer<T>(_lmHiddenDim, _codebookSize * _numCodebooks);
-
-        // Register all layers
-        foreach (var layer in _textEncoderLayers)
-            Layers.Add(layer);
-        if (_audioCodeEmbedding != null)
-            Layers.Add(_audioCodeEmbedding);
-        foreach (var layer in _languageModelLayers)
-            Layers.Add(layer);
-        if (_outputProjection != null)
-            Layers.Add(_outputProjection);
     }
 
     private static (int textHiddenDim, int lmHiddenDim, int numLayers, int numHeads) GetModelDimensions(AudioGenModelSize size)
@@ -761,25 +724,21 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// - Default (0.001): A good starting point for most tasks
     /// </para>
     /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode)
         {
             throw new NotSupportedException("Cannot update parameters in ONNX inference mode. Use the native constructor for training.");
         }
 
-        // Get current parameters
-        var currentParams = GetParameters();
-
-        // Apply gradient descent: params = params - learning_rate * gradients
-        T learningRate = NumOps.FromDouble(0.001); // Default learning rate
-        for (int i = 0; i < currentParams.Length; i++)
+        int index = 0;
+        foreach (var layer in Layers)
         {
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
+            int count = layer.ParameterCount;
+            var layerParams = parameters.Slice(index, count);
+            layer.UpdateParameters(layerParams);
+            index += count;
         }
-
-        // Set the updated parameters
-        SetParameters(currentParams);
     }
 
     /// <summary>
@@ -807,9 +766,8 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         var lossGradient = _lossFunction.CalculateDerivative(flatPrediction, flatExpected);
         Backpropagate(Tensor<T>.FromVector(lossGradient));
 
-        // Update parameters using gradient descent
-        var gradients = GetParameterGradients();
-        UpdateParameters(gradients);
+        // Update parameters using optimizer
+        _optimizer.UpdateParameters(Layers);
 
         SetTrainingMode(false);
     }
@@ -943,9 +901,12 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     private Tensor<T> ForwardTextEncoder(Tensor<T> input)
     {
         var x = input;
-        foreach (var layer in _textEncoderLayers)
+        // Text encoder is the first portion of layers (before audio code embedding)
+        // Approximately first 40 layers based on CreateDefaultAudioGenLayers structure
+        int textEncoderEndIdx = Math.Min(40, Layers.Count / 3);
+        for (int i = 0; i < textEncoderEndIdx && i < Layers.Count; i++)
         {
-            x = layer.Forward(x);
+            x = Layers[i].Forward(x);
         }
         return x;
     }
@@ -1034,31 +995,22 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
     private Tensor<T> ForwardLanguageModel(Tensor<T> textEmbeddings, Tensor<T> audioCodes)
     {
-        // Simplified forward pass for native mode
+        // Forward pass through language model portion of layers
         var x = audioCodes;
 
-        if (_audioCodeEmbedding != null)
-        {
-            // Flatten and embed audio codes
-            var flat = audioCodes.Reshape(audioCodes.Shape[0], -1);
-            x = _audioCodeEmbedding.Forward(flat);
-        }
+        // Language model starts after text encoder
+        int textEncoderEndIdx = Math.Min(40, Layers.Count / 3);
 
-        foreach (var layer in _languageModelLayers)
+        for (int i = textEncoderEndIdx; i < Layers.Count; i++)
         {
-            if (layer is TransformerDecoderLayer<T> decoderLayer)
+            if (Layers[i] is TransformerDecoderLayer<T> decoderLayer)
             {
                 x = decoderLayer.Forward(x, textEmbeddings);
             }
             else
             {
-                x = layer.Forward(x);
+                x = Layers[i].Forward(x);
             }
-        }
-
-        if (_outputProjection != null)
-        {
-            x = _outputProjection.Forward(x);
         }
 
         return x;
