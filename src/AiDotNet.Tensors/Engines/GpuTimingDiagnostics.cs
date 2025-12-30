@@ -253,7 +253,14 @@ public class GpuTimingDiagnostics
     /// Returns recent records for inspection.
     /// </summary>
     public GpuTimingRecord[] GetRecentRecords(int count = 100)
-        => _records.TakeLast(count).ToArray();
+    {
+        var allRecords = _records.ToArray();
+        if (allRecords.Length <= count)
+            return allRecords;
+        var result = new GpuTimingRecord[count];
+        Array.Copy(allRecords, allRecords.Length - count, result, 0, count);
+        return result;
+    }
 
     /// <summary>
     /// RAII-style timing scope.
