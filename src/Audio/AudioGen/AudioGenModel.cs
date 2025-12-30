@@ -327,6 +327,26 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         if (!File.Exists(audioDecoderPath))
             throw new FileNotFoundException($"Audio decoder model not found: {audioDecoderPath}");
 
+        // Validate generation parameters
+        if (temperature <= 0)
+            throw new ArgumentOutOfRangeException(nameof(temperature), "Temperature must be positive.");
+        if (topK < 0)
+            throw new ArgumentOutOfRangeException(nameof(topK), "TopK must be non-negative.");
+        if (topP < 0 || topP > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(topP), "TopP must be in range [0, 1].");
+        if (guidanceScale < 1.0)
+            throw new ArgumentOutOfRangeException(nameof(guidanceScale), "GuidanceScale must be >= 1.0.");
+        if (channels < 1)
+            throw new ArgumentOutOfRangeException(nameof(channels), "Channels must be at least 1.");
+        if (sampleRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(sampleRate), "SampleRate must be positive.");
+        if (durationSeconds <= 0)
+            throw new ArgumentOutOfRangeException(nameof(durationSeconds), "DurationSeconds must be positive.");
+        if (maxDurationSeconds <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxDurationSeconds), "MaxDurationSeconds must be positive.");
+        if (durationSeconds > maxDurationSeconds)
+            throw new ArgumentOutOfRangeException(nameof(durationSeconds), "DurationSeconds cannot exceed MaxDurationSeconds.");
+
         _useNativeMode = false;
         _textEncoderPath = textEncoderPath;
         _languageModelPath = languageModelPath;
@@ -450,6 +470,26 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        // Validate parameters
+        if (temperature <= 0)
+            throw new ArgumentOutOfRangeException(nameof(temperature), "Temperature must be positive.");
+        if (topK < 0)
+            throw new ArgumentOutOfRangeException(nameof(topK), "TopK must be non-negative.");
+        if (topP < 0 || topP > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(topP), "TopP must be in range [0, 1].");
+        if (guidanceScale < 1.0)
+            throw new ArgumentOutOfRangeException(nameof(guidanceScale), "GuidanceScale must be >= 1.0.");
+        if (channels < 1)
+            throw new ArgumentOutOfRangeException(nameof(channels), "Channels must be at least 1.");
+        if (sampleRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(sampleRate), "SampleRate must be positive.");
+        if (durationSeconds <= 0)
+            throw new ArgumentOutOfRangeException(nameof(durationSeconds), "DurationSeconds must be positive.");
+        if (maxDurationSeconds <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxDurationSeconds), "MaxDurationSeconds must be positive.");
+        if (durationSeconds > maxDurationSeconds)
+            throw new ArgumentOutOfRangeException(nameof(durationSeconds), "DurationSeconds cannot exceed MaxDurationSeconds.");
+
         _useNativeMode = true;
         _modelSize = modelSize;
         _sampleRate = sampleRate;
