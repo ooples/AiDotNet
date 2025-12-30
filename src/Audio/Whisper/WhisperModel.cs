@@ -85,30 +85,6 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
     #endregion
 
-    #region Native Mode Fields
-
-    /// <summary>
-    /// Encoder layers for native mode.
-    /// </summary>
-    private readonly List<ILayer<T>> _encoderLayers = [];
-
-    /// <summary>
-    /// Decoder layers for native mode.
-    /// </summary>
-    private readonly List<ILayer<T>> _decoderLayers = [];
-
-    /// <summary>
-    /// Token embedding layer for decoder.
-    /// </summary>
-    private ILayer<T>? _tokenEmbedding;
-
-    /// <summary>
-    /// Output projection layer.
-    /// </summary>
-    private ILayer<T>? _outputProjection;
-
-    #endregion
-
     #region Shared Fields
 
     /// <summary>
@@ -124,7 +100,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// <summary>
     /// Optimizer for training (unused in ONNX mode).
     /// </summary>
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <summary>
     /// Loss function for training.
@@ -354,7 +330,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         SupportedLanguages = GetSupportedLanguages();
 
         // Create placeholder optimizer and loss (unused in ONNX mode)
-        _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = new CrossEntropyLoss<T>();
 
         InitializeLayers();
@@ -419,7 +395,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         int maxTokens = 448,
         int beamSize = 5,
         double temperature = 0.0,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture)
     {
@@ -459,10 +435,10 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         SupportedLanguages = GetSupportedLanguages();
 
         // Initialize training components
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
 
-        InitializeNativeLayers();
+        InitializeLayers();
     }
 
     #endregion
@@ -470,69 +446,57 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     #region Initialization
 
     /// <summary>
-    /// Initializes layers for ONNX inference mode.
+    /// Initializes layers following the golden standard pattern.
     /// </summary>
     protected override void InitializeLayers()
     {
         // ONNX mode - layers are handled by ONNX runtime
-        // No native layer initialization needed
+        if (!_useNativeMode)
+        {
+            return;
+        }
+
+        // Golden Standard Pattern:
+        // 1. Check if user provided custom layers
+        // 2. If yes, use them (full customization)
+        // 3. If no, use LayerHelper.CreateDefaultWhisperLayers()
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            ValidateLayerConfiguration(Layers);
+        }
+        else
+        {
+            // Calculate max frames from audio parameters
+            int maxFrames = (SampleRate * _maxAudioLengthSeconds) / 160;
+
+            // Use default Whisper architecture
+            Layers.AddRange(LayerHelper<T>.CreateDefaultWhisperLayers(
+                modelDim: _modelDim,
+                numEncoderLayers: _numEncoderLayers,
+                numDecoderLayers: _numDecoderLayers,
+                numHeads: _numHeads,
+                ffDim: _ffDim,
+                numMels: _numMels,
+                maxFrames: maxFrames,
+                maxTokens: _maxTokens,
+                vocabSize: 51865,
+                dropoutRate: 0.0));
+        }
     }
 
     /// <summary>
-    /// Initializes native mode layers for training from scratch.
+    /// Validates that custom layers meet Whisper requirements.
     /// </summary>
-    private void InitializeNativeLayers()
+    private void ValidateLayerConfiguration(List<ILayer<T>> layers)
     {
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-
-        // Encoder: Mel features -> Encoder output
-        // Initial projection from mel spectrogram to model dimension (using Dense instead of Conv1D)
-        var proj1 = new DenseLayer<T>(_numMels, _modelDim, geluActivation);
-        var proj2 = new DenseLayer<T>(_modelDim, _modelDim, geluActivation);
-        _encoderLayers.Add(proj1);
-        _encoderLayers.Add(proj2);
-
-        // Encoder transformer layers
-        int maxFrames = (SampleRate * _maxAudioLengthSeconds) / 160; // Frames from mel spectrogram
-        for (int i = 0; i < _numEncoderLayers; i++)
+        if (layers.Count < 3)
         {
-            var selfAttn = new MultiHeadAttentionLayer<T>(maxFrames, _modelDim, _numHeads, identityActivation);
-            var ff = new DenseLayer<T>(_modelDim, _ffDim, geluActivation);
-            var ffOut = new DenseLayer<T>(_ffDim, _modelDim, identityActivation);
-            _encoderLayers.Add(selfAttn);
-            _encoderLayers.Add(ff);
-            _encoderLayers.Add(ffOut);
+            throw new ArgumentException(
+                "Whisper requires at least 3 layers: encoder, decoder, and output projection. " +
+                "Use LayerHelper.CreateDefaultWhisperLayers() as a reference.",
+                nameof(layers));
         }
-
-        // Decoder: Token embeddings + Encoder output -> Logits
-        // Token embedding (Whisper vocabulary is 51865 tokens)
-        _tokenEmbedding = new EmbeddingLayer<T>(51865, _modelDim);
-
-        // Decoder transformer layers
-        for (int i = 0; i < _numDecoderLayers; i++)
-        {
-            var decoderLayer = new TransformerDecoderLayer<T>(
-                embeddingSize: _modelDim,
-                numHeads: _numHeads,
-                feedForwardDim: _ffDim,
-                sequenceLength: _maxTokens,
-                ffnActivation: (IActivationFunction<T>?)null);
-            _decoderLayers.Add(decoderLayer);
-        }
-
-        // Output projection to vocabulary
-        _outputProjection = new DenseLayer<T>(_modelDim, 51865);
-
-        // Register all layers
-        foreach (var layer in _encoderLayers)
-            Layers.Add(layer);
-        if (_tokenEmbedding is not null)
-            Layers.Add(_tokenEmbedding);
-        foreach (var layer in _decoderLayers)
-            Layers.Add(layer);
-        if (_outputProjection is not null)
-            Layers.Add(_outputProjection);
     }
 
     private static (int modelDim, int encoderLayers, int decoderLayers, int heads, int ffDim) GetModelParameters(WhisperModelSize size)
@@ -759,25 +723,21 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// - Default (0.001): Good starting point
     /// </para>
     /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode)
         {
             throw new NotSupportedException("Cannot update parameters in ONNX inference mode. Use the native constructor for training.");
         }
 
-        // Get current parameters
-        var currentParams = GetParameters();
-
-        // Apply gradient descent: params = params - learning_rate * gradients
-        T learningRate = NumOps.FromDouble(0.001);
-        for (int i = 0; i < currentParams.Length; i++)
+        int index = 0;
+        foreach (var layer in Layers)
         {
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
+            int count = layer.ParameterCount;
+            var layerParams = parameters.Slice(index, count);
+            layer.UpdateParameters(layerParams);
+            index += count;
         }
-
-        // Set the updated parameters
-        SetParameters(currentParams);
     }
 
     /// <summary>
@@ -827,9 +787,8 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         // 6. Backward pass through layers
         Backpropagate(Tensor<T>.FromVector(outputGradients));
 
-        // 7. Get parameter gradients and update
-        var parameterGradients = GetParameterGradients();
-        UpdateParameters(parameterGradients);
+        // 7. Update parameters using optimizer
+        _optimizer.UpdateParameters(Layers);
 
         // Exit training mode
         SetTrainingMode(false);
@@ -994,10 +953,16 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         else
         {
             // Native mode: forward through encoder layers
+            // Encoder layers are approximately the first half of layers
+            // (2 projection + 1 positional + numEncoderLayers * 4 layers per block + 1 final norm)
+            int encoderLayerCount = 2 + 1 + (_numEncoderLayers * 4) + 1;
+            if (encoderLayerCount > Layers.Count)
+                encoderLayerCount = Layers.Count / 2;
+
             var current = melFeatures;
-            foreach (var layer in _encoderLayers)
+            for (int i = 0; i < encoderLayerCount && i < Layers.Count; i++)
             {
-                current = layer.Forward(current);
+                current = Layers[i].Forward(current);
             }
             return current;
         }
@@ -1005,13 +970,28 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
     private Tensor<T> ForwardDecoder(Tensor<T> tokens, Tensor<T> encoderOutput)
     {
-        // Embed tokens
-        var embedded = _tokenEmbedding?.Forward(tokens) ?? tokens;
-
-        // Forward through decoder layers
-        var current = embedded;
-        foreach (var layer in _decoderLayers)
+        if (!_useNativeMode)
         {
+            // ONNX mode: create input dictionary with both tokens and encoder output
+            var inputs = new Dictionary<string, Tensor<T>>
+            {
+                ["tokens"] = tokens,
+                ["encoder_hidden_states"] = encoderOutput
+            };
+            var outputs = OnnxDecoder?.Run(inputs);
+            return outputs?.Values.FirstOrDefault() ?? tokens;
+        }
+
+        // Calculate where decoder layers start
+        int encoderLayerCount = 2 + 1 + (_numEncoderLayers * 4) + 1;
+        if (encoderLayerCount > Layers.Count)
+            encoderLayerCount = Layers.Count / 2;
+
+        // Forward through decoder layers (starting after encoder layers)
+        var current = tokens;
+        for (int i = encoderLayerCount; i < Layers.Count; i++)
+        {
+            var layer = Layers[i];
             if (layer is TransformerDecoderLayer<T> decoderLayer)
             {
                 // Pass encoder output as context
@@ -1023,10 +1003,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             }
         }
 
-        // Output projection
-        var logits = _outputProjection?.Forward(current) ?? current;
-
-        return logits;
+        return current;
     }
 
     private (List<long> tokens, double confidence) DecodeTokens(Tensor<T> encoderOutput, string language)
