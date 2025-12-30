@@ -625,8 +625,22 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
     /// </summary>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // Read would need to reinitialize options - this is a simplified implementation
-        // In practice, the options should be reconstructed from saved data
+        // Restore options properties
+        _options.SampleRate = reader.ReadInt32();
+        _options.NumMels = reader.ReadInt32();
+        _options.FftSize = reader.ReadInt32();
+        _options.HopLength = reader.ReadInt32();
+        _options.NumMfccs = reader.ReadInt32();
+        _ = reader.ReadBoolean(); // useNativeMode (readonly, cannot restore)
+
+        // Read class labels
+        int numLabels = reader.ReadInt32();
+        var labels = new string[numLabels];
+        for (int i = 0; i < numLabels; i++)
+        {
+            labels[i] = reader.ReadString();
+        }
+        ClassLabels = labels;
     }
 
     /// <summary>
@@ -653,6 +667,13 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
         int numFrames = mfccs.Shape[0];
         int numCoeffs = mfccs.Shape[1];
 
+        // Guard against empty input
+        if (numFrames == 0 || numCoeffs == 0)
+        {
+            numFrames = Math.Max(numFrames, 1);
+            numCoeffs = Math.Max(numCoeffs, 1);
+        }
+
         var mfccMean = new double[numCoeffs];
         var mfccStd = new double[numCoeffs];
         var mfccDelta = new double[numCoeffs];
@@ -662,25 +683,34 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
             double sum = 0;
             for (int t = 0; t < numFrames; t++)
             {
-                sum += NumOps.ToDouble(mfccs[t, c]);
+                if (t < mfccs.Shape[0] && c < mfccs.Shape[1])
+                {
+                    sum += NumOps.ToDouble(mfccs[t, c]);
+                }
             }
             mfccMean[c] = sum / numFrames;
 
             double sumSq = 0;
             for (int t = 0; t < numFrames; t++)
             {
-                double diff = NumOps.ToDouble(mfccs[t, c]) - mfccMean[c];
-                sumSq += diff * diff;
+                if (t < mfccs.Shape[0] && c < mfccs.Shape[1])
+                {
+                    double diff = NumOps.ToDouble(mfccs[t, c]) - mfccMean[c];
+                    sumSq += diff * diff;
+                }
             }
             mfccStd[c] = Math.Sqrt(sumSq / numFrames);
 
             // Delta (first derivative)
             double sumDelta = 0;
-            for (int t = 1; t < numFrames; t++)
+            for (int t = 1; t < numFrames && t < mfccs.Shape[0]; t++)
             {
-                double prev = NumOps.ToDouble(mfccs[t - 1, c]);
-                double curr = NumOps.ToDouble(mfccs[t, c]);
-                sumDelta += Math.Abs(curr - prev);
+                if (c < mfccs.Shape[1])
+                {
+                    double prev = NumOps.ToDouble(mfccs[t - 1, c]);
+                    double curr = NumOps.ToDouble(mfccs[t, c]);
+                    sumDelta += Math.Abs(curr - prev);
+                }
             }
             mfccDelta[c] = numFrames > 1 ? sumDelta / (numFrames - 1) : 0.0;
         }

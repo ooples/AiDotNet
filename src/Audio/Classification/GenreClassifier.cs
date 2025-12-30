@@ -642,9 +642,9 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
             labels[i] = reader.ReadString();
         }
         ClassLabels = labels;
-        _ = reader.ReadInt32(); // NumMfccs
-        _ = reader.ReadInt32(); // FftSize
-        _ = reader.ReadInt32(); // HopLength
+        _options.NumMfccs = reader.ReadInt32();
+        _options.FftSize = reader.ReadInt32();
+        _options.HopLength = reader.ReadInt32();
     }
 
     /// <summary>

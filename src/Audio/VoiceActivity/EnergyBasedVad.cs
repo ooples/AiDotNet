@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace AiDotNet.Audio.VoiceActivity;
 
 /// <summary>
@@ -154,22 +156,25 @@ public class EnergyBasedVad<T> : VoiceActivityDetectorBase<T>
 
     private double ComputeSpectralFlatness(T[] frame)
     {
-        // Simple spectral flatness using DFT magnitudes
+        // Simple spectral flatness using FFT magnitudes
         int fftSize = 256;
-        var magnitudes = new double[fftSize / 2];
 
-        // Compute DFT magnitudes (simplified)
+        // Prepare frame data for FFT (zero-padded if needed)
+        var frameData = new double[fftSize];
+        int copyLen = Math.Min(frame.Length, fftSize);
+        for (int i = 0; i < copyLen; i++)
+        {
+            frameData[i] = NumOps.ToDouble(frame[i]);
+        }
+
+        // Use FftSharp for O(N log N) FFT
+        Complex[] spectrum = FftSharp.FFT.Forward(frameData);
+
+        // Extract magnitude spectrum for positive frequencies
+        var magnitudes = new double[fftSize / 2];
         for (int k = 0; k < fftSize / 2; k++)
         {
-            double real = 0, imag = 0;
-            for (int n = 0; n < Math.Min(frame.Length, fftSize); n++)
-            {
-                double val = NumOps.ToDouble(frame[n]);
-                double angle = -2 * Math.PI * k * n / fftSize;
-                real += val * Math.Cos(angle);
-                imag += val * Math.Sin(angle);
-            }
-            magnitudes[k] = Math.Sqrt(real * real + imag * imag) + 1e-10;
+            magnitudes[k] = spectrum[k].Magnitude + 1e-10;
         }
 
         // Spectral flatness = geometric mean / arithmetic mean
