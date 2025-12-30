@@ -28,11 +28,12 @@ namespace AiDotNet.Onnx;
 /// </code>
 /// </para>
 /// </remarks>
-public class OnnxModelDownloader : IOnnxModelDownloader
+public class OnnxModelDownloader : IOnnxModelDownloader, IDisposable
 {
     private readonly string _cacheDirectory;
     private readonly HttpClient _httpClient;
     private readonly bool _ownsHttpClient;
+    private bool _disposed;
 
     /// <summary>
     /// The base URL for HuggingFace Hub.
@@ -69,6 +70,8 @@ if (cacheDirectory is not null && !string.IsNullOrWhiteSpace(cacheDirectory))   
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
+
         if (modelId is null)
             throw new ArgumentNullException(nameof(modelId));
 
@@ -103,6 +106,8 @@ if (cacheDirectory is not null && !string.IsNullOrWhiteSpace(cacheDirectory))   
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
+
         if (modelId is null)
             throw new ArgumentNullException(nameof(modelId));
         if (fileNames is null)
@@ -322,6 +327,8 @@ if (cacheDirectory is not null && !string.IsNullOrWhiteSpace(cacheDirectory))   
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
+
         if (url is null)
             throw new ArgumentNullException(nameof(url));
 
@@ -353,6 +360,42 @@ if (cacheDirectory is not null && !string.IsNullOrWhiteSpace(cacheDirectory))   
         using var sha256 = SHA256.Create();
         var hashBytes = sha256.ComputeHash(data);
         return BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName);
+    }
+
+    /// <summary>
+    /// Disposes the downloader and the HttpClient if owned.
+    /// </summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Disposes managed and unmanaged resources.
+    /// </summary>
+    /// <param name="disposing">True if called from Dispose(), false if from finalizer.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+
+        if (disposing)
+        {
+            // Only dispose the HttpClient if we own it
+            if (_ownsHttpClient)
+            {
+                _httpClient?.Dispose();
+            }
+        }
+
+        _disposed = true;
     }
 }
 
