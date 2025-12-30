@@ -30,8 +30,9 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL.Kernels
         {
             return @"
 // ===========================================================================
-// CLBlast-Style High-Performance GEMM with Vectorized Loads
+// CLBlast-Style High-Performance GEMM with TRUE Double Buffering
 // Target: 2500+ GFLOPS on AMD GPUs
+// Key optimization: Overlap memory loads with computation using 2 buffers
 // ===========================================================================
 
 #pragma OPENCL EXTENSION cl_khr_fp16 : enable
@@ -42,7 +43,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL.Kernels
 #define WG_SIZE_N 16
 #define TILE_M 128
 #define TILE_N 128
-#define TILE_K 16     // Larger K tile for better latency hiding
+#define TILE_K 16     // K tile size
 #define OUTPUTS_M 8   // 8x8 = 64 outputs per thread
 #define OUTPUTS_N 8
 
@@ -50,8 +51,76 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL.Kernels
 #define PAD 8
 
 // ===========================================================================
-// Main GEMM Kernel - Vectorized Loads + Large Register Blocking
+// Helper macros for double buffering
+// ===========================================================================
+#define LOAD_A_TILE(As, kBase, wgRowStart, M, K) \
+    _Pragma(""unroll"") \
+    for (int i = 0; i < 8; i++) { \
+        int loadIdx = tid + i * 256; \
+        int loadRow = loadIdx / TILE_K; \
+        int loadCol = loadIdx % TILE_K; \
+        int globalRow = wgRowStart + loadRow; \
+        int globalCol = kBase + loadCol; \
+        if (globalRow < M && globalCol < K) { \
+            As[loadRow][loadCol] = A[globalRow * K + globalCol]; \
+        } else { \
+            As[loadRow][loadCol] = 0.0f; \
+        } \
+    }
+
+#define LOAD_B_TILE(Bs, kBase, wgColStart, K, N) \
+    _Pragma(""unroll"") \
+    for (int i = 0; i < 2; i++) { \
+        int loadIdx = tid + i * 256; \
+        int loadRow = loadIdx / 32; \
+        int loadCol4 = loadIdx % 32; \
+        int globalRow = kBase + loadRow; \
+        int globalCol = wgColStart + loadCol4 * 4; \
+        if (globalRow < K && globalCol + 3 < N) { \
+            float4 vec = vload4(0, &B[globalRow * N + globalCol]); \
+            Bs[loadRow][loadCol4 * 4 + 0] = vec.x; \
+            Bs[loadRow][loadCol4 * 4 + 1] = vec.y; \
+            Bs[loadRow][loadCol4 * 4 + 2] = vec.z; \
+            Bs[loadRow][loadCol4 * 4 + 3] = vec.w; \
+        } else if (globalRow < K) { \
+            for (int c = 0; c < 4; c++) { \
+                int col = globalCol + c; \
+                Bs[loadRow][loadCol4 * 4 + c] = (col < N) ? B[globalRow * N + col] : 0.0f; \
+            } \
+        } else { \
+            Bs[loadRow][loadCol4 * 4 + 0] = 0.0f; \
+            Bs[loadRow][loadCol4 * 4 + 1] = 0.0f; \
+            Bs[loadRow][loadCol4 * 4 + 2] = 0.0f; \
+            Bs[loadRow][loadCol4 * 4 + 3] = 0.0f; \
+        } \
+    }
+
+#define COMPUTE_TILE(As, Bs, acc) \
+    _Pragma(""unroll"") \
+    for (int kk = 0; kk < TILE_K; kk++) { \
+        float aVals[OUTPUTS_M]; \
+        _Pragma(""unroll"") \
+        for (int mi = 0; mi < OUTPUTS_M; mi++) { \
+            aVals[mi] = As[tidM * OUTPUTS_M + mi][kk]; \
+        } \
+        float bVals[OUTPUTS_N]; \
+        _Pragma(""unroll"") \
+        for (int ni = 0; ni < OUTPUTS_N; ni++) { \
+            bVals[ni] = Bs[kk][tidN * OUTPUTS_N + ni]; \
+        } \
+        _Pragma(""unroll"") \
+        for (int mi = 0; mi < OUTPUTS_M; mi++) { \
+            _Pragma(""unroll"") \
+            for (int ni = 0; ni < OUTPUTS_N; ni++) { \
+                acc[mi][ni] = fma(aVals[mi], bVals[ni], acc[mi][ni]); \
+            } \
+        } \
+    }
+
+// ===========================================================================
+// Main GEMM Kernel - TRUE Double Buffering
 // C = alpha * A * B + beta * C
+// Uses ping-pong buffers to overlap memory loads with computation
 // ===========================================================================
 __kernel __attribute__((reqd_work_group_size(WG_SIZE_M, WG_SIZE_N, 1)))
 void gemm_double_buffered(
@@ -71,11 +140,12 @@ void gemm_double_buffered(
     const int tidN = get_local_id(1);
     const int tid = tidM * WG_SIZE_N + tidN;  // Linear thread ID (0-255)
 
-    // Shared memory for tiles with padding to avoid bank conflicts
-    // A tile: TILE_M x TILE_K = 128 x 16 = 2048 elements
-    // B tile: TILE_K x TILE_N = 16 x 128 = 2048 elements
-    __local float As[TILE_M][TILE_K + PAD];
-    __local float Bs[TILE_K][TILE_N + PAD];
+    // Double-buffered shared memory: two sets of tiles for ping-pong
+    // Buffer 0 and Buffer 1 for A and B tiles
+    __local float As0[TILE_M][TILE_K + PAD];
+    __local float As1[TILE_M][TILE_K + PAD];
+    __local float Bs0[TILE_K][TILE_N + PAD];
+    __local float Bs1[TILE_K][TILE_N + PAD];
 
     // Register accumulators - each thread computes 8x8 = 64 outputs
     float acc[OUTPUTS_M][OUTPUTS_N];
@@ -98,95 +168,65 @@ void gemm_double_buffered(
     const int wgRowStart = wgRow * TILE_M;
     const int wgColStart = wgCol * TILE_N;
 
-    // Main K-loop over tiles
-    for (int kt = 0; kt < numKTiles; kt++) {
-        const int kBase = kt * TILE_K;
-
-        // ===== Cooperative Loading of A tile (128x16 = 2048 elements) =====
-        // 256 threads load 8 elements each
-        // COALESCED ACCESS: threads with consecutive tid access consecutive K columns
+    // Early exit for trivial case
+    if (numKTiles == 0) {
+        // Just handle beta * C
         #pragma unroll
-        for (int i = 0; i < 8; i++) {
-            int loadIdx = tid + i * 256;
-            int loadRow = loadIdx / TILE_K;  // Row in shared memory (0-127)
-            int loadCol = loadIdx % TILE_K;  // Col in shared memory (0-15)
-
-            int globalRow = wgRowStart + loadRow;
-            int globalCol = kBase + loadCol;
-
-            if (globalRow < M && globalCol < K) {
-                As[loadRow][loadCol] = A[globalRow * K + globalCol];
-            } else {
-                As[loadRow][loadCol] = 0.0f;
-            }
-        }
-
-        // ===== Cooperative Loading of B tile (16x128 = 2048 elements) =====
-        // Use float4 vectorized loads for B (consecutive columns)
-        // 256 threads * 2 iterations * 4 elements/float4 = 2048 elements
-        #pragma unroll
-        for (int i = 0; i < 2; i++) {
-            int loadIdx = tid + i * 256;  // 512 float4 loads total
-            int loadRow = loadIdx / 32;   // Row (0-15), 32 = 128/4 float4s per row
-            int loadCol4 = loadIdx % 32;  // float4 column index
-
-            int globalRow = kBase + loadRow;
-            int globalCol = wgColStart + loadCol4 * 4;
-
-            if (globalRow < K && globalCol + 3 < N) {
-                // Vectorized load
-                float4 vec = vload4(0, &B[globalRow * N + globalCol]);
-                Bs[loadRow][loadCol4 * 4 + 0] = vec.x;
-                Bs[loadRow][loadCol4 * 4 + 1] = vec.y;
-                Bs[loadRow][loadCol4 * 4 + 2] = vec.z;
-                Bs[loadRow][loadCol4 * 4 + 3] = vec.w;
-            } else if (globalRow < K) {
-                // Scalar fallback for edge
-                for (int c = 0; c < 4; c++) {
-                    int col = globalCol + c;
-                    Bs[loadRow][loadCol4 * 4 + c] = (col < N) ? B[globalRow * N + col] : 0.0f;
-                }
-            } else {
-                Bs[loadRow][loadCol4 * 4 + 0] = 0.0f;
-                Bs[loadRow][loadCol4 * 4 + 1] = 0.0f;
-                Bs[loadRow][loadCol4 * 4 + 2] = 0.0f;
-                Bs[loadRow][loadCol4 * 4 + 3] = 0.0f;
-            }
-        }
-
-        // Synchronize after loading
-        barrier(CLK_LOCAL_MEM_FENCE);
-
-        // ===== Compute on this tile =====
-        // Each thread computes an 8x8 output block using 16 iterations over K
-        #pragma unroll
-        for (int kk = 0; kk < TILE_K; kk++) {
-            // Load A values for this thread's 8 rows from shared memory
-            float aVals[OUTPUTS_M];
-            #pragma unroll
-            for (int mi = 0; mi < OUTPUTS_M; mi++) {
-                aVals[mi] = As[tidM * OUTPUTS_M + mi][kk];
-            }
-
-            // Load B values for this thread's 8 columns from shared memory
-            float bVals[OUTPUTS_N];
-            #pragma unroll
-            for (int ni = 0; ni < OUTPUTS_N; ni++) {
-                bVals[ni] = Bs[kk][tidN * OUTPUTS_N + ni];
-            }
-
-            // Outer product: accumulate into 8x8 register tile
-            #pragma unroll
-            for (int mi = 0; mi < OUTPUTS_M; mi++) {
+        for (int mi = 0; mi < OUTPUTS_M; mi++) {
+            int outRow = outRowBase + mi;
+            if (outRow < M) {
                 #pragma unroll
                 for (int ni = 0; ni < OUTPUTS_N; ni++) {
-                    acc[mi][ni] = fma(aVals[mi], bVals[ni], acc[mi][ni]);
+                    int outCol = outColBase + ni;
+                    if (outCol < N) {
+                        int idx = outRow * N + outCol;
+                        C[idx] = beta * C[idx];
+                    }
                 }
             }
         }
+        return;
+    }
 
-        // Synchronize before loading next tile
+    // ===== Load first tile into buffer 0 =====
+    LOAD_A_TILE(As0, 0, wgRowStart, M, K)
+    LOAD_B_TILE(Bs0, 0, wgColStart, K, N)
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    // Main K-loop with double buffering
+    // Pattern: Load(buf1) -> Compute(buf0) -> swap -> Load(buf0) -> Compute(buf1) -> swap
+    for (int kt = 0; kt < numKTiles - 1; kt++) {
+        const int kBaseNext = (kt + 1) * TILE_K;
+
+        if ((kt & 1) == 0) {
+            // kt is even: compute on buffer 0, load into buffer 1
+            // Start loading next tile into buffer 1 (async)
+            LOAD_A_TILE(As1, kBaseNext, wgRowStart, M, K)
+            LOAD_B_TILE(Bs1, kBaseNext, wgColStart, K, N)
+
+            // Compute on current tile in buffer 0
+            COMPUTE_TILE(As0, Bs0, acc)
+        } else {
+            // kt is odd: compute on buffer 1, load into buffer 0
+            // Start loading next tile into buffer 0 (async)
+            LOAD_A_TILE(As0, kBaseNext, wgRowStart, M, K)
+            LOAD_B_TILE(Bs0, kBaseNext, wgColStart, K, N)
+
+            // Compute on current tile in buffer 1
+            COMPUTE_TILE(As1, Bs1, acc)
+        }
+
+        // Synchronize before next iteration
         barrier(CLK_LOCAL_MEM_FENCE);
+    }
+
+    // Process last tile (no next tile to load)
+    if ((numKTiles - 1) & 1) {
+        // Last tile is in buffer 1
+        COMPUTE_TILE(As1, Bs1, acc)
+    } else {
+        // Last tile is in buffer 0
+        COMPUTE_TILE(As0, Bs0, acc)
     }
 
     // ===== Write results to global memory using vectorized stores =====
