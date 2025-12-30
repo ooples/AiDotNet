@@ -1380,6 +1380,8 @@ public sealed class GemmAutoTuner
         int[] kregValues = { 0, 1, 2, 4 };       // KREG: register tiling in K (0=disable, 1,2,4)
         int[] kwiValues = { 1, 2, 4 };           // KWI: K-loop unroll factor
         bool[] cacheOptions = { false, true };   // SA/SB: local memory caching
+        // MDIMA/NDIMB multipliers for cooperative loading (1 = no coop, 2 = 2x loading threads)
+        int[] coopMultipliers = { 1, 2 };        // 1 = MDIMA=MDIMC, 2 = MDIMA=2*MDIMC for cooperative loading
 
         foreach (int tileM in tileSizes)
         {
@@ -1437,28 +1439,49 @@ public sealed class GemmAutoTuner
                                                     // For simpler configs, just use both caching enabled
                                                     if (vwm < 4 && vwn < 4 && !(cacheA && cacheB)) continue;
 
-                                                    configs.Add(new GemmConfig
+                                                    // Test with different MDIMA/NDIMB cooperative loading multipliers
+                                                    foreach (int coopM in coopMultipliers)
                                                     {
-                                                        TileM = tileM,
-                                                        TileN = tileN,
-                                                        TileK = tileK,
-                                                        ThreadTileM = ttM,
-                                                        ThreadTileN = ttN,
-                                                        VectorWidthM = vwm,
-                                                        VectorWidthN = vwn,
-                                                        UseDoubleBuffering = tileM >= 64,
-                                                        UseVectorizedLoads = tileK >= 16,
-                                                        KReg = kreg,
-                                                        KUnroll = kwi,
-                                                        UseSubgroupOps = capabilities.SupportsSubgroups && vwm >= 2,
-                                                        StrideM = true,
-                                                        StrideN = true,
-                                                        CacheA = cacheA,
-                                                        CacheB = cacheB,
-                                                        MdimaSize = ttM,  // MDIMA = ThreadTileM
-                                                        NdimbSize = ttN,  // NDIMB = ThreadTileN
-                                                        KernelName = $"gemm_{tileM}x{tileN}x{tileK}_v{vwm}x{vwn}_k{kreg}x{kwi}"
-                                                    });
+                                                        foreach (int coopN in coopMultipliers)
+                                                        {
+                                                            // Calculate MDIMA/NDIMB based on multiplier
+                                                            int mdima = ttM * coopM;
+                                                            int ndimb = ttN * coopN;
+
+                                                            // Skip if MDIMA/NDIMB would exceed tile size
+                                                            if (mdima > tileM || ndimb > tileN) continue;
+
+                                                            // Only test cooperative loading (coopM>1 or coopN>1) for high-perf configs
+                                                            // to avoid exploding the config space
+                                                            if ((coopM > 1 || coopN > 1) && vwm < 2 && vwn < 2) continue;
+
+                                                            string coopSuffix = (coopM > 1 || coopN > 1) ?
+                                                                $"_coop{coopM}x{coopN}" : "";
+
+                                                            configs.Add(new GemmConfig
+                                                            {
+                                                                TileM = tileM,
+                                                                TileN = tileN,
+                                                                TileK = tileK,
+                                                                ThreadTileM = ttM,
+                                                                ThreadTileN = ttN,
+                                                                VectorWidthM = vwm,
+                                                                VectorWidthN = vwn,
+                                                                UseDoubleBuffering = tileM >= 64,
+                                                                UseVectorizedLoads = tileK >= 16,
+                                                                KReg = kreg,
+                                                                KUnroll = kwi,
+                                                                UseSubgroupOps = capabilities.SupportsSubgroups && vwm >= 2,
+                                                                StrideM = true,
+                                                                StrideN = true,
+                                                                CacheA = cacheA,
+                                                                CacheB = cacheB,
+                                                                MdimaSize = mdima,  // MDIMA for cooperative loading
+                                                                NdimbSize = ndimb,  // NDIMB for cooperative loading
+                                                                KernelName = $"gemm_{tileM}x{tileN}x{tileK}_v{vwm}x{vwn}_k{kreg}x{kwi}{coopSuffix}"
+                                                            });
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
