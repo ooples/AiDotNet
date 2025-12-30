@@ -288,4 +288,63 @@ public static class OnnxTensorConverter
             _ => "unknown"
         };
     }
+
+    /// <summary>
+    /// Converts an AiDotNet Tensor to an ONNX NamedOnnxValue based on the target element type.
+    /// </summary>
+    /// <typeparam name="T">The source tensor's element type.</typeparam>
+    /// <param name="name">The input name for the ONNX model.</param>
+    /// <param name="tensor">The AiDotNet tensor to convert.</param>
+    /// <param name="elementType">The target ONNX element type (e.g., "float", "double", "int64").</param>
+    /// <returns>A NamedOnnxValue with the converted tensor.</returns>
+    public static Microsoft.ML.OnnxRuntime.NamedOnnxValue ToOnnxValue<T>(string name, Tensor<T> tensor, string elementType)
+    {
+        return elementType.ToLowerInvariant() switch
+        {
+            "double" or "float64" => Microsoft.ML.OnnxRuntime.NamedOnnxValue.CreateFromTensor(name, ToOnnxDouble(tensor)),
+            "int64" or "long" => Microsoft.ML.OnnxRuntime.NamedOnnxValue.CreateFromTensor(name, ToOnnxLong(tensor)),
+            "int32" or "int" => Microsoft.ML.OnnxRuntime.NamedOnnxValue.CreateFromTensor(name, ToOnnxInt(tensor)),
+            // float is the most common and default for neural networks
+            _ => Microsoft.ML.OnnxRuntime.NamedOnnxValue.CreateFromTensor(name, ToOnnxFloat(tensor))
+        };
+    }
+
+    /// <summary>
+    /// Converts an ONNX DisposableNamedOnnxValue to an AiDotNet Tensor based on its actual element type.
+    /// </summary>
+    /// <typeparam name="T">The target tensor's element type.</typeparam>
+    /// <param name="result">The ONNX result value to convert.</param>
+    /// <returns>An AiDotNet Tensor with the converted data, or null if conversion failed.</returns>
+    public static Tensor<T>? FromOnnxValue<T>(Microsoft.ML.OnnxRuntime.DisposableNamedOnnxValue result)
+    {
+        // Try float first (most common)
+        var floatTensor = result.AsTensor<float>();
+        if (floatTensor is not null)
+        {
+            return FromOnnxFloat<T>(floatTensor);
+        }
+
+        // Try double
+        var doubleTensor = result.AsTensor<double>();
+        if (doubleTensor is not null)
+        {
+            return FromOnnxDouble<T>(doubleTensor);
+        }
+
+        // Try int64
+        var longTensor = result.AsTensor<long>();
+        if (longTensor is not null)
+        {
+            return FromOnnxLong<T>(longTensor);
+        }
+
+        // Try int32
+        var intTensor = result.AsTensor<int>();
+        if (intTensor is not null)
+        {
+            return FromOnnxInt<T>(intTensor);
+        }
+
+        return null;
+    }
 }

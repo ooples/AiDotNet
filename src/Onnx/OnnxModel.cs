@@ -124,10 +124,14 @@ public class OnnxModel<T> : IOnnxModel<T>
 
         var onnxInputs = new List<NamedOnnxValue>();
 
+        // Get input metadata for type-aware conversion
+        var inputMetadata = Metadata.Inputs.ToDictionary(i => i.Name, i => i.ElementType);
+
         foreach (var (name, tensor) in inputs)
         {
-            var onnxTensor = OnnxTensorConverter.ToOnnxFloat(tensor);
-            onnxInputs.Add(NamedOnnxValue.CreateFromTensor(name, onnxTensor));
+            // Use the model's expected element type for conversion
+            var elementType = inputMetadata.TryGetValue(name, out var type) ? type : "float";
+            onnxInputs.Add(OnnxTensorConverter.ToOnnxValue(name, tensor, elementType));
         }
 
         using var results = _session.Run(onnxInputs);
@@ -135,10 +139,11 @@ public class OnnxModel<T> : IOnnxModel<T>
         var outputs = new Dictionary<string, Tensor<T>>();
         foreach (var result in results)
         {
-            var onnxTensor = result.AsTensor<float>();
-            if (onnxTensor is not null)
+            // Use type-aware conversion based on actual output type
+            var converted = OnnxTensorConverter.FromOnnxValue<T>(result);
+            if (converted is not null)
             {
-                outputs[result.Name] = OnnxTensorConverter.FromOnnxFloat<T>(onnxTensor);
+                outputs[result.Name] = converted;
             }
         }
 
@@ -197,10 +202,14 @@ public class OnnxModel<T> : IOnnxModel<T>
 
         var onnxInputs = new List<NamedOnnxValue>();
 
+        // Get input metadata for type-aware conversion
+        var inputMetadata = Metadata.Inputs.ToDictionary(i => i.Name, i => i.ElementType);
+
         foreach (var (name, tensor) in inputs)
         {
-            var onnxTensor = OnnxTensorConverter.ToOnnxFloat(tensor);
-            onnxInputs.Add(NamedOnnxValue.CreateFromTensor(name, onnxTensor));
+            // Use the model's expected element type for conversion
+            var elementType = inputMetadata.TryGetValue(name, out var type) ? type : "float";
+            onnxInputs.Add(OnnxTensorConverter.ToOnnxValue(name, tensor, elementType));
         }
 
         var outputNamesList = outputNames.ToList();
@@ -209,10 +218,11 @@ public class OnnxModel<T> : IOnnxModel<T>
         var outputs = new Dictionary<string, Tensor<T>>();
         foreach (var result in results)
         {
-            var onnxTensor = result.AsTensor<float>();
-            if (onnxTensor is not null)
+            // Use type-aware conversion based on actual output type
+            var converted = OnnxTensorConverter.FromOnnxValue<T>(result);
+            if (converted is not null)
             {
-                outputs[result.Name] = OnnxTensorConverter.FromOnnxFloat<T>(onnxTensor);
+                outputs[result.Name] = converted;
             }
         }
 
@@ -243,11 +253,11 @@ public class OnnxModel<T> : IOnnxModel<T>
         };
 
         using var results = _session.Run(inputs);
-        var output = results.First().AsTensor<float>();
+        var firstResult = results.First();
 
-        return output is not null
-            ? OnnxTensorConverter.FromOnnxFloat<T>(output)
-            : new Tensor<T>([0]);
+        // Use type-aware conversion based on actual output type
+        var converted = OnnxTensorConverter.FromOnnxValue<T>(firstResult);
+        return converted ?? new Tensor<T>([0]);
     }
 
     private (InferenceSession session, string provider) CreateSession(string modelPath)
