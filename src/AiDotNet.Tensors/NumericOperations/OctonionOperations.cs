@@ -416,5 +416,17 @@ public class OctonionOperations<T> : INumericOperations<Octonion<T>>
     public void MultiplyAdd(ReadOnlySpan<Octonion<T>> x, ReadOnlySpan<Octonion<T>> y, Octonion<T> scalar, Span<Octonion<T>> destination)
         => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
 
+    public void ToFloatSpan(ReadOnlySpan<Octonion<T>> source, Span<float> destination)
+        => VectorizedOperationsFallback.ToFloatSpan(this, source, destination);
+
+    public void FromFloatSpan(ReadOnlySpan<float> source, Span<Octonion<T>> destination)
+        => VectorizedOperationsFallback.FromFloatSpan(this, source, destination);
+
+    public void ToHalfSpan(ReadOnlySpan<Octonion<T>> source, Span<Half> destination)
+        => VectorizedOperationsFallback.ToHalfSpan(this, source, destination);
+
+    public void FromHalfSpan(ReadOnlySpan<Half> source, Span<Octonion<T>> destination)
+        => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
+
     #endregion
 }

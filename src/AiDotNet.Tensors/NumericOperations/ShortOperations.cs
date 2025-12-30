@@ -835,4 +835,16 @@ public class ShortOperations : INumericOperations<short>
 
     public void MultiplyAdd(ReadOnlySpan<short> x, ReadOnlySpan<short> y, short scalar, Span<short> destination)
         => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
+
+    public void ToFloatSpan(ReadOnlySpan<short> source, Span<float> destination)
+        => VectorizedOperationsFallback.ToFloatSpan(this, source, destination);
+
+    public void FromFloatSpan(ReadOnlySpan<float> source, Span<short> destination)
+        => VectorizedOperationsFallback.FromFloatSpan(this, source, destination);
+
+    public void ToHalfSpan(ReadOnlySpan<short> source, Span<Half> destination)
+        => VectorizedOperationsFallback.ToHalfSpan(this, source, destination);
+
+    public void FromHalfSpan(ReadOnlySpan<Half> source, Span<short> destination)
+        => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
 }

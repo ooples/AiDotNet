@@ -924,4 +924,22 @@ public class Int32Operations : INumericOperations<int>
 
     public void MultiplyAdd(ReadOnlySpan<int> x, ReadOnlySpan<int> y, int scalar, Span<int> destination)
         => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
+
+    /// <summary>
+    /// Converts int span to float span.
+    /// </summary>
+    public void ToFloatSpan(ReadOnlySpan<int> source, Span<float> destination)
+        => VectorizedOperationsFallback.ToFloatSpan(this, source, destination);
+
+    /// <summary>
+    /// Converts float span to int span.
+    /// </summary>
+    public void FromFloatSpan(ReadOnlySpan<float> source, Span<int> destination)
+        => VectorizedOperationsFallback.FromFloatSpan(this, source, destination);
+
+    public void ToHalfSpan(ReadOnlySpan<int> source, Span<Half> destination)
+        => VectorizedOperationsFallback.ToHalfSpan(this, source, destination);
+
+    public void FromHalfSpan(ReadOnlySpan<Half> source, Span<int> destination)
+        => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
 }

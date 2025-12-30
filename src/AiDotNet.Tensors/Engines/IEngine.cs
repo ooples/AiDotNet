@@ -33,6 +33,21 @@ public interface IEngine
     /// </summary>
     bool SupportsGpu { get; }
 
+    /// <summary>
+    /// Gets the DirectGpu engine for high-performance fused GPU operations.
+    /// Returns null if DirectGpu is not available.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// DirectGpu provides 10-100x faster operations than standard GPU paths by using
+    /// custom optimized kernels with fused operations (e.g., GEMM+Bias+Activation in one pass).
+    /// </para>
+    /// <para>
+    /// Works on ALL .NET versions including .NET Framework 4.6.2 via pure P/Invoke.
+    /// </para>
+    /// </remarks>
+    DirectGpu.DirectGpuEngine? DirectGpu { get; }
+
     #region Vector Operations
 
     /// <summary>

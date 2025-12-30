@@ -334,4 +334,77 @@ public interface IVectorizedOperations<T>
     /// <param name="scalar">The scalar value to multiply y by.</param>
     /// <param name="destination">The destination span for results.</param>
     void MultiplyAdd(ReadOnlySpan<T> x, ReadOnlySpan<T> y, T scalar, Span<T> destination);
+
+    /// <summary>
+    /// Converts elements from type T to float (FP32): destination[i] = (float)source[i].
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method converts an array of numbers from one type (like double or int)
+    /// to 32-bit floating-point numbers. This is commonly used when preparing data for GPU processing,
+    /// which typically operates on float32 for optimal performance.
+    /// </para>
+    /// <para>
+    /// <b>Performance:</b> This operation can be SIMD-accelerated using TensorPrimitives.ConvertToSingle
+    /// on .NET 8+, providing significant speedup over sequential conversion loops.
+    /// </para>
+    /// </remarks>
+    /// <param name="source">The source span containing values of type T.</param>
+    /// <param name="destination">The destination span for float results.</param>
+    void ToFloatSpan(ReadOnlySpan<T> source, Span<float> destination);
+
+    /// <summary>
+    /// Converts elements from float (FP32) to type T: destination[i] = (T)source[i].
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method converts an array of 32-bit floating-point numbers back to
+    /// another type (like double or int). This is commonly used when retrieving results from GPU
+    /// processing and converting them back to the user's preferred type.
+    /// </para>
+    /// <para>
+    /// <b>Performance:</b> This operation can be SIMD-accelerated on .NET 8+, providing significant
+    /// speedup over sequential conversion loops.
+    /// </para>
+    /// </remarks>
+    /// <param name="source">The source span containing float values.</param>
+    /// <param name="destination">The destination span for values of type T.</param>
+    void FromFloatSpan(ReadOnlySpan<float> source, Span<T> destination);
+
+    /// <summary>
+    /// Converts elements from type T to Half (FP16): destination[i] = (Half)source[i].
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method converts an array of numbers to 16-bit half-precision
+    /// floating-point numbers. Half precision uses less memory and can be faster on GPUs that
+    /// support it, at the cost of reduced precision and range.
+    /// </para>
+    /// <para>
+    /// <b>Performance:</b> This operation can be SIMD-accelerated using TensorPrimitives.ConvertToHalf
+    /// on .NET 8+, providing significant speedup over sequential conversion loops. Critical for
+    /// mixed-precision GPU operations where FP16 loads with FP32 accumulation provides 2x speedup.
+    /// </para>
+    /// </remarks>
+    /// <param name="source">The source span containing values of type T.</param>
+    /// <param name="destination">The destination span for Half results.</param>
+    void ToHalfSpan(ReadOnlySpan<T> source, Span<Half> destination);
+
+    /// <summary>
+    /// Converts elements from Half (FP16) to type T: destination[i] = (T)source[i].
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method converts an array of 16-bit half-precision floating-point
+    /// numbers to another type (like float or double). This is commonly used when retrieving results
+    /// from GPU processing that used half precision.
+    /// </para>
+    /// <para>
+    /// <b>Performance:</b> This operation can be SIMD-accelerated on .NET 8+, providing significant
+    /// speedup over sequential conversion loops.
+    /// </para>
+    /// </remarks>
+    /// <param name="source">The source span containing Half values.</param>
+    /// <param name="destination">The destination span for values of type T.</param>
+    void FromHalfSpan(ReadOnlySpan<Half> source, Span<T> destination);
 }

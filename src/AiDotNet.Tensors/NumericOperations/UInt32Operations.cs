@@ -842,4 +842,16 @@ public class UInt32Operations : INumericOperations<uint>
 
     public void MultiplyAdd(ReadOnlySpan<uint> x, ReadOnlySpan<uint> y, uint scalar, Span<uint> destination)
         => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
+
+    public void ToFloatSpan(ReadOnlySpan<uint> source, Span<float> destination)
+        => VectorizedOperationsFallback.ToFloatSpan(this, source, destination);
+
+    public void FromFloatSpan(ReadOnlySpan<float> source, Span<uint> destination)
+        => VectorizedOperationsFallback.FromFloatSpan(this, source, destination);
+
+    public void ToHalfSpan(ReadOnlySpan<uint> source, Span<Half> destination)
+        => VectorizedOperationsFallback.ToHalfSpan(this, source, destination);
+
+    public void FromHalfSpan(ReadOnlySpan<Half> source, Span<uint> destination)
+        => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
 }

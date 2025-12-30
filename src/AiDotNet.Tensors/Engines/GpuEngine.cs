@@ -2133,6 +2133,9 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public bool SupportsGpu => _accelerator != null;
 
+    /// <inheritdoc/>
+    public DirectGpu.DirectGpuEngine? DirectGpu => Engine.DirectGpu;
+
     /// <summary>
     /// Gets the timing diagnostics collector for this engine.
     /// </summary>

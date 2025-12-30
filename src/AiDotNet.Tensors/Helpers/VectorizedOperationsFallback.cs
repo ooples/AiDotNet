@@ -468,4 +468,60 @@ internal static class VectorizedOperationsFallback
         for (int i = 0; i < x.Length; i++)
             destination[i] = ops.Add(x[i], ops.Multiply(y[i], scalar));
     }
+
+    /// <summary>
+    /// Converts elements from type T to float using sequential loops.
+    /// </summary>
+    public static void ToFloatSpan<T>(INumericOperations<T> ops, ReadOnlySpan<T> source, Span<float> destination)
+    {
+        if (source.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < source.Length; i++)
+            destination[i] = ops.ToFloat(source[i]);
+    }
+
+    /// <summary>
+    /// Converts elements from float to type T using sequential loops.
+    /// </summary>
+    public static void FromFloatSpan<T>(INumericOperations<T> ops, ReadOnlySpan<float> source, Span<T> destination)
+    {
+        if (source.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < source.Length; i++)
+            destination[i] = ops.FromFloat(source[i]);
+    }
+
+    /// <summary>
+    /// Converts elements from type T to Half (FP16) using sequential loops.
+    /// </summary>
+    /// <remarks>
+    /// Conversion path: T -> float -> Half. For SIMD-optimized version on float arrays,
+    /// use TensorPrimitivesHelper.ConvertToHalf when available.
+    /// </remarks>
+    public static void ToHalfSpan<T>(INumericOperations<T> ops, ReadOnlySpan<T> source, Span<Half> destination)
+    {
+        if (source.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < source.Length; i++)
+            destination[i] = (Half)ops.ToFloat(source[i]);
+    }
+
+    /// <summary>
+    /// Converts elements from Half (FP16) to type T using sequential loops.
+    /// </summary>
+    /// <remarks>
+    /// Conversion path: Half -> float -> T. For SIMD-optimized version on float arrays,
+    /// use TensorPrimitivesHelper.ConvertFromHalf when available.
+    /// </remarks>
+    public static void FromHalfSpan<T>(INumericOperations<T> ops, ReadOnlySpan<Half> source, Span<T> destination)
+    {
+        if (source.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < source.Length; i++)
+            destination[i] = ops.FromFloat((float)source[i]);
+    }
 }

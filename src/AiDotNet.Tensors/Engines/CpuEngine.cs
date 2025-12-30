@@ -41,6 +41,9 @@ public class CpuEngine : IEngine
     public bool SupportsGpu => false;
 
     /// <inheritdoc/>
+    public DirectGpu.DirectGpuEngine? DirectGpu => Engine.DirectGpu;
+
+    /// <inheritdoc/>
     public Vector<T> Add<T>(Vector<T> a, Vector<T> b)
     {
         if (a == null) throw new ArgumentNullException(nameof(a));

@@ -87,39 +87,11 @@ public sealed class DirectGpuEngine : IDisposable
         Console.WriteLine("[DirectGpuEngine] Initializing GPU backends...");
 
         // Try backends in order of preference for maximum performance
+        // NOTE: OpenCL is preferred for now as it has optimized GEMM kernels
+        // HIP support is experimental and may have stability issues on some AMD GPUs
 
-        // 1. Try HIP backend first for AMD GPUs with MFMA
-        // This provides 10-20x speedup over OpenCL for matrix operations
-        try
-        {
-            Console.WriteLine("[DirectGpuEngine] Checking HIP availability...");
-            if (HipBackend.IsHipAvailable)
-            {
-                Console.WriteLine("[DirectGpuEngine] HIP is available, creating HIP backend...");
-                var hipBackend = new HipBackend();
-                if (hipBackend.IsAvailable)
-                {
-                    _backend = hipBackend;
-                    _isAvailable = true;
-                    Console.WriteLine($"[DirectGpuEngine] SUCCESS: Using HIP backend with {hipBackend.Architecture} architecture");
-                    System.Diagnostics.Debug.WriteLine($"DirectGpuEngine: Using HIP backend with {hipBackend.Architecture} architecture");
-                    return;
-                }
-                Console.WriteLine("[DirectGpuEngine] HIP backend created but not available, disposing...");
-                hipBackend.Dispose();
-            }
-            else
-            {
-                Console.WriteLine("[DirectGpuEngine] HIP is not available on this system");
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[DirectGpuEngine] HIP backend initialization failed: {ex.GetType().Name}: {ex.Message}");
-            System.Diagnostics.Debug.WriteLine($"HIP backend initialization failed: {ex.Message}");
-        }
-
-        // 2. Try OpenCL (works on AMD, Intel, and NVIDIA)
+        // 1. Try OpenCL first (works on AMD, Intel, and NVIDIA)
+        // Our optimized kernels with double buffering, KREG, and vectorized loads are in OpenCL
         try
         {
             Console.WriteLine("[DirectGpuEngine] Checking OpenCL availability...");
@@ -148,6 +120,37 @@ public sealed class DirectGpuEngine : IDisposable
                 Console.WriteLine($"[DirectGpuEngine] Inner exception: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
             }
             System.Diagnostics.Debug.WriteLine($"OpenCL backend initialization failed: {ex.Message}");
+        }
+
+        // 2. Try HIP backend for AMD GPUs (experimental)
+        // HIP provides MFMA support on MI100/200/300 GPUs
+        try
+        {
+            Console.WriteLine("[DirectGpuEngine] Checking HIP availability...");
+            if (HipBackend.IsHipAvailable)
+            {
+                Console.WriteLine("[DirectGpuEngine] HIP is available, creating HIP backend...");
+                var hipBackend = new HipBackend();
+                if (hipBackend.IsAvailable)
+                {
+                    _backend = hipBackend;
+                    _isAvailable = true;
+                    Console.WriteLine($"[DirectGpuEngine] SUCCESS: Using HIP backend with {hipBackend.Architecture} architecture");
+                    System.Diagnostics.Debug.WriteLine($"DirectGpuEngine: Using HIP backend with {hipBackend.Architecture} architecture");
+                    return;
+                }
+                Console.WriteLine("[DirectGpuEngine] HIP backend created but not available, disposing...");
+                hipBackend.Dispose();
+            }
+            else
+            {
+                Console.WriteLine("[DirectGpuEngine] HIP is not available on this system");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DirectGpuEngine] HIP backend initialization failed: {ex.GetType().Name}: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"HIP backend initialization failed: {ex.Message}");
         }
 
         // Future: Try CUDA backend

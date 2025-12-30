@@ -803,4 +803,16 @@ public class ByteOperations : INumericOperations<byte>
 
     public void MultiplyAdd(ReadOnlySpan<byte> x, ReadOnlySpan<byte> y, byte scalar, Span<byte> destination)
         => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
+
+    public void ToFloatSpan(ReadOnlySpan<byte> source, Span<float> destination)
+        => VectorizedOperationsFallback.ToFloatSpan(this, source, destination);
+
+    public void FromFloatSpan(ReadOnlySpan<float> source, Span<byte> destination)
+        => VectorizedOperationsFallback.FromFloatSpan(this, source, destination);
+
+    public void ToHalfSpan(ReadOnlySpan<byte> source, Span<Half> destination)
+        => VectorizedOperationsFallback.ToHalfSpan(this, source, destination);
+
+    public void FromHalfSpan(ReadOnlySpan<Half> source, Span<byte> destination)
+        => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
 }

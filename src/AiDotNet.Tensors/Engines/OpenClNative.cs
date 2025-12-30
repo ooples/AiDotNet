@@ -746,9 +746,24 @@ public static class ClBlastNative
                     {
                         try
                         {
+#if NET5_0_OR_GREATER
                             var handle = NativeLibrary.Load(ClBlastLibrary);
                             NativeLibrary.Free(handle);
                             _isAvailable = true;
+#else
+                            // On .NET Framework, try to call a simple function to check availability
+                            // This will throw if CLBlast is not found
+                            var ptr = LoadLibrary(ClBlastLibrary);
+                            if (ptr != IntPtr.Zero)
+                            {
+                                FreeLibrary(ptr);
+                                _isAvailable = true;
+                            }
+                            else
+                            {
+                                _isAvailable = false;
+                            }
+#endif
                         }
                         catch
                         {
@@ -761,6 +776,15 @@ public static class ClBlastNative
             return _isAvailable;
         }
     }
+
+#if !NET5_0_OR_GREATER
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr LoadLibrary(string dllToLoad);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool FreeLibrary(IntPtr hModule);
+#endif
 
     /// <summary>
     /// Single-precision general matrix multiplication: C = alpha*A*B + beta*C
@@ -1385,6 +1409,73 @@ public sealed class OpenClKernel : IDisposable
             out evt);
 
         OpenClContext.CheckError(error, "EnqueueNDRangeKernel");
+
+        if (evt != IntPtr.Zero)
+            OpenClNative.clReleaseEvent(evt);
+    }
+
+    /// <summary>Executes a 1D kernel with the specified global and local work sizes.</summary>
+    /// <param name="commandQueue">The command queue to use.</param>
+    /// <param name="globalSize">Total number of work items.</param>
+    /// <param name="localSize">Work items per workgroup.</param>
+    public void Execute1D(IntPtr commandQueue, int globalSize, int localSize)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(OpenClKernel));
+
+        // Round up global size to multiple of local size
+        int alignedGlobal = ((globalSize + localSize - 1) / localSize) * localSize;
+
+        var global = new UIntPtr[] { (UIntPtr)alignedGlobal };
+        var local = new UIntPtr[] { (UIntPtr)localSize };
+
+        IntPtr evt;
+        var error = OpenClNative.clEnqueueNDRangeKernel(
+            commandQueue,
+            _kernel,
+            1,
+            null!,
+            global,
+            local,
+            0,
+            null!,
+            out evt);
+
+        OpenClContext.CheckError(error, "Execute1D");
+
+        if (evt != IntPtr.Zero)
+            OpenClNative.clReleaseEvent(evt);
+    }
+
+    /// <summary>Executes a 2D kernel with the specified global and local work sizes.</summary>
+    /// <param name="commandQueue">The command queue to use.</param>
+    /// <param name="globalSizeX">Total work items in X dimension.</param>
+    /// <param name="globalSizeY">Total work items in Y dimension.</param>
+    /// <param name="localSizeX">Work items per workgroup in X.</param>
+    /// <param name="localSizeY">Work items per workgroup in Y.</param>
+    public void Execute2D(IntPtr commandQueue, int globalSizeX, int globalSizeY, int localSizeX, int localSizeY)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(OpenClKernel));
+
+        // Round up global sizes to multiple of local sizes
+        int alignedGlobalX = ((globalSizeX + localSizeX - 1) / localSizeX) * localSizeX;
+        int alignedGlobalY = ((globalSizeY + localSizeY - 1) / localSizeY) * localSizeY;
+
+        var global = new UIntPtr[] { (UIntPtr)alignedGlobalX, (UIntPtr)alignedGlobalY };
+        var local = new UIntPtr[] { (UIntPtr)localSizeX, (UIntPtr)localSizeY };
+
+        IntPtr evt;
+        var error = OpenClNative.clEnqueueNDRangeKernel(
+            commandQueue,
+            _kernel,
+            2,
+            null!,
+            global,
+            local,
+            0,
+            null!,
+            out evt);
+
+        OpenClContext.CheckError(error, "Execute2D");
 
         if (evt != IntPtr.Zero)
             OpenClNative.clReleaseEvent(evt);

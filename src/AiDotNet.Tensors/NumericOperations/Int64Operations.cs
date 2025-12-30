@@ -1011,4 +1011,16 @@ public class Int64Operations : INumericOperations<long>
 
     public void MultiplyAdd(ReadOnlySpan<long> x, ReadOnlySpan<long> y, long scalar, Span<long> destination)
         => VectorizedOperationsFallback.MultiplyAdd(this, x, y, scalar, destination);
+
+    public void ToFloatSpan(ReadOnlySpan<long> source, Span<float> destination)
+        => VectorizedOperationsFallback.ToFloatSpan(this, source, destination);
+
+    public void FromFloatSpan(ReadOnlySpan<float> source, Span<long> destination)
+        => VectorizedOperationsFallback.FromFloatSpan(this, source, destination);
+
+    public void ToHalfSpan(ReadOnlySpan<long> source, Span<Half> destination)
+        => VectorizedOperationsFallback.ToHalfSpan(this, source, destination);
+
+    public void FromHalfSpan(ReadOnlySpan<Half> source, Span<long> destination)
+        => VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
 }

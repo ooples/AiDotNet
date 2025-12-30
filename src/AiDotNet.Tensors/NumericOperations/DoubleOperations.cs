@@ -1061,5 +1061,43 @@ public class DoubleOperations : INumericOperations<double>
         Engines.Simd.SimdKernels.ScalarMultiplyAdd(x, y, scalar, destination);
     }
 
+    /// <summary>
+    /// Converts double span to float span.
+    /// Uses TensorPrimitives.ConvertTruncating on .NET 8+ for SIMD acceleration.
+    /// </summary>
+    public void ToFloatSpan(ReadOnlySpan<double> source, Span<float> destination)
+    {
+#if NET8_0_OR_GREATER
+        System.Numerics.Tensors.TensorPrimitives.ConvertTruncating(source, destination);
+#else
+        VectorizedOperationsFallback.ToFloatSpan(this, source, destination);
+#endif
+    }
+
+    /// <summary>
+    /// Converts float span to double span.
+    /// </summary>
+    public void FromFloatSpan(ReadOnlySpan<float> source, Span<double> destination)
+    {
+        // No TensorPrimitives for float->double, use fallback
+        VectorizedOperationsFallback.FromFloatSpan(this, source, destination);
+    }
+
+    /// <summary>
+    /// Converts double span to Half (FP16) span.
+    /// </summary>
+    public void ToHalfSpan(ReadOnlySpan<double> source, Span<Half> destination)
+    {
+        VectorizedOperationsFallback.ToHalfSpan(this, source, destination);
+    }
+
+    /// <summary>
+    /// Converts Half (FP16) span to double span.
+    /// </summary>
+    public void FromHalfSpan(ReadOnlySpan<Half> source, Span<double> destination)
+    {
+        VectorizedOperationsFallback.FromHalfSpan(this, source, destination);
+    }
+
     #endregion
 }
