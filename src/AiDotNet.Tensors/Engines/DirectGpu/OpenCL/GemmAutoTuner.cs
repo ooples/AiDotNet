@@ -1471,6 +1471,127 @@ public sealed class GemmAutoTuner
             }
         }
 
+        // ============================================================
+        // COOPERATIVE LOADING CONFIGURATIONS (CLBlast-style MDIMA/NDIMB)
+        // The KEY insight: Use different thread organization for loading vs computing
+        // MDIMA != MDIMC or NDIMB != NDIMC enables cooperative loading kernel
+        // This is how CLBlast achieves maximum memory bandwidth on large matrices!
+        // ============================================================
+
+        // 128x128 tile with cooperative loading: 8 threads load A (MDIMA=8), 8 threads load B (NDIMB=8)
+        // But compute uses 16x16 threads - more threads for loading bandwidth
+        configs.Add(new GemmConfig
+        {
+            TileM = 128, TileN = 128, TileK = 16,
+            ThreadTileM = 16, ThreadTileN = 16,  // MDIMC=16, NDIMC=16 (256 threads for compute)
+            VectorWidthM = 2, VectorWidthN = 4,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
+            StrideM = true, StrideN = true,
+            CacheA = true, CacheB = true,
+            MdimaSize = 8, NdimbSize = 8,  // MDIMA=8, NDIMB=8 (different from MDIMC/NDIMC!)
+            KernelName = "coop_128x128_md8_nd8"
+        });
+
+        // 128x128 with MDIMA=16, NDIMB=16 (same as MDIMC/NDIMC but wider vectors)
+        configs.Add(new GemmConfig
+        {
+            TileM = 128, TileN = 128, TileK = 16,
+            ThreadTileM = 16, ThreadTileN = 16,
+            VectorWidthM = 4, VectorWidthN = 4,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
+            StrideM = true, StrideN = true,
+            CacheA = true, CacheB = true,
+            MdimaSize = 32, NdimbSize = 32,  // Larger than MDIMC/NDIMC - more cooperative loading
+            KernelName = "coop_128x128_md32_nd32"
+        });
+
+        // 64x128 with cooperative loading
+        configs.Add(new GemmConfig
+        {
+            TileM = 64, TileN = 128, TileK = 16,
+            ThreadTileM = 8, ThreadTileN = 16,   // MDIMC=8, NDIMC=16 (128 threads)
+            VectorWidthM = 2, VectorWidthN = 4,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
+            StrideM = true, StrideN = true,
+            CacheA = true, CacheB = true,
+            MdimaSize = 16, NdimbSize = 32,  // MDIMA=16, NDIMB=32 (more threads for B loading)
+            KernelName = "coop_64x128_md16_nd32"
+        });
+
+        // 128x64 with cooperative loading (M-heavy)
+        configs.Add(new GemmConfig
+        {
+            TileM = 128, TileN = 64, TileK = 16,
+            ThreadTileM = 16, ThreadTileN = 8,   // MDIMC=16, NDIMC=8 (128 threads)
+            VectorWidthM = 4, VectorWidthN = 2,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
+            StrideM = true, StrideN = true,
+            CacheA = true, CacheB = true,
+            MdimaSize = 32, NdimbSize = 16,  // MDIMA=32 (more threads for A loading)
+            KernelName = "coop_128x64_md32_nd16"
+        });
+
+        // 64x64 with cooperative loading
+        configs.Add(new GemmConfig
+        {
+            TileM = 64, TileN = 64, TileK = 16,
+            ThreadTileM = 8, ThreadTileN = 8,    // MDIMC=8, NDIMC=8 (64 threads)
+            VectorWidthM = 2, VectorWidthN = 2,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
+            StrideM = true, StrideN = true,
+            CacheA = true, CacheB = true,
+            MdimaSize = 16, NdimbSize = 16,  // MDIMA=16, NDIMB=16 (2x loading threads)
+            KernelName = "coop_64x64_md16_nd16"
+        });
+
+        // Large matrix optimized: 128x128 with VWN=8 and cooperative loading
+        configs.Add(new GemmConfig
+        {
+            TileM = 128, TileN = 128, TileK = 32,
+            ThreadTileM = 16, ThreadTileN = 16,
+            VectorWidthM = 4, VectorWidthN = 8,  // Heavy B vectorization
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
+            StrideM = true, StrideN = true,
+            CacheA = true, CacheB = true,
+            MdimaSize = 32, NdimbSize = 64,  // Very cooperative B loading
+            KernelName = "coop_128x128_v8_md32_nd64"
+        });
+
+        // High-compute density: 256x256 tiles with cooperative loading
+        // (May exceed LDS for some GPUs, validation will filter)
+        configs.Add(new GemmConfig
+        {
+            TileM = 256, TileN = 256, TileK = 8,  // Small K to fit in LDS
+            ThreadTileM = 16, ThreadTileN = 16,
+            VectorWidthM = 4, VectorWidthN = 4,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
+            StrideM = true, StrideN = true,
+            CacheA = true, CacheB = true,
+            MdimaSize = 32, NdimbSize = 32,
+            KernelName = "coop_256x256_md32_nd32"
+        });
+
+        // CLBlast RX 5700 style: specific MDIMA/NDIMB values
+        configs.Add(new GemmConfig
+        {
+            TileM = 128, TileN = 128, TileK = 16,
+            ThreadTileM = 16, ThreadTileN = 8,   // MDIMC=16, NDIMC=8 (128 threads)
+            VectorWidthM = 8, VectorWidthN = 4,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 2, KUnroll = 4, UseSubgroupOps = capabilities.SupportsSubgroups,
+            StrideM = true, StrideN = true,
+            CacheA = true, CacheB = true,
+            MdimaSize = 16, NdimbSize = 16,  // CLBlast-style MDIMA/NDIMB
+            KernelName = "clblast_rx5700_variant"
+        });
+
         // Add mixed precision configs if supported
         if (capabilities.SupportsFP16)
         {

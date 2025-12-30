@@ -22,6 +22,7 @@ internal sealed class GemmFeatureBayesianTuner
     private double[,]? _covarianceMatrixInverse;
 
     // Feature indices for easy reference
+    // Basic configuration parameters
     private const int FEAT_TILE_M = 0;
     private const int FEAT_TILE_N = 1;
     private const int FEAT_TILE_K = 2;
@@ -36,7 +37,25 @@ internal sealed class GemmFeatureBayesianTuner
     private const int FEAT_SUBGROUP_OPS = 11;
     private const int FEAT_STRIDE_M = 12;
     private const int FEAT_STRIDE_N = 13;
-    private const int NUM_FEATURES = 14;
+    // CLBlast cooperative loading parameters
+    private const int FEAT_MDIMA = 14;
+    private const int FEAT_NDIMB = 15;
+    private const int FEAT_CACHE_A = 16;
+    private const int FEAT_CACHE_B = 17;
+    // Derived performance-critical features
+    private const int FEAT_MWI = 18;              // Output elements per thread in M (TileM / ThreadTileM)
+    private const int FEAT_NWI = 19;              // Output elements per thread in N (TileN / ThreadTileN)
+    private const int FEAT_COMPUTE_INTENSITY = 20; // MWI * NWI - register pressure indicator
+    private const int FEAT_WORKGROUP_SIZE = 21;    // ThreadTileM * ThreadTileN
+    private const int FEAT_LDS_USAGE = 22;         // Local memory usage in KB
+    private const int FEAT_OCCUPANCY_EST = 23;     // Estimated occupancy (registers/LDS based)
+    private const int FEAT_TILE_RATIO = 24;        // TileM / TileN - aspect ratio
+    private const int FEAT_K_TILE_RATIO = 25;      // TileK / (TileM + TileN) - K depth ratio
+    private const int FEAT_VEC_BANDWIDTH = 26;     // VWM * VWN - combined vectorization
+    private const int FEAT_COOP_LOADING = 27;      // 1.0 if MDIMA != MDIMC or NDIMB != NDIMC
+    private const int FEAT_REGISTERS_EST = 28;     // Estimated registers per thread
+    private const int FEAT_ILP_FACTOR = 29;        // Instruction-level parallelism (KREG * KUnroll)
+    private const int NUM_FEATURES = 30;
 
     // ARD length scales per feature (learned)
     private readonly double[] _lengthScales;
@@ -102,22 +121,95 @@ internal sealed class GemmFeatureBayesianTuner
 
     private double[] ExtractFeatures(GemmConfig config)
     {
+        // Basic parameters
+        int tileM = config.TileM;
+        int tileN = config.TileN;
+        int tileK = config.TileK;
+        int threadTileM = config.ThreadTileM > 0 ? config.ThreadTileM : 8;
+        int threadTileN = config.ThreadTileN > 0 ? config.ThreadTileN : 8;
+        int vwm = config.VectorWidthM > 0 ? config.VectorWidthM : 1;
+        int vwn = config.VectorWidthN > 0 ? config.VectorWidthN : 1;
+        int kreg = config.KReg > 0 ? config.KReg : 1;
+        int kunroll = config.KUnroll > 0 ? config.KUnroll : 1;
+
+        // Derived values - critical for performance prediction
+        int mwi = tileM / Math.Max(1, threadTileM);  // Outputs per thread in M
+        int nwi = tileN / Math.Max(1, threadTileN);  // Outputs per thread in N
+        int computeIntensity = mwi * nwi;            // Total outputs per thread
+        int workgroupSize = threadTileM * threadTileN;  // Total threads per work group
+
+        // Local memory usage (LDS) in KB - critical for occupancy
+        // Als[KWG][MWG+1] + Bls[KWG][NWG+1] in floats (4 bytes each)
+        double ldsUsage = (tileK * (tileM + 1) + tileK * (tileN + 1)) * sizeof(float) / 1024.0;
+        if (config.UseDoubleBuffering)
+            ldsUsage *= 2.0;  // Double buffering needs 2x LDS
+
+        // Occupancy estimate: based on registers and LDS
+        // AMD RDNA1: 256 VGPRs per SIMD, 64KB LDS per CU, max 4 waves/SIMD
+        // Registers per thread = accumulators + temps + A/B regs
+        double registersEst = computeIntensity +   // Accumulators
+                              mwi + nwi +          // A and B register values
+                              8;                   // Loop counters and temps
+
+        // Occupancy limited by: LDS (64KB max) and registers (256 per thread)
+        double ldsOccupancy = Math.Min(1.0, 64.0 / Math.Max(1.0, ldsUsage));
+        double regOccupancy = Math.Min(1.0, 256.0 / Math.Max(1.0, registersEst));
+        double occupancyEst = Math.Min(ldsOccupancy, regOccupancy);
+
+        // Aspect ratio - helps with memory coalescing
+        double tileRatio = (double)tileM / Math.Max(1.0, tileN);
+
+        // K tile depth ratio - affects K-loop overhead
+        double kTileRatio = (double)tileK / Math.Max(1.0, tileM + tileN);
+
+        // Combined vectorization - memory bandwidth efficiency
+        double vecBandwidth = vwm * vwn;
+
+        // Cooperative loading indicator
+        int mdima = config.MdimaSize > 0 ? config.MdimaSize : threadTileM;
+        int ndimb = config.NdimbSize > 0 ? config.NdimbSize : threadTileN;
+        double coopLoading = (mdima != threadTileM || ndimb != threadTileN) ? 1.0 : 0.0;
+
+        // ILP factor - instruction-level parallelism
+        double ilpFactor = kreg * kunroll;
+
         return new double[]
         {
-            config.TileM,
-            config.TileN,
-            config.TileK,
-            config.ThreadTileM,
-            config.ThreadTileN,
-            config.VectorWidthM,
-            config.VectorWidthN,
+            // Basic configuration parameters (14 features)
+            tileM,
+            tileN,
+            tileK,
+            threadTileM,
+            threadTileN,
+            vwm,
+            vwn,
             config.UseDoubleBuffering ? 1.0 : 0.0,
             config.UseVectorizedLoads ? 1.0 : 0.0,
-            config.KReg,       // Register tiling in K dimension (1, 2, 4)
-            config.KUnroll,    // K loop unroll factor (1, 2, 4, 8)
+            kreg,          // Register tiling in K dimension (1, 2, 4)
+            kunroll,       // K loop unroll factor (1, 2, 4, 8)
             config.UseSubgroupOps ? 1.0 : 0.0,  // Subgroup/wave operations
-            config.StrideM ? 1.0 : 0.0,  // STRM: Strided A tile stores for bank conflict avoidance
-            config.StrideN ? 1.0 : 0.0   // STRN: Strided B tile stores for bank conflict avoidance
+            config.StrideM ? 1.0 : 0.0,  // STRM: Strided A tile stores
+            config.StrideN ? 1.0 : 0.0,  // STRN: Strided B tile stores
+
+            // CLBlast cooperative loading parameters (4 features)
+            mdima,                              // MDIMA: loading threads for A
+            ndimb,                              // NDIMB: loading threads for B
+            config.CacheA ? 1.0 : 0.0,         // SA: cache A in local memory
+            config.CacheB ? 1.0 : 0.0,         // SB: cache B in local memory
+
+            // Derived performance-critical features (12 features)
+            mwi,                               // Outputs per thread in M
+            nwi,                               // Outputs per thread in N
+            computeIntensity,                  // MWI * NWI
+            workgroupSize,                     // Threads per work group
+            ldsUsage,                          // LDS usage in KB
+            occupancyEst,                      // Estimated occupancy 0-1
+            tileRatio,                         // TileM / TileN aspect ratio
+            kTileRatio,                        // K depth ratio
+            vecBandwidth,                      // Combined vectorization
+            coopLoading,                       // 1.0 if using cooperative loading
+            registersEst,                      // Estimated registers per thread
+            ilpFactor                          // ILP from KREG * KUnroll
         };
     }
 

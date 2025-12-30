@@ -10,11 +10,14 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL;
 /// <summary>
 /// Persistent storage for GEMM tuning results.
 /// Saves best configurations to disk for reuse across application restarts.
+/// Also tracks ALL tested configurations to avoid duplicate work in Bayesian optimization.
 /// </summary>
 internal sealed class GemmTuningDatabase : IDisposable
 {
     private readonly string _databasePath;
+    private readonly string _historyPath;  // Tracks ALL tested configs, not just best
     private readonly Dictionary<string, (GemmConfig Config, double GFlops)> _cache;
+    private readonly HashSet<string> _testedConfigs;  // ConfigKey -> already tested
     private readonly object _lock = new();
     private bool _isDirty;
     private bool _disposed;
@@ -22,6 +25,7 @@ internal sealed class GemmTuningDatabase : IDisposable
     public GemmTuningDatabase(string? customPath = null)
     {
         _cache = new Dictionary<string, (GemmConfig, double)>();
+        _testedConfigs = new HashSet<string>();
 
         // Use app data folder for persistence
         var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -29,8 +33,80 @@ internal sealed class GemmTuningDatabase : IDisposable
         Directory.CreateDirectory(aiDotNetPath);
 
         _databasePath = customPath ?? Path.Combine(aiDotNetPath, "gemm_tuning.json");
+        _historyPath = Path.Combine(aiDotNetPath, "gemm_history.txt");
 
         LoadFromDisk();
+        LoadHistoryFromDisk();
+    }
+
+    /// <summary>
+    /// Checks if a specific configuration has already been tested for a matrix size.
+    /// Used by Bayesian optimization to avoid re-testing configurations.
+    /// </summary>
+    public bool HasBeenTested(int M, int N, int K, GemmConfig config)
+    {
+        lock (_lock)
+        {
+            var historyKey = FormattableString.Invariant($"{M}x{N}x{K}|{config.ToKey()}");
+            return _testedConfigs.Contains(historyKey);
+        }
+    }
+
+    /// <summary>
+    /// Gets the cached GFLOPS for a specific configuration, if it was tested before.
+    /// Returns null if the config hasn't been tested yet.
+    /// </summary>
+    public double? GetCachedGflops(int M, int N, int K, GemmConfig config)
+    {
+        lock (_lock)
+        {
+            var historyKey = FormattableString.Invariant($"{M}x{N}x{K}|{config.ToKey()}");
+            if (_testedConfigs.Contains(historyKey))
+            {
+                // Try to find the exact GFLOPS from history
+                var matrixKey = FormattableString.Invariant($"{M}x{N}x{K}");
+                if (_cache.TryGetValue(matrixKey, out var entry) &&
+                    entry.Config.ToKey() == config.ToKey())
+                {
+                    return entry.GFlops;
+                }
+            }
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Marks a configuration as tested (even if it failed or wasn't the best).
+    /// This is crucial for Bayesian optimization efficiency.
+    /// </summary>
+    public void MarkAsTested(int M, int N, int K, GemmConfig config, double gflops)
+    {
+        lock (_lock)
+        {
+            var historyKey = FormattableString.Invariant($"{M}x{N}x{K}|{config.ToKey()}");
+            if (_testedConfigs.Add(historyKey))
+            {
+                _isDirty = true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the count of configurations already tested for a specific matrix size.
+    /// </summary>
+    public int GetTestedCount(int M, int N, int K)
+    {
+        lock (_lock)
+        {
+            var prefix = FormattableString.Invariant($"{M}x{N}x{K}|");
+            int count = 0;
+            foreach (var key in _testedConfigs)
+            {
+                if (key.StartsWith(prefix, StringComparison.Ordinal))
+                    count++;
+            }
+            return count;
+        }
     }
 
     /// <summary>
@@ -75,7 +151,7 @@ internal sealed class GemmTuningDatabase : IDisposable
     }
 
     /// <summary>
-    /// Persists any changes to disk.
+    /// Persists any changes to disk (including test history).
     /// </summary>
     public void Save()
     {
@@ -83,6 +159,7 @@ internal sealed class GemmTuningDatabase : IDisposable
         {
             if (!_isDirty) return;
             SaveToDisk();
+            SaveHistoryToDisk();
             _isDirty = false;
         }
     }
@@ -103,6 +180,38 @@ internal sealed class GemmTuningDatabase : IDisposable
         catch (Exception)
         {
             // Silently ignore load failures - start fresh
+        }
+    }
+
+    private void LoadHistoryFromDisk()
+    {
+        try
+        {
+            if (!File.Exists(_historyPath)) return;
+
+            foreach (var line in File.ReadLines(_historyPath))
+            {
+                if (!string.IsNullOrWhiteSpace(line))
+                {
+                    _testedConfigs.Add(line.Trim());
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // Silently ignore load failures
+        }
+    }
+
+    private void SaveHistoryToDisk()
+    {
+        try
+        {
+            File.WriteAllLines(_historyPath, _testedConfigs);
+        }
+        catch (Exception)
+        {
+            // Silently ignore save failures
         }
     }
 
@@ -133,6 +242,16 @@ internal sealed class GemmTuningDatabase : IDisposable
                 sb.Append(FormattableString.Invariant($"\"VectorWidthN\": {config.VectorWidthN}, "));
                 sb.Append(FormattableString.Invariant($"\"UseDoubleBuffering\": {config.UseDoubleBuffering.ToString().ToLower()}, "));
                 sb.Append(FormattableString.Invariant($"\"UseVectorizedLoads\": {config.UseVectorizedLoads.ToString().ToLower()}, "));
+                // CLBlast-style parameters
+                sb.Append(FormattableString.Invariant($"\"KReg\": {config.KReg}, "));
+                sb.Append(FormattableString.Invariant($"\"KUnroll\": {config.KUnroll}, "));
+                sb.Append(FormattableString.Invariant($"\"UseSubgroupOps\": {config.UseSubgroupOps.ToString().ToLower()}, "));
+                sb.Append(FormattableString.Invariant($"\"StrideM\": {config.StrideM.ToString().ToLower()}, "));
+                sb.Append(FormattableString.Invariant($"\"StrideN\": {config.StrideN.ToString().ToLower()}, "));
+                sb.Append(FormattableString.Invariant($"\"CacheA\": {config.CacheA.ToString().ToLower()}, "));
+                sb.Append(FormattableString.Invariant($"\"CacheB\": {config.CacheB.ToString().ToLower()}, "));
+                sb.Append(FormattableString.Invariant($"\"MdimaSize\": {config.MdimaSize}, "));
+                sb.Append(FormattableString.Invariant($"\"NdimbSize\": {config.NdimbSize}, "));
                 sb.Append(FormattableString.Invariant($"\"KernelName\": \"{config.KernelName}\", "));
                 sb.Append(FormattableString.Invariant($"\"GFlops\": {gflops:F2}}}"));
             }
@@ -207,6 +326,16 @@ internal sealed class GemmTuningDatabase : IDisposable
                     VectorWidthN = GetIntValue("VectorWidthN"),
                     UseDoubleBuffering = GetBoolValue("UseDoubleBuffering"),
                     UseVectorizedLoads = GetBoolValue("UseVectorizedLoads"),
+                    // CLBlast-style parameters
+                    KReg = GetIntValue("KReg"),
+                    KUnroll = GetIntValue("KUnroll"),
+                    UseSubgroupOps = GetBoolValue("UseSubgroupOps"),
+                    StrideM = GetBoolValue("StrideM"),
+                    StrideN = GetBoolValue("StrideN"),
+                    CacheA = GetBoolValue("CacheA"),
+                    CacheB = GetBoolValue("CacheB"),
+                    MdimaSize = GetIntValue("MdimaSize"),
+                    NdimbSize = GetIntValue("NdimbSize"),
                     KernelName = GetStringValue("KernelName")
                 };
 
