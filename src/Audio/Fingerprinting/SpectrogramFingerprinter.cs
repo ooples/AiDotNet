@@ -200,6 +200,9 @@ public class SpectrogramFingerprinter<T> : AudioFingerprinterBase<T>
         // Convert to fingerprint data
         var fpData = hashes.Select(h => NumOps.FromDouble(h)).ToArray();
 
+        // Calculate actual frame count from audio length
+        int actualFrameCount = Math.Max(1, (audioLength - _options.FftSize) / _options.HopLength + 1);
+
         return new AudioFingerprint<T>
         {
             Data = fpData,
@@ -207,7 +210,7 @@ public class SpectrogramFingerprinter<T> : AudioFingerprinterBase<T>
             Duration = (double)audioLength / _options.SampleRate,
             SampleRate = _options.SampleRate,
             Algorithm = Name,
-            FrameCount = peaks.Count,
+            FrameCount = actualFrameCount,
             Metadata = new Dictionary<string, object>
             {
                 ["peak_count"] = peaks.Count,
