@@ -50,12 +50,12 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     /// <summary>
     /// Indicates whether to use native training mode.
     /// </summary>
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
 
     /// <summary>
     /// Path to ONNX model (ONNX mode only).
     /// </summary>
-    private readonly string? _modelPath;
+    private string? _modelPath;
 
     #endregion
 
@@ -70,12 +70,12 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     /// <summary>
     /// Encoder layers (downsampling path).
     /// </summary>
-    private readonly List<ILayer<T>> _encoderLayers = new();
+    private List<ILayer<T>> _encoderLayers = new();
 
     /// <summary>
     /// Decoder layers (upsampling path).
     /// </summary>
-    private readonly List<ILayer<T>> _decoderLayers = new();
+    private List<ILayer<T>> _decoderLayers = new();
 
     /// <summary>
     /// Bottleneck layer.
@@ -90,36 +90,36 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     /// <summary>
     /// Loss function for training.
     /// </summary>
-    private readonly ILossFunction<T> _lossFunction;
+    private ILossFunction<T> _lossFunction;
 
     #endregion
 
     #region Configuration
 
     /// <summary>
-    /// FFT size for STFT analysis.
+    /// FFT size for STFT analysis (non-readonly for deserialization support).
     /// </summary>
-    private readonly int _fftSize;
+    private int _fftSize;
 
     /// <summary>
-    /// Hop size between STFT frames.
+    /// Hop size between STFT frames (non-readonly for deserialization support).
     /// </summary>
-    private readonly int _hopSize;
+    private int _hopSize;
 
     /// <summary>
-    /// Number of encoder/decoder stages.
+    /// Number of encoder/decoder stages (non-readonly for deserialization support).
     /// </summary>
-    private readonly int _numStages;
+    private int _numStages;
 
     /// <summary>
-    /// Base number of filters (doubled at each stage).
+    /// Base number of filters (doubled at each stage) (non-readonly for deserialization support).
     /// </summary>
-    private readonly int _baseFilters;
+    private int _baseFilters;
 
     /// <summary>
-    /// Hidden dimension in bottleneck.
+    /// Hidden dimension in bottleneck (non-readonly for deserialization support).
     /// </summary>
-    private readonly int _bottleneckDim;
+    private int _bottleneckDim;
 
     #endregion
 
@@ -826,15 +826,21 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadBoolean(); // _useNativeMode
+        _useNativeMode = reader.ReadBoolean();
         SampleRate = reader.ReadInt32();
-        _ = reader.ReadInt32(); // _fftSize
-        _ = reader.ReadInt32(); // _hopSize
+        _fftSize = reader.ReadInt32();
+        _hopSize = reader.ReadInt32();
         NumChannels = reader.ReadInt32();
-        _ = reader.ReadInt32(); // _numStages
-        _ = reader.ReadInt32(); // _baseFilters
-        _ = reader.ReadInt32(); // _bottleneckDim
+        _numStages = reader.ReadInt32();
+        _baseFilters = reader.ReadInt32();
+        _bottleneckDim = reader.ReadInt32();
         EnhancementStrength = reader.ReadDouble();
+
+        // Reinitialize layers if needed for native mode
+        if (_useNativeMode && (_encoderLayers is null || _encoderLayers.Count == 0))
+        {
+            InitializeLayers();
+        }
     }
 
     #endregion

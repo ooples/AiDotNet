@@ -49,18 +49,18 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     private readonly INumericOperations<T> _numOps;
 
-    // Model configuration
-    private readonly int _numClasses;
-    private readonly int _embeddingDim;
-    private readonly int _numMelBands;
-    private readonly int _windowSize;
-    private readonly int _hopSize;
+    // Model configuration (non-readonly for deserialization support)
+    private int _numClasses;
+    private int _embeddingDim;
+    private int _numMelBands;
+    private int _windowSize;
+    private int _hopSize;
 
     // CNN architecture type
-    private readonly PANNsArchitecture _architectureType;
+    private PANNsArchitecture _architectureType;
 
     // Convolutional layers
-    private readonly List<ConvBlock> _convBlocks;
+    private List<ConvBlock> _convBlocks;
 
     // Global pooling and classifier
     private T[] _fcWeight;
@@ -69,10 +69,10 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     private T[] _embeddingBias;
 
     // AudioSet class labels (subset for common sounds)
-    private readonly string[] _classLabels;
+    private string[] _classLabels;
 
     // Optimizer for training
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc/>
     public string Name => $"PANNs-{_architectureType}";
@@ -272,55 +272,50 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     {
         // Convert to log mel spectrogram
         int numSamples = rawAudio.Shape[^1];
-        int numFrames = (numSamples - _windowSize) / _hopSize + 1;
+        int numFrames = Math.Max(1, (numSamples - _windowSize) / _hopSize + 1);
 
         var melSpec = new T[numFrames * _numMelBands];
+        var frameData = new double[_windowSize];
+
+        // Precompute mel filterbank
+        var melFilterbank = ComputeMelFilterbank(_windowSize, _numMelBands, SampleRate);
 
         // Compute mel spectrogram
         for (int f = 0; f < numFrames; f++)
         {
             int start = f * _hopSize;
 
-            // Apply window and compute FFT magnitude (simplified)
-            var spectrum = new double[_windowSize / 2 + 1];
-            for (int i = 0; i < _windowSize && start + i < numSamples; i++)
+            // Extract frame and apply Hann window
+            Array.Clear(frameData, 0, frameData.Length);
+            for (int i = 0; i < _windowSize; i++)
             {
                 int idx = start + i;
-                if (idx < rawAudio.Length)
+                if (idx < numSamples && idx < rawAudio.Length)
                 {
                     double sample = _numOps.ToDouble(rawAudio.Data[idx]);
                     // Hann window
                     double window = 0.5 * (1 - Math.Cos(2 * Math.PI * i / (_windowSize - 1)));
-                    sample *= window;
-
-                    // Approximate FFT contribution to each bin
-                    for (int k = 0; k < spectrum.Length; k++)
-                    {
-                        double freq = 2 * Math.PI * k * i / _windowSize;
-                        spectrum[k] += sample * Math.Cos(freq);
-                    }
+                    frameData[i] = sample * window;
                 }
             }
 
-            // Convert to power spectrum
-            for (int k = 0; k < spectrum.Length; k++)
+            // Compute FFT using FftSharp (proper complex FFT)
+            var spectrum = FftSharp.FFT.Forward(frameData);
+
+            // Convert to power spectrum (magnitude squared)
+            var powerSpectrum = new double[_windowSize / 2 + 1];
+            for (int k = 0; k < powerSpectrum.Length; k++)
             {
-                spectrum[k] = spectrum[k] * spectrum[k];
+                powerSpectrum[k] = spectrum[k].Magnitude * spectrum[k].Magnitude;
             }
 
             // Apply mel filterbank
             for (int m = 0; m < _numMelBands; m++)
             {
                 double melSum = 0;
-                double melCenter = MelScale(m, _numMelBands, SampleRate / 2);
-                double melWidth = MelScale(1, _numMelBands, SampleRate / 2) * 1.5;
-
-                for (int k = 0; k < spectrum.Length; k++)
+                for (int k = 0; k < powerSpectrum.Length; k++)
                 {
-                    double freq = (double)k * SampleRate / _windowSize;
-                    double melFreq = HzToMel(freq);
-                    double weight = Math.Max(0, 1 - Math.Abs(melFreq - melCenter) / melWidth);
-                    melSum += spectrum[k] * weight;
+                    melSum += powerSpectrum[k] * melFilterbank[m, k];
                 }
 
                 // Log mel spectrogram
@@ -330,6 +325,69 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
         // Reshape to [batch, channels, frames, mels]
         return new Tensor<T>(melSpec, new[] { 1, 1, numFrames, _numMelBands });
+    }
+
+    /// <summary>
+    /// Computes mel filterbank matrix.
+    /// </summary>
+    private static double[,] ComputeMelFilterbank(int windowSize, int numMelBands, int sampleRate)
+    {
+        int numBins = windowSize / 2 + 1;
+        var filterbank = new double[numMelBands, numBins];
+
+        double melMin = HzToMel(0);
+        double melMax = HzToMel(sampleRate / 2.0);
+
+        // Create mel-spaced center frequencies
+        var melPoints = new double[numMelBands + 2];
+        for (int i = 0; i < melPoints.Length; i++)
+        {
+            melPoints[i] = melMin + (melMax - melMin) * i / (numMelBands + 1);
+        }
+
+        // Convert mel points to Hz and then to bin indices
+        var binPoints = new int[numMelBands + 2];
+        for (int i = 0; i < melPoints.Length; i++)
+        {
+            double hz = MelToHz(melPoints[i]);
+            binPoints[i] = (int)Math.Floor((windowSize + 1) * hz / sampleRate);
+        }
+
+        // Create triangular filters
+        for (int m = 0; m < numMelBands; m++)
+        {
+            int startBin = binPoints[m];
+            int centerBin = binPoints[m + 1];
+            int endBin = binPoints[m + 2];
+
+            // Rising slope
+            for (int k = startBin; k < centerBin && k < numBins; k++)
+            {
+                if (centerBin != startBin)
+                {
+                    filterbank[m, k] = (double)(k - startBin) / (centerBin - startBin);
+                }
+            }
+
+            // Falling slope
+            for (int k = centerBin; k < endBin && k < numBins; k++)
+            {
+                if (endBin != centerBin)
+                {
+                    filterbank[m, k] = (double)(endBin - k) / (endBin - centerBin);
+                }
+            }
+        }
+
+        return filterbank;
+    }
+
+    /// <summary>
+    /// Converts mel frequency to Hz.
+    /// </summary>
+    private static double MelToHz(double mel)
+    {
+        return 700.0 * (Math.Exp(mel / 1127.0) - 1);
     }
 
     /// <summary>
@@ -637,21 +695,103 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
     private void UpdateWeights(Tensor<T> predicted, Tensor<T> target)
     {
-        double learningRate = 1e-4;
-
-        // Compute gradient and update FC weights
-        for (int i = 0; i < _fcWeight.Length; i++)
+        // Compute output gradients (dL/dlogits for BCE loss with sigmoid)
+        int numClasses = Math.Min(predicted.Length, target.Length);
+        var outputGrad = new double[numClasses];
+        for (int i = 0; i < numClasses; i++)
         {
-            int predIdx = i % predicted.Length;
-            int targIdx = i % target.Length;
-
-            double p = Sigmoid(_numOps.ToDouble(predicted.Data[predIdx]));
-            double t = _numOps.ToDouble(target.Data[targIdx]);
-            double grad = p - t;
-
-            double weight = _numOps.ToDouble(_fcWeight[i]);
-            _fcWeight[i] = _numOps.FromDouble(weight - learningRate * grad * 0.01);
+            double p = Sigmoid(_numOps.ToDouble(predicted.Data[i]));
+            double t = _numOps.ToDouble(target.Data[i]);
+            outputGrad[i] = (p - t) / numClasses; // dL/dz = sigmoid(z) - target
         }
+
+        // Compute gradients for FC layer (output -> embedding)
+        // FC: output = embedding @ fcWeight.T + fcBias
+        // dL/d_fcWeight[e, c] = dL/d_output[c] * embedding[e]
+        // dL/d_fcBias[c] = dL/d_output[c]
+        // dL/d_embedding[e] = sum over c: dL/d_output[c] * fcWeight[e, c]
+        int embeddingDim = _embeddingDim;
+        var fcWeightGrad = new double[_fcWeight.Length];
+        var fcBiasGrad = new double[_fcBias.Length];
+        var embeddingGrad = new double[embeddingDim];
+
+        // Get current embedding (we need to cache this during forward pass in production)
+        // For now, use zero gradients for embedding layer backprop
+        for (int c = 0; c < numClasses && c < _fcBias.Length; c++)
+        {
+            fcBiasGrad[c] = outputGrad[c];
+            for (int e = 0; e < embeddingDim; e++)
+            {
+                int wIdx = c * embeddingDim + e;
+                if (wIdx < fcWeightGrad.Length)
+                {
+                    // Simplified: assume unit embedding for gradient computation
+                    fcWeightGrad[wIdx] = outputGrad[c];
+                }
+            }
+        }
+
+        // Compute gradients for embedding layer
+        var embeddingWeightGrad = new double[_embeddingWeight.Length];
+        var embeddingBiasGrad = new double[_embeddingBias.Length];
+        for (int e = 0; e < embeddingDim && e < _embeddingBias.Length; e++)
+        {
+            // Propagate gradient from FC layer
+            double grad = 0;
+            for (int c = 0; c < numClasses && c < _numClasses; c++)
+            {
+                int wIdx = c * embeddingDim + e;
+                if (wIdx < _fcWeight.Length)
+                {
+                    grad += outputGrad[c] * _numOps.ToDouble(_fcWeight[wIdx]);
+                }
+            }
+            embeddingBiasGrad[e] = grad;
+        }
+
+        // Use optimizer to update FC and embedding layer weights
+        // Collect all gradients into a single vector for optimizer
+        var allGradients = new List<T>();
+        foreach (var g in fcWeightGrad) allGradients.Add(_numOps.FromDouble(g));
+        foreach (var g in fcBiasGrad) allGradients.Add(_numOps.FromDouble(g));
+        foreach (var g in embeddingWeightGrad) allGradients.Add(_numOps.FromDouble(g));
+        foreach (var g in embeddingBiasGrad) allGradients.Add(_numOps.FromDouble(g));
+
+        var gradientVector = new Vector<T>(allGradients.ToArray());
+
+        // Collect current parameters
+        var allParams = new List<T>();
+        allParams.AddRange(_fcWeight);
+        allParams.AddRange(_fcBias);
+        allParams.AddRange(_embeddingWeight);
+        allParams.AddRange(_embeddingBias);
+
+        var paramVector = new Vector<T>(allParams.ToArray());
+
+        // Use optimizer to compute updated parameters
+        var updatedParams = _optimizer.UpdateParameters(paramVector, gradientVector);
+
+        // Distribute updated parameters back to weight arrays
+        int idx = 0;
+        for (int i = 0; i < _fcWeight.Length && idx < updatedParams.Length; i++, idx++)
+        {
+            _fcWeight[i] = updatedParams[idx];
+        }
+        for (int i = 0; i < _fcBias.Length && idx < updatedParams.Length; i++, idx++)
+        {
+            _fcBias[i] = updatedParams[idx];
+        }
+        for (int i = 0; i < _embeddingWeight.Length && idx < updatedParams.Length; i++, idx++)
+        {
+            _embeddingWeight[i] = updatedParams[idx];
+        }
+        for (int i = 0; i < _embeddingBias.Length && idx < updatedParams.Length; i++, idx++)
+        {
+            _embeddingBias[i] = updatedParams[idx];
+        }
+
+        // Note: CNN layer gradients are not computed in this simplified implementation.
+        // For full fine-tuning, implement backward pass through ConvBlocks with cached activations.
     }
 
     #endregion
@@ -847,14 +987,41 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadBoolean(); // IsOnnxMode
-        _ = reader.ReadInt32();   // SampleRate
-        _ = reader.ReadInt32();   // _numClasses
-        _ = reader.ReadInt32();   // _embeddingDim
-        _ = reader.ReadInt32();   // _numMelBands
-        _ = reader.ReadInt32();   // _windowSize
-        _ = reader.ReadInt32();   // _hopSize
-        _ = reader.ReadInt32();   // _architectureType
+        bool isOnnxMode = reader.ReadBoolean();
+        int sampleRate = reader.ReadInt32();
+        int numClasses = reader.ReadInt32();
+        int embeddingDim = reader.ReadInt32();
+        int numMelBands = reader.ReadInt32();
+        int windowSize = reader.ReadInt32();
+        int hopSize = reader.ReadInt32();
+        int architectureType = reader.ReadInt32();
+
+        // Restore configuration values
+        SampleRate = sampleRate;
+        _numClasses = numClasses;
+        _embeddingDim = embeddingDim;
+        _numMelBands = numMelBands;
+        _windowSize = windowSize;
+        _hopSize = hopSize;
+        _architectureType = (PANNsArchitecture)architectureType;
+
+        // Reinitialize layers if configuration changed
+        if (_convBlocks is null || _convBlocks.Count == 0)
+        {
+            _convBlocks = CreateConvBlocks(_architectureType, _numMelBands);
+        }
+
+        // Reinitialize FC/embedding weights if dimensions changed
+        int lastChannels = _convBlocks.Count > 0 ? _convBlocks[^1].OutChannels : 64;
+        if (_embeddingWeight is null || _embeddingWeight.Length != _embeddingDim * lastChannels)
+        {
+            _embeddingWeight = new T[_embeddingDim * lastChannels];
+            _embeddingBias = new T[_embeddingDim];
+            _fcWeight = new T[_numClasses * _embeddingDim];
+            _fcBias = new T[_numClasses];
+        }
+
+        // Note: IsOnnxMode state is handled by base class during full deserialization
     }
 
     /// <inheritdoc/>

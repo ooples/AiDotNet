@@ -65,7 +65,7 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// <summary>
     /// Indicates whether this network uses native layers (true) or ONNX models (false).
     /// </summary>
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
 
     #endregion
 
@@ -74,7 +74,7 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// <summary>
     /// Path to the ONNX model file.
     /// </summary>
-    private readonly string? _modelPath;
+    private string? _modelPath;
 
     #endregion
 
@@ -83,12 +83,12 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// <summary>
     /// Convolutional feature encoder layers.
     /// </summary>
-    private readonly List<ILayer<T>> _featureEncoderLayers = [];
+    private List<ILayer<T>> _featureEncoderLayers = [];
 
     /// <summary>
     /// Transformer encoder layers.
     /// </summary>
-    private readonly List<ILayer<T>> _transformerLayers = [];
+    private List<ILayer<T>> _transformerLayers = [];
 
     /// <summary>
     /// CTC projection layer.
@@ -102,52 +102,52 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// <summary>
     /// Optimizer for training (unused in ONNX mode).
     /// </summary>
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <summary>
     /// Loss function for training.
     /// </summary>
-    private readonly ILossFunction<T> _lossFunction;
+    private ILossFunction<T> _lossFunction;
 
     /// <summary>
-    /// Target language for transcription.
+    /// Target language for transcription (non-readonly for deserialization support).
     /// </summary>
-    private readonly string? _language;
+    private string? _language;
 
     /// <summary>
-    /// Maximum audio length in seconds.
+    /// Maximum audio length in seconds (non-readonly for deserialization support).
     /// </summary>
-    private readonly int _maxAudioLengthSeconds;
+    private int _maxAudioLengthSeconds;
 
     /// <summary>
-    /// Hidden dimension for the transformer.
+    /// Hidden dimension for the transformer (non-readonly for deserialization support).
     /// </summary>
-    private readonly int _hiddenDim;
+    private int _hiddenDim;
 
     /// <summary>
-    /// Number of transformer layers.
+    /// Number of transformer layers (non-readonly for deserialization support).
     /// </summary>
-    private readonly int _numTransformerLayers;
+    private int _numTransformerLayers;
 
     /// <summary>
-    /// Number of attention heads.
+    /// Number of attention heads (non-readonly for deserialization support).
     /// </summary>
-    private readonly int _numHeads;
+    private int _numHeads;
 
     /// <summary>
-    /// Feed-forward dimension.
+    /// Feed-forward dimension (non-readonly for deserialization support).
     /// </summary>
-    private readonly int _ffDim;
+    private int _ffDim;
 
     /// <summary>
-    /// Vocabulary size for CTC output.
+    /// Vocabulary size for CTC output (non-readonly for deserialization support).
     /// </summary>
-    private readonly int _vocabSize;
+    private int _vocabSize;
 
     /// <summary>
-    /// Vocabulary mapping for CTC decoding.
+    /// Vocabulary mapping for CTC decoding (non-readonly for deserialization support).
     /// </summary>
-    private readonly string[] _vocabulary;
+    private string[] _vocabulary;
 
     /// <summary>
     /// Disposed flag.
@@ -674,15 +674,21 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// </summary>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadBoolean(); // useNativeMode
+        _useNativeMode = reader.ReadBoolean();
         SampleRate = reader.ReadInt32();
-        _ = reader.ReadInt32(); // maxAudioLengthSeconds
-        _ = reader.ReadInt32(); // hiddenDim
-        _ = reader.ReadInt32(); // numTransformerLayers
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadInt32(); // ffDim
-        _ = reader.ReadInt32(); // vocabSize
-        _ = reader.ReadString(); // language
+        _maxAudioLengthSeconds = reader.ReadInt32();
+        _hiddenDim = reader.ReadInt32();
+        _numTransformerLayers = reader.ReadInt32();
+        _numHeads = reader.ReadInt32();
+        _ffDim = reader.ReadInt32();
+        _vocabSize = reader.ReadInt32();
+        _language = reader.ReadString();
+
+        // Reinitialize layers if needed for native mode
+        if (_useNativeMode && (_featureEncoderLayers is null || _featureEncoderLayers.Count == 0))
+        {
+            InitializeLayers();
+        }
     }
 
     /// <summary>
