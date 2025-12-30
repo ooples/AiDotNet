@@ -95,24 +95,39 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL.Kernels
         } \
     }
 
+// KREG = 4: Process 4 K values per loop iteration for better register utilization
+#define KREG 4
+
 #define COMPUTE_TILE(As, Bs, acc) \
     _Pragma(""unroll"") \
-    for (int kk = 0; kk < TILE_K; kk++) { \
-        float aVals[OUTPUTS_M]; \
+    for (int kk = 0; kk < TILE_K; kk += KREG) { \
+        /* Load KREG A values for each of OUTPUTS_M rows */ \
+        float aVals0[OUTPUTS_M], aVals1[OUTPUTS_M], aVals2[OUTPUTS_M], aVals3[OUTPUTS_M]; \
         _Pragma(""unroll"") \
         for (int mi = 0; mi < OUTPUTS_M; mi++) { \
-            aVals[mi] = As[tidM * OUTPUTS_M + mi][kk]; \
+            aVals0[mi] = As[tidM * OUTPUTS_M + mi][kk + 0]; \
+            aVals1[mi] = As[tidM * OUTPUTS_M + mi][kk + 1]; \
+            aVals2[mi] = As[tidM * OUTPUTS_M + mi][kk + 2]; \
+            aVals3[mi] = As[tidM * OUTPUTS_M + mi][kk + 3]; \
         } \
-        float bVals[OUTPUTS_N]; \
+        /* Load KREG B values for each of OUTPUTS_N columns */ \
+        float bVals0[OUTPUTS_N], bVals1[OUTPUTS_N], bVals2[OUTPUTS_N], bVals3[OUTPUTS_N]; \
         _Pragma(""unroll"") \
         for (int ni = 0; ni < OUTPUTS_N; ni++) { \
-            bVals[ni] = Bs[kk][tidN * OUTPUTS_N + ni]; \
+            bVals0[ni] = Bs[kk + 0][tidN * OUTPUTS_N + ni]; \
+            bVals1[ni] = Bs[kk + 1][tidN * OUTPUTS_N + ni]; \
+            bVals2[ni] = Bs[kk + 2][tidN * OUTPUTS_N + ni]; \
+            bVals3[ni] = Bs[kk + 3][tidN * OUTPUTS_N + ni]; \
         } \
+        /* 4 outer products accumulated */ \
         _Pragma(""unroll"") \
         for (int mi = 0; mi < OUTPUTS_M; mi++) { \
             _Pragma(""unroll"") \
             for (int ni = 0; ni < OUTPUTS_N; ni++) { \
-                acc[mi][ni] = fma(aVals[mi], bVals[ni], acc[mi][ni]); \
+                acc[mi][ni] = fma(aVals0[mi], bVals0[ni], acc[mi][ni]); \
+                acc[mi][ni] = fma(aVals1[mi], bVals1[ni], acc[mi][ni]); \
+                acc[mi][ni] = fma(aVals2[mi], bVals2[ni], acc[mi][ni]); \
+                acc[mi][ni] = fma(aVals3[mi], bVals3[ni], acc[mi][ni]); \
             } \
         } \
     }
