@@ -95,20 +95,6 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
     #endregion
 
-    #region Native Mode Fields
-
-    /// <summary>
-    /// Encoder layers for native training mode.
-    /// </summary>
-    private readonly List<ILayer<T>> _encoderLayers = [];
-
-    /// <summary>
-    /// Decoder layers for native training mode.
-    /// </summary>
-    private readonly List<ILayer<T>> _decoderLayers = [];
-
-    #endregion
-
     #region Shared Fields
 
     /// <summary>
@@ -119,7 +105,7 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <summary>
     /// Optimizer for training.
     /// </summary>
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <summary>
     /// Loss function for training.
@@ -341,7 +327,7 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
         // Initialize optimizer and loss function (not used in ONNX mode, but required for readonly fields)
         _lossFunction = new MeanSquaredErrorLoss<T>();
-        _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Initialize layers (empty for ONNX mode)
         InitializeLayers();
@@ -403,7 +389,7 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         int fftSize = 1024,
         int hopLength = 256,
         int griffinLimIterations = 60,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
@@ -440,13 +426,13 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
         // Initialize optimizer and loss function
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Initialize available voices
         AvailableVoices = GetDefaultVoices();
 
-        // Initialize native layers
-        InitializeNativeLayers();
+        // Initialize layers
+        InitializeLayers();
     }
 
     #endregion
@@ -454,59 +440,38 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     #region Layer Initialization
 
     /// <summary>
-    /// Initializes layers for ONNX inference mode.
+    /// Initializes the layers for the TTS model.
     /// </summary>
+    /// <remarks>
+    /// Follows the golden standard pattern:
+    /// 1. Check if in native mode (ONNX mode returns early)
+    /// 2. Use Architecture.Layers if provided by user
+    /// 3. Fall back to LayerHelper.CreateDefaultTtsLayers() otherwise
+    /// </remarks>
     protected override void InitializeLayers()
     {
-        // ONNX mode - no native layers needed
-    }
+        if (!_useNativeMode) return;
 
-    /// <summary>
-    /// Initializes layers for native training mode.
-    /// </summary>
-    private void InitializeNativeLayers()
-    {
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-
-        int phonemeVocabSize = 128; // Typical phoneme vocabulary size
-
-        // Encoder: Phoneme embedding -> Hidden representation
-        // Phoneme embedding projection
-        var phonemeEmbed = new DenseLayer<T>(phonemeVocabSize, _hiddenDim, geluActivation);
-        _encoderLayers.Add(phonemeEmbed);
-
-        // Encoder transformer layers
-        for (int i = 0; i < _numEncoderLayers; i++)
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
-            var selfAttn = new MultiHeadAttentionLayer<T>(_maxPhonemeLength, _hiddenDim, _numHeads, identityActivation);
-            var ff = new DenseLayer<T>(_hiddenDim, _hiddenDim * 4, geluActivation);
-            var ffOut = new DenseLayer<T>(_hiddenDim * 4, _hiddenDim, identityActivation);
-            _encoderLayers.Add(selfAttn);
-            _encoderLayers.Add(ff);
-            _encoderLayers.Add(ffOut);
+            Layers.AddRange(Architecture.Layers);
         }
-
-        // Duration predictor (predicts mel frames per phoneme)
-        var durationPredictor = new DenseLayer<T>(_hiddenDim, 1, identityActivation);
-        _encoderLayers.Add(durationPredictor);
-
-        // Decoder: Hidden representation -> Mel spectrogram
-        int maxMelFrames = (SampleRate * 30) / _hopLength; // Max 30 seconds
-
-        for (int i = 0; i < _numDecoderLayers; i++)
+        else
         {
-            var selfAttn = new MultiHeadAttentionLayer<T>(maxMelFrames, _hiddenDim, _numHeads, identityActivation);
-            var ff = new DenseLayer<T>(_hiddenDim, _hiddenDim * 4, geluActivation);
-            var ffOut = new DenseLayer<T>(_hiddenDim * 4, _hiddenDim, identityActivation);
-            _decoderLayers.Add(selfAttn);
-            _decoderLayers.Add(ff);
-            _decoderLayers.Add(ffOut);
+            int maxMelFrames = (SampleRate * 30) / _hopLength; // Max 30 seconds
+            int phonemeVocabSize = 128;
+            Layers.AddRange(LayerHelper<T>.CreateDefaultTtsLayers(
+                vocabSize: phonemeVocabSize,
+                textHiddenDim: _hiddenDim,
+                audioHiddenDim: _hiddenDim,
+                numEncoderLayers: _numEncoderLayers,
+                numDecoderLayers: _numDecoderLayers,
+                numHeads: _numHeads,
+                maxTextLength: _maxPhonemeLength,
+                maxMelFrames: maxMelFrames,
+                numMels: NumMels,
+                dropoutRate: 0.0));
         }
-
-        // Output projection to mel spectrogram
-        var melOutput = new DenseLayer<T>(_hiddenDim, NumMels, identityActivation);
-        _decoderLayers.Add(melOutput);
     }
 
     #endregion
@@ -688,14 +653,9 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         }
         else
         {
-            // Native forward pass through encoder
+            // Native forward pass through unified Layers list
             Tensor<T> output = input;
-            foreach (var layer in _encoderLayers)
-            {
-                output = layer.Forward(output);
-            }
-            // Continue through decoder
-            foreach (var layer in _decoderLayers)
+            foreach (var layer in Layers)
             {
                 output = layer.Forward(output);
             }
@@ -706,23 +666,21 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <summary>
     /// Updates model parameters using gradient descent.
     /// </summary>
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode)
         {
             throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
         }
 
-        // Apply gradient descent: params = params - learning_rate * gradients
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-
-        for (int i = 0; i < currentParams.Length; i++)
+        int index = 0;
+        foreach (var layer in Layers)
         {
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
+            int count = layer.ParameterCount;
+            var layerParams = parameters.Slice(index, count);
+            layer.UpdateParameters(layerParams);
+            index += count;
         }
-
-        SetParameters(currentParams);
     }
 
     /// <summary>
@@ -735,27 +693,27 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             throw new NotSupportedException("Cannot train in ONNX inference mode. Use the native training constructor.");
         }
 
-        // Set training mode
+        // 1. Set training mode
         SetTrainingMode(true);
 
-        // Forward pass
+        // 2. Forward pass
         var prediction = Predict(input);
 
-        // Convert tensors to vectors for loss calculation
+        // 3. Convert tensors to vectors for loss calculation
         var flatPrediction = prediction.ToVector();
         var flatExpected = expectedOutput.ToVector();
 
-        // Compute loss
+        // 4. Compute loss
         LastLoss = _lossFunction.CalculateLoss(flatPrediction, flatExpected);
 
-        // Compute gradients via backpropagation
+        // 5. Compute gradients via backpropagation
         var lossGradient = _lossFunction.CalculateDerivative(flatPrediction, flatExpected);
         Backpropagate(Tensor<T>.FromVector(lossGradient));
 
-        // Update parameters using gradient descent
-        var gradients = GetParameterGradients();
-        UpdateParameters(gradients);
+        // 6. Update parameters using optimizer
+        _optimizer.UpdateParameters(Layers);
 
+        // 7. Exit training mode
         SetTrainingMode(false);
     }
 

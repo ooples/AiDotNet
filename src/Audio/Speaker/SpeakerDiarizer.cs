@@ -1,3 +1,4 @@
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -70,12 +71,27 @@ public class SpeakerDiarizer<T> : IDisposable
         NumOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new SpeakerDiarizerOptions();
 
-        _embeddingExtractor = new SpeakerEmbeddingExtractor<T>(new SpeakerEmbeddingOptions
+        // Create architecture for embedding extractor
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputFeatures: _options.EmbeddingDimension,
+            outputSize: _options.EmbeddingDimension);
+
+        // Create embedding extractor based on whether we have an ONNX model path
+        if (_options.EmbeddingModelPath is not null && _options.EmbeddingModelPath.Length > 0)
         {
-            SampleRate = _options.SampleRate,
-            EmbeddingDimension = _options.EmbeddingDimension,
-            ModelPath = _options.EmbeddingModelPath
-        });
+            _embeddingExtractor = new SpeakerEmbeddingExtractor<T>(
+                architecture,
+                modelPath: _options.EmbeddingModelPath,
+                sampleRate: _options.SampleRate,
+                embeddingDimension: _options.EmbeddingDimension);
+        }
+        else
+        {
+            _embeddingExtractor = new SpeakerEmbeddingExtractor<T>(
+                architecture,
+                sampleRate: _options.SampleRate,
+                embeddingDimension: _options.EmbeddingDimension);
+        }
     }
 
     /// <summary>
