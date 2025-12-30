@@ -22,6 +22,7 @@ public class BeatTrackingResult
 
     /// <summary>
     /// Gets the average beat interval in seconds.
+    /// Returns 0 if tempo is not available (0 or negative).
     /// </summary>
-    public double AverageBeatInterval => 60.0 / Tempo;
+    public double AverageBeatInterval => Tempo > 0 ? 60.0 / Tempo : 0.0;
 }

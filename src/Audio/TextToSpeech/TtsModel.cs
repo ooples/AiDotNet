@@ -304,14 +304,35 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         // Initialize preprocessor
         _preprocessor = new TtsPreprocessor();
 
-        // Load acoustic model
-        _acousticModel = new OnnxModel<T>(acousticModelPath, onnxOptions ?? new OnnxModelOptions());
+        // Load ONNX models with proper cleanup on failure
+        OnnxModel<T>? acousticModel = null;
+        OnnxModel<T>? vocoder = null;
 
-        // Load vocoder or create Griffin-Lim fallback
-        if (vocoderModelPath is not null && vocoderModelPath.Length > 0)
+        try
         {
-            _vocoder = new OnnxModel<T>(vocoderModelPath, onnxOptions ?? new OnnxModelOptions());
-            OnnxModel = _vocoder;
+            // Load acoustic model first
+            acousticModel = new OnnxModel<T>(acousticModelPath, onnxOptions ?? new OnnxModelOptions());
+
+            // Load vocoder if path provided
+            if (vocoderModelPath is not null && vocoderModelPath.Length > 0)
+            {
+                vocoder = new OnnxModel<T>(vocoderModelPath, onnxOptions ?? new OnnxModelOptions());
+            }
+
+            // Assign to fields only after both succeed
+            _acousticModel = acousticModel;
+            _vocoder = vocoder;
+            if (_vocoder is not null)
+            {
+                OnnxModel = _vocoder;
+            }
+        }
+        catch
+        {
+            // Clean up any successfully created models before rethrowing
+            acousticModel?.Dispose();
+            vocoder?.Dispose();
+            throw;
         }
 
         if (useGriffinLimFallback || _vocoder is null)

@@ -4489,10 +4489,17 @@ public static class LayerHelper<T>
     ///    - Transformer encoder layers with self-attention
     /// 2. Text decoder: Generates text tokens autoregressively
     ///    - Embedding layer for text tokens
-    ///    - Transformer decoder layers with self-attention and cross-attention
+    ///    - Transformer decoder layers with self-attention
     ///    - Output projection to vocabulary
     ///
-    /// This creates a trainable model from scratch. For inference with pre-trained weights,
+    /// <b>IMPORTANT LIMITATION:</b> This method creates a flat sequential layer list which does NOT
+    /// support true encoder-decoder cross-attention. The "cross-attention" layers in the decoder
+    /// are actually additional self-attention layers because the flat architecture cannot route
+    /// encoder outputs to the decoder. For a proper Whisper implementation with cross-attention,
+    /// use the ONNX-based WhisperModel with pretrained weights, or implement a custom forward pass
+    /// that explicitly passes encoder outputs to decoder cross-attention layers.
+    ///
+    /// This creates a trainable model structure from scratch. For inference with pre-trained weights,
     /// use the ONNX-based WhisperModel.CreateAsync() method instead.
     /// </para>
     /// </remarks>
@@ -4578,7 +4585,11 @@ public static class LayerHelper<T>
         // Decoder transformer layers
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            // Self-attention (masked for autoregressive decoding)
+            // Self-attention layer for decoder
+            // NOTE: Causal masking for autoregressive decoding should be applied during
+            // the forward pass, not in the layer configuration. The MultiHeadAttentionLayer
+            // does not automatically apply causal masking - this must be handled by the
+            // model's forward implementation.
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: maxSequenceLength,
                 embeddingDimension: modelDimension,
@@ -4594,7 +4605,11 @@ public static class LayerHelper<T>
                 yield return new DropoutLayer<T>(dropoutRate);
             }
 
-            // Cross-attention (attends to encoder output)
+            // NOTE: This is a placeholder for cross-attention but functions as self-attention
+            // in the current flat sequential architecture. True cross-attention would require
+            // encoder output to be passed as key/value, which the flat layer list cannot support.
+            // For production use with proper cross-attention, use ONNX models or implement
+            // a custom forward pass.
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: maxSequenceLength,
                 embeddingDimension: modelDimension,

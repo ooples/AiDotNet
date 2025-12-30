@@ -948,7 +948,8 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         }
 
         // Add speaker embedding if available
-        if (speakerEmb is not null && encoded.Rank >= 2)
+        // Requires Rank >= 3 for 3D tensor indexing [batch, time, hidden]
+        if (speakerEmb is not null && encoded.Rank >= 3)
         {
             // Broadcast speaker embedding across sequence
             for (int t = 0; t < encoded.Shape[1]; t++)
@@ -1029,7 +1030,8 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
         for (int i = 0; i < seqLen; i++)
         {
-            double dur = durations.Rank >= 2
+            // Use 3D indexing only if Rank >= 3, otherwise fall back to 1D indexing
+            double dur = durations.Rank >= 3
                 ? NumOps.ToDouble(durations[0, i, 0])
                 : NumOps.ToDouble(durations[i]);
             totalFrames += Math.Max(1, (int)(dur * lengthScale));
@@ -1041,7 +1043,8 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         int frameIdx = 0;
         for (int i = 0; i < seqLen && frameIdx < totalFrames; i++)
         {
-            double dur = durations.Rank >= 2
+            // Use 3D indexing only if Rank >= 3, otherwise fall back to 1D indexing
+            double dur = durations.Rank >= 3
                 ? NumOps.ToDouble(durations[0, i, 0])
                 : NumOps.ToDouble(durations[i]);
             int numFrames = Math.Max(1, (int)(dur * lengthScale));

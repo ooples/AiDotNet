@@ -37,6 +37,7 @@ public class BeatTracker<T> : MusicAnalysisBase<T>
 {
     private readonly SpectralFeatureExtractor<T> _spectralExtractor;
     private readonly BeatTrackerOptions _options;
+    private readonly int _fluxIndex;
 
     /// <summary>
     /// Gets the minimum BPM for beat detection.
@@ -61,12 +62,26 @@ public class BeatTracker<T> : MusicAnalysisBase<T>
         HopLength = _options.HopLength;
         FftSize = _options.FftSize;
 
+        // Create spectral extractor - ensure Flux is included for beat tracking
+        // We use Flux (spectral change) as the onset strength signal
         _spectralExtractor = new SpectralFeatureExtractor<T>(new SpectralFeatureOptions
         {
             SampleRate = _options.SampleRate,
             FftSize = _options.FftSize,
-            HopLength = _options.HopLength
+            HopLength = _options.HopLength,
+            // Ensure Flux is enabled - it's part of Basic by default
+            FeatureTypes = SpectralFeatureType.Flux
         });
+
+        // Get the actual index of Flux in the feature tensor
+        _fluxIndex = _spectralExtractor.GetFeatureIndex(SpectralFeatureType.Flux);
+
+        if (_fluxIndex < 0)
+        {
+            throw new InvalidOperationException(
+                "BeatTracker requires spectral flux feature but it is not available. " +
+                "Ensure SpectralFeatureType.Flux is enabled in the extractor options.");
+        }
     }
 
     /// <summary>
@@ -117,11 +132,12 @@ public class BeatTracker<T> : MusicAnalysisBase<T>
         int numFrames = features.Shape[0];
         var onsetEnvelope = new double[numFrames];
 
-        // Get spectral flux (column 4 in our SpectralFeatureExtractor)
+        // Get spectral flux using the dynamically determined index
+        // Flux measures spectral change between frames - high values indicate onsets
         for (int f = 0; f < numFrames; f++)
         {
-            // Use spectral flux (index 4) as onset strength
-            onsetEnvelope[f] = Math.Max(0, NumOps.ToDouble(features[f, 4]));
+            // Use spectral flux as onset strength (half-wave rectified to only keep increases)
+            onsetEnvelope[f] = Math.Max(0, NumOps.ToDouble(features[f, _fluxIndex]));
         }
 
         // Apply half-wave rectification and smoothing

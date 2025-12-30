@@ -380,4 +380,63 @@ public class SpectralFeatureExtractor<T> : AudioFeatureExtractorBase<T>
         if (types.HasFlag(SpectralFeatureType.ZeroCrossingRate)) count++;
         return count;
     }
+
+    /// <summary>
+    /// Gets the column index for a specific feature type in the extracted feature tensor.
+    /// </summary>
+    /// <param name="featureType">The feature type to find the index for.</param>
+    /// <returns>
+    /// The column index of the feature in the output tensor, or -1 if the feature is not enabled.
+    /// </returns>
+    /// <remarks>
+    /// Feature indices depend on which features are enabled. For example, if only Flux and Flatness
+    /// are enabled, Flux will be at index 0 and Flatness at index 1. With Basic features
+    /// (Centroid, Bandwidth, Rolloff, Flux, Flatness), Flux will be at index 3.
+    /// </remarks>
+    public int GetFeatureIndex(SpectralFeatureType featureType)
+    {
+        if (!_featureTypes.HasFlag(featureType))
+        {
+            return -1; // Feature not enabled
+        }
+
+        int index = 0;
+
+        // Features are added in this specific order in Extract()
+        if (featureType == SpectralFeatureType.Centroid)
+            return index;
+        if (_featureTypes.HasFlag(SpectralFeatureType.Centroid))
+            index++;
+
+        if (featureType == SpectralFeatureType.Bandwidth)
+            return index;
+        if (_featureTypes.HasFlag(SpectralFeatureType.Bandwidth))
+            index++;
+
+        if (featureType == SpectralFeatureType.Rolloff)
+            return index;
+        if (_featureTypes.HasFlag(SpectralFeatureType.Rolloff))
+            index++;
+
+        if (featureType == SpectralFeatureType.Flux)
+            return index;
+        if (_featureTypes.HasFlag(SpectralFeatureType.Flux))
+            index++;
+
+        if (featureType == SpectralFeatureType.Flatness)
+            return index;
+        if (_featureTypes.HasFlag(SpectralFeatureType.Flatness))
+            index++;
+
+        if (featureType == SpectralFeatureType.Contrast)
+            return index; // Returns first band index; 6 bands total
+        if (_featureTypes.HasFlag(SpectralFeatureType.Contrast))
+            index += 6;
+
+        if (featureType == SpectralFeatureType.ZeroCrossingRate)
+            return index;
+
+        // Should not reach here if feature was enabled
+        return -1;
+    }
 }

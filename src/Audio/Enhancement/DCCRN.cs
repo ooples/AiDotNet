@@ -540,12 +540,12 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         var x = stft;
 
         // Encoder with skip connection caching
+        // Each encoder stage has 2 layers: Conv (with built-in activation) + BatchNorm
         int skipIdx = 0;
-        for (int i = 0; i < _encoder.Count; i += 3)
+        for (int i = 0; i < _encoder.Count; i += 2)
         {
-            x = _encoder[i].Forward(x);     // Conv
+            x = _encoder[i].Forward(x);     // Conv (includes LeakyReLU activation)
             x = _encoder[i + 1].Forward(x); // BatchNorm
-            x = _encoder[i + 2].Forward(x); // Activation
 
             if (skipIdx < _skipLayers.Count)
             {

@@ -321,10 +321,25 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
         MelSpec = _melSpectrogram;
 
-        // Load ONNX models
+        // Load ONNX models with proper cleanup on failure
         var options = onnxOptions ?? new OnnxModelOptions();
-        OnnxEncoder = new OnnxModel<T>(encoderPath, options);
-        OnnxDecoder = new OnnxModel<T>(decoderPath, options);
+        OnnxModel<T>? encoder = null;
+
+        try
+        {
+            encoder = new OnnxModel<T>(encoderPath, options);
+            var decoder = new OnnxModel<T>(decoderPath, options);
+
+            // Assign to properties only after both succeed
+            OnnxEncoder = encoder;
+            OnnxDecoder = decoder;
+        }
+        catch
+        {
+            // Clean up encoder if decoder creation failed
+            encoder?.Dispose();
+            throw;
+        }
 
         // Initialize supported languages
         SupportedLanguages = GetSupportedLanguages();
