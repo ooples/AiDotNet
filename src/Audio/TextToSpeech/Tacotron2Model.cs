@@ -165,87 +165,87 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <summary>
     /// Character/phoneme vocabulary size.
     /// </summary>
-    private readonly int _vocabSize;
+    private int _vocabSize;
 
     /// <summary>
     /// Embedding dimension.
     /// </summary>
-    private readonly int _embeddingDim;
+    private int _embeddingDim;
 
     /// <summary>
     /// Encoder hidden dimension.
     /// </summary>
-    private readonly int _encoderDim;
+    private int _encoderDim;
 
     /// <summary>
     /// Decoder hidden dimension.
     /// </summary>
-    private readonly int _decoderDim;
+    private int _decoderDim;
 
     /// <summary>
     /// Attention dimension.
     /// </summary>
-    private readonly int _attentionDim;
+    private int _attentionDim;
 
     /// <summary>
     /// Attention location filters.
     /// </summary>
-    private readonly int _attentionFilters;
+    private int _attentionFilters;
 
     /// <summary>
     /// Pre-net dimension.
     /// </summary>
-    private readonly int _prenetDim;
+    private int _prenetDim;
 
     /// <summary>
     /// Post-net embedding dimension.
     /// </summary>
-    private readonly int _postnetEmbeddingDim;
+    private int _postnetEmbeddingDim;
 
     /// <summary>
     /// Number of encoder convolutional layers.
     /// </summary>
-    private readonly int _numEncoderConvLayers;
+    private int _numEncoderConvLayers;
 
     /// <summary>
     /// Number of post-net convolutional layers.
     /// </summary>
-    private readonly int _numPostnetConvLayers;
+    private int _numPostnetConvLayers;
 
     /// <summary>
     /// Number of mel frames to output per decoder step.
     /// </summary>
-    private readonly int _numMelsPerFrame;
+    private int _numMelsPerFrame;
 
     /// <summary>
     /// Maximum decoder steps.
     /// </summary>
-    private readonly int _maxDecoderSteps;
+    private int _maxDecoderSteps;
 
     /// <summary>
     /// Decoder stop threshold.
     /// </summary>
-    private readonly double _stopThreshold;
+    private double _stopThreshold;
 
     /// <summary>
     /// FFT size for Griffin-Lim.
     /// </summary>
-    private readonly int _fftSize;
+    private int _fftSize;
 
     /// <summary>
     /// Hop length for audio synthesis.
     /// </summary>
-    private readonly int _hopLength;
+    private int _hopLength;
 
     /// <summary>
     /// Griffin-Lim iterations.
     /// </summary>
-    private readonly int _griffinLimIterations;
+    private int _griffinLimIterations;
 
     /// <summary>
     /// Speaking rate multiplier.
     /// </summary>
-    private readonly double _speakingRate;
+    private double _speakingRate;
 
     #endregion
 
@@ -771,7 +771,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     }
 
     /// <summary>
-    /// Updates model parameters using gradient descent.
+    /// Updates model parameters using the configured optimizer.
     /// </summary>
     public override void UpdateParameters(Vector<T> gradients)
     {
@@ -780,15 +780,25 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
         }
 
+        // Use the configured optimizer for parameter updates
         var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
 
-        for (int i = 0; i < currentParams.Length; i++)
+        // Cast to gradient-based optimizer to access UpdateParameters
+        if (_optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gradientOptimizer)
         {
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
+            var updatedParams = gradientOptimizer.UpdateParameters(currentParams, gradients);
+            SetParameters(updatedParams);
         }
-
-        SetParameters(currentParams);
+        else
+        {
+            // Fallback: manual SGD if optimizer doesn't support gradient-based updates
+            T learningRate = NumOps.FromDouble(0.001);
+            for (int i = 0; i < currentParams.Length; i++)
+            {
+                currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
+            }
+            SetParameters(currentParams);
+        }
     }
 
     /// <summary>
@@ -874,25 +884,37 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// </summary>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadBoolean(); // useNativeMode
+        // Note: _useNativeMode is readonly and set at construction
+        // Deserialized models operate in native mode
+        _ = reader.ReadBoolean(); // useNativeMode (read but not assigned)
+
+        // Restore audio configuration
         SampleRate = reader.ReadInt32();
         NumMels = reader.ReadInt32();
-        _ = reader.ReadDouble(); // speakingRate
-        _ = reader.ReadInt32(); // vocabSize
-        _ = reader.ReadInt32(); // embeddingDim
-        _ = reader.ReadInt32(); // encoderDim
-        _ = reader.ReadInt32(); // decoderDim
-        _ = reader.ReadInt32(); // attentionDim
-        _ = reader.ReadInt32(); // prenetDim
-        _ = reader.ReadInt32(); // postnetEmbeddingDim
-        _ = reader.ReadInt32(); // numEncoderConvLayers
-        _ = reader.ReadInt32(); // numPostnetConvLayers
-        _ = reader.ReadInt32(); // numMelsPerFrame
-        _ = reader.ReadInt32(); // maxDecoderSteps
-        _ = reader.ReadDouble(); // stopThreshold
-        _ = reader.ReadInt32(); // fftSize
-        _ = reader.ReadInt32(); // hopLength
-        _ = reader.ReadInt32(); // griffinLimIterations
+        _speakingRate = reader.ReadDouble();
+
+        // Restore architecture parameters
+        _vocabSize = reader.ReadInt32();
+        _embeddingDim = reader.ReadInt32();
+        _encoderDim = reader.ReadInt32();
+        _decoderDim = reader.ReadInt32();
+        _attentionDim = reader.ReadInt32();
+        _prenetDim = reader.ReadInt32();
+        _postnetEmbeddingDim = reader.ReadInt32();
+        _numEncoderConvLayers = reader.ReadInt32();
+        _numPostnetConvLayers = reader.ReadInt32();
+        _numMelsPerFrame = reader.ReadInt32();
+        _maxDecoderSteps = reader.ReadInt32();
+        _stopThreshold = reader.ReadDouble();
+        _fftSize = reader.ReadInt32();
+        _hopLength = reader.ReadInt32();
+        _griffinLimIterations = reader.ReadInt32();
+
+        // Reinitialize layers with restored parameters if needed
+        if (_useNativeMode && _encoderConvLayers.Count == 0)
+        {
+            InitializeLayers();
+        }
     }
 
     /// <summary>
@@ -1105,22 +1127,55 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         if (_attentionLayers.Count < 4)
             return keys;
 
+        // Project query and keys through attention layers
         var projQuery = _attentionLayers[0].Forward(query);
         var projKeys = _attentionLayers[1].Forward(keys);
 
-        // Simplified attention - just return mean of encoder outputs
+        // Additive attention: score = tanh(projQuery + projKeys)
         int seqLen = keys.Shape[1];
         int hiddenDim = keys.Shape[^1];
-        var context = new Tensor<T>([1, hiddenDim]);
+        int attDim = projQuery.Shape[^1];
 
+        // Compute attention scores for each encoder position
+        var scores = new double[seqLen];
+        for (int t = 0; t < seqLen; t++)
+        {
+            double score = 0;
+            for (int d = 0; d < attDim; d++)
+            {
+                // Get projected key at position t
+                double keyVal = NumOps.ToDouble(projKeys[0, t, d]);
+                double queryVal = NumOps.ToDouble(projQuery[0, d]);
+                // Additive score with tanh activation
+                double combined = Math.Tanh(queryVal + keyVal);
+                score += combined;
+            }
+            scores[t] = score;
+        }
+
+        // Softmax over scores to get attention weights
+        double maxScore = scores.Max();
+        double sumExp = 0;
+        for (int t = 0; t < seqLen; t++)
+        {
+            scores[t] = Math.Exp(scores[t] - maxScore);
+            sumExp += scores[t];
+        }
+        for (int t = 0; t < seqLen; t++)
+        {
+            scores[t] /= sumExp;
+        }
+
+        // Weighted sum of encoder outputs using attention weights
+        var context = new Tensor<T>([1, hiddenDim]);
         for (int d = 0; d < hiddenDim; d++)
         {
             double sum = 0;
             for (int t = 0; t < seqLen; t++)
             {
-                sum += NumOps.ToDouble(keys[0, t, d]);
+                sum += scores[t] * NumOps.ToDouble(keys[0, t, d]);
             }
-            context[0, d] = NumOps.FromDouble(sum / seqLen);
+            context[0, d] = NumOps.FromDouble(sum);
         }
 
         return context;

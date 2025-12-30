@@ -500,7 +500,13 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         foreach (var layer in allLayers)
         {
             var layerParams = layer.GetParameters();
-            layer.UpdateParameters(NumOps.FromDouble(0.001));
+            var newParams = parameters.Slice(offset, layerParams.Length);
+            // Apply actual parameter updates from optimizer
+            for (int i = 0; i < layerParams.Length; i++)
+            {
+                layerParams[i] = newParams[i];
+            }
+            layer.SetParameters(layerParams);
             offset += layerParams.Length;
         }
     }
@@ -582,8 +588,10 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
                 x = ConcatenateChannels(x, _encoderOutputs[i]);
             }
 
-            // Decoder layers (ConvT + optional BN + Activation)
-            for (int j = 0; j < (i < _numStages - 1 ? 3 : 1); j++)
+            // Decoder layers: 2 per stage (DeconvT + BN) except last stage which has 1 (DeconvT only)
+            // This mirrors the initialization: stages 0 to numStages-2 have 2 layers, last stage has 1
+            int layersThisStage = (i > 0) ? 2 : 1;
+            for (int j = 0; j < layersThisStage; j++)
             {
                 if (decoderLayerIdx < _decoder.Count)
                 {

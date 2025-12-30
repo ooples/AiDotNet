@@ -61,7 +61,7 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <summary>
     /// Indicates whether this network uses native layers (true) or ONNX models (false).
     /// </summary>
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
 
     #endregion
 
@@ -147,62 +147,62 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <summary>
     /// Hidden dimension for the model.
     /// </summary>
-    private readonly int _hiddenDim;
+    private int _hiddenDim;
 
     /// <summary>
     /// Number of attention heads.
     /// </summary>
-    private readonly int _numHeads;
+    private int _numHeads;
 
     /// <summary>
     /// Number of text encoder layers.
     /// </summary>
-    private readonly int _numEncoderLayers;
+    private int _numEncoderLayers;
 
     /// <summary>
     /// Number of flow layers.
     /// </summary>
-    private readonly int _numFlowLayers;
+    private int _numFlowLayers;
 
     /// <summary>
     /// Speaker embedding dimension.
     /// </summary>
-    private readonly int _speakerEmbeddingDim;
+    private int _speakerEmbeddingDim;
 
     /// <summary>
     /// Number of speakers for multi-speaker model.
     /// </summary>
-    private readonly int _numSpeakers;
+    private int _numSpeakers;
 
     /// <summary>
     /// Maximum phoneme sequence length.
     /// </summary>
-    private readonly int _maxPhonemeLength;
+    private int _maxPhonemeLength;
 
     /// <summary>
     /// FFT size for audio generation.
     /// </summary>
-    private readonly int _fftSize;
+    private int _fftSize;
 
     /// <summary>
     /// Hop length for audio generation.
     /// </summary>
-    private readonly int _hopLength;
+    private int _hopLength;
 
     /// <summary>
     /// Speaking rate multiplier.
     /// </summary>
-    private readonly double _speakingRate;
+    private double _speakingRate;
 
     /// <summary>
     /// Noise scale for sampling.
     /// </summary>
-    private readonly double _noiseScale;
+    private double _noiseScale;
 
     /// <summary>
     /// Length scale for duration control.
     /// </summary>
-    private readonly double _lengthScale;
+    private double _lengthScale;
 
     #endregion
 
@@ -745,7 +745,7 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     }
 
     /// <summary>
-    /// Updates model parameters using gradient descent.
+    /// Updates model parameters using the configured optimizer.
     /// </summary>
     public override void UpdateParameters(Vector<T> gradients)
     {
@@ -754,15 +754,25 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
         }
 
+        // Use the configured optimizer for parameter updates
         var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.0002); // VITS uses smaller learning rate
 
-        for (int i = 0; i < currentParams.Length; i++)
+        // Cast to gradient-based optimizer to access UpdateParameters
+        if (_optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gradientOptimizer)
         {
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
+            var updatedParams = gradientOptimizer.UpdateParameters(currentParams, gradients);
+            SetParameters(updatedParams);
         }
-
-        SetParameters(currentParams);
+        else
+        {
+            // Fallback: manual SGD with VITS's smaller learning rate
+            T learningRate = NumOps.FromDouble(0.0002);
+            for (int i = 0; i < currentParams.Length; i++)
+            {
+                currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
+            }
+            SetParameters(currentParams);
+        }
     }
 
     /// <summary>
@@ -844,21 +854,21 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// </summary>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadBoolean(); // useNativeMode
+        _useNativeMode = reader.ReadBoolean();
         SampleRate = reader.ReadInt32();
         NumMels = reader.ReadInt32();
-        _ = reader.ReadDouble(); // speakingRate
-        _ = reader.ReadDouble(); // noiseScale
-        _ = reader.ReadDouble(); // lengthScale
-        _ = reader.ReadInt32(); // hiddenDim
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadInt32(); // numEncoderLayers
-        _ = reader.ReadInt32(); // numFlowLayers
-        _ = reader.ReadInt32(); // speakerEmbeddingDim
-        _ = reader.ReadInt32(); // numSpeakers
-        _ = reader.ReadInt32(); // maxPhonemeLength
-        _ = reader.ReadInt32(); // fftSize
-        _ = reader.ReadInt32(); // hopLength
+        _speakingRate = reader.ReadDouble();
+        _noiseScale = reader.ReadDouble();
+        _lengthScale = reader.ReadDouble();
+        _hiddenDim = reader.ReadInt32();
+        _numHeads = reader.ReadInt32();
+        _numEncoderLayers = reader.ReadInt32();
+        _numFlowLayers = reader.ReadInt32();
+        _speakerEmbeddingDim = reader.ReadInt32();
+        _numSpeakers = reader.ReadInt32();
+        _maxPhonemeLength = reader.ReadInt32();
+        _fftSize = reader.ReadInt32();
+        _hopLength = reader.ReadInt32();
     }
 
     /// <summary>

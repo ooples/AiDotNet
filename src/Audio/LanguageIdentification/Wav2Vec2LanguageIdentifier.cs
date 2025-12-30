@@ -414,7 +414,12 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
         {
             var layerParams = layer.GetParameters();
             var newParams = parameters.Slice(offset, layerParams.Length);
-            layer.UpdateParameters(_numOps.FromDouble(0.001));
+            // Apply actual parameter updates from optimizer
+            for (int i = 0; i < layerParams.Length; i++)
+            {
+                layerParams[i] = newParams[i];
+            }
+            layer.SetParameters(layerParams);
             offset += layerParams.Length;
         }
     }
@@ -619,6 +624,13 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
     private Tensor<T> MeanPooling(Tensor<T> input)
     {
         int hiddenSize = _options.HiddenSize;
+
+        // Guard against empty input or zero hidden size
+        if (input.Length == 0 || hiddenSize <= 0)
+        {
+            return new Tensor<T>(new T[Math.Max(hiddenSize, 1)], [Math.Max(hiddenSize, 1)]);
+        }
+
         int timeSteps = input.Length / hiddenSize;
         if (timeSteps < 1) timeSteps = 1;
 

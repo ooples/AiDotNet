@@ -428,7 +428,12 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
         {
             var layerParams = layer.GetParameters();
             var newParams = parameters.Slice(offset, layerParams.Length);
-            layer.UpdateParameters(_numOps.FromDouble(0.001));
+            // Apply actual parameter updates from optimizer
+            for (int i = 0; i < layerParams.Length; i++)
+            {
+                layerParams[i] = newParams[i];
+            }
+            layer.SetParameters(layerParams);
             offset += layerParams.Length;
         }
     }
