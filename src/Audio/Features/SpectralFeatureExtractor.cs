@@ -96,9 +96,11 @@ public class SpectralFeatureExtractor<T> : AudioFeatureExtractorBase<T>
 
         // Calculate frequency bins in Hz
         var freqBins = new double[numFreqs];
+        // Guard against division by zero when numFreqs == 1 (only DC component)
+        double freqScale = numFreqs > 1 ? (double)SampleRate / (2 * (numFreqs - 1)) : 0.0;
         for (int freq = 0; freq < numFreqs; freq++)
         {
-            freqBins[freq] = (double)freq * SampleRate / (2 * (numFreqs - 1));
+            freqBins[freq] = freq * freqScale;
         }
 
         // Extract features
