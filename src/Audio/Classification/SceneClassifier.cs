@@ -171,9 +171,9 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
         ClassLabels = _options.CustomScenes ?? StandardScenes;
 
         // Initialize ONNX if path provided
-        if (!string.IsNullOrEmpty(_options.ModelPath))
+        if (_options.ModelPath is string modelPath && !string.IsNullOrEmpty(modelPath))
         {
-            OnnxEncoder = new OnnxModel<T>(_options.ModelPath, _options.OnnxOptions);
+            OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         }
 
         // Initialize feature extractors
@@ -227,18 +227,20 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
         CancellationToken cancellationToken = default)
     {
         options ??= new SceneClassifierOptions();
+        string modelPath = options.ModelPath ?? string.Empty;
 
-        if (string.IsNullOrEmpty(options.ModelPath))
+        if (string.IsNullOrEmpty(modelPath))
         {
             var downloader = new OnnxModelDownloader();
-            options.ModelPath = await downloader.DownloadAsync(
+            modelPath = await downloader.DownloadAsync(
                 "acoustic-scene-classifier",
                 "model.onnx",
                 progress: progress,
                 cancellationToken);
+            options.ModelPath = modelPath;
         }
 
-        return new SceneClassifier<T>(options.ModelPath, options);
+        return new SceneClassifier<T>(modelPath, options);
     }
 
     #endregion
@@ -433,7 +435,7 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
 
         // Find dominant scene
         string dominantScene = sceneCounts.Count > 0
-            ? sceneCounts.MaxBy(kvp => kvp.Value).Key
+            ? sceneCounts.OrderByDescending(kvp => kvp.Value).First().Key
             : "unknown";
 
         return new SceneTrackingResult<T>
@@ -630,7 +632,7 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
     /// <summary>
     /// Creates a new instance of this network type.
     /// </summary>
-    protected override NeuralNetworkBase<T> CreateNewInstance()
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return new SceneClassifier<T>(Architecture, _options);
     }
@@ -973,7 +975,10 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
 
     private void ThrowIfDisposed()
     {
-        ObjectDisposedException.ThrowIf(_disposed, GetType().FullName ?? nameof(SceneClassifier<T>));
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(SceneClassifier<T>));
+        }
     }
 
     /// <summary>

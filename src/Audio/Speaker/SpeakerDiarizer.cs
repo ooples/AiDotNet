@@ -124,7 +124,10 @@ public class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
         SpeakerDiarizerOptions? options = null)
         : base(architecture)
     {
-        ArgumentNullException.ThrowIfNull(modelPath, nameof(modelPath));
+        if (modelPath is null)
+        {
+            throw new ArgumentNullException(nameof(modelPath));
+        }
 
         if (!File.Exists(modelPath))
         {
@@ -1123,7 +1126,10 @@ public class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
 
     private void ThrowIfDisposed()
     {
-        ObjectDisposedException.ThrowIf(_disposed, GetType().FullName ?? nameof(SpeakerDiarizer<T>));
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(SpeakerDiarizer<T>));
+        }
     }
 
     /// <summary>

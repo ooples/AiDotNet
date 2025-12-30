@@ -110,7 +110,10 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
         GenreClassifierOptions? options = null)
         : base(architecture)
     {
-        ArgumentNullException.ThrowIfNull(modelPath, nameof(modelPath));
+        if (modelPath is null)
+        {
+            throw new ArgumentNullException(nameof(modelPath));
+        }
 
         if (!File.Exists(modelPath))
         {
@@ -353,7 +356,13 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
     {
         var probabilities = GetGenreProbabilities(audio);
         // Convert IReadOnlyDictionary to Dictionary for base class GetTopK method
-        var topK = GetTopK(new Dictionary<string, T>(probabilities), k);
+        // Note: Must manually copy since net471 Dictionary constructor doesn't accept IReadOnlyDictionary
+        var probabilitiesDict = new Dictionary<string, T>();
+        foreach (var kvp in probabilities)
+        {
+            probabilitiesDict[kvp.Key] = kvp.Value;
+        }
+        var topK = GetTopK(probabilitiesDict, k);
 
         return topK.Select(t => new GenrePrediction<T>
         {
@@ -835,7 +844,10 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
 
     private void ThrowIfDisposed()
     {
-        ObjectDisposedException.ThrowIf(_disposed, GetType().FullName ?? nameof(GenreClassifier<T>));
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(GenreClassifier<T>));
+        }
     }
 
     /// <summary>

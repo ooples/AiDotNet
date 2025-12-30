@@ -357,9 +357,9 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         var tokenTensor = EncodeTextToTensor(prompt);
 
         Tensor<T>? negativeEmbedding = null;
-        if (!string.IsNullOrEmpty(negativePrompt) && guidanceScale > 1.0)
+        if (negativePrompt is string negPrompt && !string.IsNullOrEmpty(negPrompt) && guidanceScale > 1.0)
         {
-            var negTokenTensor = EncodeTextToTensor(negativePrompt);
+            var negTokenTensor = EncodeTextToTensor(negPrompt);
             negativeEmbedding = EncodeClapEmbedding(negTokenTensor);
         }
 
@@ -431,9 +431,9 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
         // Encode text prompt if provided
         Tensor<T>? textEmbedding = null;
-        if (!string.IsNullOrEmpty(prompt))
+        if (prompt is string textPrompt && !string.IsNullOrEmpty(textPrompt))
         {
-            var tokenTensor = EncodeTextToTensor(prompt);
+            var tokenTensor = EncodeTextToTensor(textPrompt);
             textEmbedding = EncodeClapEmbedding(tokenTensor);
         }
 
@@ -489,9 +489,9 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
         // Encode text prompt
         Tensor<T> conditioning;
-        if (!string.IsNullOrEmpty(prompt))
+        if (prompt is string textPrompt && !string.IsNullOrEmpty(textPrompt))
         {
-            var tokenTensor = EncodeTextToTensor(prompt);
+            var tokenTensor = EncodeTextToTensor(textPrompt);
             conditioning = EncodeClapEmbedding(tokenTensor);
         }
         else

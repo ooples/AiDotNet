@@ -376,9 +376,9 @@ public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
         // Generate audio codes with optional classifier-free guidance
         Tensor<T> audioCodes;
-        if (!string.IsNullOrEmpty(negativePrompt) && guidanceScale > 1.0)
+        if (negativePrompt is string negPrompt && !string.IsNullOrEmpty(negPrompt) && guidanceScale > 1.0)
         {
-            var negativeEmbeddings = EncodeText(negativePrompt);
+            var negativeEmbeddings = EncodeText(negPrompt);
             audioCodes = GenerateWithGuidance(textEmbeddings, negativeEmbeddings, guidanceScale, durationSeconds, random);
         }
         else
@@ -416,9 +416,9 @@ public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
         // Encode text prompt if provided
         Tensor<T>? textEmbeddings = null;
-        if (!string.IsNullOrEmpty(prompt))
+        if (prompt is string textPrompt && !string.IsNullOrEmpty(textPrompt))
         {
-            textEmbeddings = EncodeText(prompt);
+            textEmbeddings = EncodeText(textPrompt);
         }
 
         // Generate continuation codes
@@ -826,7 +826,8 @@ public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             }
             double avg = sum / samplesPerToken;
             int code = (int)((avg + 1) / 2 * _options.CodebookSize);
-            code = Math.Clamp(code, 0, _options.CodebookSize - 1);
+            // Use MathHelper.Clamp for net471 compatibility (Math.Clamp not available)
+            code = MathHelper.Clamp(code, 0, _options.CodebookSize - 1);
 
             for (int cb = 0; cb < _options.NumCodebooks; cb++)
             {

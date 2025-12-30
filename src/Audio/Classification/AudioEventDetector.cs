@@ -214,22 +214,24 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
         CancellationToken cancellationToken = default)
     {
         options ??= new AudioEventDetectorOptions();
+        string modelPath = options.ModelPath ?? string.Empty;
 
-        if (string.IsNullOrEmpty(options.ModelPath))
+        if (string.IsNullOrEmpty(modelPath))
         {
             var downloader = new OnnxModelDownloader();
-            options.ModelPath = await downloader.DownloadAsync(
+            modelPath = await downloader.DownloadAsync(
                 "audio-event-detector",
                 "model.onnx",
                 progress: progress,
                 cancellationToken);
+            options.ModelPath = modelPath;
         }
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputFeatures: options.NumMels,
             outputSize: (options.CustomLabels ?? CommonEventLabels).Length);
 
-        return new AudioEventDetector<T>(architecture, options.ModelPath, options);
+        return new AudioEventDetector<T>(architecture, modelPath, options);
     }
 
     #endregion
@@ -655,7 +657,7 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
     /// <summary>
     /// Creates a new instance for deserialization.
     /// </summary>
-    protected override NeuralNetworkBase<T> CreateNewInstance()
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return new AudioEventDetector<T>(Architecture, _options);
     }
@@ -1025,7 +1027,10 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
 
     private void ThrowIfDisposed()
     {
-        ObjectDisposedException.ThrowIf(_disposed, GetType().FullName ?? nameof(AudioEventDetector<T>));
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(AudioEventDetector<T>));
+        }
     }
 
     #endregion
@@ -1092,7 +1097,10 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
 
         public void FeedAudio(Tensor<T> audioChunk)
         {
-            ObjectDisposedException.ThrowIf(_disposed, nameof(StreamingEventDetectionSession));
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(StreamingEventDetectionSession));
+            }
 
             // Add to buffer
             for (int i = 0; i < audioChunk.Length; i++)
