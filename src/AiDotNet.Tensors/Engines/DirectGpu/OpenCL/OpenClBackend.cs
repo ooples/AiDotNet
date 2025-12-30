@@ -117,12 +117,20 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         {
             if (_context == null) return;
 
+            // Aggressive optimization flags for maximum performance
+            // -cl-fast-relaxed-math: Allows aggressive math optimizations (FMA, reordering)
+            // -cl-mad-enable: Enables fused multiply-add instructions (critical for GEMM)
+            // -cl-unsafe-math-optimizations: More aggressive optimizations
+            // -cl-finite-math-only: Assume no NaN/Inf (safe for GEMM)
+            // -cl-no-signed-zeros: Ignore sign of zeros for faster math
+            const string optimizationFlags = "-cl-fast-relaxed-math -cl-mad-enable -cl-unsafe-math-optimizations -cl-finite-math-only -cl-no-signed-zeros";
+
             try
             {
-                // Compile GEMM kernels
+                // Compile GEMM kernels with aggressive optimizations
                 Console.WriteLine("[OpenClBackend] Compiling GEMM kernels...");
                 var gemmProgram = new DirectOpenClProgram(_context, GemmKernel.GetSource());
-                gemmProgram.Build();
+                gemmProgram.Build(optimizationFlags);
                 _programs.Add(gemmProgram);
                 foreach (var name in GemmKernel.GetKernelNames())
                 {
@@ -133,7 +141,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 // Compile activation kernels
                 Console.WriteLine("[OpenClBackend] Compiling activation kernels...");
                 var activationProgram = new DirectOpenClProgram(_context, ActivationKernels.GetSource());
-                activationProgram.Build();
+                activationProgram.Build(optimizationFlags);
                 _programs.Add(activationProgram);
                 foreach (var name in ActivationKernels.GetKernelNames())
                 {
@@ -144,7 +152,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 // Compile fused kernels
                 Console.WriteLine("[OpenClBackend] Compiling fused kernels...");
                 var fusedProgram = new DirectOpenClProgram(_context, FusedKernels.GetSource());
-                fusedProgram.Build();
+                fusedProgram.Build(optimizationFlags);
                 _programs.Add(fusedProgram);
                 foreach (var name in FusedKernels.GetKernelNames())
                 {
@@ -155,7 +163,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 // Compile reduction kernels
                 Console.WriteLine("[OpenClBackend] Compiling reduction kernels...");
                 var reductionProgram = new DirectOpenClProgram(_context, ReductionKernels.GetSource());
-                reductionProgram.Build();
+                reductionProgram.Build(optimizationFlags);
                 _programs.Add(reductionProgram);
                 foreach (var name in ReductionKernels.GetKernelNames())
                 {
@@ -166,7 +174,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 // Compile sparse GEMM kernels (2:4 structured sparsity)
                 Console.WriteLine("[OpenClBackend] Compiling sparse GEMM kernels...");
                 var sparseProgram = new DirectOpenClProgram(_context, SparseGemmKernels.GetSource());
-                sparseProgram.Build();
+                sparseProgram.Build(optimizationFlags);
                 _programs.Add(sparseProgram);
                 foreach (var name in SparseGemmKernels.GetKernelNames())
                 {
