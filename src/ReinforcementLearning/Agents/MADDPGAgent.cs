@@ -600,36 +600,95 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// Serializes the MADDPG agent to a byte array.
     /// </summary>
     /// <returns>Byte array containing the serialized agent data.</returns>
-    /// <exception cref="NotSupportedException">
-    /// MADDPG serialization is not currently supported. Use GetParameters() and SetParameters() instead.
-    /// </exception>
     /// <remarks>
-    /// Issue #6 fix: Changed from NotImplementedException to NotSupportedException to indicate
-    /// this is a design limitation rather than incomplete implementation.
-    /// For saving/loading trained weights, use GetParameters() to extract all network weights
-    /// and SetParameters() to restore them.
+    /// Serializes configuration values and all actor/critic network weights.
     /// </remarks>
     public override byte[] Serialize()
     {
-        throw new NotSupportedException("MADDPG serialization is not currently supported. Use GetParameters() and SetParameters() for weight management.");
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        writer.Write(_options.NumAgents);
+        writer.Write(_options.StateSize);
+        writer.Write(_options.ActionSize);
+
+        void WriteNetwork(INeuralNetwork<T> network)
+        {
+            var bytes = network.Serialize();
+            writer.Write(bytes.Length);
+            writer.Write(bytes);
+        }
+
+        foreach (var network in _actorNetworks)
+        {
+            WriteNetwork(network);
+        }
+
+        foreach (var network in _targetActorNetworks)
+        {
+            WriteNetwork(network);
+        }
+
+        foreach (var network in _criticNetworks)
+        {
+            WriteNetwork(network);
+        }
+
+        foreach (var network in _targetCriticNetworks)
+        {
+            WriteNetwork(network);
+        }
+
+        return ms.ToArray();
     }
 
     /// <summary>
     /// Deserializes a MADDPG agent from a byte array.
     /// </summary>
     /// <param name="data">Byte array containing the serialized agent data.</param>
-    /// <exception cref="NotSupportedException">
-    /// MADDPG deserialization is not currently supported. Use GetParameters() and SetParameters() instead.
-    /// </exception>
     /// <remarks>
-    /// Issue #6 fix: Changed from NotImplementedException to NotSupportedException to indicate
-    /// this is a design limitation rather than incomplete implementation.
-    /// For saving/loading trained weights, use GetParameters() to extract all network weights
-    /// and SetParameters() to restore them.
+    /// Expects data created by <see cref="Serialize"/> with a compatible configuration.
     /// </remarks>
     public override void Deserialize(byte[] data)
     {
-        throw new NotSupportedException("MADDPG deserialization is not currently supported. Use GetParameters() and SetParameters() for weight management.");
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        var numAgents = reader.ReadInt32();
+        var stateSize = reader.ReadInt32();
+        var actionSize = reader.ReadInt32();
+
+        if (numAgents != _options.NumAgents || stateSize != _options.StateSize || actionSize != _options.ActionSize)
+        {
+            throw new InvalidOperationException("Serialized MADDPG configuration does not match current agent options.");
+        }
+
+        void ReadNetwork(INeuralNetwork<T> network)
+        {
+            var length = reader.ReadInt32();
+            var bytes = reader.ReadBytes(length);
+            network.Deserialize(bytes);
+        }
+
+        foreach (var network in _actorNetworks)
+        {
+            ReadNetwork(network);
+        }
+
+        foreach (var network in _targetActorNetworks)
+        {
+            ReadNetwork(network);
+        }
+
+        foreach (var network in _criticNetworks)
+        {
+            ReadNetwork(network);
+        }
+
+        foreach (var network in _targetCriticNetworks)
+        {
+            ReadNetwork(network);
+        }
     }
 
     public override Vector<T> GetParameters()
@@ -807,31 +866,25 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// Saves the trained model to a file.
     /// </summary>
     /// <param name="filepath">Path to save the model.</param>
-    /// <exception cref="NotSupportedException">
-    /// MADDPG serialization is not currently supported.
-    /// </exception>
     /// <remarks>
-    /// Issue #6 fix: SaveModel now throws NotSupportedException since Serialize() is not supported.
-    /// For saving trained weights, use GetParameters() to extract the parameter vector and save it separately.
+    /// Uses <see cref="Serialize"/> to persist network weights.
     /// </remarks>
     public override void SaveModel(string filepath)
     {
-        throw new NotSupportedException("MADDPG model saving is not currently supported. Use GetParameters() to extract trained weights for manual persistence.");
+        var data = Serialize();
+        File.WriteAllBytes(filepath, data);
     }
 
     /// <summary>
     /// Loads a trained model from a file.
     /// </summary>
     /// <param name="filepath">Path to load the model from.</param>
-    /// <exception cref="NotSupportedException">
-    /// MADDPG deserialization is not currently supported.
-    /// </exception>
     /// <remarks>
-    /// Issue #6 fix: LoadModel now throws NotSupportedException since Deserialize() is not supported.
-    /// For loading trained weights, use SetParameters() to restore a previously saved parameter vector.
+    /// Uses <see cref="Deserialize"/> to restore network weights.
     /// </remarks>
     public override void LoadModel(string filepath)
     {
-        throw new NotSupportedException("MADDPG model loading is not currently supported. Use SetParameters() to restore trained weights from manual persistence.");
+        var data = File.ReadAllBytes(filepath);
+        Deserialize(data);
     }
 }

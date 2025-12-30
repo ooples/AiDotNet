@@ -327,6 +327,8 @@ public abstract class ClusteringBase<T> : IClustering<T>
                 Regularization = RegularizationFactory.CreateRegularization<T, Matrix<T>, Vector<T>>(regOptions);
             }
         }
+
+        IsTrained = NumClusters > 0 && (ClusterCenters is not null || Labels is not null);
     }
 
     private double[][] MatrixToDoubleArray(Matrix<T> matrix)

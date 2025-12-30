@@ -181,7 +181,7 @@ public class DecoderLayer<T> : LayerBase<T>
 
             int batchSize = decoderInput.Shape[0];
             input3D = decoderInput.Reshape(batchSize, 1, InputSize);
-            
+
             // Handle encoder output reshaping
             int encRank = encoderOutput.Shape.Length;
             if (encRank == 2)
@@ -203,7 +203,7 @@ public class DecoderLayer<T> : LayerBase<T>
                 throw new ArgumentException($"Decoder input dimension {decoderInput.Shape[2]} does not match expected InputSize {InputSize}.");
 
             input3D = decoderInput;
-            
+
             // Handle encoder output
             int encRank = encoderOutput.Shape.Length;
             if (encRank == 3)
@@ -226,7 +226,7 @@ public class DecoderLayer<T> : LayerBase<T>
             for (int d = 0; d < rank - 2; d++)
                 flatBatch *= decoderInput.Shape[d];
             input3D = decoderInput.Reshape(flatBatch, decoderInput.Shape[rank - 2], decoderInput.Shape[rank - 1]);
-            
+
             // Handle encoder output
             int encRank = encoderOutput.Shape.Length;
             int encFlatBatch = 1;

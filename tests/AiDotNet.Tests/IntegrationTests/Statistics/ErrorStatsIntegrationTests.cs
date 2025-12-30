@@ -249,7 +249,7 @@ public class ErrorStatsIntegrationTests
         var stats = new ErrorStats<double>(inputs);
 
         // Assert - (10/100 + 10/200 + 10/300) / 3 * 100 = 6.111...
-        double expectedMAPE = ((10.0/100.0) + (10.0/200.0) + (10.0/300.0)) / 3.0 * 100.0;
+        double expectedMAPE = ((10.0 / 100.0) + (10.0 / 200.0) + (10.0 / 300.0)) / 3.0 * 100.0;
         Assert.Equal(expectedMAPE, stats.MAPE, 0.01); // Slightly relaxed tolerance for percentage
     }
 

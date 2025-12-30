@@ -1,10 +1,10 @@
 namespace AiDotNet.Tests.IntegrationTests.Helpers;
 
-using Xunit;
-using AiDotNet.Helpers;
-using AiDotNet.Statistics;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
+using AiDotNet.Statistics;
+using Xunit;
 
 /// <summary>
 /// Integration tests for StatisticsHelper - comprehensive coverage of all statistical functions.
