@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -44,7 +45,7 @@ public class SpeakerVerifier<T>
     /// </summary>
     protected readonly INumericOperations<T> NumOps;
     private readonly SpeakerVerifierOptions _options;
-    private readonly Dictionary<string, EnrolledSpeaker<T>> _enrolledSpeakers;
+    private readonly ConcurrentDictionary<string, EnrolledSpeaker<T>> _enrolledSpeakers;
 
     /// <summary>
     /// Gets the number of enrolled speakers.
@@ -69,7 +70,7 @@ public class SpeakerVerifier<T>
     {
         NumOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new SpeakerVerifierOptions();
-        _enrolledSpeakers = new Dictionary<string, EnrolledSpeaker<T>>();
+        _enrolledSpeakers = new ConcurrentDictionary<string, EnrolledSpeaker<T>>();
     }
 
     /// <summary>
@@ -114,7 +115,7 @@ public class SpeakerVerifier<T>
     /// <returns>True if removed, false if not found.</returns>
     public bool Unenroll(string speakerId)
     {
-        return _enrolledSpeakers.Remove(speakerId);
+        return _enrolledSpeakers.TryRemove(speakerId, out _);
     }
 
     /// <summary>
