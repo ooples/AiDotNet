@@ -280,7 +280,8 @@ public class SceneClassifier<T> : IDisposable
                 double curr = NumOps.ToDouble(mfccs[t, c]);
                 sumDelta += Math.Abs(curr - prev);
             }
-            mfccDelta[c] = sumDelta / (numFrames - 1);
+            // Avoid division by zero for single-frame audio
+            mfccDelta[c] = numFrames > 1 ? sumDelta / (numFrames - 1) : 0.0;
         }
 
         // Compute spectral features
