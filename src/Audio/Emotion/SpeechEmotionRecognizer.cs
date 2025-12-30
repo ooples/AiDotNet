@@ -634,59 +634,17 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
     /// <inheritdoc/>
     public T GetArousal(Tensor<T> audio)
     {
+        // Use the private helper to avoid redundant code
         var probs = GetEmotionProbabilities(audio);
-
-        // Arousal mapping (based on circumplex model of affect)
-        var arousalWeights = new Dictionary<string, double>
-        {
-            { "neutral", 0.0 },
-            { "happy", 0.5 },
-            { "sad", -0.7 },
-            { "angry", 0.9 },
-            { "fearful", 0.6 },
-            { "disgusted", 0.2 },
-            { "surprised", 0.7 }
-        };
-
-        double arousal = 0;
-        foreach (var (emotion, prob) in probs)
-        {
-            if (arousalWeights.TryGetValue(emotion.ToLowerInvariant(), out double weight))
-            {
-                arousal += NumOps.ToDouble(prob) * weight;
-            }
-        }
-
-        return NumOps.FromDouble(Math.Max(-1.0, Math.Min(1.0, arousal)));
+        return ComputeArousalFromProbabilities(probs);
     }
 
     /// <inheritdoc/>
     public T GetValence(Tensor<T> audio)
     {
+        // Use the private helper to avoid redundant code
         var probs = GetEmotionProbabilities(audio);
-
-        // Valence mapping (based on circumplex model of affect)
-        var valenceWeights = new Dictionary<string, double>
-        {
-            { "neutral", 0.0 },
-            { "happy", 0.9 },
-            { "sad", -0.8 },
-            { "angry", -0.6 },
-            { "fearful", -0.7 },
-            { "disgusted", -0.5 },
-            { "surprised", 0.3 }
-        };
-
-        double valence = 0;
-        foreach (var (emotion, prob) in probs)
-        {
-            if (valenceWeights.TryGetValue(emotion.ToLowerInvariant(), out double weight))
-            {
-                valence += NumOps.ToDouble(prob) * weight;
-            }
-        }
-
-        return NumOps.FromDouble(Math.Max(-1.0, Math.Min(1.0, valence)));
+        return ComputeValenceFromProbabilities(probs);
     }
 
     /// <summary>

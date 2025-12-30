@@ -140,7 +140,13 @@ public abstract class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase<T>
 
         if (NumOps.Equals(norm, NumOps.Zero))
         {
-            return embedding;
+            // Return a defensive copy to avoid aliasing issues
+            var copy = new Tensor<T>(embedding.Shape);
+            for (int i = 0; i < data.Length; i++)
+            {
+                copy[i] = data[i];
+            }
+            return copy;
         }
 
         // Create new tensor with same shape and copy normalized values
@@ -178,6 +184,18 @@ public abstract class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase<T>
 
         var firstShape = embeddings[0].Shape;
         int totalSize = embeddings[0].Length;
+
+        // Validate all embeddings have the same shape
+        for (int e = 1; e < embeddings.Count; e++)
+        {
+            if (embeddings[e].Length != totalSize)
+            {
+                throw new ArgumentException(
+                    $"All embeddings must have the same shape. Expected length {totalSize}, " +
+                    $"got {embeddings[e].Length} at index {e}.");
+            }
+        }
+
         T[] sum = new T[totalSize];
 
         // Initialize with zeros

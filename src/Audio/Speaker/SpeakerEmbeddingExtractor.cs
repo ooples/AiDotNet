@@ -373,6 +373,25 @@ public class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, ISpeakerE
     /// </summary>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
+        // Validate and handle output dimension mismatch
+        if (modelOutput.Length != EmbeddingDimension)
+        {
+            // If output is shorter, pad with zeros; if longer, truncate
+            // Log warning for diagnostic purposes via debug output
+            System.Diagnostics.Debug.WriteLine(
+                $"SpeakerEmbeddingExtractor: Model output size ({modelOutput.Length}) does not match " +
+                $"expected EmbeddingDimension ({EmbeddingDimension}). Adjusting embedding.");
+
+            var adjusted = new Tensor<T>([EmbeddingDimension]);
+            int copyLen = Math.Min(modelOutput.Length, EmbeddingDimension);
+            for (int i = 0; i < copyLen; i++)
+            {
+                adjusted[i] = modelOutput[i];
+            }
+            // Remaining elements are default (zero) if output was shorter
+            modelOutput = adjusted;
+        }
+
         // L2 normalize the embedding
         return NormalizeEmbedding(modelOutput);
     }
