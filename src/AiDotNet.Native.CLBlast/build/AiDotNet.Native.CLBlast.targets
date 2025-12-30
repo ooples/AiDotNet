@@ -2,11 +2,13 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
   <!-- Copy CLBlast native library to output directory based on runtime -->
-  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'win-x64' Or ('$(RuntimeIdentifier)' == '' And '$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Windows)))' == 'true')">
-    <None Include="$(MSBuildThisFileDirectory)..\runtimes\win-x64\native\clblast.dll">
+  <!-- Use simpler Windows detection for reliability -->
+  <ItemGroup Condition="'$(OS)' == 'Windows_NT'">
+    <Content Include="$(MSBuildThisFileDirectory)..\runtimes\win-x64\native\clblast.dll">
       <Link>clblast.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+      <Visible>false</Visible>
+    </Content>
   </ItemGroup>
 
   <!-- Future: Linux support -->

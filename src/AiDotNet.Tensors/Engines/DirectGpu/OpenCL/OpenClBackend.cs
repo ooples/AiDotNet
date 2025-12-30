@@ -1350,13 +1350,6 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             using var database = new GemmTuningDatabase();
             var tuner = new GemmAutoTuner();
 
-            // Check for cached result first
-            var cachedConfig = database.GetBestConfig(M, N, K);
-            if (cachedConfig.HasValue)
-            {
-                Console.WriteLine($"Using cached configuration: {cachedConfig.Value}");
-            }
-
             int benchmarkAttempts = 0;
             int benchmarkFailures = 0;
 
@@ -1402,6 +1395,31 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 }
             }
 
+            // Check for cached result first and benchmark it
+            var cachedConfig = database.GetBestConfig(M, N, K);
+            TuningResult? cachedResult = null;
+            double cachedGflops = 0;
+
+            if (cachedConfig.HasValue)
+            {
+                Console.WriteLine($"Using cached configuration: {cachedConfig.Value}");
+                var cachedTimeMs = BenchmarkConfig(cachedConfig.Value);
+                if (cachedTimeMs < double.MaxValue)
+                {
+                    double ops = 2.0 * M * N * K;
+                    cachedGflops = (ops / (cachedTimeMs / 1000.0)) / 1e9;
+                    cachedResult = new TuningResult
+                    {
+                        Config = cachedConfig.Value,
+                        TimeMs = cachedTimeMs,
+                        GFlops = cachedGflops,
+                        IsValid = true
+                    };
+                    Console.WriteLine($"Cached config: {cachedGflops:F2} GFLOPS");
+                }
+            }
+
+            // Run Bayesian optimization
             var results = tuner.TuneWithBayesianOptimization(M, N, K, capabilities, BenchmarkConfig, maxTrials, Math.Min(5, maxTrials / 4), 0, 1);
 
             // Print final statistics
@@ -1414,14 +1432,29 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 }
             }
 
-            if (results.Length > 0 && results[0].IsValid)
+            // Merge cached result with optimization results
+            var allResults = new List<TuningResult>(results);
+            if (cachedResult.HasValue)
             {
-                var best = results[0];
-                Console.WriteLine($"Best: {best.Config} - {best.GFlops:F2} GFLOPS");
-                database.StoreResult(M, N, K, best.Config, best.GFlops);
+                allResults.Add(cachedResult.Value);
             }
 
-            return results;
+            // Sort by GFLOPS descending
+            allResults.Sort((a, b) => b.GFlops.CompareTo(a.GFlops));
+
+            if (allResults.Count > 0 && allResults[0].IsValid)
+            {
+                var best = allResults[0];
+                Console.WriteLine($"Best: {best.Config} - {best.GFlops:F2} GFLOPS");
+
+                // Only update database if we found something better than cached
+                if (best.GFlops > cachedGflops)
+                {
+                    database.StoreResult(M, N, K, best.Config, best.GFlops);
+                }
+            }
+
+            return allResults.ToArray();
         }
 
         /// <summary>
