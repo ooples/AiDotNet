@@ -107,6 +107,16 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     private readonly List<ILayer<T>> _lstmLayers = [];
 
     /// <summary>
+    /// Projection layer to map LSTM output back to encoder spatial dimensions.
+    /// </summary>
+    private ILayer<T>? _lstmProjection;
+
+    /// <summary>
+    /// Encoder output dimension (channels * freqBins) for LSTM projection.
+    /// </summary>
+    private int _encoderOutputDim;
+
+    /// <summary>
     /// Decoder layers (complex transposed convolutions).
     /// </summary>
     private readonly List<ILayer<T>> _decoder = [];
@@ -335,6 +345,7 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
         // LSTM layers
         int lstmInputDim = inChannels * (_fftSize / (int)Math.Pow(_stride, _numStages));
+        _encoderOutputDim = lstmInputDim; // Store for projection
         int[] lstmInputShape = [1, lstmInputDim];
         for (int i = 0; i < _numLstmLayers; i++)
         {
@@ -343,6 +354,9 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             lstmInputDim = _lstmHiddenDim;
             lstmInputShape = [1, lstmInputDim];
         }
+
+        // Projection layer to map LSTM hidden dim back to encoder spatial dimensions
+        _lstmProjection = new DenseLayer<T>(_lstmHiddenDim, _encoderOutputDim);
 
         // Decoder (transposed convolutions with decreasing channels)
         int decoderChannels = _baseChannels * (int)Math.Pow(2, Math.Min(_numStages - 1, 4));
@@ -575,7 +589,40 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             reshaped = lstm.Forward(reshaped);
         }
 
-        // Reshape back
+        // Project LSTM output back to encoder spatial dimensions
+        if (_lstmProjection is not null)
+        {
+            // Apply projection per timestep: [batch, time, hidden] -> [batch, time, encoderDim]
+            var projectedData = new T[batchSize * timeFrames * _encoderOutputDim];
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int t = 0; t < timeFrames; t++)
+                {
+                    // Extract timestep data
+                    var timestepInput = new Tensor<T>([_lstmHiddenDim]);
+                    for (int h = 0; h < _lstmHiddenDim; h++)
+                    {
+                        int idx = b * timeFrames * _lstmHiddenDim + t * _lstmHiddenDim + h;
+                        if (idx < reshaped.Length)
+                            timestepInput[h] = reshaped.GetFlat(idx);
+                    }
+
+                    // Project
+                    var projected = _lstmProjection.Forward(timestepInput);
+
+                    // Store result
+                    for (int e = 0; e < _encoderOutputDim && e < projected.Length; e++)
+                    {
+                        int outIdx = b * timeFrames * _encoderOutputDim + t * _encoderOutputDim + e;
+                        if (outIdx < projectedData.Length)
+                            projectedData[outIdx] = projected.GetFlat(e);
+                    }
+                }
+            }
+            reshaped = new Tensor<T>(projectedData, [batchSize, timeFrames, _encoderOutputDim]);
+        }
+
+        // Reshape back (now dimensions match: channels * freqBins == _encoderOutputDim)
         x = reshaped.Reshape([batchSize, channels, freqBins, timeFrames]);
 
         // Decoder with skip connections
