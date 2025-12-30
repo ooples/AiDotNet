@@ -64,7 +64,7 @@ public class TrajectoryAndHelpersIntegrationTests
         node.Rewards[0] = 0.1;
         node.TotalVisits = 1;
 
-        Assert.Equal(1, node.Children.Count);
+        Assert.Single(node.Children);
         Assert.Equal(1, node.VisitCounts[0]);
         Assert.Equal(1, node.TotalVisits);
     }
