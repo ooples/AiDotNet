@@ -177,9 +177,21 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
     }
 
     /// <summary>
-    /// Creates an AudioEventDetector with legacy options only.
+    /// Creates an AudioEventDetector with legacy options only (native mode).
     /// </summary>
     /// <param name="options">Detection options.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a native mode detector. For ONNX inference mode,
+    /// use <see cref="CreateAsync"/> or the constructor that accepts a model path.
+    /// </para>
+    /// <para>
+    /// Example for ONNX mode:
+    /// <code>
+    /// var detector = await AudioEventDetector&lt;float&gt;.CreateAsync(options);
+    /// </code>
+    /// </para>
+    /// </remarks>
     public AudioEventDetector(AudioEventDetectorOptions? options = null)
         : this(
             new NeuralNetworkArchitecture<T>(
