@@ -14,14 +14,15 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL.Kernels
     internal static class GemmKernel
     {
         // Kernel configuration constants (must match kernel #defines)
-        // Using 128x128 tiles with 8x8 register blocking - high arithmetic intensity
+        // Optimized for RDNA1 (RX 5500 XT): 64x64 tiles with 4x4 register blocking
+        // Lower register pressure = higher occupancy = better performance on limited CUs
         public const int WG_SIZE_M = 16;
         public const int WG_SIZE_N = 16;
-        public const int TILE_M = 128;
-        public const int TILE_N = 128;
+        public const int TILE_M = 64;
+        public const int TILE_N = 64;
         public const int TILE_K = 16;
-        public const int OUTPUTS_M = 8;
-        public const int OUTPUTS_N = 8;
+        public const int OUTPUTS_M = 4;
+        public const int OUTPUTS_N = 4;
 
         /// <summary>
         /// Gets the optimized GEMM kernel source.
@@ -30,48 +31,44 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL.Kernels
         {
             return @"
 // ===========================================================================
-// CLBlast-Style High-Performance GEMM with TRUE Double Buffering
+// RDNA1-Optimized High-Performance GEMM with TRUE Double Buffering
 // Target: 2500+ GFLOPS on AMD GPUs
-// Key optimization: Overlap memory loads with computation using 2 buffers
+// Optimized for low register pressure and high occupancy on RDNA1 (RX 5500 XT)
 // ===========================================================================
 
 #pragma OPENCL EXTENSION cl_khr_fp16 : enable
 
-// Configuration - 16x16 work group, 8x8 register blocking = 128x128 tile
-// High arithmetic intensity for maximum GFLOPS
+// Configuration - 16x16 work group, 4x4 register blocking = 64x64 tile
+// Lower register pressure = higher occupancy on limited CUs
 #define WG_SIZE_M 16
 #define WG_SIZE_N 16
-#define TILE_M 128
-#define TILE_N 128
+#define TILE_M 64
+#define TILE_N 64
 #define TILE_K 16     // K tile size
-#define OUTPUTS_M 8   // 8x8 = 64 outputs per thread
-#define OUTPUTS_N 8
+#define OUTPUTS_M 4   // 4x4 = 16 outputs per thread (vs 8x8 = 64)
+#define OUTPUTS_N 4
 
-// Padding for bank conflict avoidance (AMD RDNA: 32 banks, need offset=8 for stride access)
-#define PAD 8
+// Padding for bank conflict avoidance (AMD RDNA: 32 banks, need offset=4)
+#define PAD 4
 
 // ===========================================================================
-// Helper macros for double buffering
+// Helper macros for double buffering (64x64 tiles)
 // ===========================================================================
-// Vectorized A loading: 128 rows * 16 cols = 2048 elements = 512 float4s
-// 256 threads * 2 iterations = 512 float4 loads
+// Vectorized A loading: 64 rows * 16 cols = 1024 elements = 256 float4s
+// 256 threads * 1 iteration = 256 float4 loads (each thread loads 1 float4)
 #define LOAD_A_TILE(As, kBase, wgRowStart, M, K) \
-    _Pragma(""unroll"") \
-    for (int i = 0; i < 2; i++) { \
-        int loadIdx = tid + i * 256; \
-        int loadRow = loadIdx / 4;   /* 4 = TILE_K/4 float4s per row */ \
-        int loadCol4 = loadIdx % 4;  /* float4 index within row */ \
+    { \
+        int loadRow = tid / 4;   /* 4 = TILE_K/4 float4s per row, tid 0-255 -> row 0-63 */ \
+        int loadCol4 = tid % 4;  /* float4 index within row (0-3) */ \
         int globalRow = wgRowStart + loadRow; \
         int globalCol = kBase + loadCol4 * 4; \
         if (globalRow < M && globalCol + 3 < K) { \
-            /* Vectorized load along K dimension - coalesced for row-major A */ \
             float4 vec = vload4(0, &A[globalRow * K + globalCol]); \
             As[loadRow][loadCol4 * 4 + 0] = vec.x; \
             As[loadRow][loadCol4 * 4 + 1] = vec.y; \
             As[loadRow][loadCol4 * 4 + 2] = vec.z; \
             As[loadRow][loadCol4 * 4 + 3] = vec.w; \
         } else if (globalRow < M) { \
-            /* Scalar fallback for edge cases */ \
             for (int c = 0; c < 4; c++) { \
                 int col = globalCol + c; \
                 As[loadRow][loadCol4 * 4 + c] = (col < K) ? A[globalRow * K + col] : 0.0f; \
@@ -84,12 +81,11 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL.Kernels
         } \
     }
 
+// Vectorized B loading: 16 rows * 64 cols = 1024 elements = 256 float4s
 #define LOAD_B_TILE(Bs, kBase, wgColStart, K, N) \
-    _Pragma(""unroll"") \
-    for (int i = 0; i < 2; i++) { \
-        int loadIdx = tid + i * 256; \
-        int loadRow = loadIdx / 32; \
-        int loadCol4 = loadIdx % 32; \
+    { \
+        int loadRow = tid / 16;  /* 16 = TILE_N/4 float4s per row, tid 0-255 -> row 0-15 */ \
+        int loadCol4 = tid % 16; /* float4 index within row (0-15) */ \
         int globalRow = kBase + loadRow; \
         int globalCol = wgColStart + loadCol4 * 4; \
         if (globalRow < K && globalCol + 3 < N) { \
@@ -178,7 +174,7 @@ void gemm_double_buffered(
     __local float Bs0[TILE_K][TILE_N + PAD];
     __local float Bs1[TILE_K][TILE_N + PAD];
 
-    // Register accumulators - each thread computes 8x8 = 64 outputs
+    // Register accumulators - each thread computes 4x4 = 16 outputs
     float acc[OUTPUTS_M][OUTPUTS_N];
     #pragma unroll
     for (int i = 0; i < OUTPUTS_M; i++) {
@@ -265,30 +261,31 @@ void gemm_double_buffered(
     for (int mi = 0; mi < OUTPUTS_M; mi++) {
         int outRow = outRowBase + mi;
         if (outRow < M) {
-            // Store 8 columns as 2 float4s
-            #pragma unroll
-            for (int ni4 = 0; ni4 < 2; ni4++) {
-                int outCol = outColBase + ni4 * 4;
-                if (outCol + 3 < N) {
-                    int idx = outRow * N + outCol;
-                    float4 result;
-                    result.x = alpha * acc[mi][ni4 * 4 + 0];
-                    result.y = alpha * acc[mi][ni4 * 4 + 1];
-                    result.z = alpha * acc[mi][ni4 * 4 + 2];
-                    result.w = alpha * acc[mi][ni4 * 4 + 3];
+            // Store 4 columns as 1 float4 (OUTPUTS_N = 4)
+            int outCol = outColBase;
+            if (outCol + 3 < N) {
+                int idx = outRow * N + outCol;
+                float4 result;
+                result.x = alpha * acc[mi][0];
+                result.y = alpha * acc[mi][1];
+                result.z = alpha * acc[mi][2];
+                result.w = alpha * acc[mi][3];
 
-                    if (beta != 0.0f) {
-                        float4 cOld = vload4(0, &C[idx]);
-                        result.x += beta * cOld.x;
-                        result.y += beta * cOld.y;
-                        result.z += beta * cOld.z;
-                        result.w += beta * cOld.w;
-                    }
-                    vstore4(result, 0, &C[idx]);
-                } else {
-                    // Scalar fallback for edge
-                    for (int ni = ni4 * 4; ni < OUTPUTS_N && outColBase + ni < N; ni++) {
-                        int idx = outRow * N + outColBase + ni;
+                if (beta != 0.0f) {
+                    float4 cOld = vload4(0, &C[idx]);
+                    result.x += beta * cOld.x;
+                    result.y += beta * cOld.y;
+                    result.z += beta * cOld.z;
+                    result.w += beta * cOld.w;
+                }
+                vstore4(result, 0, &C[idx]);
+            } else {
+                // Scalar fallback for edge
+                #pragma unroll
+                for (int ni = 0; ni < OUTPUTS_N; ni++) {
+                    int outColScalar = outColBase + ni;
+                    if (outColScalar < N) {
+                        int idx = outRow * N + outColScalar;
                         if (beta != 0.0f) {
                             C[idx] = alpha * acc[mi][ni] + beta * C[idx];
                         } else {
