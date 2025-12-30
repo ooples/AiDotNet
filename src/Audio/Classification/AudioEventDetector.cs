@@ -1175,6 +1175,10 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
                 throw new ObjectDisposedException(nameof(StreamingEventDetectionSession));
             }
 
+            // Collect events to raise outside the lock to prevent deadlock
+            // (event handlers might acquire other locks or call back into this session)
+            List<AudioEvent<T>>? eventsToRaise = null;
+
             lock (_lock)
             {
                 if (_disposed)
@@ -1221,7 +1225,10 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
                             };
 
                             _newEvents.Add(evt);
-                            EventDetected?.Invoke(this, evt);
+
+                            // Collect event for raising outside lock
+                            eventsToRaise ??= new List<AudioEvent<T>>();
+                            eventsToRaise.Add(evt);
                         }
                     }
 
@@ -1229,6 +1236,15 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
                     int hopSamples = (int)(_windowSamples * (1 - _detector._options.WindowOverlap));
                     _buffer.RemoveRange(0, hopSamples);
                     _processedTime += hopSamples / (double)_sampleRate;
+                }
+            }
+
+            // Raise events outside lock to prevent deadlock
+            if (eventsToRaise is not null)
+            {
+                foreach (var evt in eventsToRaise)
+                {
+                    EventDetected?.Invoke(this, evt);
                 }
             }
         }

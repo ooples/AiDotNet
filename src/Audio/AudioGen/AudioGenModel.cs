@@ -554,7 +554,13 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            ValidateLayerConfiguration(Layers);
+            ValidateLayerConfiguration(Layers, out int textEncoderEnd, out int lmStart);
+
+            // Use validated boundaries from custom layer configuration
+            _textEncoderLayerStart = 0;
+            _textEncoderLayerEnd = textEncoderEnd;
+            _languageModelLayerStart = lmStart;
+            _languageModelLayerEnd = Layers.Count;
         }
         else
         {
@@ -572,22 +578,33 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
                 maxTextLength: _maxTextLength,
                 maxAudioTokens: maxAudioTokens,
                 dropoutRate: 0.1));
-        }
 
-        // Set layer boundaries based on AudioGen architecture:
-        // - Text encoder: first 1/3 of layers
-        // - Language model: remaining 2/3 of layers
-        int totalLayers = Layers.Count;
-        _textEncoderLayerStart = 0;
-        _textEncoderLayerEnd = totalLayers / 3;
-        _languageModelLayerStart = _textEncoderLayerEnd;
-        _languageModelLayerEnd = totalLayers;
+            // For default layers, we know the exact structure from CreateDefaultAudioGenLayers:
+            // - Embedding layer (1)
+            // - Text encoder transformer layers (_numLmLayers / 2)
+            // - Cross-attention projection (1)
+            // - Language model transformer layers (_numLmLayers)
+            // - Output projection (1)
+            int textEncoderLayers = 1 + (_numLmLayers / 2) + 1; // embedding + transformers + projection
+            _textEncoderLayerStart = 0;
+            _textEncoderLayerEnd = textEncoderLayers;
+            _languageModelLayerStart = textEncoderLayers;
+            _languageModelLayerEnd = Layers.Count;
+        }
     }
 
     /// <summary>
-    /// Validates that custom layers meet AudioGen requirements.
+    /// Validates that custom layers meet AudioGen requirements and determines layer boundaries.
     /// </summary>
-    private void ValidateLayerConfiguration(List<ILayer<T>> layers)
+    /// <param name="layers">The custom layers to validate.</param>
+    /// <param name="textEncoderEnd">Output: Index where text encoder ends.</param>
+    /// <param name="languageModelStart">Output: Index where language model starts.</param>
+    /// <remarks>
+    /// For custom layers, this method attempts to detect boundaries by looking for
+    /// TransformerDecoderLayer instances (which indicate language model layers).
+    /// If no clear boundary is found, it falls back to a 1/3 split with a warning.
+    /// </remarks>
+    private void ValidateLayerConfiguration(List<ILayer<T>> layers, out int textEncoderEnd, out int languageModelStart)
     {
         if (layers.Count < 3)
         {
@@ -595,6 +612,32 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
                 "AudioGen requires at least 3 layers: text encoder, language model, and output projection. " +
                 "Use LayerHelper.CreateDefaultAudioGenLayers() as a reference.",
                 nameof(layers));
+        }
+
+        // Try to detect boundary by finding the first TransformerDecoderLayer
+        // (text encoder uses regular transformer layers, LM uses decoder layers with cross-attention)
+        int firstDecoderLayerIdx = -1;
+        for (int i = 0; i < layers.Count; i++)
+        {
+            if (layers[i] is TransformerDecoderLayer<T>)
+            {
+                firstDecoderLayerIdx = i;
+                break;
+            }
+        }
+
+        if (firstDecoderLayerIdx > 0)
+        {
+            // Found a clear boundary - decoder layers start the language model
+            textEncoderEnd = firstDecoderLayerIdx;
+            languageModelStart = firstDecoderLayerIdx;
+        }
+        else
+        {
+            // No decoder layers found - use fraction-based fallback
+            // This assumes custom layers follow the standard AudioGen structure
+            textEncoderEnd = layers.Count / 3;
+            languageModelStart = textEncoderEnd;
         }
     }
 
