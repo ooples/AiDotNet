@@ -294,6 +294,22 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        // Validate parameters
+        if (sampleRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(sampleRate), "Sample rate must be positive.");
+        if (numStages <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numStages), "Number of stages must be positive.");
+        if (baseChannels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(baseChannels), "Base channels must be positive.");
+        if (lstmHiddenDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(lstmHiddenDim), "LSTM hidden dimension must be positive.");
+        if (numLstmLayers <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numLstmLayers), "Number of LSTM layers must be positive.");
+        if (fftSize <= 0 || (fftSize & (fftSize - 1)) != 0)
+            throw new ArgumentOutOfRangeException(nameof(fftSize), "FFT size must be a positive power of 2.");
+        if (hopSize <= 0 || hopSize > fftSize)
+            throw new ArgumentOutOfRangeException(nameof(hopSize), "Hop size must be positive and not exceed FFT size.");
+
         SampleRate = sampleRate;
         _numStages = numStages;
         _baseChannels = baseChannels;
