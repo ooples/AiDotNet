@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Text;
 
 namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL;
@@ -17,11 +18,18 @@ internal sealed class DynamicGemmKernel : IDisposable
     private readonly DirectOpenClContext _context;
     private readonly Dictionary<string, (DirectOpenClProgram Program, DirectOpenClKernel Kernel)> _cache;
     private bool _disposed;
+    private static readonly object _logLock = new object();
+    private static StreamWriter? _logWriter;
 
     /// <summary>
     /// Enable verbose diagnostic output for debugging kernel compilation and execution.
     /// </summary>
     public static bool EnableDiagnostics { get; set; } = false;
+
+    /// <summary>
+    /// Log file path for diagnostic output. If null, logs to console.
+    /// </summary>
+    public static string? LogFilePath { get; set; }
 
     /// <summary>
     /// Gets the number of cached kernels.
@@ -51,12 +59,49 @@ internal sealed class DynamicGemmKernel : IDisposable
 
     /// <summary>
     /// Logs a diagnostic message if diagnostics are enabled.
+    /// Writes to log file if LogFilePath is set, otherwise to console.
     /// </summary>
     private static void LogDiag(string message)
     {
-        if (EnableDiagnostics)
+        if (!EnableDiagnostics)
+            return;
+
+        string logLine = $"[{DateTime.Now:HH:mm:ss.fff}] [DynamicGemm] {message}";
+
+        lock (_logLock)
         {
-            Console.WriteLine($"[DynamicGemm] {message}");
+            if (!string.IsNullOrEmpty(LogFilePath))
+            {
+                try
+                {
+                    if (_logWriter == null)
+                    {
+                        _logWriter = new StreamWriter(LogFilePath, append: true) { AutoFlush = true };
+                    }
+                    _logWriter.WriteLine(logLine);
+                }
+                catch
+                {
+                    // Fall back to console on error
+                    Console.WriteLine(logLine);
+                }
+            }
+            else
+            {
+                Console.WriteLine(logLine);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Closes the log file if open.
+    /// </summary>
+    public static void CloseLog()
+    {
+        lock (_logLock)
+        {
+            _logWriter?.Dispose();
+            _logWriter = null;
         }
     }
 

@@ -85,13 +85,43 @@ public sealed class GemmAutoTuner
     public static int ProgressInterval { get; set; } = 10;
 
     /// <summary>
+    /// Log file path for diagnostic output. If null, logs to console.
+    /// Shared with DynamicGemmKernel.
+    /// </summary>
+    public static string? LogFilePath
+    {
+        get => DynamicGemmKernel.LogFilePath;
+        set => DynamicGemmKernel.LogFilePath = value;
+    }
+
+    /// <summary>
     /// Logs a diagnostic message if diagnostics are enabled.
+    /// Uses same log file as DynamicGemmKernel if configured.
     /// </summary>
     private static void LogDiag(string message)
     {
-        if (EnableDiagnostics)
+        if (!EnableDiagnostics)
+            return;
+
+        string logLine = $"[{DateTime.Now:HH:mm:ss.fff}] [GemmTuner] {message}";
+
+        if (!string.IsNullOrEmpty(LogFilePath))
         {
-            Console.WriteLine($"[GemmTuner] {message}");
+            // Use DynamicGemmKernel's logging mechanism
+            DynamicGemmKernel.EnableDiagnostics = true;
+            try
+            {
+                using var sw = new System.IO.StreamWriter(LogFilePath, append: true);
+                sw.WriteLine(logLine);
+            }
+            catch
+            {
+                Console.WriteLine(logLine);
+            }
+        }
+        else
+        {
+            Console.WriteLine(logLine);
         }
     }
 

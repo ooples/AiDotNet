@@ -3,6 +3,7 @@
 
 using System;
 using System.Diagnostics;
+using System.IO;
 using AiDotNet.Tensors.Engines.DirectGpu.OpenCL;
 
 namespace AiDotNetTestConsole;
@@ -19,11 +20,13 @@ public static class GemmTuningTest
         Console.WriteLine("=== Extended GEMM Tuning with Feature-Based ARD Kernel ===");
         Console.WriteLine();
 
-        // Enable diagnostics if requested
+        // Enable diagnostics if requested - write to log file to keep console clean
+        string logFile = Path.Combine(Path.GetTempPath(), $"gemm_tuning_{DateTime.Now:yyyyMMdd_HHmmss}.log");
         if (enableDiagnostics)
         {
             OpenClBackend.EnableTuningDiagnostics = true;
-            Console.WriteLine("[DIAGNOSTICS ENABLED] Verbose output will be shown for debugging.");
+            GemmAutoTuner.LogFilePath = logFile;
+            Console.WriteLine($"[DIAGNOSTICS ENABLED] Verbose output will be written to: {logFile}");
             Console.WriteLine();
         }
 
