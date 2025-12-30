@@ -855,9 +855,12 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
     /// - Native neural network mode is not active (_useNativeMode is false)
     ///
     /// This typically occurs during:
-    /// - Legacy constructor usage without ONNX models for basic audio event detection
-    /// - Incomplete initialization where model loading failed but detection should continue
-    /// - Scenarios where rule-based heuristics are preferred over neural network inference
+    /// - Deserialization when the original ONNX model file is missing or inaccessible
+    /// - Recovery scenarios where model loading failed but detection should continue
+    ///
+    /// Note: Normal constructor paths do not reach this method because:
+    /// - ONNX constructor sets _useNativeMode=false and loads OnnxEncoder (takes ONNX path)
+    /// - Native/legacy constructors set _useNativeMode=true (takes native path)
     ///
     /// The method uses spectral features (energy, zero-crossing rate, spectral centroid,
     /// spectral flatness, band energies) to classify audio events using predefined heuristics.
