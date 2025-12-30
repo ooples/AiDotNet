@@ -1395,27 +1395,32 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 }
             }
 
-            // Check for cached result first and benchmark it
-            var cachedConfig = database.GetBestConfig(M, N, K);
+            // Check for cached result first - use DATABASE GFLOPS as baseline
+            var cachedEntry = database.GetBestConfigWithGflops(M, N, K);
             TuningResult? cachedResult = null;
-            double cachedGflops = 0;
+            double databaseGflops = 0;  // The historical best from database - this is the threshold to beat
 
-            if (cachedConfig.HasValue)
+            if (cachedEntry.HasValue)
             {
-                Console.WriteLine($"Using cached configuration: {cachedConfig.Value}");
-                var cachedTimeMs = BenchmarkConfig(cachedConfig.Value);
+                var cachedConfig = cachedEntry.Value.Config;
+                databaseGflops = cachedEntry.Value.GFlops;  // Use stored GFLOPS as baseline
+                Console.WriteLine($"Using cached configuration: {cachedConfig}");
+                Console.WriteLine($"Database best: {databaseGflops:F2} GFLOPS (threshold to beat)");
+
+                // Re-benchmark to validate config works and add to result set
+                var cachedTimeMs = BenchmarkConfig(cachedConfig);
                 if (cachedTimeMs < double.MaxValue)
                 {
                     double ops = 2.0 * M * N * K;
-                    cachedGflops = (ops / (cachedTimeMs / 1000.0)) / 1e9;
+                    double revalidatedGflops = (ops / (cachedTimeMs / 1000.0)) / 1e9;
                     cachedResult = new TuningResult
                     {
-                        Config = cachedConfig.Value,
+                        Config = cachedConfig,
                         TimeMs = cachedTimeMs,
-                        GFlops = cachedGflops,
+                        GFlops = revalidatedGflops,
                         IsValid = true
                     };
-                    Console.WriteLine($"Cached config: {cachedGflops:F2} GFLOPS");
+                    Console.WriteLine($"Revalidated: {revalidatedGflops:F2} GFLOPS");
                 }
             }
 
@@ -1447,10 +1452,16 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 var best = allResults[0];
                 Console.WriteLine($"Best: {best.Config} - {best.GFlops:F2} GFLOPS");
 
-                // Only update database if we found something better than cached
-                if (best.GFlops > cachedGflops)
+                // Only update database if we found something better than the DATABASE best
+                // Note: We compare against databaseGflops (historical best), NOT re-benchmarked value
+                if (best.GFlops > databaseGflops)
                 {
+                    Console.WriteLine($"NEW GLOBAL BEST! {best.GFlops:F2} > {databaseGflops:F2} GFLOPS (previous best)");
                     database.StoreResult(M, N, K, best.Config, best.GFlops);
+                }
+                else
+                {
+                    Console.WriteLine($"No improvement: {best.GFlops:F2} <= {databaseGflops:F2} GFLOPS (database best)");
                 }
             }
 

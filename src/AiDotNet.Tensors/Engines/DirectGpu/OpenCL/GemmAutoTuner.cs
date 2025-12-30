@@ -344,6 +344,8 @@ public sealed class GemmAutoTuner
         double bestGflops = 0;
         string bestConfig = "";
         int failedTrials = 0;
+        int trialsSinceImprovement = 0;
+        int earlyStopPatience = Math.Max(15, maxTrials / 5);  // Stop after N trials without improvement
 
         // Phase 1: Initial random sampling
         LogDiag($"\n--- Phase 1: Random Exploration ({initialRandomSamples} trials) ---");
@@ -377,9 +379,18 @@ public sealed class GemmAutoTuner
         // Phase 2: Bayesian optimization
         LogDiag($"\n--- Phase 2: Bayesian Optimization ({maxTrials - initialRandomSamples} trials) ---");
         LogDiag($"Current best: {bestGflops:F2} GFLOPS - {bestConfig}");
+        LogDiag($"Early stopping patience: {earlyStopPatience} trials without improvement");
 
         for (int trial = initialRandomSamples; trial < maxTrials && testedIndices.Count < allConfigs.Length; trial++)
         {
+            // Check early stopping
+            if (trialsSinceImprovement >= earlyStopPatience)
+            {
+                LogDiag($"\n*** EARLY STOPPING: No improvement for {earlyStopPatience} trials ***");
+                LogDiag($"Stopped at trial {trial}/{maxTrials}, saved {maxTrials - trial} trials");
+                break;
+            }
+
             // Update GP model
             bayesian.UpdateModel();
 
@@ -395,7 +406,7 @@ public sealed class GemmAutoTuner
                 double elapsed = tuningStopwatch.Elapsed.TotalSeconds;
                 double trialsPerSec = (trial + 1) / elapsed;
                 double eta = (maxTrials - trial - 1) / trialsPerSec;
-                LogDiag($"Trial {trial + 1}/{maxTrials}: Best={bestGflops:F2} GFLOPS, Failed={failedTrials}, ETA={eta:F1}s");
+                LogDiag($"Trial {trial + 1}/{maxTrials}: Best={bestGflops:F2} GFLOPS, Failed={failedTrials}, NoImprove={trialsSinceImprovement}/{earlyStopPatience}, ETA={eta:F1}s");
             }
 
             var result = BenchmarkConfig(config, benchmarkFunc, warmupRuns, benchmarkRuns, M, N, K);
@@ -408,12 +419,18 @@ public sealed class GemmAutoTuner
                 {
                     bestGflops = result.GFlops;
                     bestConfig = config.ToString();
+                    trialsSinceImprovement = 0;  // Reset counter on improvement
                     LogDiag($"  NEW BEST at trial {trial + 1}: {bestGflops:F2} GFLOPS - {config.KernelName}");
+                }
+                else
+                {
+                    trialsSinceImprovement++;  // No improvement
                 }
             }
             else
             {
                 failedTrials++;
+                trialsSinceImprovement++;  // Failed trial counts as no improvement
                 bayesian.AddObservation(nextIdx, 0);
             }
         }

@@ -124,6 +124,21 @@ internal sealed class GemmTuningDatabase : IDisposable
     }
 
     /// <summary>
+    /// Gets the cached configuration AND its stored GFLOPS for a given matrix size.
+    /// Returns null if no cached entry exists.
+    /// </summary>
+    public (GemmConfig Config, double GFlops)? GetBestConfigWithGflops(int M, int N, int K)
+    {
+        lock (_lock)
+        {
+            var key = FormattableString.Invariant($"{M}x{N}x{K}");
+            if (_cache.TryGetValue(key, out var entry))
+                return (entry.Config, entry.GFlops);
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Stores a tuning result if it's better than the current best.
     /// </summary>
     public void StoreResult(int M, int N, int K, GemmConfig config, double gflops)
