@@ -189,15 +189,33 @@ public abstract class AudioClassifierBase<T> : AudioNeuralNetworkBase<T>
     /// </remarks>
     protected Dictionary<string, T> ComputeClassWeights(Dictionary<string, int> classCounts)
     {
-        int totalSamples = classCounts.Values.Sum();
-        int numClasses = classCounts.Count;
+        // Filter out classes with zero counts to prevent division by zero
+        var nonZeroCounts = classCounts.Where(kvp => kvp.Value > 0).ToList();
+
+        if (nonZeroCounts.Count == 0)
+        {
+            // Return equal weights of 1.0 for all classes if all counts are zero
+            return classCounts.ToDictionary(kvp => kvp.Key, _ => NumOps.FromDouble(1.0));
+        }
+
+        int totalSamples = nonZeroCounts.Sum(kvp => kvp.Value);
+        int numClasses = nonZeroCounts.Count;
 
         var weights = new Dictionary<string, T>();
         foreach (var (label, count) in classCounts)
         {
-            // Inverse frequency weighting
-            double weight = (double)totalSamples / (numClasses * count);
-            weights[label] = NumOps.FromDouble(weight);
+            if (count > 0)
+            {
+                // Inverse frequency weighting
+                double weight = (double)totalSamples / (numClasses * count);
+                weights[label] = NumOps.FromDouble(weight);
+            }
+            else
+            {
+                // Assign maximum weight to classes with zero samples (they need the most attention)
+                double maxWeight = nonZeroCounts.Max(kvp => (double)totalSamples / (numClasses * kvp.Value));
+                weights[label] = NumOps.FromDouble(maxWeight);
+            }
         }
 
         return weights;
