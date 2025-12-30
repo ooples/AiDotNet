@@ -214,7 +214,13 @@ public class FlattenLayer<T> : LayerBase<T>
 
         // Batched input: flatten spatial dimensions keeping batch dimension
         int batchSize = input.Shape[0];
-        return Engine.Reshape(input, [batchSize, _outputSize]);
+        // Calculate actual flattened size from input dimensions, not pre-computed _outputSize
+        int actualOutputSize = 1;
+        for (int i = 1; i < input.Shape.Length; i++)
+        {
+            actualOutputSize *= input.Shape[i];
+        }
+        return Engine.Reshape(input, [batchSize, actualOutputSize]);
     }
 
     /// <summary>

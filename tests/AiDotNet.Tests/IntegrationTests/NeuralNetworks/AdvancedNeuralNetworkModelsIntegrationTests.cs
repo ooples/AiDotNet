@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -2192,6 +2193,1436 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         // Assert
         Assert.True(parameterCount > 0, $"NTM parameter count should be > 0, got {parameterCount}");
+    }
+
+    #endregion
+
+    #region Additional GAN Variant Tests
+
+    [Fact]
+    public void ACGAN_Predict_ProducesOutput()
+    {
+        // Arrange - GANs use ThreeDimensional input for image generation
+        // For ThreeDimensional, inputSize must equal inputHeight * inputWidth * inputDepth
+        var generatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Simple,
+            inputSize: 64,  // 8*8*1 = 64
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 64);
+
+        // ACGAN discriminator output = 1 (real/fake) + numClasses (class labels) = 11
+        var discriminatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification, // ACGAN discriminator outputs multiple values
+            NetworkComplexity.Simple,
+            inputSize: 64,  // 8*8*1 = 64
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 11);  // 1 + numClasses = 1 + 10 = 11
+
+        var acgan = new ACGAN<float>(
+            generatorArchitecture,
+            discriminatorArchitecture,
+            numClasses: 10,
+            inputType: InputType.ThreeDimensional);
+
+        var noiseInput = CreateRandomTensor([1, 8, 8]); // [channels, height, width]
+
+        // Act
+        var output = acgan.Predict(noiseInput);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "ACGAN output should have elements");
+    }
+
+    [Fact]
+    public void ACGAN_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange - GANs use ThreeDimensional input for image generation
+        var generatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Simple,
+            inputSize: 64,  // 8*8*1 = 64
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 64);
+
+        // ACGAN discriminator output = 1 (real/fake) + numClasses (class labels) = 11
+        var discriminatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification, // ACGAN discriminator outputs multiple values
+            NetworkComplexity.Simple,
+            inputSize: 64,  // 8*8*1 = 64
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 11);  // 1 + numClasses = 1 + 10 = 11
+
+        var acgan = new ACGAN<float>(
+            generatorArchitecture,
+            discriminatorArchitecture,
+            numClasses: 10,
+            inputType: InputType.ThreeDimensional);
+
+        // Act
+        var parameterCount = acgan.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"ACGAN parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void BigGAN_Predict_ProducesOutput()
+    {
+        // Arrange - BigGAN uses ThreeDimensional input for image generation
+        var generatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 64);
+
+        var discriminatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.BinaryClassification,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 1);
+
+        var biggan = new BigGAN<float>(
+            generatorArchitecture,
+            discriminatorArchitecture,
+            latentSize: 16,
+            numClasses: 10,
+            classEmbeddingDim: 8,
+            imageChannels: 1,
+            imageHeight: 8,
+            imageWidth: 8,
+            generatorChannels: 8,
+            discriminatorChannels: 8);
+
+        // BigGAN expects 2D latent code [batch, latent_size]
+        var noiseInput = CreateRandomTensor([1, 16]);
+
+        // Act
+        var output = biggan.Predict(noiseInput);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "BigGAN output should have elements");
+    }
+
+    [Fact]
+    public void BigGAN_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange - BigGAN uses ThreeDimensional input for image generation
+        var generatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 64);
+
+        var discriminatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.BinaryClassification,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 1);
+
+        var biggan = new BigGAN<float>(
+            generatorArchitecture,
+            discriminatorArchitecture,
+            latentSize: 16,
+            numClasses: 10,
+            classEmbeddingDim: 8,
+            imageChannels: 1,
+            imageHeight: 8,
+            imageWidth: 8);
+
+        // Act
+        var parameterCount = biggan.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"BigGAN parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void InfoGAN_Predict_ProducesOutput()
+    {
+        // Arrange - InfoGAN uses ThreeDimensional input for image generation
+        var generatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 64);
+
+        var discriminatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.BinaryClassification,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 1);
+
+        var qNetworkArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 10);
+
+        var infogan = new InfoGAN<float>(
+            generatorArchitecture,
+            discriminatorArchitecture,
+            qNetworkArchitecture,
+            latentCodeSize: 10,
+            inputType: InputType.ThreeDimensional);
+
+        var noiseInput = CreateRandomTensor([1, 8, 8]);
+
+        // Act
+        var output = infogan.Predict(noiseInput);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "InfoGAN output should have elements");
+    }
+
+    [Fact]
+    public void InfoGAN_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange - InfoGAN uses ThreeDimensional input for image generation
+        var generatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 64);
+
+        var discriminatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.BinaryClassification,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 1);
+
+        var qNetworkArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 10);
+
+        var infogan = new InfoGAN<float>(
+            generatorArchitecture,
+            discriminatorArchitecture,
+            qNetworkArchitecture,
+            latentCodeSize: 10,
+            inputType: InputType.ThreeDimensional);
+
+        // Act
+        var parameterCount = infogan.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"InfoGAN parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void Pix2Pix_Predict_ProducesOutput()
+    {
+        // Arrange - Pix2Pix uses ThreeDimensional input for image-to-image translation
+        var generatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 64);
+
+        var discriminatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.BinaryClassification,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 1);
+
+        var pix2pix = new Pix2Pix<float>(
+            generatorArchitecture,
+            discriminatorArchitecture,
+            inputType: InputType.ThreeDimensional);
+
+        var imageInput = CreateRandomTensor([1, 8, 8]); // [channels, height, width]
+
+        // Act
+        var output = pix2pix.Predict(imageInput);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "Pix2Pix output should have elements");
+    }
+
+    [Fact]
+    public void Pix2Pix_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange - Pix2Pix uses ThreeDimensional input for image-to-image translation
+        var generatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 64);
+
+        var discriminatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.BinaryClassification,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 1);
+
+        var pix2pix = new Pix2Pix<float>(
+            generatorArchitecture,
+            discriminatorArchitecture,
+            inputType: InputType.ThreeDimensional);
+
+        // Act
+        var parameterCount = pix2pix.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"Pix2Pix parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void ProgressiveGAN_Predict_ProducesOutput()
+    {
+        // Arrange - ProgressiveGAN uses ThreeDimensional input for image generation
+        var generatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 64);
+
+        var discriminatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.BinaryClassification,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 1);
+
+        var progressiveGan = new ProgressiveGAN<float>(
+            generatorArchitecture,
+            discriminatorArchitecture,
+            latentSize: 16,
+            imageChannels: 1,
+            maxResolutionLevel: 2, // 16x16 max
+            baseFeatureMaps: 8);
+
+        var noiseInput = CreateRandomTensor([16]);
+
+        // Act
+        var output = progressiveGan.Predict(noiseInput);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "ProgressiveGAN output should have elements");
+    }
+
+    [Fact]
+    public void ProgressiveGAN_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange - ProgressiveGAN uses ThreeDimensional input for image generation
+        var generatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 64);
+
+        var discriminatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.BinaryClassification,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 1);
+
+        var progressiveGan = new ProgressiveGAN<float>(
+            generatorArchitecture,
+            discriminatorArchitecture,
+            latentSize: 16,
+            imageChannels: 1,
+            maxResolutionLevel: 2,
+            baseFeatureMaps: 8);
+
+        // Act
+        var parameterCount = progressiveGan.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"ProgressiveGAN parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void SAGAN_Predict_ProducesOutput()
+    {
+        // Arrange - SAGAN uses ThreeDimensional input for image generation
+        var generatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 64);
+
+        var discriminatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.BinaryClassification,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 1);
+
+        var sagan = new SAGAN<float>(
+            generatorArchitecture,
+            discriminatorArchitecture,
+            latentSize: 16,
+            imageChannels: 1,
+            imageHeight: 8,
+            imageWidth: 8,
+            generatorChannels: 8,
+            discriminatorChannels: 8);
+
+        var noiseInput = CreateRandomTensor([16]);
+
+        // Act
+        var output = sagan.Predict(noiseInput);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "SAGAN output should have elements");
+    }
+
+    [Fact]
+    public void SAGAN_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange - SAGAN uses ThreeDimensional input for image generation
+        var generatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 64);
+
+        var discriminatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.BinaryClassification,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 1);
+
+        var sagan = new SAGAN<float>(
+            generatorArchitecture,
+            discriminatorArchitecture,
+            latentSize: 16,
+            imageChannels: 1,
+            imageHeight: 8,
+            imageWidth: 8);
+
+        // Act
+        var parameterCount = sagan.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"SAGAN parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void StyleGAN_Predict_ProducesOutput()
+    {
+        // Arrange - StyleGAN uses ThreeDimensional input for image generation
+        var mappingNetworkArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 32);
+
+        var synthesisNetworkArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 64);
+
+        var discriminatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.BinaryClassification,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 1);
+
+        var stylegan = new StyleGAN<float>(
+            mappingNetworkArchitecture,
+            synthesisNetworkArchitecture,
+            discriminatorArchitecture,
+            latentSize: 16,
+            intermediateLatentSize: 32,
+            inputType: InputType.ThreeDimensional);
+
+        var noiseInput = CreateRandomTensor([16]);
+
+        // Act
+        var output = stylegan.Predict(noiseInput);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "StyleGAN output should have elements");
+    }
+
+    [Fact]
+    public void StyleGAN_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange - StyleGAN uses ThreeDimensional input for image generation
+        var mappingNetworkArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 32);
+
+        var synthesisNetworkArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 64);
+
+        var discriminatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.BinaryClassification,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 1);
+
+        var stylegan = new StyleGAN<float>(
+            mappingNetworkArchitecture,
+            synthesisNetworkArchitecture,
+            discriminatorArchitecture,
+            latentSize: 16,
+            intermediateLatentSize: 32,
+            inputType: InputType.ThreeDimensional);
+
+        // Act
+        var parameterCount = stylegan.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"StyleGAN parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void WGANGP_Predict_ProducesOutput()
+    {
+        // Arrange - WGANGP uses ThreeDimensional input for image generation
+        var generatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 64);
+
+        var criticArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.BinaryClassification,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 1);
+
+        var wgangp = new WGANGP<float>(
+            generatorArchitecture,
+            criticArchitecture,
+            inputType: InputType.ThreeDimensional);
+
+        var noiseInput = CreateRandomTensor([1, 8, 8]);
+
+        // Act
+        var output = wgangp.Predict(noiseInput);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "WGANGP output should have elements");
+    }
+
+    [Fact]
+    public void WGANGP_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange - WGANGP uses ThreeDimensional input for image generation
+        var generatorArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 64);
+
+        var criticArchitecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.BinaryClassification,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 1,
+            outputSize: 1);
+
+        var wgangp = new WGANGP<float>(
+            generatorArchitecture,
+            criticArchitecture,
+            inputType: InputType.ThreeDimensional);
+
+        // Act
+        var parameterCount = wgangp.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"WGANGP parameter count should be > 0, got {parameterCount}");
+    }
+
+    #endregion
+
+    #region Additional Graph Neural Network Tests
+
+    [Fact]
+    public void GraphSAGENetwork_Predict_ProducesOutput()
+    {
+        // Arrange - GraphSAGENetwork uses OneDimensional input
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 16,
+            outputSize: 4);
+
+        var graphSage = new GraphSAGENetwork<float>(
+            architecture,
+            aggregatorType: SAGEAggregatorType.Mean,
+            numLayers: 2);
+
+        // Create node features [numNodes, features]
+        var nodeFeatures = CreateRandomTensor([8, 16]);
+
+        // Create adjacency matrix [numNodes, numNodes] - required for graph networks
+        var adjacencyMatrix = CreateRandomTensor([8, 8]);
+        graphSage.SetAdjacencyMatrix(adjacencyMatrix);
+
+        // Act
+        var output = graphSage.Predict(nodeFeatures);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "GraphSAGENetwork output should have elements");
+    }
+
+    [Fact]
+    public void GraphSAGENetwork_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 16,
+            outputSize: 4);
+
+        var graphSage = new GraphSAGENetwork<float>(
+            architecture,
+            aggregatorType: SAGEAggregatorType.Mean,
+            numLayers: 2);
+
+        // Act
+        var parameterCount = graphSage.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"GraphSAGENetwork parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void GraphIsomorphismNetwork_Predict_ProducesOutput()
+    {
+        // Arrange - GraphIsomorphismNetwork uses OneDimensional input
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 16,
+            outputSize: 4);
+
+        var gin = new GraphIsomorphismNetwork<float>(
+            architecture,
+            mlpHiddenDim: 32,
+            numLayers: 2);
+
+        // Create node features [numNodes, features]
+        var nodeFeatures = CreateRandomTensor([8, 16]);
+
+        // Create adjacency matrix [numNodes, numNodes] - required for graph networks
+        var adjacencyMatrix = CreateRandomTensor([8, 8]);
+        gin.SetAdjacencyMatrix(adjacencyMatrix);
+
+        // Act
+        var output = gin.Predict(nodeFeatures);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "GraphIsomorphismNetwork output should have elements");
+    }
+
+    [Fact]
+    public void GraphIsomorphismNetwork_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 16,
+            outputSize: 4);
+
+        var gin = new GraphIsomorphismNetwork<float>(
+            architecture,
+            mlpHiddenDim: 32,
+            numLayers: 2);
+
+        // Act
+        var parameterCount = gin.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"GraphIsomorphismNetwork parameter count should be > 0, got {parameterCount}");
+    }
+
+    #endregion
+
+    #region Vision Architecture Tests
+
+    [Fact]
+    public void VGGNetwork_Predict_ProducesOutput()
+    {
+        // Arrange - VGG requires ThreeDimensional input and VGGConfiguration
+        var config = new VGGConfiguration(VGGVariant.VGG11, numClasses: 10, inputHeight: 32, inputWidth: 32, inputChannels: 3);
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 3 * 32 * 32,
+            inputHeight: 32,
+            inputWidth: 32,
+            inputDepth: 3,
+            outputSize: 10);
+
+        var vgg = new VGGNetwork<float>(architecture, config);
+
+        var imageInput = CreateRandomTensor([3, 32, 32]); // [channels, height, width]
+
+        // Act
+        var output = vgg.Predict(imageInput);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "VGGNetwork output should have elements");
+    }
+
+    [Fact]
+    public void VGGNetwork_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var config = new VGGConfiguration(VGGVariant.VGG11, numClasses: 10, inputHeight: 32, inputWidth: 32, inputChannels: 3);
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 3 * 32 * 32,
+            inputHeight: 32,
+            inputWidth: 32,
+            inputDepth: 3,
+            outputSize: 10);
+
+        var vgg = new VGGNetwork<float>(architecture, config);
+
+        // Act
+        var parameterCount = vgg.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"VGGNetwork parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void ResNetNetwork_Predict_ProducesOutput()
+    {
+        // Arrange - ResNet requires ThreeDimensional input and ResNetConfiguration
+        var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10, inputHeight: 32, inputWidth: 32, inputChannels: 3);
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 3 * 32 * 32,
+            inputHeight: 32,
+            inputWidth: 32,
+            inputDepth: 3,
+            outputSize: 10);
+
+        var resnet = new ResNetNetwork<float>(architecture, config);
+
+        var imageInput = CreateRandomTensor([3, 32, 32]);
+
+        // Act
+        var output = resnet.Predict(imageInput);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "ResNetNetwork output should have elements");
+    }
+
+    [Fact]
+    public void ResNetNetwork_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10, inputHeight: 32, inputWidth: 32, inputChannels: 3);
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 3 * 32 * 32,
+            inputHeight: 32,
+            inputWidth: 32,
+            inputDepth: 3,
+            outputSize: 10);
+
+        var resnet = new ResNetNetwork<float>(architecture, config);
+
+        // Act
+        var parameterCount = resnet.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"ResNetNetwork parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void DenseNetNetwork_Predict_ProducesOutput()
+    {
+        // Arrange - DenseNet requires ThreeDimensional input and DenseNetConfiguration
+        var config = new DenseNetConfiguration(DenseNetVariant.DenseNet121, numClasses: 10, inputHeight: 32, inputWidth: 32, inputChannels: 3);
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 3 * 32 * 32,
+            inputHeight: 32,
+            inputWidth: 32,
+            inputDepth: 3,
+            outputSize: 10);
+
+        var densenet = new DenseNetNetwork<float>(architecture, config);
+
+        var imageInput = CreateRandomTensor([3, 32, 32]);
+
+        // Act
+        var output = densenet.Predict(imageInput);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "DenseNetNetwork output should have elements");
+    }
+
+    [Fact]
+    public void DenseNetNetwork_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var config = new DenseNetConfiguration(DenseNetVariant.DenseNet121, numClasses: 10, inputHeight: 32, inputWidth: 32, inputChannels: 3);
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 3 * 32 * 32,
+            inputHeight: 32,
+            inputWidth: 32,
+            inputDepth: 3,
+            outputSize: 10);
+
+        var densenet = new DenseNetNetwork<float>(architecture, config);
+
+        // Act
+        var parameterCount = densenet.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"DenseNetNetwork parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void EfficientNetNetwork_Predict_ProducesOutput()
+    {
+        // Arrange - EfficientNet requires ThreeDimensional input and EfficientNetConfiguration
+        var config = new EfficientNetConfiguration(EfficientNetVariant.B0, numClasses: 10);
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 3 * 224 * 224,
+            inputHeight: 224,
+            inputWidth: 224,
+            inputDepth: 3,
+            outputSize: 10);
+
+        var efficientnet = new EfficientNetNetwork<float>(architecture, config);
+
+        var imageInput = CreateRandomTensor([3, 224, 224]);
+
+        // Act
+        var output = efficientnet.Predict(imageInput);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "EfficientNetNetwork output should have elements");
+    }
+
+    [Fact]
+    public void EfficientNetNetwork_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var config = new EfficientNetConfiguration(EfficientNetVariant.B0, numClasses: 10);
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 3 * 224 * 224,
+            inputHeight: 224,
+            inputWidth: 224,
+            inputDepth: 3,
+            outputSize: 10);
+
+        var efficientnet = new EfficientNetNetwork<float>(architecture, config);
+
+        // Act
+        var parameterCount = efficientnet.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"EfficientNetNetwork parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void MobileNetV2Network_Predict_ProducesOutput()
+    {
+        // Arrange - MobileNetV2 requires ThreeDimensional input and MobileNetV2Configuration
+        var config = new MobileNetV2Configuration(MobileNetV2WidthMultiplier.Alpha100, numClasses: 10, inputHeight: 32, inputWidth: 32, inputChannels: 3);
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 3 * 32 * 32,
+            inputHeight: 32,
+            inputWidth: 32,
+            inputDepth: 3,
+            outputSize: 10);
+
+        var mobilenet = new MobileNetV2Network<float>(architecture, config);
+
+        var imageInput = CreateRandomTensor([3, 32, 32]);
+
+        // Act
+        var output = mobilenet.Predict(imageInput);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "MobileNetV2Network output should have elements");
+    }
+
+    [Fact]
+    public void MobileNetV2Network_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var config = new MobileNetV2Configuration(MobileNetV2WidthMultiplier.Alpha100, numClasses: 10, inputHeight: 32, inputWidth: 32, inputChannels: 3);
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 3 * 32 * 32,
+            inputHeight: 32,
+            inputWidth: 32,
+            inputDepth: 3,
+            outputSize: 10);
+
+        var mobilenet = new MobileNetV2Network<float>(architecture, config);
+
+        // Act
+        var parameterCount = mobilenet.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"MobileNetV2Network parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void MobileNetV3Network_Predict_ProducesOutput()
+    {
+        // Arrange - MobileNetV3 requires ThreeDimensional input and MobileNetV3Configuration
+        var config = new MobileNetV3Configuration(MobileNetV3Variant.Small, numClasses: 10, inputHeight: 32, inputWidth: 32, inputChannels: 3);
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 3 * 32 * 32,
+            inputHeight: 32,
+            inputWidth: 32,
+            inputDepth: 3,
+            outputSize: 10);
+
+        var mobilenet = new MobileNetV3Network<float>(architecture, config);
+
+        var imageInput = CreateRandomTensor([3, 32, 32]);
+
+        // Act
+        var output = mobilenet.Predict(imageInput);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "MobileNetV3Network output should have elements");
+    }
+
+    [Fact]
+    public void MobileNetV3Network_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var config = new MobileNetV3Configuration(MobileNetV3Variant.Small, numClasses: 10, inputHeight: 32, inputWidth: 32, inputChannels: 3);
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 3 * 32 * 32,
+            inputHeight: 32,
+            inputWidth: 32,
+            inputDepth: 3,
+            outputSize: 10);
+
+        var mobilenet = new MobileNetV3Network<float>(architecture, config);
+
+        // Act
+        var parameterCount = mobilenet.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"MobileNetV3Network parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void VisionTransformer_Predict_ProducesOutput()
+    {
+        // Arrange - VisionTransformer takes imageHeight, imageWidth, channels, patchSize, numClasses
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 3 * 32 * 32,
+            inputHeight: 32,
+            inputWidth: 32,
+            inputDepth: 3,
+            outputSize: 10);
+
+        var vit = new VisionTransformer<float>(
+            architecture,
+            imageHeight: 32,
+            imageWidth: 32,
+            channels: 3,
+            patchSize: 8,
+            numClasses: 10,
+            hiddenDim: 64,
+            numLayers: 2,
+            numHeads: 4,
+            mlpDim: 128);
+
+        var imageInput = CreateRandomTensor([3, 32, 32]);
+
+        // Act
+        var output = vit.Predict(imageInput);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "VisionTransformer output should have elements");
+    }
+
+    [Fact]
+    public void VisionTransformer_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 3 * 32 * 32,
+            inputHeight: 32,
+            inputWidth: 32,
+            inputDepth: 3,
+            outputSize: 10);
+
+        var vit = new VisionTransformer<float>(
+            architecture,
+            imageHeight: 32,
+            imageWidth: 32,
+            channels: 3,
+            patchSize: 8,
+            numClasses: 10,
+            hiddenDim: 64,
+            numLayers: 2,
+            numHeads: 4,
+            mlpDim: 128);
+
+        // Act
+        var parameterCount = vit.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"VisionTransformer parameter count should be > 0, got {parameterCount}");
+    }
+
+    #endregion
+
+    #region Advanced Memory and Specialized Network Tests
+
+    [Fact]
+    public void DifferentiableNeuralComputer_Predict_ProducesOutput()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.Regression,
+            NetworkComplexity.Simple,
+            inputSize: 16,
+            outputSize: 8);
+
+        var dnc = new DifferentiableNeuralComputer<float>(
+            architecture,
+            memorySize: 16,
+            memoryWordSize: 8,
+            controllerSize: 32,
+            readHeads: 2,
+            lossFunction: null,
+            activationFunction: (IActivationFunction<float>?)null);
+
+        var input = CreateRandomTensor([16]);
+
+        // Act
+        var output = dnc.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "DifferentiableNeuralComputer output should have elements");
+    }
+
+    [Fact]
+    public void DifferentiableNeuralComputer_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.Regression,
+            NetworkComplexity.Simple,
+            inputSize: 16,
+            outputSize: 8);
+
+        var dnc = new DifferentiableNeuralComputer<float>(
+            architecture,
+            memorySize: 16,
+            memoryWordSize: 8,
+            controllerSize: 32,
+            readHeads: 2,
+            lossFunction: null,
+            activationFunction: (IActivationFunction<float>?)null);
+
+        // Act
+        var parameterCount = dnc.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"DifferentiableNeuralComputer parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void DeepBoltzmannMachine_Predict_ProducesOutput()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Simple,
+            inputSize: 16,
+            outputSize: 16);
+
+        var dbm = new DeepBoltzmannMachine<float>(
+            architecture,
+            epochs: 10,
+            learningRate: 0.01f,
+            lossFunction: null,
+            activationFunction: (IActivationFunction<float>?)null);
+
+        var input = CreateRandomTensor([16]);
+
+        // Act
+        var output = dbm.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "DeepBoltzmannMachine output should have elements");
+    }
+
+    [Fact]
+    public void DeepBoltzmannMachine_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Simple,
+            inputSize: 16,
+            outputSize: 16);
+
+        var dbm = new DeepBoltzmannMachine<float>(
+            architecture,
+            epochs: 10,
+            learningRate: 0.01f,
+            lossFunction: null,
+            activationFunction: (IActivationFunction<float>?)null);
+
+        // Act
+        var parameterCount = dbm.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"DeepBoltzmannMachine parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void HyperbolicNeuralNetwork_Predict_ProducesOutput()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.Regression,
+            NetworkComplexity.Simple,
+            inputSize: 16,
+            outputSize: 8);
+
+        var hyperbolicNet = new HyperbolicNeuralNetwork<float>(
+            architecture,
+            curvature: -1.0);
+
+        var input = CreateRandomTensor([16]);
+
+        // Act
+        var output = hyperbolicNet.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "HyperbolicNeuralNetwork output should have elements");
+    }
+
+    [Fact]
+    public void HyperbolicNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.Regression,
+            NetworkComplexity.Simple,
+            inputSize: 16,
+            outputSize: 8);
+
+        var hyperbolicNet = new HyperbolicNeuralNetwork<float>(
+            architecture,
+            curvature: -1.0);
+
+        // Act
+        var parameterCount = hyperbolicNet.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"HyperbolicNeuralNetwork parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void OctonionNeuralNetwork_Predict_ProducesOutput()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.Regression,
+            NetworkComplexity.Simple,
+            inputSize: 16, // Must be divisible by 8 for octonions
+            outputSize: 8);
+
+        var octonionNet = new OctonionNeuralNetwork<float>(
+            architecture);
+
+        var input = CreateRandomTensor([16]);
+
+        // Act
+        var output = octonionNet.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "OctonionNeuralNetwork output should have elements");
+    }
+
+    [Fact]
+    public void OctonionNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.Regression,
+            NetworkComplexity.Simple,
+            inputSize: 16,
+            outputSize: 8);
+
+        var octonionNet = new OctonionNeuralNetwork<float>(
+            architecture);
+
+        // Act
+        var parameterCount = octonionNet.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"OctonionNeuralNetwork parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void QuantumNeuralNetwork_Predict_ProducesOutput()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 4, // Small for quantum simulation
+            outputSize: 2);
+
+        var quantumNet = new QuantumNeuralNetwork<float>(
+            architecture,
+            numQubits: 4);
+
+        var input = CreateRandomTensor([4]);
+
+        // Act
+        var output = quantumNet.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "QuantumNeuralNetwork output should have elements");
+    }
+
+    [Fact]
+    public void QuantumNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 4,
+            outputSize: 2);
+
+        var quantumNet = new QuantumNeuralNetwork<float>(
+            architecture,
+            numQubits: 4);
+
+        // Act
+        var parameterCount = quantumNet.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"QuantumNeuralNetwork parameter count should be > 0, got {parameterCount}");
     }
 
     #endregion

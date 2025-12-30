@@ -820,7 +820,30 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
 
         Generator.SetTrainingMode(false);
         var noise = GenerateGaussianNoise(numImages);
-        var newOutput = Generator.Predict(noise);
+
+        // Reshape noise to 4D format for CNN generator: [batch, latent_size] -> [batch, 1, h, w]
+        int h = (int)Math.Ceiling(Math.Sqrt(LatentSize));
+        int w = h;
+        int padSize = h * w - LatentSize;
+        Tensor<T> reshapedNoise;
+        if (padSize > 0)
+        {
+            var padded = new Tensor<T>([numImages, h * w]);
+            for (int b = 0; b < numImages; b++)
+            {
+                for (int i = 0; i < LatentSize; i++)
+                    padded[b, i] = noise[b, i];
+                for (int i = LatentSize; i < h * w; i++)
+                    padded[b, i] = NumOps.Zero;
+            }
+            reshapedNoise = padded.Reshape(numImages, 1, h, w);
+        }
+        else
+        {
+            reshapedNoise = noise.Reshape(numImages, 1, h, w);
+        }
+
+        var newOutput = Generator.Predict(reshapedNoise);
 
         // Apply alpha blending during fade-in phase
         return ApplyAlphaBlending(newOutput);
@@ -839,7 +862,62 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         }
 
         Generator.SetTrainingMode(false);
-        var newOutput = Generator.Predict(latentCodes);
+
+        // Reshape latent codes to 3D/4D format for CNN generator
+        Tensor<T> reshapedLatent;
+        if (latentCodes.Shape.Length == 1)
+        {
+            // 1D [latent_size] -> 3D [1, height, width]
+            int latentLen = latentCodes.Shape[0];
+            int h = (int)Math.Ceiling(Math.Sqrt(latentLen));
+            int w = h;
+            int padSize = h * w - latentLen;
+            if (padSize > 0)
+            {
+                var padded = new Tensor<T>([h * w]);
+                for (int i = 0; i < latentLen; i++)
+                    padded.Data[i] = latentCodes.Data[i];
+                for (int i = latentLen; i < h * w; i++)
+                    padded.Data[i] = NumOps.Zero;
+                reshapedLatent = padded.Reshape(1, h, w);
+            }
+            else
+            {
+                reshapedLatent = latentCodes.Reshape(1, h, w);
+            }
+        }
+        else if (latentCodes.Shape.Length == 2)
+        {
+            // 2D [batch, latent_size] -> 4D [batch, 1, height, width]
+            int batchSize = latentCodes.Shape[0];
+            int latentLen = latentCodes.Shape[1];
+            int h = (int)Math.Ceiling(Math.Sqrt(latentLen));
+            int w = h;
+            int padSize = h * w - latentLen;
+            if (padSize > 0)
+            {
+                var padded = new Tensor<T>([batchSize, h * w]);
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int i = 0; i < latentLen; i++)
+                        padded[b, i] = latentCodes[b, i];
+                    for (int i = latentLen; i < h * w; i++)
+                        padded[b, i] = NumOps.Zero;
+                }
+                reshapedLatent = padded.Reshape(batchSize, 1, h, w);
+            }
+            else
+            {
+                reshapedLatent = latentCodes.Reshape(batchSize, 1, h, w);
+            }
+        }
+        else
+        {
+            // Already 3D or 4D, use as-is
+            reshapedLatent = latentCodes;
+        }
+
+        var newOutput = Generator.Predict(reshapedLatent);
 
         // Apply alpha blending during fade-in phase
         return ApplyAlphaBlending(newOutput);
@@ -903,6 +981,14 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
     #endregion
 
     #region NeuralNetworkBase Overrides
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in the ProgressiveGAN.
+    /// </summary>
+    /// <remarks>
+    /// This includes all parameters from both the Generator and Discriminator networks.
+    /// </remarks>
+    public override int ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount();
 
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)

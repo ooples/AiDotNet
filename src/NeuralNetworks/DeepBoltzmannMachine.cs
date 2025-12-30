@@ -419,7 +419,15 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
             Layers.AddRange(LayerHelper<T>.CreateDefaultDeepBoltzmannMachineLayers(Architecture));
         }
 
-        _layerSizes = [.. Layers.Select(l => l.GetOutputShape()[0])];
+        // Extract layer sizes starting with input size, then output sizes of RBM layers only
+        // (skip BatchNorm and other non-RBM layers to get the DBM structure)
+        var inputSize = Architecture.GetInputShape()[0];
+        var rbmOutputSizes = Layers
+            .Where(l => l is RBMLayer<T>)
+            .Select(l => l.GetOutputShape()[0])
+            .ToList();
+
+        _layerSizes = [inputSize, .. rbmOutputSizes];
         InitializeParameters();
     }
 
@@ -476,8 +484,20 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Tensor<T> Reconstruct(Tensor<T> input)
     {
+        // Remember original shape
+        var originalShape = input.Shape;
+        var was1D = originalShape.Length == 1;
+
         var hidden = PropagateUp(input);
-        return PropagateDown(hidden);
+        var result = PropagateDown(hidden);
+
+        // Restore original shape if input was 1D
+        if (was1D && result.Shape.Length == 2 && result.Shape[0] == 1)
+        {
+            result = result.Reshape([result.Shape[1]]);
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -492,7 +512,12 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Tensor<T> PropagateUp(Tensor<T> visible)
     {
-        var hidden = visible;
+        // Ensure input is 2D for matrix multiplication
+        // 1D [features] -> 2D [1, features]
+        var hidden = visible.Shape.Length == 1
+            ? visible.Reshape([1, visible.Shape[0]])
+            : visible;
+
         for (int layer = 0; layer < _layerSizes.Count - 1; layer++)
         {
             hidden = ActivationFunction(hidden.Multiply(_layerWeights[layer]).Add(_layerBiases[layer + 1]));

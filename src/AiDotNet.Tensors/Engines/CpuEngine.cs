@@ -6686,10 +6686,15 @@ public class CpuEngine : IEngine
         var numOps = MathHelper.GetNumericOperations<T>();
         T eps = numOps.FromDouble(epsilon);
 
-        // Handle both 2D [batch, features] and 4D [batch, channels, height, width] tensors
+        // Handle 2D [batch, features], 3D [channels, height, width], and 4D [batch, channels, height, width] tensors
         if (input.Shape.Length == 4)
         {
             return BatchNorm4D(input, gamma, beta, eps, numOps, out mean, out variance);
+        }
+
+        if (input.Shape.Length == 3)
+        {
+            return BatchNorm3D(input, gamma, beta, eps, numOps, out mean, out variance);
         }
 
         // 2D case: [batch, features]
@@ -6741,6 +6746,72 @@ public class CpuEngine : IEngine
 
         mean = new Tensor<T>([features], new Vector<T>(meanData));
         variance = new Tensor<T>([features], new Vector<T>(varData));
+        return new Tensor<T>(input.Shape, new Vector<T>(outputData));
+    }
+
+    /// <summary>
+    /// Batch normalization for 3D tensors [channels, height, width].
+    /// Normalizes per channel across height and width dimensions.
+    /// </summary>
+    private Tensor<T> BatchNorm3D<T>(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, T eps, INumericOperations<T> numOps, out Tensor<T> mean, out Tensor<T> variance)
+    {
+        int channels = input.Shape[0];
+        int height = input.Shape[1];
+        int width = input.Shape[2];
+        int spatialSize = height * width;
+
+        var inputData = input.ToArray();
+        var gammaData = gamma.ToArray();
+        var betaData = beta.ToArray();
+
+        var meanData = new T[channels];
+        var varData = new T[channels];
+        var outputData = new T[inputData.Length];
+
+        // Compute mean per channel (across height, width)
+        Parallel.For(0, channels, c =>
+        {
+            T sum = numOps.Zero;
+            int channelOffset = c * spatialSize;
+            for (int s = 0; s < spatialSize; s++)
+            {
+                sum = numOps.Add(sum, inputData[channelOffset + s]);
+            }
+            meanData[c] = numOps.Divide(sum, numOps.FromDouble(spatialSize));
+        });
+
+        // Compute variance per channel
+        Parallel.For(0, channels, c =>
+        {
+            T sumSq = numOps.Zero;
+            T channelMean = meanData[c];
+            int channelOffset = c * spatialSize;
+            for (int s = 0; s < spatialSize; s++)
+            {
+                T diff = numOps.Subtract(inputData[channelOffset + s], channelMean);
+                sumSq = numOps.Add(sumSq, numOps.Multiply(diff, diff));
+            }
+            varData[c] = numOps.Divide(sumSq, numOps.FromDouble(spatialSize));
+        });
+
+        // Normalize and scale
+        Parallel.For(0, channels, c =>
+        {
+            T channelMean = meanData[c];
+            T channelStdInv = numOps.Divide(numOps.One, numOps.Sqrt(numOps.Add(varData[c], eps)));
+            T gammaVal = gammaData[c];
+            T betaVal = betaData[c];
+            int channelOffset = c * spatialSize;
+
+            for (int s = 0; s < spatialSize; s++)
+            {
+                T normalized = numOps.Multiply(numOps.Subtract(inputData[channelOffset + s], channelMean), channelStdInv);
+                outputData[channelOffset + s] = numOps.Add(numOps.Multiply(gammaVal, normalized), betaVal);
+            }
+        });
+
+        mean = new Tensor<T>([channels], new Vector<T>(meanData));
+        variance = new Tensor<T>([channels], new Vector<T>(varData));
         return new Tensor<T>(input.Shape, new Vector<T>(outputData));
     }
 

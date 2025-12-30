@@ -1004,15 +1004,17 @@ public static class LayerHelper<T>
             ? architecture.OutputSize
             : throw new InvalidOperationException("Output size must be specified and greater than 0 for DNC.");
 
-        // Controller (Feed-forward network)
-        yield return new DenseLayer<T>(inputSize, controllerSize, new ReLUActivation<T>() as IActivationFunction<T>);
+        // Controller input includes read vectors concatenated: inputSize + readHeads * memoryWordSize
+        int controllerInputSize = inputSize + readHeads * memoryWordSize;
 
-        // Memory interface
-        yield return new DenseLayer<T>(controllerSize, interfaceSize, new IdentityActivation<T>() as IActivationFunction<T>);
+        // Controller (Feed-forward network) - first layer takes the combined input
+        yield return new DenseLayer<T>(controllerInputSize, controllerSize, new ReLUActivation<T>() as IActivationFunction<T>);
 
-        // Output layer
-        yield return new DenseLayer<T>(controllerSize + readHeads * memoryWordSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
-        yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IActivationFunction<T>);
+        // Controller output layer - produces BOTH direct output (controllerSize) AND interface signals
+        // The DNC's CombineControllerOutputWithReadVectors expects:
+        // controllerOutput.Shape[1] = controllerDirectOutputSize + interfaceSize
+        int controllerOutputSize = controllerSize + interfaceSize;
+        yield return new DenseLayer<T>(controllerSize, controllerOutputSize, new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>

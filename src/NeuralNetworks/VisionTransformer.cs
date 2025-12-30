@@ -270,22 +270,42 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (input.Shape.Length != 4)
+        Tensor<T> input4D;
+        bool addedBatchDim = false;
+
+        // Support both 3D [C, H, W] and 4D [B, C, H, W] input
+        if (input.Shape.Length == 3)
+        {
+            // Add batch dimension: [C, H, W] -> [1, C, H, W]
+            input4D = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2]);
+            addedBatchDim = true;
+        }
+        else if (input.Shape.Length == 4)
+        {
+            input4D = input;
+        }
+        else
         {
             throw new ArgumentException(
-                $"Input must be a 4D tensor with shape [batch, channels, height, width], but got rank {input.Shape.Length}.",
+                $"Input must be a 3D tensor [C, H, W] or 4D tensor [B, C, H, W], but got rank {input.Shape.Length}.",
                 nameof(input));
         }
 
-        if (input.Shape[1] != _channels || input.Shape[2] != _imageHeight || input.Shape[3] != _imageWidth)
+        if (input4D.Shape[1] != _channels || input4D.Shape[2] != _imageHeight || input4D.Shape[3] != _imageWidth)
         {
             throw new ArgumentException(
-                $"Input shape {string.Join("x", input.Shape)} does not match expected " +
+                $"Input shape {string.Join("x", input4D.Shape)} does not match expected " +
                 $"[batch, {_channels}, {_imageHeight}, {_imageWidth}].",
                 nameof(input));
         }
 
-        int batchSize = input.Shape[0];
+        int batchSize = input4D.Shape[0];
+
+        // Store for potential use in backward pass
+        _ = addedBatchDim;
+
+        // Use input4D for the forward pass
+        input = input4D;
 
         var patchEmbeddings = Layers[0].Forward(input);
 

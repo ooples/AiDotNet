@@ -171,21 +171,22 @@ public class QuantumLayer<T> : LayerBase<T>
 
         _lastInput = processInput;
         int dimension = 1 << _numQubits;
+        int inputDim = processInput.Shape[1]; // Use processInput which is always 2D
 
         // Ensure input matches circuit dimension (pad or slice using engine ops)
         Tensor<T> realState;
-        if (input.Shape[1] == dimension)
+        if (inputDim == dimension)
         {
-            realState = input;
+            realState = processInput;
         }
-        else if (input.Shape[1] < dimension)
+        else if (inputDim < dimension)
         {
             realState = new Tensor<T>([batchSize, dimension]);
-            Engine.TensorSetSlice(realState, input, [0, 0]);
+            Engine.TensorSetSlice(realState, processInput, [0, 0]);
         }
         else
         {
-            realState = Engine.TensorSlice(input, [0, 0], [batchSize, dimension]);
+            realState = Engine.TensorSlice(processInput, [0, 0], [batchSize, dimension]);
         }
 
         var imagState = new Tensor<T>(realState.Shape);
