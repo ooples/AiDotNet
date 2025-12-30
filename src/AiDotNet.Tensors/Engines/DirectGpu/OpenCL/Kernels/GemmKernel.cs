@@ -53,18 +53,34 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL.Kernels
 // ===========================================================================
 // Helper macros for double buffering
 // ===========================================================================
+// Vectorized A loading: 128 rows * 16 cols = 2048 elements = 512 float4s
+// 256 threads * 2 iterations = 512 float4 loads
 #define LOAD_A_TILE(As, kBase, wgRowStart, M, K) \
     _Pragma(""unroll"") \
-    for (int i = 0; i < 8; i++) { \
+    for (int i = 0; i < 2; i++) { \
         int loadIdx = tid + i * 256; \
-        int loadRow = loadIdx / TILE_K; \
-        int loadCol = loadIdx % TILE_K; \
+        int loadRow = loadIdx / 4;   /* 4 = TILE_K/4 float4s per row */ \
+        int loadCol4 = loadIdx % 4;  /* float4 index within row */ \
         int globalRow = wgRowStart + loadRow; \
-        int globalCol = kBase + loadCol; \
-        if (globalRow < M && globalCol < K) { \
-            As[loadRow][loadCol] = A[globalRow * K + globalCol]; \
+        int globalCol = kBase + loadCol4 * 4; \
+        if (globalRow < M && globalCol + 3 < K) { \
+            /* Vectorized load along K dimension - coalesced for row-major A */ \
+            float4 vec = vload4(0, &A[globalRow * K + globalCol]); \
+            As[loadRow][loadCol4 * 4 + 0] = vec.x; \
+            As[loadRow][loadCol4 * 4 + 1] = vec.y; \
+            As[loadRow][loadCol4 * 4 + 2] = vec.z; \
+            As[loadRow][loadCol4 * 4 + 3] = vec.w; \
+        } else if (globalRow < M) { \
+            /* Scalar fallback for edge cases */ \
+            for (int c = 0; c < 4; c++) { \
+                int col = globalCol + c; \
+                As[loadRow][loadCol4 * 4 + c] = (col < K) ? A[globalRow * K + col] : 0.0f; \
+            } \
         } else { \
-            As[loadRow][loadCol] = 0.0f; \
+            As[loadRow][loadCol4 * 4 + 0] = 0.0f; \
+            As[loadRow][loadCol4 * 4 + 1] = 0.0f; \
+            As[loadRow][loadCol4 * 4 + 2] = 0.0f; \
+            As[loadRow][loadCol4 * 4 + 3] = 0.0f; \
         } \
     }
 
