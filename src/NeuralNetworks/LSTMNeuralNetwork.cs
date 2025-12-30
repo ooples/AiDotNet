@@ -341,32 +341,17 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         // Set to inference mode
         SetTrainingMode(false);
 
-        // Check input dimensions and determine if we're processing a batch or a single sequence
-        bool isBatchedSequence = input.Shape.Length >= 3;
-        bool isBatch = input.Shape.Length >= 2;
-        bool isSequence = input.Shape.Length >= 2 && !isBatchedSequence;
+        // Simple layer-by-layer forward pass
+        // Each layer (including LSTM layers) handles its own time-stepping internally
+        // This matches the industry-standard approach used by GRU networks
+        var current = input;
 
-        // Handle different input shapes
-        if (isBatchedSequence)
+        foreach (var layer in Layers)
         {
-            // [batch_size, sequence_length, features]
-            return ProcessBatchedSequence(input);
+            current = layer.Forward(current);
         }
-        else if (isSequence)
-        {
-            // [sequence_length, features]
-            return ProcessSequence(input);
-        }
-        else if (isBatch)
-        {
-            // [batch_size, features] - single time step batch
-            return ProcessSingleTimeStepBatch(input);
-        }
-        else
-        {
-            // [features] - single sample
-            return ProcessSingleSample(input);
-        }
+
+        return current;
     }
 
     /// <summary>
@@ -2039,7 +2024,12 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
             if (IsLSTMLayer(layer))
             {
                 lstmLayerCount++;
-                lstmSizes.Add(layer.GetOutputShape()[1]); // Hidden size
+                var outputShape = layer.GetOutputShape();
+                // Hidden size is the last dimension of output shape
+                // For 2D output [seqLen, hiddenSize], use index 1
+                // For 1D output [hiddenSize], use index 0
+                int hiddenSize = outputShape.Length > 1 ? outputShape[1] : outputShape[0];
+                lstmSizes.Add(hiddenSize);
             }
         }
 

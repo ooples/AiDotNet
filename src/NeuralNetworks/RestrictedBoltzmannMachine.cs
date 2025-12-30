@@ -143,6 +143,22 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     public int HiddenSize { get; private set; }
 
     /// <summary>
+    /// Gets the total number of parameters (weights and biases) in the RBM.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The parameter count includes:
+    /// - Weights matrix: HiddenSize × VisibleSize parameters
+    /// - Visible biases: VisibleSize parameters
+    /// - Hidden biases: HiddenSize parameters
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you the total number of learnable values in the RBM.
+    /// More parameters means the RBM can learn more complex patterns, but also requires more data and computation.
+    /// </para>
+    /// </remarks>
+    public override int ParameterCount => (HiddenSize * VisibleSize) + VisibleSize + HiddenSize;
+
+    /// <summary>
     /// Gets or sets the scalar activation function used in the RBM.
     /// </summary>
     /// <remarks>
@@ -411,7 +427,43 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     public Tensor<T> GetHiddenLayerActivation(Tensor<T> visibleLayer)
     {
-        var hiddenActivations = _weights.Multiply(visibleLayer.ToMatrix()).Add(_hiddenBiases.ToColumnMatrix());
+        // Convert input tensor to a column matrix for matrix multiplication
+        // Input shape: [visibleSize] or [batchSize, visibleSize] -> need [visibleSize, 1] or [visibleSize, batchSize]
+        Matrix<T> visibleMatrix;
+        if (visibleLayer.Rank == 1)
+        {
+            // 1D tensor: reshape to column matrix [visibleSize, 1]
+            visibleMatrix = new Matrix<T>(visibleLayer.Shape[0], 1);
+            for (int i = 0; i < visibleLayer.Shape[0]; i++)
+            {
+                visibleMatrix[i, 0] = visibleLayer[i];
+            }
+        }
+        else if (visibleLayer.Rank == 2)
+        {
+            // 2D tensor: transpose if needed to get [visibleSize, batchSize]
+            if (visibleLayer.Shape[0] == _weights.Columns)
+            {
+                // Already in correct orientation [visibleSize, batchSize]
+                visibleMatrix = visibleLayer.ToMatrix();
+            }
+            else if (visibleLayer.Shape[1] == _weights.Columns)
+            {
+                // Need to transpose from [batchSize, visibleSize] to [visibleSize, batchSize]
+                var temp = visibleLayer.ToMatrix();
+                visibleMatrix = (Matrix<T>)temp.Transpose();
+            }
+            else
+            {
+                throw new ArgumentException($"Visible layer shape {string.Join(",", visibleLayer.Shape)} is incompatible with weights shape [{_weights.Rows},{_weights.Columns}]");
+            }
+        }
+        else
+        {
+            throw new ArgumentException($"Visible layer must be 1D or 2D, got {visibleLayer.Rank}D");
+        }
+
+        var hiddenActivations = _weights.Multiply(visibleMatrix).Add(_hiddenBiases.ToColumnMatrix());
 
         if (_vectorActivation != null)
         {
@@ -627,8 +679,46 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     public Tensor<T> GetVisibleLayerActivation(Tensor<T> hiddenLayer)
     {
+        // Convert input tensor to a column matrix for matrix multiplication
+        // Input shape: [hiddenSize] or [batchSize, hiddenSize] -> need [hiddenSize, 1] or [hiddenSize, batchSize]
+        Matrix<T> hiddenMatrix;
+        int hiddenSize = _weights.Rows; // weights is [hiddenSize, visibleSize]
+
+        if (hiddenLayer.Rank == 1)
+        {
+            // 1D tensor: reshape to column matrix [hiddenSize, 1]
+            hiddenMatrix = new Matrix<T>(hiddenLayer.Shape[0], 1);
+            for (int i = 0; i < hiddenLayer.Shape[0]; i++)
+            {
+                hiddenMatrix[i, 0] = hiddenLayer[i];
+            }
+        }
+        else if (hiddenLayer.Rank == 2)
+        {
+            // 2D tensor: transpose if needed to get [hiddenSize, batchSize]
+            if (hiddenLayer.Shape[0] == hiddenSize)
+            {
+                // Already in correct orientation [hiddenSize, batchSize]
+                hiddenMatrix = hiddenLayer.ToMatrix();
+            }
+            else if (hiddenLayer.Shape[1] == hiddenSize)
+            {
+                // Need to transpose from [batchSize, hiddenSize] to [hiddenSize, batchSize]
+                var temp = hiddenLayer.ToMatrix();
+                hiddenMatrix = (Matrix<T>)temp.Transpose();
+            }
+            else
+            {
+                throw new ArgumentException($"Hidden layer shape {string.Join(",", hiddenLayer.Shape)} is incompatible with hidden size {hiddenSize}");
+            }
+        }
+        else
+        {
+            throw new ArgumentException($"Hidden layer must be 1D or 2D, got {hiddenLayer.Rank}D");
+        }
+
         // We need to transpose the weights matrix for the reverse direction
-        var visibleActivations = _weights.Transpose().Multiply(hiddenLayer.ToMatrix()).Add(_visibleBiases.ToColumnMatrix());
+        var visibleActivations = _weights.Transpose().Multiply(hiddenMatrix).Add(_visibleBiases.ToColumnMatrix());
 
         if (_vectorActivation != null)
         {

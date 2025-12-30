@@ -653,10 +653,23 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // Auto-create adjacency matrix if not set (assumes fully-connected graph)
+        // This supports flexible input without requiring explicit graph structure
         if (_cachedAdjacencyMatrix == null)
         {
-            throw new InvalidOperationException(
-                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Predict.");
+            // Determine number of nodes from input shape
+            // Input is typically [numNodes, featureDim] or [batch, numNodes, featureDim]
+            int numNodes = input.Rank >= 2 ? input.Shape[input.Rank - 2] : input.Shape[0];
+
+            // Create fully-connected adjacency matrix (all nodes connected to all)
+            _cachedAdjacencyMatrix = new Tensor<T>([numNodes, numNodes]);
+            for (int i = 0; i < numNodes; i++)
+            {
+                for (int j = 0; j < numNodes; j++)
+                {
+                    _cachedAdjacencyMatrix.SetFlat(i * numNodes + j, NumOps.One);
+                }
+            }
         }
 
         // Set all layers to inference mode

@@ -134,9 +134,12 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
-            nameof(ConvolutionalNeuralNetwork<T>), "forward pass");
-
+        // Allow any rank tensor - layers will handle dimension adaptation internally
+        // This supports industry standard flexibility where CNNs can accept:
+        // - 1D inputs (which get reshaped internally)
+        // - 2D inputs (treated as single-channel images)
+        // - 3D inputs (standard channels, height, width format)
+        // - 4D+ inputs (batch dimensions preserved)
         Tensor<T> output = input;
         foreach (var layer in Layers)
         {

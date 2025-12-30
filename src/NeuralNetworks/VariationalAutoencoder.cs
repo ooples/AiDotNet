@@ -356,15 +356,40 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
         }
 
         var current = input;
+        // Process encoder layers, skipping MeanLayer and LogVarianceLayer
+        // (they are processed separately after the encoder loop)
         for (int i = 0; i < Layers.Count / 2; i++)
         {
+            if (Layers[i] is MeanLayer<T> || Layers[i] is LogVarianceLayer<T>)
+            {
+                continue; // Skip special layers - they're processed separately
+            }
             current = Layers[i].Forward(Tensor<T>.FromVector(current)).ToVector();
         }
 
-        var mean = _meanLayer.Forward(Tensor<T>.FromVector(current)).ToVector();
-        var logVariance = _logVarianceLayer.Forward(Tensor<T>.FromVector(current)).ToVector();
-
-        return (mean, logVariance);
+        // For VAE, the encoder output should have size = latentSize * 2
+        // First half is mean, second half is log-variance
+        // If the encoder output size matches latentSize * 2, slice directly
+        // Otherwise, fall back to using MeanLayer/LogVarianceLayer (which may reduce dimensions)
+        if (current.Length == LatentSize * 2)
+        {
+            // Direct slicing - encoder output has exactly latentSize * 2 values
+            var meanData = new T[LatentSize];
+            var logVarData = new T[LatentSize];
+            for (int i = 0; i < LatentSize; i++)
+            {
+                meanData[i] = current[i];
+                logVarData[i] = current[i + LatentSize];
+            }
+            return (new Vector<T>(meanData), new Vector<T>(logVarData));
+        }
+        else
+        {
+            // Fall back to using the layers (may produce different output sizes)
+            var mean = _meanLayer.Forward(Tensor<T>.FromVector(current)).ToVector();
+            var logVariance = _logVarianceLayer.Forward(Tensor<T>.FromVector(current)).ToVector();
+            return (mean, logVariance);
+        }
     }
 
     /// <summary>
@@ -458,8 +483,14 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
     public Vector<T> Decode(Vector<T> latentVector)
     {
         var current = latentVector;
+        // Process decoder layers, skipping MeanLayer and LogVarianceLayer
+        // (they are encoder-specific and shouldn't be in the decoder path)
         for (int i = Layers.Count / 2; i < Layers.Count; i++)
         {
+            if (Layers[i] is MeanLayer<T> || Layers[i] is LogVarianceLayer<T>)
+            {
+                continue; // Skip special layers - they're not part of the decoder
+            }
             current = Layers[i].Forward(Tensor<T>.FromVector(current)).ToVector();
         }
 

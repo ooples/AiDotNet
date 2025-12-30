@@ -77,33 +77,33 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// and realistic images as training progresses.
     /// </para>
     /// </remarks>
-    public ConvolutionalNeuralNetwork<T> Generator { get; private set; }
+    public NeuralNetworkBase<T> Generator { get; private set; }
 
     /// <summary>
     /// Gets the discriminator network that distinguishes between real and synthetic data.
     /// </summary>
-    /// <value>A convolutional neural network that classifies data as real or synthetic.</value>
+    /// <value>A neural network that classifies data as real or synthetic.</value>
     /// <remarks>
     /// <para>
     /// The Discriminator is a neural network that takes data (either real or generated) as input
     /// and outputs a probability that the data is real. During training, it learns to better
-    /// distinguish between real data and the Generator's synthetic data. In this implementation,
-    /// it's specifically a convolutional neural network, which is well-suited for image classification tasks.
+    /// distinguish between real data and the Generator's synthetic data. The network type
+    /// is chosen based on the input type (FeedForward for 1D, Convolutional for 3D, etc.).
     /// </para>
     /// <para><b>For Beginners:</b> This is the "detective" network that tries to spot fakes.
-    /// 
+    ///
     /// Think of the Discriminator as:
     /// - An art expert examining paintings to determine if they're authentic
     /// - It analyzes data (like images) and gives a probability that it's real
     /// - Its goal is to correctly identify real data and detect generated fakes
     /// - It improves by learning from its mistakes
-    /// 
+    ///
     /// For example, in an image generation task, the Discriminator essentially
     /// answers the question "Is this a real photograph or a computer-generated image?"
     /// and becomes increasingly sophisticated in its ability to tell the difference.
     /// </para>
     /// </remarks>
-    public ConvolutionalNeuralNetwork<T> Discriminator { get; private set; }
+    public NeuralNetworkBase<T> Discriminator { get; private set; }
 
     private ILossFunction<T> _lossFunction;
 
@@ -359,8 +359,8 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
 
         // Initialize tracking collections
         _generatorLosses = new List<T>();
-        Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
-        Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
+        Generator = CreateNetworkForInputType(generatorArchitecture, inputType);
+        Discriminator = CreateNetworkForInputType(discriminatorArchitecture, inputType);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 
         // Initialize optimizers (default to Adam if not provided)
@@ -368,6 +368,23 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         _discriminatorOptimizer = discriminatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Discriminator);
 
         InitializeLayers();
+    }
+
+    /// <summary>
+    /// Creates the appropriate neural network type based on the input type.
+    /// </summary>
+    /// <param name="architecture">The network architecture configuration.</param>
+    /// <param name="inputType">The type of input data (OneDimensional, TwoDimensional, or ThreeDimensional).</param>
+    /// <returns>A neural network appropriate for the input type.</returns>
+    private static NeuralNetworkBase<T> CreateNetworkForInputType(NeuralNetworkArchitecture<T> architecture, InputType inputType)
+    {
+        return inputType switch
+        {
+            InputType.OneDimensional => new FeedForwardNeuralNetwork<T>(architecture),
+            InputType.TwoDimensional => new FeedForwardNeuralNetwork<T>(architecture),
+            InputType.ThreeDimensional => new ConvolutionalNeuralNetwork<T>(architecture),
+            _ => new FeedForwardNeuralNetwork<T>(architecture)
+        };
     }
 
     /// <summary>
@@ -574,7 +591,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// This approach helps GANs train more reliably and efficiently.
     /// </para>
     /// </remarks>
-    private void UpdateNetworkParameters(ConvolutionalNeuralNetwork<T> network)
+    private void UpdateNetworkParameters(NeuralNetworkBase<T> network)
     {
         // Get current parameters and gradients
         var parameters = network.GetParameters();
@@ -730,27 +747,42 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     public override Tensor<T> Predict(Tensor<T> input)
     {
         // For a GAN, prediction means generating data using the generator
-        // Check if the input is a batch of noise vectors or a single noise vector
-        if (input.Rank == 1)
+        // Determine if input is a single sample or batch based on the generator's expected input type
+        var expectedInputRank = Architecture.InputType switch
         {
-            // Single noise vector
+            InputType.OneDimensional => 1,
+            InputType.TwoDimensional => 2,
+            InputType.ThreeDimensional => 3,
+            _ => 1
+        };
+
+        // If input rank matches expected, it's a single sample
+        // If input rank is one more than expected, it's a batch
+        if (input.Rank == expectedInputRank)
+        {
+            // Single sample - pass directly to generator
             return Generator.Predict(input);
         }
-        else
+        else if (input.Rank == expectedInputRank + 1)
         {
-            // Batch of noise vectors
+            // Batch of samples - iterate through batch dimension
             var batchSize = input.Shape[0];
             var results = new List<Tensor<T>>(batchSize);
 
             for (int i = 0; i < batchSize; i++)
             {
-                // Get noise vector from input batch (not from empty results list)
-                var noiseVector = input.GetSlice(i);
-                var generatedImage = Generator.Predict(noiseVector);
-                results.Add(generatedImage);
+                var sample = input.GetSlice(i);
+                var generatedOutput = Generator.Predict(sample);
+                results.Add(generatedOutput);
             }
 
             return Tensor<T>.Stack([.. results]);
+        }
+        else
+        {
+            // Input rank doesn't match expected - try to use it directly
+            // This supports flexible input types
+            return Generator.Predict(input);
         }
     }
 

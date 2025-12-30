@@ -54,6 +54,7 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     public GRUNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        InitializeLayers();
     }
 
     /// <summary>

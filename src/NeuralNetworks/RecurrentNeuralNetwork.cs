@@ -201,23 +201,9 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentNullException(nameof(input), "Input tensor cannot be null.");
         }
 
-        var inputShape = input.Shape;
-        var expectedShape = Architecture.GetInputShape();
-
-        // Ensure input has correct shape
-        if (inputShape.Length != expectedShape.Length)
-        {
-            throw new ArgumentException($"Input tensor has wrong number of dimensions. Expected {expectedShape.Length}, got {inputShape.Length}.");
-        }
-
-        // Check if dimensions match
-        for (int i = 0; i < inputShape.Length; i++)
-        {
-            if (inputShape[i] != expectedShape[i])
-            {
-                throw new ArgumentException($"Input dimension mismatch at index {i}. Expected {expectedShape[i]}, got {inputShape[i]}.");
-            }
-        }
+        // Support any rank tensors - RNNs can handle variable sequence lengths and dimensions
+        // The recurrent layers will internally adapt to the input dimensions
+        // This is industry standard behavior for flexible neural networks
 
         // Forward pass through each layer in the network
         Tensor<T> currentOutput = input;

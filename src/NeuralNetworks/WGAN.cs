@@ -90,7 +90,7 @@ public class WGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the generator network that creates synthetic data.
     /// </summary>
-    public ConvolutionalNeuralNetwork<T> Generator { get; private set; }
+    public NeuralNetworkBase<T> Generator { get; private set; }
 
     /// <summary>
     /// Gets the critic network (called discriminator in vanilla GAN) that evaluates data.
@@ -109,7 +109,7 @@ public class WGAN<T> : NeuralNetworkBase<T>
     /// - Higher scores mean more realistic images
     /// </para>
     /// </remarks>
-    public ConvolutionalNeuralNetwork<T> Critic { get; private set; }
+    public NeuralNetworkBase<T> Critic { get; private set; }
 
     private readonly ILossFunction<T> _lossFunction;
 
@@ -258,8 +258,8 @@ public class WGAN<T> : NeuralNetworkBase<T>
         _weightClipValue = weightClipValue;
         _criticIterations = criticIterations;
 
-        Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
-        Critic = new ConvolutionalNeuralNetwork<T>(criticArchitecture);
+        Generator = CreateNetworkForInputType(generatorArchitecture, inputType);
+        Critic = CreateNetworkForInputType(criticArchitecture, inputType);
         _lossFunction = lossFunction ?? new WassersteinLoss<T>();
 
         // Initialize optimizers (RMSprop is the recommended default for WGAN per the original paper)
@@ -267,6 +267,20 @@ public class WGAN<T> : NeuralNetworkBase<T>
         _criticOptimizer = criticOptimizer ?? new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(Critic);
 
         InitializeLayers();
+    }
+
+    /// <summary>
+    /// Creates the appropriate neural network type based on the input type.
+    /// </summary>
+    private static NeuralNetworkBase<T> CreateNetworkForInputType(NeuralNetworkArchitecture<T> architecture, InputType inputType)
+    {
+        return inputType switch
+        {
+            InputType.OneDimensional => new FeedForwardNeuralNetwork<T>(architecture),
+            InputType.TwoDimensional => new FeedForwardNeuralNetwork<T>(architecture),
+            InputType.ThreeDimensional => new ConvolutionalNeuralNetwork<T>(architecture),
+            _ => new FeedForwardNeuralNetwork<T>(architecture)
+        };
     }
 
     /// <summary>
@@ -488,7 +502,7 @@ public class WGAN<T> : NeuralNetworkBase<T>
         var criticInputGradients = Critic.BackwardWithInputGradient(gradients);
 
         // Backpropagate through generator
-        Generator.Backward(criticInputGradients);
+        Generator.Backpropagate(criticInputGradients);
 
         // Update generator parameters using optimizer
         UpdateGeneratorWithOptimizer();
