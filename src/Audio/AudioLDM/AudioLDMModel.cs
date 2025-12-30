@@ -894,8 +894,11 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             {
                 double variance = beta * (1.0 - prevAlphaCumprod) / (1.0 - alphaCumprod);
                 double std = Math.Sqrt(variance);
-                double z = random.NextDouble() * 2 - 1;
-                mean += std * z * 0.1;
+                // Use Box-Muller transform for proper Gaussian noise (DDPM requires N(0,1))
+                double u1 = 1.0 - random.NextDouble(); // Avoid log(0)
+                double u2 = random.NextDouble();
+                double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+                mean += std * z;
             }
 
             result.SetFlat(i, NumOps.FromDouble(mean));

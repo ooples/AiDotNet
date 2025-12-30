@@ -650,8 +650,22 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
     /// </summary>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // Read would need to reinitialize options - this is a simplified implementation
-        // In practice, the options should be reconstructed from saved data
+        // Restore options properties
+        _options.SampleRate = reader.ReadInt32();
+        _options.NumMels = reader.ReadInt32();
+        _options.FftSize = reader.ReadInt32();
+        _options.HopLength = reader.ReadInt32();
+        _options.WindowSize = reader.ReadDouble();
+        _options.Threshold = reader.ReadDouble();
+
+        // Read class labels
+        int numLabels = reader.ReadInt32();
+        var labels = new string[numLabels];
+        for (int i = 0; i < numLabels; i++)
+        {
+            labels[i] = reader.ReadString();
+        }
+        ClassLabels = labels;
     }
 
     /// <summary>
