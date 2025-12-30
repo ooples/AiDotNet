@@ -80,6 +80,14 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
     private bool _disposed;
 
+    // Layer boundary indices for routing data through correct layers
+    private int _clapLayerStart;
+    private int _clapLayerEnd;
+    private int _unetLayerStart;
+    private int _unetLayerEnd;
+    private int _decoderLayerStart;
+    private int _decoderLayerEnd;
+
     #endregion
 
     #region IAudioGenerator Properties
@@ -243,7 +251,10 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         // Set dimensions based on model size
         (_clapHiddenDim, _unetBaseChannels, _numAttentionHeads) = GetModelDimensions(_options.ModelSize);
 
-        // Use T5-compatible tokenizer as default (CLAP shares similar vocabulary)
+        // Use T5-style tokenizer as default for native training mode.
+        // Note: For ONNX inference, the tokenizer MUST match the pretrained model's tokenizer.
+        // CLAP models use their own tokenizer - when using pretrained CLAP ONNX models,
+        // provide the matching CLAP tokenizer instead of relying on this fallback.
         _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -292,6 +303,18 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
                 maxTextLength: _options.MaxTextLength,
                 dropoutRate: _options.DropoutRate));
         }
+
+        // Set layer boundaries based on AudioLDM architecture:
+        // - CLAP encoder: first 1/3 of layers
+        // - U-Net denoiser: middle 1/3 of layers
+        // - VAE decoder: last 1/3 of layers
+        int totalLayers = Layers.Count;
+        _clapLayerStart = 0;
+        _clapLayerEnd = totalLayers / 3;
+        _unetLayerStart = _clapLayerEnd;
+        _unetLayerEnd = 2 * totalLayers / 3;
+        _decoderLayerStart = _unetLayerEnd;
+        _decoderLayerEnd = totalLayers;
     }
 
     /// <summary>
@@ -607,11 +630,8 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     {
         var current = input;
 
-        // U-Net is the middle portion of layers
-        int startIdx = Layers.Count / 3;
-        int endIdx = 2 * Layers.Count / 3;
-
-        for (int i = startIdx; i < endIdx && i < Layers.Count; i++)
+        // Use layer boundaries instead of hard-coded fractions
+        for (int i = _unetLayerStart; i < _unetLayerEnd && i < Layers.Count; i++)
         {
             current = Layers[i].Forward(current);
         }
@@ -629,10 +649,9 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             return _clapEncoder.Run(tokenTensor);
         }
 
-        // Use native layers (first portion)
+        // Use layer boundaries instead of hard-coded fractions
         var current = tokenTensor;
-        int clapLayerCount = Math.Min(6, Layers.Count / 3);
-        for (int i = 0; i < clapLayerCount && i < Layers.Count; i++)
+        for (int i = _clapLayerStart; i < _clapLayerEnd && i < Layers.Count; i++)
         {
             current = Layers[i].Forward(current);
         }
@@ -651,10 +670,10 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             return _vaeModel.Run(melSpec);
         }
 
-        // Native encoding through layers
+        // Native encoding through CLAP layers (audio encoder portion)
+        // Use layer boundaries instead of hard-coded fractions
         var current = melSpec;
-        int encoderLayers = Layers.Count / 4;
-        for (int i = 0; i < encoderLayers && i < Layers.Count; i++)
+        for (int i = _clapLayerStart; i < _clapLayerEnd && i < Layers.Count; i++)
         {
             current = Layers[i].Forward(current);
         }
@@ -674,10 +693,10 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         }
         else
         {
-            // Native decoding through layers
+            // Native decoding through decoder layers
+            // Use layer boundaries instead of hard-coded fractions
             var current = latents;
-            int startIdx = 2 * Layers.Count / 3;
-            for (int i = startIdx; i < Layers.Count; i++)
+            for (int i = _decoderLayerStart; i < _decoderLayerEnd && i < Layers.Count; i++)
             {
                 current = Layers[i].Forward(current);
             }

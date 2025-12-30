@@ -215,6 +215,12 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// </summary>
     private bool _disposed;
 
+    // Layer boundary indices for routing data through correct layers
+    private int _textEncoderLayerStart;
+    private int _textEncoderLayerEnd;
+    private int _languageModelLayerStart;
+    private int _languageModelLayerEnd;
+
     #endregion
 
     #region IAudioGenerator Properties
@@ -567,6 +573,15 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
                 maxAudioTokens: maxAudioTokens,
                 dropoutRate: 0.1));
         }
+
+        // Set layer boundaries based on AudioGen architecture:
+        // - Text encoder: first 1/3 of layers
+        // - Language model: remaining 2/3 of layers
+        int totalLayers = Layers.Count;
+        _textEncoderLayerStart = 0;
+        _textEncoderLayerEnd = totalLayers / 3;
+        _languageModelLayerStart = _textEncoderLayerEnd;
+        _languageModelLayerEnd = totalLayers;
     }
 
     /// <summary>
@@ -951,16 +966,17 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         }
 
         // ONNX mode: run through text encoder model
-        return _textEncoder!.Run(inputTensor);
+        if (_textEncoder is null)
+            throw new InvalidOperationException("Text encoder not loaded.");
+
+        return _textEncoder.Run(inputTensor);
     }
 
     private Tensor<T> ForwardTextEncoder(Tensor<T> input)
     {
         var x = input;
-        // Text encoder is the first portion of layers (before audio code embedding)
-        // Approximately first 40 layers based on CreateDefaultAudioGenLayers structure
-        int textEncoderEndIdx = Math.Min(40, Layers.Count / 3);
-        for (int i = 0; i < textEncoderEndIdx && i < Layers.Count; i++)
+        // Use layer boundaries instead of hard-coded fractions
+        for (int i = _textEncoderLayerStart; i < _textEncoderLayerEnd && i < Layers.Count; i++)
         {
             x = Layers[i].Forward(x);
         }
@@ -997,7 +1013,11 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         int numTokens = (int)(durationSeconds * tokensPerSecond);
 
         var codes = new Tensor<T>([1, _numCodebooks, numTokens]);
-        var currentTokens = new Tensor<T>([1, _numCodebooks, 1]);
+
+        // Pre-allocate currentTokens to avoid O(n²) copy overhead
+        // Start with capacity for all tokens + 1 for start token
+        var currentTokens = new Tensor<T>([1, _numCodebooks, numTokens + 1]);
+        int currentLength = 1;
 
         // Initialize with start token
         for (int cb = 0; cb < _numCodebooks; cb++)
@@ -1007,20 +1027,33 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
         for (int t = 0; t < numTokens; t++)
         {
+            // Create a view of currentTokens up to currentLength for the forward pass
+            var inputTokens = new Tensor<T>([1, _numCodebooks, currentLength]);
+            for (int cb = 0; cb < _numCodebooks; cb++)
+            {
+                for (int i = 0; i < currentLength; i++)
+                {
+                    inputTokens[0, cb, i] = currentTokens[0, cb, i];
+                }
+            }
+
             Tensor<T> logits;
 
             if (_useNativeMode)
             {
-                logits = ForwardLanguageModel(textEmbeddings, currentTokens);
+                logits = ForwardLanguageModel(textEmbeddings, inputTokens);
             }
             else
             {
+                if (_languageModel is null)
+                    throw new InvalidOperationException("Language model not loaded.");
+
                 var inputs = new Dictionary<string, Tensor<T>>
                 {
                     ["text_embeddings"] = textEmbeddings,
-                    ["audio_codes"] = currentTokens
+                    ["audio_codes"] = inputTokens
                 };
-                var outputs = _languageModel!.Run(inputs);
+                var outputs = _languageModel.Run(inputs);
                 logits = outputs.Values.First();
             }
 
@@ -1030,20 +1063,10 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
                 int nextToken = SampleFromLogits(logits, cb, random);
                 codes[0, cb, t] = NumOps.FromDouble(nextToken);
 
-                if (t < numTokens - 1)
-                {
-                    var newTokens = new Tensor<T>([1, _numCodebooks, currentTokens.Shape[2] + 1]);
-                    for (int c = 0; c < _numCodebooks; c++)
-                    {
-                        for (int i = 0; i < currentTokens.Shape[2]; i++)
-                        {
-                            newTokens[0, c, i] = currentTokens[0, c, i];
-                        }
-                        newTokens[0, c, currentTokens.Shape[2]] = codes[0, c, t];
-                    }
-                    currentTokens = newTokens;
-                }
+                // Append to pre-allocated tensor (O(1) instead of O(n) copy)
+                currentTokens[0, cb, currentLength] = codes[0, cb, t];
             }
+            currentLength++;
         }
 
         return codes;
@@ -1052,12 +1075,10 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     private Tensor<T> ForwardLanguageModel(Tensor<T> textEmbeddings, Tensor<T> audioCodes)
     {
         // Forward pass through language model portion of layers
+        // Use layer boundaries instead of hard-coded fractions
         var x = audioCodes;
 
-        // Language model starts after text encoder
-        int textEncoderEndIdx = Math.Min(40, Layers.Count / 3);
-
-        for (int i = textEncoderEndIdx; i < Layers.Count; i++)
+        for (int i = _languageModelLayerStart; i < _languageModelLayerEnd && i < Layers.Count; i++)
         {
             if (Layers[i] is TransformerDecoderLayer<T> decoderLayer)
             {
@@ -1088,7 +1109,10 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         int numTokens = (int)(durationSeconds * tokensPerSecond);
 
         var codes = new Tensor<T>([1, _numCodebooks, numTokens]);
-        var currentTokens = new Tensor<T>([1, _numCodebooks, 1]);
+
+        // Pre-allocate currentTokens to avoid O(n²) copy overhead
+        var currentTokens = new Tensor<T>([1, _numCodebooks, numTokens + 1]);
+        int currentLength = 1;
 
         for (int cb = 0; cb < _numCodebooks; cb++)
         {
@@ -1097,28 +1121,41 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
         for (int t = 0; t < numTokens; t++)
         {
+            // Create a view of currentTokens up to currentLength for the forward pass
+            var inputTokens = new Tensor<T>([1, _numCodebooks, currentLength]);
+            for (int cb = 0; cb < _numCodebooks; cb++)
+            {
+                for (int i = 0; i < currentLength; i++)
+                {
+                    inputTokens[0, cb, i] = currentTokens[0, cb, i];
+                }
+            }
+
             Tensor<T> condLogits, uncondLogits;
 
             if (_useNativeMode)
             {
-                condLogits = ForwardLanguageModel(condEmbeddings, currentTokens);
-                uncondLogits = ForwardLanguageModel(uncondEmbeddings, currentTokens);
+                condLogits = ForwardLanguageModel(condEmbeddings, inputTokens);
+                uncondLogits = ForwardLanguageModel(uncondEmbeddings, inputTokens);
             }
             else
             {
+                if (_languageModel is null)
+                    throw new InvalidOperationException("Language model not loaded.");
+
                 var condInputs = new Dictionary<string, Tensor<T>>
                 {
                     ["text_embeddings"] = condEmbeddings,
-                    ["audio_codes"] = currentTokens
+                    ["audio_codes"] = inputTokens
                 };
-                condLogits = _languageModel!.Run(condInputs).Values.First();
+                condLogits = _languageModel.Run(condInputs).Values.First();
 
                 var uncondInputs = new Dictionary<string, Tensor<T>>
                 {
                     ["text_embeddings"] = uncondEmbeddings,
-                    ["audio_codes"] = currentTokens
+                    ["audio_codes"] = inputTokens
                 };
-                uncondLogits = _languageModel!.Run(uncondInputs).Values.First();
+                uncondLogits = _languageModel.Run(uncondInputs).Values.First();
             }
 
             // Apply classifier-free guidance
@@ -1129,20 +1166,10 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
                 int nextToken = SampleFromLogits(guidedLogits, cb, random);
                 codes[0, cb, t] = NumOps.FromDouble(nextToken);
 
-                if (t < numTokens - 1)
-                {
-                    var newTokens = new Tensor<T>([1, _numCodebooks, currentTokens.Shape[2] + 1]);
-                    for (int c = 0; c < _numCodebooks; c++)
-                    {
-                        for (int i = 0; i < currentTokens.Shape[2]; i++)
-                        {
-                            newTokens[0, c, i] = currentTokens[0, c, i];
-                        }
-                        newTokens[0, c, currentTokens.Shape[2]] = codes[0, c, t];
-                    }
-                    currentTokens = newTokens;
-                }
+                // Append to pre-allocated tensor (O(1) instead of O(n) copy)
+                currentTokens[0, cb, currentLength] = codes[0, cb, t];
             }
+            currentLength++;
         }
 
         return codes;
@@ -1268,7 +1295,10 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         }
         else
         {
-            waveformTensor = _audioDecoder!.Run(audioCodes);
+            if (_audioDecoder is null)
+                throw new InvalidOperationException("Audio decoder not loaded.");
+
+            waveformTensor = _audioDecoder.Run(audioCodes);
         }
 
         // Trim to target duration

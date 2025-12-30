@@ -59,7 +59,7 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
     #region Fields
 
     private readonly AudioEventDetectorOptions _options;
-    private readonly MelSpectrogram<T>? _melSpectrogram;
+    private MelSpectrogram<T>? _melSpectrogram;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -675,6 +675,16 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
             labels[i] = reader.ReadString();
         }
         ClassLabels = labels;
+
+        // Reinitialize mel spectrogram with deserialized options
+        _melSpectrogram = new MelSpectrogram<T>(
+            sampleRate: _options.SampleRate,
+            nMels: _options.NumMels,
+            nFft: _options.FftSize,
+            hopLength: _options.HopLength,
+            fMin: _options.FMin,
+            fMax: _options.FMax,
+            logMel: true);
     }
 
     /// <summary>
@@ -811,6 +821,24 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
         return scores;
     }
 
+    /// <summary>
+    /// Rule-based fallback classification when neither ONNX nor native neural network mode is available.
+    /// </summary>
+    /// <remarks>
+    /// This method is invoked when:
+    /// - ONNX mode is not active (no OnnxEncoder loaded or IsOnnxMode is false)
+    /// - Native neural network mode is not active (_useNativeMode is false)
+    ///
+    /// This typically occurs during:
+    /// - Legacy constructor usage without ONNX models for basic audio event detection
+    /// - Incomplete initialization where model loading failed but detection should continue
+    /// - Scenarios where rule-based heuristics are preferred over neural network inference
+    ///
+    /// The method uses spectral features (energy, zero-crossing rate, spectral centroid,
+    /// spectral flatness, band energies) to classify audio events using predefined heuristics.
+    /// While less accurate than neural network classification, it provides a functional
+    /// fallback that doesn't require external model files.
+    /// </remarks>
     private T[] ClassifyWithRules(Tensor<T> melSpec, Tensor<T> audio)
     {
         var scores = new T[ClassLabels.Count];
@@ -1160,47 +1188,47 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
                     _buffer.Add(audioChunk[i]);
                 }
 
-            // Process complete windows
-            while (_buffer.Count >= _windowSamples)
-            {
-                // Extract window
-                var window = new Tensor<T>([_windowSamples]);
-                for (int i = 0; i < _windowSamples; i++)
+                // Process complete windows (inside lock for thread-safety)
+                while (_buffer.Count >= _windowSamples)
                 {
-                    window[i] = _buffer[i];
-                }
-
-                // Process window
-                var melSpec = _detector._melSpectrogram?.Forward(window) ??
-                    throw new InvalidOperationException("MelSpectrogram not initialized.");
-                var scores = _detector.ClassifyWindow(melSpec, window);
-
-                // Update state and check for events
-                double thresholdValue = _detector.NumOps.ToDouble(_threshold);
-                for (int i = 0; i < scores.Length && i < _detector.ClassLabels.Count; i++)
-                {
-                    _currentState[_detector.ClassLabels[i]] = scores[i];
-
-                    if (_detector.NumOps.ToDouble(scores[i]) >= thresholdValue)
+                    // Extract window
+                    var window = new Tensor<T>([_windowSamples]);
+                    for (int i = 0; i < _windowSamples; i++)
                     {
-                        var evt = new AudioEvent<T>
-                        {
-                            EventType = _detector.ClassLabels[i],
-                            Confidence = scores[i],
-                            StartTime = _processedTime,
-                            EndTime = _processedTime + _detector._options.WindowSize,
-                            PeakTime = _processedTime + _detector._options.WindowSize / 2
-                        };
-
-                        _newEvents.Add(evt);
-                        EventDetected?.Invoke(this, evt);
+                        window[i] = _buffer[i];
                     }
-                }
 
-                // Advance buffer (with overlap)
-                int hopSamples = (int)(_windowSamples * (1 - _detector._options.WindowOverlap));
-                _buffer.RemoveRange(0, hopSamples);
-                _processedTime += hopSamples / (double)_sampleRate;
+                    // Process window
+                    var melSpec = _detector._melSpectrogram?.Forward(window) ??
+                        throw new InvalidOperationException("MelSpectrogram not initialized.");
+                    var scores = _detector.ClassifyWindow(melSpec, window);
+
+                    // Update state and check for events
+                    double thresholdValue = _detector.NumOps.ToDouble(_threshold);
+                    for (int i = 0; i < scores.Length && i < _detector.ClassLabels.Count; i++)
+                    {
+                        _currentState[_detector.ClassLabels[i]] = scores[i];
+
+                        if (_detector.NumOps.ToDouble(scores[i]) >= thresholdValue)
+                        {
+                            var evt = new AudioEvent<T>
+                            {
+                                EventType = _detector.ClassLabels[i],
+                                Confidence = scores[i],
+                                StartTime = _processedTime,
+                                EndTime = _processedTime + _detector._options.WindowSize,
+                                PeakTime = _processedTime + _detector._options.WindowSize / 2
+                            };
+
+                            _newEvents.Add(evt);
+                            EventDetected?.Invoke(this, evt);
+                        }
+                    }
+
+                    // Advance buffer (with overlap)
+                    int hopSamples = (int)(_windowSamples * (1 - _detector._options.WindowOverlap));
+                    _buffer.RemoveRange(0, hopSamples);
+                    _processedTime += hopSamples / (double)_sampleRate;
                 }
             }
         }

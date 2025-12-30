@@ -370,9 +370,26 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
     {
         ThrowIfDisposed();
 
+        // Validate parameters to prevent infinite loop
+        if (segmentDuration <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(segmentDuration),
+                "Segment duration must be positive.");
+        }
+
         int totalSamples = audio.Length;
         int segmentSamples = (int)(segmentDuration * SampleRate);
-        int hopSamples = segmentSamples / 2; // 50% overlap
+
+        // Ensure segmentSamples is at least 1 to prevent infinite loop
+        if (segmentSamples < 1)
+        {
+            throw new ArgumentException(
+                $"Segment duration ({segmentDuration}s) is too short for sample rate ({SampleRate}Hz). " +
+                "Minimum duration: " + (1.0 / SampleRate).ToString("F6") + "s",
+                nameof(segmentDuration));
+        }
+
+        int hopSamples = Math.Max(1, segmentSamples / 2); // 50% overlap, minimum 1 sample to prevent infinite loop
 
         var segments = new List<SceneSegment<T>>();
         var transitions = new List<SceneTransition<T>>();
