@@ -212,6 +212,14 @@ public class FeedForwardLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets the total number of trainable parameters in this layer.
+    /// </summary>
+    /// <remarks>
+    /// This includes all weights (inputSize × outputSize) and all biases (outputSize).
+    /// </remarks>
+    public override int ParameterCount => Weights.Length + Biases.Length;
+
+    /// <summary>
     /// Gets the weight tensor for JIT compilation and graph composition.
     /// </summary>
     public Tensor<T> GetWeightsTensor() => Weights;
@@ -404,18 +412,71 @@ public class FeedForwardLayer<T> : LayerBase<T>
             activationGradient = ApplyActivationDerivative(Output, outputGradient);
         }
 
-        // Input Gradient: grad @ Weights^T
-        var weightsT = Engine.TensorTranspose(Weights);
-        var inputGradient = Engine.TensorMatMul(activationGradient, weightsT);
+        int rank = Input.Shape.Length;
 
-        // Weights Gradient: Input^T @ grad
-        var inputT = Engine.TensorTranspose(Input);
-        WeightsGradient = Engine.TensorMatMul(inputT, activationGradient);
+        if (rank == 2)
+        {
+            // Standard 2D case: [batch, features]
+            var weightsT = Engine.TensorTranspose(Weights);
+            var inputGradient = Engine.TensorMatMul(activationGradient, weightsT);
 
-        // Biases Gradient: sum(grad, axis=0)
-        BiasesGradient = Engine.ReduceSum(activationGradient, new[] { 0 }, keepDims: true);
+            var inputT = Engine.TensorTranspose(Input);
+            WeightsGradient = Engine.TensorMatMul(inputT, activationGradient);
 
-        return inputGradient;
+            BiasesGradient = Engine.ReduceSum(activationGradient, new[] { 0 }, keepDims: true);
+
+            return inputGradient;
+        }
+        else if (rank == 3)
+        {
+            // 3D case: [batch, seq, features]
+            // Reshape to 2D, compute gradients, reshape back
+            int batchSize = Input.Shape[0];
+            int seqLen = Input.Shape[1];
+            int inputFeatures = Input.Shape[2];
+            int outputFeatures = activationGradient.Shape[2];
+
+            // Flatten batch and seq dimensions for matmul
+            var input2D = Input.Reshape([batchSize * seqLen, inputFeatures]);
+            var grad2D = activationGradient.Reshape([batchSize * seqLen, outputFeatures]);
+
+            // Input Gradient: grad @ Weights^T -> [batch*seq, inputFeatures]
+            var weightsT = Engine.TensorTranspose(Weights);
+            var inputGradient2D = Engine.TensorMatMul(grad2D, weightsT);
+            var inputGradient = inputGradient2D.Reshape([batchSize, seqLen, inputFeatures]);
+
+            // Weights Gradient: Input^T @ grad -> [inputFeatures, outputFeatures]
+            var inputT = Engine.TensorTranspose(input2D);
+            WeightsGradient = Engine.TensorMatMul(inputT, grad2D);
+
+            // Biases Gradient: sum(grad, axis=0)
+            BiasesGradient = Engine.ReduceSum(grad2D, new[] { 0 }, keepDims: true);
+
+            return inputGradient;
+        }
+        else
+        {
+            // Higher-rank tensors: flatten all but last dimension
+            int totalBatch = 1;
+            for (int d = 0; d < rank - 1; d++)
+                totalBatch *= Input.Shape[d];
+            int inputFeatures = Input.Shape[rank - 1];
+            int outputFeatures = activationGradient.Shape[rank - 1];
+
+            var input2D = Input.Reshape([totalBatch, inputFeatures]);
+            var grad2D = activationGradient.Reshape([totalBatch, outputFeatures]);
+
+            var weightsT = Engine.TensorTranspose(Weights);
+            var inputGradient2D = Engine.TensorMatMul(grad2D, weightsT);
+            var inputGradient = inputGradient2D.Reshape(Input.Shape);
+
+            var inputT = Engine.TensorTranspose(input2D);
+            WeightsGradient = Engine.TensorMatMul(inputT, grad2D);
+
+            BiasesGradient = Engine.ReduceSum(grad2D, new[] { 0 }, keepDims: true);
+
+            return inputGradient;
+        }
     }
 
     /// <summary>

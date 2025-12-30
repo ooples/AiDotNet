@@ -472,6 +472,18 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets the total number of trainable parameters in this layer.
+    /// </summary>
+    /// <remarks>
+    /// This returns the total count of weights and biases in both fully connected layers.
+    /// </remarks>
+    public override int ParameterCount =>
+        _weights1.Shape[0] * _weights1.Shape[1] +   // FC1 weights
+        _bias1.Shape[0] +                            // FC1 biases
+        _weights2.Shape[0] * _weights2.Shape[1] +   // FC2 weights
+        _bias2.Shape[0];                             // FC2 biases
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="SqueezeAndExcitationLayer{T}"/> class with scalar activation functions.
     /// </summary>
     /// <param name="channels">The number of input and output channels.</param>
