@@ -654,6 +654,14 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// <summary>
     /// Trains the model on audio-label pairs.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Note:</b> Full training from scratch is not yet implemented. PANNs models
+    /// are designed to be used as pre-trained feature extractors. For best results:
+    /// - Use ONNX mode with pre-trained weights for inference
+    /// - Fine-tune only the final classification layers if needed
+    /// </para>
+    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode)
@@ -661,18 +669,19 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             throw new InvalidOperationException("Cannot train in ONNX inference mode.");
         }
 
-        SetTrainingMode(true);
-
-        // Forward pass
-        var logits = Predict(input);
-
-        // Compute BCE loss
-        var loss = ComputeBCELoss(logits, expected);
-
-        // Backward pass and update (simplified)
-        UpdateWeights(logits, expected);
-
-        SetTrainingMode(false);
+        // Full training from scratch is not yet implemented.
+        // PANNs models require:
+        // 1. Cached activations at each layer for proper backpropagation
+        // 2. CNN layer gradient computation (not just FC layers)
+        // 3. Batch normalization gradient handling
+        // 4. Learning rate scheduling and data augmentation
+        //
+        // For transfer learning, use the pre-trained ONNX model and
+        // fine-tune only the classification head with a separate classifier.
+        throw new NotImplementedException(
+            "Full PANNs training from scratch is not yet implemented. " +
+            "Use ONNX mode with pre-trained weights for inference, or " +
+            "implement transfer learning by fine-tuning the classification head.");
     }
 
     private T ComputeBCELoss(Tensor<T> predicted, Tensor<T> target)
