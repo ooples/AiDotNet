@@ -29,6 +29,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         private DirectOpenClContext? _context;
         private readonly Dictionary<string, DirectOpenClKernel> _kernelCache;
         private readonly List<DirectOpenClProgram> _programs;
+        private DynamicGemmKernel? _dynamicGemm;
         private bool _disposed;
 
         public bool IsAvailable { get; }
@@ -98,6 +99,10 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 Console.WriteLine("[OpenClBackend] Compiling kernels...");
                 CompileKernels();
                 Console.WriteLine($"[OpenClBackend] Kernels compiled successfully. Total: {_kernelCache.Count}");
+
+                // Initialize dynamic kernel generator for Bayesian-optimized GEMM
+                _dynamicGemm = new DynamicGemmKernel(_context);
+                Console.WriteLine("[OpenClBackend] Dynamic GEMM kernel generator initialized.");
             }
             catch (Exception ex)
             {
@@ -355,6 +360,115 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             // Sync only when returning buffer that might be immediately read
             _context?.Finish();
             return C;
+        }
+
+        /// <summary>
+        /// CLBlast-style GEMM with RDNA1-optimized parameters.
+        /// </summary>
+        public void GemmClblastRdna1(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha = 1.0f, float beta = 0.0f)
+        {
+            ExecuteGemmKernel("gemm_clblast_rdna1", A, B, C, M, N, K, alpha, beta, 64, 8);
+        }
+
+        /// <summary>
+        /// Medium tile GEMM kernel.
+        /// </summary>
+        public void GemmMediumTile(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha = 1.0f, float beta = 0.0f)
+        {
+            ExecuteGemmKernel("gemm_medium_tile", A, B, C, M, N, K, alpha, beta, 32, 16);
+        }
+
+        /// <summary>
+        /// Wide vector GEMM kernel.
+        /// </summary>
+        public void GemmWideVec(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha = 1.0f, float beta = 0.0f)
+        {
+            ExecuteGemmKernel("gemm_wide_vec", A, B, C, M, N, K, alpha, beta, 64, 16);
+        }
+
+        /// <summary>
+        /// KREG4 GEMM kernel with 4-element register blocking.
+        /// </summary>
+        public void GemmKreg4(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha = 1.0f, float beta = 0.0f)
+        {
+            ExecuteGemmKernel("gemm_kreg4", A, B, C, M, N, K, alpha, beta, 64, 16);
+        }
+
+        /// <summary>
+        /// Prefetching GEMM kernel.
+        /// </summary>
+        public void GemmPrefetch(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha = 1.0f, float beta = 0.0f)
+        {
+            ExecuteGemmKernel("gemm_prefetch", A, B, C, M, N, K, alpha, beta, 64, 16);
+        }
+
+
+        /// <summary>
+        /// Simple tiled GEMM kernel.
+        /// </summary>
+        public void GemmSimple(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha = 1.0f, float beta = 0.0f)
+        {
+            ExecuteGemmKernel("gemm_tiled_simple", A, B, C, M, N, K, alpha, beta, 16, 16);
+        }
+
+        /// <summary>
+        /// Small tile GEMM kernel.
+        /// </summary>
+        public void GemmSmallTile(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha = 1.0f, float beta = 0.0f)
+        {
+            ExecuteGemmKernel("gemm_small_tile", A, B, C, M, N, K, alpha, beta, 16, 16);
+        }
+
+        /// <summary>
+        /// Coalesced GEMM kernel.
+        /// </summary>
+        public void GemmCoalesced(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha = 1.0f, float beta = 0.0f)
+        {
+            ExecuteGemmKernel("gemm_coalesced", A, B, C, M, N, K, alpha, beta, 32, 16);
+        }
+
+        /// <summary>
+        /// Vectorized tile GEMM kernel.
+        /// </summary>
+        public void GemmVectorizedTile(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha = 1.0f, float beta = 0.0f)
+        {
+            ExecuteGemmKernel("gemm_vectorized_tile", A, B, C, M, N, K, alpha, beta, 32, 16);
+        }
+
+        /// <summary>
+        /// Low register GEMM kernel.
+        /// </summary>
+        public void GemmLowRegister(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha = 1.0f, float beta = 0.0f)
+        {
+            ExecuteGemmKernel("gemm_low_register", A, B, C, M, N, K, alpha, beta, 32, 16);
+        }
+
+        private void ExecuteGemmKernel(string kernelName, IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha, float beta, int tileSize, int wgSize)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var bufferA = ((DirectOpenClGpuBuffer)A).Buffer;
+            var bufferB = ((DirectOpenClGpuBuffer)B).Buffer;
+            var bufferC = ((DirectOpenClGpuBuffer)C).Buffer;
+
+            var kernel = _kernelCache[kernelName];
+
+            kernel.SetArg(0, bufferA.Handle);
+            kernel.SetArg(1, bufferB.Handle);
+            kernel.SetArg(2, bufferC.Handle);
+            kernel.SetArg(3, M);
+            kernel.SetArg(4, N);
+            kernel.SetArg(5, K);
+            kernel.SetArg(6, alpha);
+            kernel.SetArg(7, beta);
+
+            int numTilesM = (M + tileSize - 1) / tileSize;
+            int numTilesN = (N + tileSize - 1) / tileSize;
+            int globalSizeX = numTilesM * wgSize;
+            int globalSizeY = numTilesN * wgSize;
+
+            kernel.Execute2D(globalSizeX, globalSizeY, wgSize, wgSize);
         }
 
         /// <summary>
@@ -1172,11 +1286,136 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             }
         }
 
+
+        /// <summary>
+        /// Execute GEMM using dynamically compiled kernel with parameters baked in.
+        /// </summary>
+        public double GemmWithDynamicKernel(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, GemmConfig config)
+        {
+            if (_context == null || _dynamicGemm == null)
+                throw new InvalidOperationException("OpenCL context or dynamic GEMM not available");
+
+            var sw = Stopwatch.StartNew();
+            var kernel = _dynamicGemm.GetKernel(config);
+            _dynamicGemm.Execute(kernel, config, A, B, C, M, N, K);
+            _dynamicGemm.Synchronize();
+            sw.Stop();
+
+            return sw.Elapsed.TotalMilliseconds;
+        }
+
+        /// <summary>
+        /// Runs Bayesian optimization to find the optimal GEMM kernel configuration.
+        /// </summary>
+        public TuningResult[] RunBayesianGemmOptimization(int M, int N, int K, int maxTrials = 20, int warmupRuns = 2, int benchmarkRuns = 3)
+        {
+            if (_context == null || _dynamicGemm == null)
+                throw new InvalidOperationException("OpenCL context or dynamic GEMM not available");
+
+            var capabilities = GpuCapabilities.Detect(ComputeUnits, GlobalMemoryBytes, (int)LocalMemoryBytes,
+                (int)_maxWorkGroupSize, DeviceVendor, DeviceName, _context.Extensions);
+
+            Console.WriteLine("=== Bayesian GEMM Optimization ===");
+            Console.WriteLine($"Matrix: {M}x{N}x{K}, Device: {DeviceName}, Max trials: {maxTrials}");
+
+            var dataA = new float[M * K];
+            var dataB = new float[K * N];
+            for (int i = 0; i < dataA.Length; i++) dataA[i] = 1.0f;
+            for (int i = 0; i < dataB.Length; i++) dataB[i] = 1.0f;
+
+            using var bufA = AllocateBuffer(dataA);
+            using var bufB = AllocateBuffer(dataB);
+            using var bufC = AllocateBuffer(M * N);
+
+            var tuner = new GemmAutoTuner();
+
+            double BenchmarkConfig(GemmConfig config)
+            {
+                try
+                {
+                    for (int i = 0; i < warmupRuns; i++)
+                        GemmWithDynamicKernel(bufA, bufB, bufC, M, N, K, config);
+
+                    double totalTimeMs = 0;
+                    for (int i = 0; i < benchmarkRuns; i++)
+                        totalTimeMs += GemmWithDynamicKernel(bufA, bufB, bufC, M, N, K, config);
+
+                    return totalTimeMs / benchmarkRuns;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"  Config {config} failed: {ex.Message}");
+                    return double.MaxValue;
+                }
+            }
+
+            var results = tuner.TuneWithBayesianOptimization(M, N, K, capabilities, BenchmarkConfig, maxTrials, Math.Min(5, maxTrials / 4), 0, 1);
+
+            if (results.Length > 0 && results[0].IsValid)
+            {
+                var best = results[0];
+                Console.WriteLine($"Best: {best.Config} - {best.GFlops:F2} GFLOPS");
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// Executes GEMM using the actual CLBlast library for head-to-head comparison.
+        /// Returns the execution time in milliseconds, or -1 if CLBlast is not available.
+        /// </summary>
+        public double GemmWithClBlast(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha = 1.0f, float beta = 0.0f)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            if (!ClBlastNative.IsAvailable)
+                return -1.0;
+
+            var bufferA = ((DirectOpenClGpuBuffer)A).Buffer;
+            var bufferB = ((DirectOpenClGpuBuffer)B).Buffer;
+            var bufferC = ((DirectOpenClGpuBuffer)C).Buffer;
+
+            IntPtr queue = _context.CommandQueue;
+
+            var sw = Stopwatch.StartNew();
+            var status = ClBlastNative.Sgemm(
+                ClBlastNative.Layout.RowMajor,
+                ClBlastNative.Transpose.No,
+                ClBlastNative.Transpose.No,
+                (UIntPtr)M, (UIntPtr)N, (UIntPtr)K,
+                alpha,
+                bufferA.Handle, UIntPtr.Zero, (UIntPtr)K,
+                bufferB.Handle, UIntPtr.Zero, (UIntPtr)N,
+                beta,
+                bufferC.Handle, UIntPtr.Zero, (UIntPtr)N,
+                ref queue,
+                IntPtr.Zero);
+
+            OpenClNativeBindings.Finish(_context.CommandQueue);
+            sw.Stop();
+
+            if (status != ClBlastNative.StatusCode.Success)
+            {
+                Console.WriteLine($"CLBlast SGEMM failed with status: {status}");
+                return -1.0;
+            }
+
+            return sw.Elapsed.TotalMilliseconds;
+        }
+
+        /// <summary>
+        /// Checks if the CLBlast library is available for use.
+        /// </summary>
+        public static bool IsClBlastAvailable => ClBlastNative.IsAvailable;
+
         #endregion
 
         public void Dispose()
         {
             if (_disposed) return;
+
+            _dynamicGemm?.Dispose();
 
             foreach (var kernel in _kernelCache.Values)
             {
