@@ -1,3 +1,4 @@
+using System.Numerics;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.Audio.Enhancement;
@@ -333,25 +334,29 @@ public abstract class AudioEnhancerBase<T> : IAudioEnhancer<T>
     }
 
     /// <summary>
-    /// Computes FFT of audio frame (simplified implementation).
+    /// Computes FFT of audio frame using FftSharp library (O(N log N) algorithm).
     /// </summary>
     protected virtual (T[] Magnitudes, T[] Phases) ComputeFFT(T[] frame)
     {
-        // Simplified DFT - real implementation should use FFT library
+        // Convert frame to double array for FFT
+        var frameData = new double[_fftSize];
+        for (int i = 0; i < Math.Min(frame.Length, _fftSize); i++)
+        {
+            frameData[i] = NumOps.ToDouble(frame[i]);
+        }
+
+        // Compute FFT using FftSharp (proper O(N log N) algorithm)
+        Complex[] spectrum = FftSharp.FFT.Forward(frameData);
+
+        // Extract magnitude and phase for positive frequencies (N/2+1 bins)
         int numBins = _fftSize / 2 + 1;
         var magnitudes = new T[numBins];
         var phases = new T[numBins];
 
         for (int k = 0; k < numBins; k++)
         {
-            double real = 0, imag = 0;
-            for (int n = 0; n < _fftSize; n++)
-            {
-                double angle = -2 * Math.PI * k * n / _fftSize;
-                real += NumOps.ToDouble(frame[n]) * Math.Cos(angle);
-                imag += NumOps.ToDouble(frame[n]) * Math.Sin(angle);
-            }
-
+            double real = spectrum[k].Real;
+            double imag = spectrum[k].Imaginary;
             magnitudes[k] = NumOps.FromDouble(Math.Sqrt(real * real + imag * imag));
             phases[k] = NumOps.FromDouble(Math.Atan2(imag, real));
         }
@@ -360,29 +365,37 @@ public abstract class AudioEnhancerBase<T> : IAudioEnhancer<T>
     }
 
     /// <summary>
-    /// Computes inverse FFT (simplified implementation).
+    /// Computes inverse FFT using FftSharp library.
     /// </summary>
     protected virtual T[] ComputeIFFT(T[] magnitudes, T[] phases)
     {
-        var output = new T[_fftSize];
+        // Reconstruct full complex spectrum from magnitude/phase
+        // magnitudes/phases contain N/2+1 positive frequency bins
+        var spectrum = new Complex[_fftSize];
 
+        // Fill positive frequencies
+        for (int k = 0; k < magnitudes.Length; k++)
+        {
+            double mag = NumOps.ToDouble(magnitudes[k]);
+            double phase = NumOps.ToDouble(phases[k]);
+            spectrum[k] = Complex.FromPolarCoordinates(mag, phase);
+        }
+
+        // Fill negative frequencies with conjugate symmetry
+        // For real signals: X[N-k] = conj(X[k])
+        for (int k = 1; k < magnitudes.Length - 1; k++)
+        {
+            spectrum[_fftSize - k] = Complex.Conjugate(spectrum[k]);
+        }
+
+        // Compute inverse FFT using FftSharp (modifies spectrum in-place)
+        FftSharp.FFT.Inverse(spectrum);
+
+        // Extract real part
+        var output = new T[_fftSize];
         for (int n = 0; n < _fftSize; n++)
         {
-            double sum = 0;
-            for (int k = 0; k < magnitudes.Length; k++)
-            {
-                double mag = NumOps.ToDouble(magnitudes[k]);
-                double phase = NumOps.ToDouble(phases[k]);
-                double angle = 2 * Math.PI * k * n / _fftSize + phase;
-                sum += mag * Math.Cos(angle);
-
-                // Add conjugate for negative frequencies
-                if (k > 0 && k < magnitudes.Length - 1)
-                {
-                    sum += mag * Math.Cos(-angle);
-                }
-            }
-            output[n] = NumOps.FromDouble(sum / _fftSize);
+            output[n] = NumOps.FromDouble(spectrum[n].Real);
         }
 
         return output;

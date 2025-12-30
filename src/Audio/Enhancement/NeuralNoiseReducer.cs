@@ -6,6 +6,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Audio.Enhancement;
 
@@ -15,9 +16,11 @@ namespace AiDotNet.Audio.Enhancement;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// This model uses a U-Net style encoder-decoder architecture with skip connections
+/// This model uses an encoder-bottleneck-decoder architecture inspired by U-Net
 /// to learn the mapping from noisy audio to clean audio. It operates in the
 /// time-frequency domain using STFT for analysis and synthesis.
+/// Note: The current implementation uses a simplified dense decoder; a full U-Net
+/// with transposed convolutions and skip connections is planned for future versions.
 /// </para>
 /// <para><b>For Beginners:</b> This is like a "magic eraser" for audio noise!
 ///
@@ -328,13 +331,18 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
             activationFunction: new ReLUActivation<T>());
         Layers.Add(_bottleneckLayer);
 
-        // Decoder path: progressively upsample and decrease channels
-        // Note: For proper U-Net, we'd need transposed convolutions or upsampling
-        // This simplified version uses dense layers to decode back
+        // Decoder path: direct bottleneck-to-output projection
+        // TODO: Implement proper U-Net decoder with:
+        //   - Transposed convolutions or upsampling layers
+        //   - Skip connections from encoder stages
+        //   - Progressive channel reduction mirroring encoder
+        //   - Proper frequency resolution restoration
+        // Current implementation uses a simplified dense decoder that works
+        // but has reduced capacity compared to a true U-Net architecture.
         int decoderInputSize = _bottleneckDim;
         int targetFreqDim = freqBins;
 
-        // Final output projection
+        // Final output projection (simplified decoder)
         _outputLayer = new DenseLayer<T>(
             inputSize: decoderInputSize,
             outputSize: targetFreqDim,
@@ -557,26 +565,29 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     #region STFT Implementation
 
     /// <summary>
-    /// Computes Short-Time Fourier Transform.
+    /// Computes Short-Time Fourier Transform using FftSharp library (O(N log N) algorithm).
     /// </summary>
     private (T[] Magnitudes, T[] Phases) ComputeSTFT(T[] frame)
     {
+        // Convert frame to double array for FFT
+        var frameData = new double[_fftSize];
+        for (int i = 0; i < Math.Min(frame.Length, _fftSize); i++)
+        {
+            frameData[i] = NumOps.ToDouble(frame[i]);
+        }
+
+        // Compute FFT using FftSharp (proper O(N log N) algorithm)
+        System.Numerics.Complex[] spectrum = FftSharp.FFT.Forward(frameData);
+
+        // Extract magnitude and phase for positive frequencies (N/2+1 bins)
         int numBins = _fftSize / 2 + 1;
         var magnitudes = new T[numBins];
         var phases = new T[numBins];
 
-        // Using Engine for vectorized operations where possible
         for (int k = 0; k < numBins; k++)
         {
-            double real = 0, imag = 0;
-            for (int n = 0; n < _fftSize; n++)
-            {
-                double angle = -2 * Math.PI * k * n / _fftSize;
-                double val = NumOps.ToDouble(frame[n]);
-                real += val * Math.Cos(angle);
-                imag += val * Math.Sin(angle);
-            }
-
+            double real = spectrum[k].Real;
+            double imag = spectrum[k].Imaginary;
             magnitudes[k] = NumOps.FromDouble(Math.Sqrt(real * real + imag * imag));
             phases[k] = NumOps.FromDouble(Math.Atan2(imag, real));
         }
@@ -585,29 +596,37 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     }
 
     /// <summary>
-    /// Computes Inverse Short-Time Fourier Transform.
+    /// Computes Inverse Short-Time Fourier Transform using FftSharp library.
     /// </summary>
     private T[] ComputeISTFT(T[] magnitudes, T[] phases)
     {
-        var output = new T[_fftSize];
+        // Reconstruct full complex spectrum from magnitude/phase
+        // magnitudes/phases contain N/2+1 positive frequency bins
+        var spectrum = new System.Numerics.Complex[_fftSize];
 
+        // Fill positive frequencies
+        for (int k = 0; k < magnitudes.Length; k++)
+        {
+            double mag = NumOps.ToDouble(magnitudes[k]);
+            double phase = NumOps.ToDouble(phases[k]);
+            spectrum[k] = System.Numerics.Complex.FromPolarCoordinates(mag, phase);
+        }
+
+        // Fill negative frequencies with conjugate symmetry
+        // For real signals: X[N-k] = conj(X[k])
+        for (int k = 1; k < magnitudes.Length - 1; k++)
+        {
+            spectrum[_fftSize - k] = System.Numerics.Complex.Conjugate(spectrum[k]);
+        }
+
+        // Compute inverse FFT using FftSharp (modifies spectrum in-place)
+        FftSharp.FFT.Inverse(spectrum);
+
+        // Extract real part
+        var output = new T[_fftSize];
         for (int n = 0; n < _fftSize; n++)
         {
-            double sum = 0;
-            for (int k = 0; k < magnitudes.Length; k++)
-            {
-                double mag = NumOps.ToDouble(magnitudes[k]);
-                double phase = NumOps.ToDouble(phases[k]);
-                double angle = 2 * Math.PI * k * n / _fftSize + phase;
-                sum += mag * Math.Cos(angle);
-
-                // Add conjugate for negative frequencies
-                if (k > 0 && k < magnitudes.Length - 1)
-                {
-                    sum += mag * Math.Cos(-angle + 2 * phase);
-                }
-            }
-            output[n] = NumOps.FromDouble(sum / _fftSize);
+            output[n] = NumOps.FromDouble(spectrum[n].Real);
         }
 
         return output;
@@ -735,20 +754,82 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        // Apply gradient descent updates to all layers
-        var learningRate = NumOps.FromDouble(0.001);
-
-        foreach (var layer in _encoderLayers)
+        if (IsOnnxMode)
         {
-            layer.UpdateParameters(learningRate);
+            throw new InvalidOperationException("Cannot update parameters in ONNX mode.");
         }
 
-        _bottleneckLayer?.UpdateParameters(learningRate);
-        _outputLayer?.UpdateParameters(learningRate);
+        int offset = 0;
 
+        // Update encoder layers
+        foreach (var layer in _encoderLayers)
+        {
+            var layerParams = layer.GetParameters();
+            int layerParamCount = layerParams.Length;
+
+            if (offset + layerParamCount <= parameters.Length)
+            {
+                var newParams = new Vector<T>(layerParamCount);
+                for (int i = 0; i < layerParamCount; i++)
+                {
+                    newParams[i] = parameters[offset + i];
+                }
+                layer.SetParameters(newParams);
+                offset += layerParamCount;
+            }
+        }
+
+        // Update bottleneck layer
+        if (_bottleneckLayer is not null)
+        {
+            var layerParams = _bottleneckLayer.GetParameters();
+            int layerParamCount = layerParams.Length;
+
+            if (offset + layerParamCount <= parameters.Length)
+            {
+                var newParams = new Vector<T>(layerParamCount);
+                for (int i = 0; i < layerParamCount; i++)
+                {
+                    newParams[i] = parameters[offset + i];
+                }
+                _bottleneckLayer.SetParameters(newParams);
+                offset += layerParamCount;
+            }
+        }
+
+        // Update decoder layers
         foreach (var layer in _decoderLayers)
         {
-            layer.UpdateParameters(learningRate);
+            var layerParams = layer.GetParameters();
+            int layerParamCount = layerParams.Length;
+
+            if (offset + layerParamCount <= parameters.Length)
+            {
+                var newParams = new Vector<T>(layerParamCount);
+                for (int i = 0; i < layerParamCount; i++)
+                {
+                    newParams[i] = parameters[offset + i];
+                }
+                layer.SetParameters(newParams);
+                offset += layerParamCount;
+            }
+        }
+
+        // Update output layer
+        if (_outputLayer is not null)
+        {
+            var layerParams = _outputLayer.GetParameters();
+            int layerParamCount = layerParams.Length;
+
+            if (offset + layerParamCount <= parameters.Length)
+            {
+                var newParams = new Vector<T>(layerParamCount);
+                for (int i = 0; i < layerParamCount; i++)
+                {
+                    newParams[i] = parameters[offset + i];
+                }
+                _outputLayer.SetParameters(newParams);
+            }
         }
     }
 

@@ -77,12 +77,12 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
     /// <summary>
     /// Convolutional feature extraction layers.
     /// </summary>
-    private readonly List<ILayer<T>> _convLayers = [];
+    private List<ILayer<T>> _convLayers = [];
 
     /// <summary>
     /// Dense classification layers.
     /// </summary>
-    private readonly List<ILayer<T>> _denseLayers = [];
+    private List<ILayer<T>> _denseLayers = [];
 
     /// <summary>
     /// Output layer for emotion classification.
@@ -92,22 +92,22 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
     /// <summary>
     /// Number of convolutional blocks in the feature extractor.
     /// </summary>
-    private readonly int _numConvBlocks;
+    private int _numConvBlocks;
 
     /// <summary>
     /// Number of filters in the first convolutional layer (doubles with each block).
     /// </summary>
-    private readonly int _baseFilters;
+    private int _baseFilters;
 
     /// <summary>
     /// Hidden dimension for dense layers.
     /// </summary>
-    private readonly int _hiddenDim;
+    private int _hiddenDim;
 
     /// <summary>
     /// Dropout rate for regularization.
     /// </summary>
-    private readonly double _dropoutRate;
+    private double _dropoutRate;
 
     #endregion
 
@@ -116,27 +116,27 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
     /// <summary>
     /// FFT window size for spectrogram computation.
     /// </summary>
-    private readonly int _nFft;
+    private int _nFft;
 
     /// <summary>
     /// Hop length between FFT frames.
     /// </summary>
-    private readonly int _hopLength;
+    private int _hopLength;
 
     /// <summary>
     /// Expected input duration in seconds.
     /// </summary>
-    private readonly double _inputDurationSeconds;
+    private double _inputDurationSeconds;
 
     /// <summary>
     /// Mel spectrogram extractor.
     /// </summary>
-    private readonly MelSpectrogram<T>? _melSpec;
+    private MelSpectrogram<T>? _melSpec;
 
     /// <summary>
     /// Whether to include arousal/valence prediction.
     /// </summary>
-    private readonly bool _includeArousalValence;
+    private bool _includeArousalValence;
 
     #endregion
 
@@ -159,7 +159,7 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
     /// <summary>
     /// Custom emotion labels if provided.
     /// </summary>
-    private readonly string[] _emotionLabels;
+    private string[] _emotionLabels;
 
     #endregion
 
@@ -415,11 +415,10 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
             _denseLayers.Add(new DropoutLayer<T>(_dropoutRate));
         }
 
-        // Output layer
+        // Output layer - outputs logits (softmax is applied in GetEmotionProbabilities)
         _outputLayer = new DenseLayer<T>(
             inputSize: _hiddenDim / 2,
-            outputSize: _emotionLabels.Length,
-            activationFunction: new SoftmaxActivation<T>());
+            outputSize: _emotionLabels.Length);
     }
 
     #endregion
@@ -448,14 +447,14 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
     /// </summary>
     private Tensor<T> NormalizeMelSpectrogram(Tensor<T> melSpec)
     {
-        var vector = melSpec.ToVector();
-        int length = vector.Length;
+        var inputVector = melSpec.ToVector();
+        int length = inputVector.Length;
 
         // Compute mean
         T sum = NumOps.Zero;
         for (int i = 0; i < length; i++)
         {
-            sum = NumOps.Add(sum, vector[i]);
+            sum = NumOps.Add(sum, inputVector[i]);
         }
         T mean = NumOps.Divide(sum, NumOps.FromDouble(length));
 
@@ -463,21 +462,21 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
         T varSum = NumOps.Zero;
         for (int i = 0; i < length; i++)
         {
-            T diff = NumOps.Subtract(vector[i], mean);
+            T diff = NumOps.Subtract(inputVector[i], mean);
             varSum = NumOps.Add(varSum, NumOps.Multiply(diff, diff));
         }
         T variance = NumOps.Divide(varSum, NumOps.FromDouble(length));
         T stdDev = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-8)));
 
-        // Normalize
-        var result = new Tensor<T>(melSpec.Shape);
-        var resultVector = result.ToVector();
+        // Normalize - create result vector, fill it, then create tensor from it
+        var resultVector = new Vector<T>(length);
         for (int i = 0; i < length; i++)
         {
-            resultVector[i] = NumOps.Divide(NumOps.Subtract(vector[i], mean), stdDev);
+            resultVector[i] = NumOps.Divide(NumOps.Subtract(inputVector[i], mean), stdDev);
         }
 
-        return result;
+        // Create tensor from the normalized vector with the original shape
+        return Tensor<T>.FromVector(resultVector, melSpec.Shape);
     }
 
     /// <inheritdoc/>
@@ -555,9 +554,9 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
             secondaryEmotion = null;
         }
 
-        // Get arousal and valence
-        T arousal = _includeArousalValence ? GetArousal(audio) : NumOps.Zero;
-        T valence = _includeArousalValence ? GetValence(audio) : NumOps.Zero;
+        // Get arousal and valence from already-computed probabilities (avoid redundant inference)
+        T arousal = _includeArousalValence ? ComputeArousalFromProbabilities(probabilities) : NumOps.Zero;
+        T valence = _includeArousalValence ? ComputeValenceFromProbabilities(probabilities) : NumOps.Zero;
 
         return new EmotionResult<T>
         {
@@ -666,6 +665,64 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
     {
         var probs = GetEmotionProbabilities(audio);
 
+        // Valence mapping (based on circumplex model of affect)
+        var valenceWeights = new Dictionary<string, double>
+        {
+            { "neutral", 0.0 },
+            { "happy", 0.9 },
+            { "sad", -0.8 },
+            { "angry", -0.6 },
+            { "fearful", -0.7 },
+            { "disgusted", -0.5 },
+            { "surprised", 0.3 }
+        };
+
+        double valence = 0;
+        foreach (var (emotion, prob) in probs)
+        {
+            if (valenceWeights.TryGetValue(emotion.ToLowerInvariant(), out double weight))
+            {
+                valence += NumOps.ToDouble(prob) * weight;
+            }
+        }
+
+        return NumOps.FromDouble(Math.Max(-1.0, Math.Min(1.0, valence)));
+    }
+
+    /// <summary>
+    /// Computes arousal from already-computed emotion probabilities.
+    /// </summary>
+    private T ComputeArousalFromProbabilities(IReadOnlyDictionary<string, T> probs)
+    {
+        // Arousal mapping (based on circumplex model of affect)
+        var arousalWeights = new Dictionary<string, double>
+        {
+            { "neutral", 0.0 },
+            { "happy", 0.5 },
+            { "sad", -0.7 },
+            { "angry", 0.9 },
+            { "fearful", 0.6 },
+            { "disgusted", 0.2 },
+            { "surprised", 0.7 }
+        };
+
+        double arousal = 0;
+        foreach (var (emotion, prob) in probs)
+        {
+            if (arousalWeights.TryGetValue(emotion.ToLowerInvariant(), out double weight))
+            {
+                arousal += NumOps.ToDouble(prob) * weight;
+            }
+        }
+
+        return NumOps.FromDouble(Math.Max(-1.0, Math.Min(1.0, arousal)));
+    }
+
+    /// <summary>
+    /// Computes valence from already-computed emotion probabilities.
+    /// </summary>
+    private T ComputeValenceFromProbabilities(IReadOnlyDictionary<string, T> probs)
+    {
         // Valence mapping (based on circumplex model of affect)
         var valenceWeights = new Dictionary<string, double>
         {
@@ -935,21 +992,40 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadBoolean(); // _isOnnxMode
+        // Note: _isOnnxMode is readonly and set at construction, but we read to advance stream position
+        // The deserialized model will always be in native mode since ONNX models need model files
+        _ = reader.ReadBoolean(); // _isOnnxMode (read but not assigned - mode is set at construction)
+
+        // Restore audio configuration
         SampleRate = reader.ReadInt32();
         NumMels = reader.ReadInt32();
-        _ = reader.ReadInt32(); // _nFft
-        _ = reader.ReadInt32(); // _hopLength
-        _ = reader.ReadDouble(); // _inputDurationSeconds
-        _ = reader.ReadInt32(); // _numConvBlocks
-        _ = reader.ReadInt32(); // _baseFilters
-        _ = reader.ReadInt32(); // _hiddenDim
-        _ = reader.ReadDouble(); // _dropoutRate
-        _ = reader.ReadBoolean(); // _includeArousalValence
+        _nFft = reader.ReadInt32();
+        _hopLength = reader.ReadInt32();
+        _inputDurationSeconds = reader.ReadDouble();
+
+        // Restore architecture configuration
+        _numConvBlocks = reader.ReadInt32();
+        _baseFilters = reader.ReadInt32();
+        _hiddenDim = reader.ReadInt32();
+        _dropoutRate = reader.ReadDouble();
+        _includeArousalValence = reader.ReadBoolean();
+
+        // Restore emotion labels
         int labelCount = reader.ReadInt32();
+        _emotionLabels = new string[labelCount];
         for (int i = 0; i < labelCount; i++)
         {
-            _ = reader.ReadString();
+            _emotionLabels[i] = reader.ReadString();
+        }
+        ClassLabels = _emotionLabels;
+
+        // Reinitialize mel spectrogram extractor with restored parameters
+        _melSpec = CreateMelSpectrogram(SampleRate, NumMels, _nFft, _hopLength);
+
+        // Reinitialize layers if needed (native mode)
+        if (_convLayers.Count == 0)
+        {
+            InitializeLayers();
         }
     }
 
