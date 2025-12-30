@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -435,6 +436,27 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastInput = input;
         _lastMemory = memory;
 
+        // Dynamic input dimension adaptation
+        int actualInputDim = input.Shape[^1];
+        int expectedInputDim = _queryWeights.Shape[0];
+        if (actualInputDim != expectedInputDim)
+        {
+            int memoryDim = _queryWeights.Shape[1];
+            T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (actualInputDim + memoryDim)));
+            var random = RandomHelper.CreateSeededRandom(42);
+
+            _queryWeights = new Tensor<T>([actualInputDim, memoryDim]);
+            _keyWeights = new Tensor<T>([actualInputDim, memoryDim]);
+            _valueWeights = new Tensor<T>([actualInputDim, memoryDim]);
+
+            for (int i = 0; i < _queryWeights.Length; i++)
+                _queryWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
+            for (int i = 0; i < _keyWeights.Length; i++)
+                _keyWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
+            for (int i = 0; i < _valueWeights.Length; i++)
+                _valueWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
+        }
+
         // Use Engine operations for matrix multiplications
         var queries = Engine.TensorMatMul(input, _queryWeights);
         var keys = Engine.TensorMatMul(input, _keyWeights);
@@ -453,12 +475,18 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var attentionWeights = softmaxActivation.Activate(attentionScores);
         _lastAttentionScores = attentionWeights;
 
-        // Compute write values using element-wise multiplication
-        var writeValues = Engine.TensorMultiply(values, attentionWeights);
-        _lastWriteValues = writeValues; // Cache for output weights gradient computation
+        // Compute write values: attention-weighted combination of values
+        // attentionWeights: [batch, numSlots], values: [batch, memoryDim]
+        // We want: [numSlots, memoryDim] to update memory
+        // Use: attentionWeights^T @ values = [numSlots, batch] @ [batch, memoryDim] = [numSlots, memoryDim]
+        var attentionT = Engine.TensorTranspose(attentionWeights);
+        var writeValues = Engine.TensorMatMul(attentionT, values);
+        _lastWriteValues = writeValues; // Cache for gradient computation / memory update
 
-        // Apply output transformation: writeValues × outputWeights + outputBias
-        var projected = Engine.TensorMatMul(writeValues, _outputWeights);
+        // For the output, we transform the values (what we're writing) through output weights
+        // This maintains [batch, memoryDim] shape for downstream layers
+        // Output: values × outputWeights + outputBias = [batch, memoryDim]
+        var projected = Engine.TensorMatMul(values, _outputWeights);
 
         // Broadcast bias and add
         var batchSize = input.Shape[0];
