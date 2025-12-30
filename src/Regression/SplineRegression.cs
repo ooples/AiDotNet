@@ -174,16 +174,22 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
         // Generate basis functions
         var basisFunctions = GenerateBasisFunctions(x);
 
-        // Add regularization
-        basisFunctions = Regularization.Regularize(basisFunctions);
-
-        // Solve for coefficients
+        // Solve for coefficients with optional ridge regularization
         var xTx = basisFunctions.Transpose().Multiply(basisFunctions);
+
+        // Add ridge regularization to the diagonal if strength is specified
+        var regularizationStrength = Regularization?.GetOptions().Strength ?? 0.0;
+        if (regularizationStrength > 0)
+        {
+            T regTerm = NumOps.FromDouble(regularizationStrength);
+            for (int i = 0; i < xTx.Rows; i++)
+            {
+                xTx[i, i] = NumOps.Add(xTx[i, i], regTerm);
+            }
+        }
+
         var xTy = basisFunctions.Transpose().Multiply(y);
         _coefficients = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _options.DecompositionType);
-
-        // Apply regularization to coefficients
-        _coefficients = Regularization.Regularize(_coefficients);
     }
 
     /// <summary>

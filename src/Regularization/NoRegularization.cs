@@ -63,23 +63,25 @@ public class NoRegularization<T, TInput, TOutput> : RegularizationBase<T, TInput
     /// <returns>The same input data, unchanged.</returns>
     /// <remarks>
     /// <para>
-    /// This method simply returns the input data without any modification, effectively applying
-    /// no regularization to the data during model training or prediction.
+    /// This method returns a zero matrix of the same dimensions as the input, representing
+    /// no regularization penalty. This is important because when regularization is added to
+    /// a matrix (like X^T*X), adding zeros has no effect, whereas returning the original
+    /// matrix would incorrectly double the values.
     /// </para>
-    /// <para><b>For Beginners:</b> This method passes your data through unchanged.
-    /// 
+    /// <para><b>For Beginners:</b> This method returns a zero matrix (no regularization penalty).
+    ///
     /// When called:
-    /// - The input data goes in
-    /// - The exact same data comes out
-    /// - No transformations, adjustments, or modifications are applied
-    /// 
-    /// Think of it like having a "bypass" switch that lets data flow through
-    /// without being processed.
+    /// - A matrix of zeros with the same dimensions is returned
+    /// - Adding this to another matrix has no effect
+    /// - This represents "no regularization" because nothing is added
+    ///
+    /// Think of it like adding zero to a number - it doesn't change anything.
     /// </para>
     /// </remarks>
     public override Matrix<T> Regularize(Matrix<T> data)
     {
-        return data;
+        // Return a zero matrix - adding zero has no effect
+        return new Matrix<T>(data.Rows, data.Columns);
     }
 
     /// <summary>

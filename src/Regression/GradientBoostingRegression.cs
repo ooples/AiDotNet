@@ -149,15 +149,18 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </remarks>
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {
-        // Apply regularization to the feature matrix
-        x = Regularization.Regularize(x);
+        // Note: Tree-based methods handle regularization through tree structure parameters
+        // (MaxDepth, MinSamplesSplit, etc.), not through data transformation
 
         _initialPrediction = NumOps.Divide(y.Sum(), NumOps.FromDouble(y.Length)); // Mean of y
         var residuals = y.Subtract(Vector<T>.CreateDefault(y.Length, _initialPrediction));
 
         FeatureImportances = new Vector<T>(x.Columns);
+        _trees = new List<DecisionTreeRegression<T>>(_options.NumberOfTrees);
 
-        var treeTasks = Enumerable.Range(0, _options.NumberOfTrees).Select(_ => Task.Run(() =>
+        // IMPORTANT: Gradient boosting MUST build trees sequentially, not in parallel!
+        // Each tree fits the residuals from the previous iteration.
+        for (int treeIndex = 0; treeIndex < _options.NumberOfTrees; treeIndex++)
         {
             var tree = new DecisionTreeRegression<T>(new DecisionTreeOptions
             {
@@ -181,18 +184,15 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
             }
 
             tree.Train(xSubsample, ySubsample);
+            _trees.Add(tree);
 
-            // Update residuals
+            // Update residuals for the next tree
             var predictions = tree.Predict(x);
             for (int i = 0; i < residuals.Length; i++)
             {
                 residuals[i] = NumOps.Subtract(residuals[i], NumOps.Multiply(NumOps.FromDouble(_options.LearningRate), predictions[i]));
             }
-
-            return tree;
-        }));
-
-        _trees = await ParallelProcessingHelper.ProcessTasksInParallel(treeTasks);
+        }
 
         await CalculateFeatureImportancesAsync(x.Columns);
     }
@@ -232,8 +232,8 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </remarks>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
-        // Apply regularization to the input matrix
-        input = Regularization.Regularize(input);
+        // Note: Tree-based methods handle regularization through tree structure parameters
+        // (MaxDepth, MinSamplesSplit, etc.), not through data transformation
 
         var predictions = Vector<T>.CreateDefault(input.Rows, _initialPrediction);
 
@@ -247,9 +247,6 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
                 predictions[i] = NumOps.Add(predictions[i], NumOps.Multiply(NumOps.FromDouble(_options.LearningRate), treePredictions[j][i]));
             }
         }
-
-        // Apply regularization to the final predictions
-        predictions = Regularization.Regularize(predictions);
 
         return predictions;
     }
@@ -289,9 +286,11 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
         var importanceTasks = _trees.Select(tree => Task.Run(() =>
         {
             var treeImportances = new T[featureCount];
-            for (int i = 0; i < featureCount; i++)
+            var treeFeatureImportances = tree.FeatureImportances;
+            int copyCount = Math.Min(featureCount, treeFeatureImportances.Length);
+            for (int i = 0; i < copyCount; i++)
             {
-                treeImportances[i] = tree.FeatureImportances[i];
+                treeImportances[i] = treeFeatureImportances[i];
             }
             return treeImportances;
         }));

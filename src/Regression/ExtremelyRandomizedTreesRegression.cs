@@ -221,8 +221,9 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
     /// </remarks>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
-        var regularizedInput = Regularization.Regularize(input);
-        var predictionTasks = _trees.Select(tree => new Func<Vector<T>>(() => tree.Predict(regularizedInput)));
+        // Note: Tree-based methods handle regularization through tree structure parameters
+        // (MaxDepth, MinSamplesSplit, etc.), not through data transformation
+        var predictionTasks = _trees.Select(tree => new Func<Vector<T>>(() => tree.Predict(input)));
         var predictions = await ParallelProcessingHelper.ProcessTasksInParallel(predictionTasks, _options.MaxDegreeOfParallelism);
 
         var result = new T[input.Rows];
@@ -234,8 +235,7 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
             );
         }
 
-        var regularizedPredictions = new Vector<T>(result);
-        return Regularization.Regularize(regularizedPredictions);
+        return new Vector<T>(result);
     }
 
     /// <summary>

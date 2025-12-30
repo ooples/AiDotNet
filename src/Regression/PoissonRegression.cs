@@ -100,13 +100,17 @@ public class PoissonRegression<T> : RegressionBase<T>
             Matrix<T> xTwx = xTw.Multiply(xWithIntercept);
             Vector<T> xTwz = xTw.Multiply(z);
 
-            // Apply regularization to the matrix
-            if (Regularization != null)
+            // Add ridge regularization to ensure numerical stability
+            // This adds a small value to the diagonal to prevent singularity
+            var minRegularization = 1e-10;
+            var userStrength = Regularization?.GetOptions().Strength ?? 0.0;
+            var effectiveStrength = NumOps.FromDouble(Math.Max(minRegularization, userStrength));
+            for (int i = 0; i < xTwx.Rows; i++)
             {
-                xTwx = Regularization.Regularize(xTwx);
+                xTwx[i, i] = NumOps.Add(xTwx[i, i], effectiveStrength);
             }
 
-            Vector<T> newCoefficients = MatrixSolutionHelper.SolveLinearSystem(xTwx, xTwz, MatrixDecompositionFactory.GetDecompositionType(_options.DecompositionMethod));
+            Vector<T> newCoefficients = MatrixSolutionHelper.SolveLinearSystem(xTwx, xTwz, _options.DecompositionType);
 
             // Apply regularization to the coefficients
             if (Regularization != null)

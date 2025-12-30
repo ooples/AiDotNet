@@ -326,16 +326,21 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
         int column = x.Columns;
         for (int lag = 1; lag <= _options.LagOrder; lag++)
         {
-            for (int i = _options.LagOrder; i < n; i++)
+            // Add lagged X features
+            for (int j = 0; j < x.Columns; j++)
             {
-                for (int j = 0; j < x.Columns; j++)
+                for (int i = _options.LagOrder; i < n; i++)
                 {
                     preparedX[i - _options.LagOrder, column] = x[i - lag, j];
-                    column++;
                 }
-                preparedX[i - _options.LagOrder, column] = y[i - lag];
                 column++;
             }
+            // Add lagged y values
+            for (int i = _options.LagOrder; i < n; i++)
+            {
+                preparedX[i - _options.LagOrder, column] = y[i - lag];
+            }
+            column++;
         }
 
         // Add trend feature
@@ -351,13 +356,13 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
         // Add seasonal features
         if (_options.SeasonalPeriod > 0)
         {
-            for (int i = 0; i < preparedX.Rows; i++)
+            for (int s = 1; s < _options.SeasonalPeriod; s++)
             {
-                for (int s = 1; s < _options.SeasonalPeriod; s++)
+                for (int i = 0; i < preparedX.Rows; i++)
                 {
                     preparedX[i, column] = NumOps.FromDouble((i + _options.LagOrder) % _options.SeasonalPeriod == s ? 1 : 0);
-                    column++;
                 }
+                column++;
             }
         }
 
@@ -549,31 +554,10 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        // PrepareInputData adds trend and seasonal features to the input
+        // so _timeSeriesModel.Predict already accounts for them
         Matrix<T> preparedInput = PrepareInputData(input, new Vector<T>(input.Rows)); // Dummy y vector
-        Vector<T> predictions = base.Predict(preparedInput);
-
-        Vector<T> trendCoefficients = ExtractTrendCoefficients();
-        Vector<T> seasonalCoefficients = ExtractSeasonalCoefficients();
-
-        // Add trend and seasonality components
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            if (_options.IncludeTrend)
-            {
-                predictions[i] = NumOps.Add(predictions[i], NumOps.Multiply(trendCoefficients[0], NumOps.FromDouble(i + 1)));
-            }
-
-            if (_options.SeasonalPeriod > 0)
-            {
-                int seasonIndex = i % _options.SeasonalPeriod;
-                if (seasonIndex > 0)
-                {
-                    predictions[i] = NumOps.Add(predictions[i], seasonalCoefficients[seasonIndex - 1]);
-                }
-            }
-        }
-
-        return predictions;
+        return _timeSeriesModel.Predict(preparedInput);
     }
 
     /// <summary>

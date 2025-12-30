@@ -129,12 +129,29 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 throw new ArgumentOutOfRangeException(nameof(numGenerations));
             }
 
+            // For single-feature data, try deterministic linear regression first (fast and reliable)
+            if (inputs.GetLength(1) == 1)
+            {
+                var linearExpression = TryBuildLinearExpressionFromData(inputs, outputs);
+                if (linearExpression != null)
+                {
+                    // Verify the linear fit is good enough (MSE < 1e-6 for exact linear relationships)
+                    double linearMse = ComputeMse(linearExpression, inputs, outputs);
+                    if (linearMse < 1e-6)
+                    {
+                        return linearExpression;
+                    }
+                }
+            }
+
+            // Try symbolic regression for more complex relationships
             var regressionExpression = TryDiscoverWithSymbolicRegression(inputs, outputs, maxComplexity, numGenerations);
             if (regressionExpression != null)
             {
                 return regressionExpression;
             }
 
+            // Fall back to linear regression for any single-feature data that symbolic regression couldn't handle
             var linearFallback = TryBuildLinearExpressionFromData(inputs, outputs);
             if (linearFallback != null)
             {
@@ -399,6 +416,51 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             {
                 TraverseNodes(node.Right, node, false, nodes);
             }
+        }
+
+        private double ComputeMse(SymbolicExpression<T> expression, T[,] inputs, T[] outputs)
+        {
+            int samples = inputs.GetLength(0);
+            int features = inputs.GetLength(1);
+
+            if (samples == 0)
+            {
+                return double.PositiveInfinity;
+            }
+
+            T sumSquared = _numOps.Zero;
+            var variables = new T[features];
+
+            for (int i = 0; i < samples; i++)
+            {
+                for (int j = 0; j < features; j++)
+                {
+                    variables[j] = inputs[i, j];
+                }
+
+                T prediction;
+                try
+                {
+                    prediction = expression.Evaluate(variables);
+                }
+                catch (ArgumentOutOfRangeException)
+                {
+                    return double.PositiveInfinity;
+                }
+
+                if (_numOps.IsNaN(prediction) || _numOps.IsInfinity(prediction))
+                {
+                    return double.PositiveInfinity;
+                }
+
+                T error = _numOps.Subtract(prediction, outputs[i]);
+                sumSquared = _numOps.Add(sumSquared, _numOps.Multiply(error, error));
+            }
+
+            T mse = _numOps.Divide(sumSquared, _numOps.FromDouble(samples));
+            double mseValue = _numOps.ToDouble(mse);
+
+            return double.IsNaN(mseValue) || double.IsInfinity(mseValue) ? double.PositiveInfinity : mseValue;
         }
 
         private double ComputeLoss(SymbolicExpression<T> expression, T[,] inputs, T[] outputs, int maxComplexity)
