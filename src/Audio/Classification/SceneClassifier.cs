@@ -253,9 +253,29 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
     public IReadOnlyList<string> SupportedScenes => ClassLabels;
 
     /// <summary>
+    /// Gets the scenes (alias for SupportedScenes for legacy API compatibility).
+    /// </summary>
+    public IReadOnlyList<string> Scenes => ClassLabels;
+
+    /// <summary>
     /// Gets the minimum audio duration required for reliable classification.
     /// </summary>
     public double MinimumDurationSeconds => 1.0;
+
+    #endregion
+
+    #region Legacy API
+
+    /// <summary>
+    /// Classifies audio and returns category with confidence (legacy API compatibility).
+    /// </summary>
+    /// <param name="audio">Audio waveform tensor.</param>
+    /// <returns>Tuple of (category, confidence).</returns>
+    public (string Category, T Confidence) ClassifyCategory(Tensor<T> audio)
+    {
+        var result = Classify(audio);
+        return (result.Category, result.Confidence);
+    }
 
     #endregion
 

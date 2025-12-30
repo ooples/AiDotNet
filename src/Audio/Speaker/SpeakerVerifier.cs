@@ -139,6 +139,24 @@ public class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>
     #region Constructors
 
     /// <summary>
+    /// Creates a SpeakerVerifier with default settings for native training mode.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the simplest way to create a speaker verifier.
+    /// It uses default settings suitable for most use cases.
+    /// </para>
+    /// </remarks>
+    public SpeakerVerifier()
+        : this(
+            new NeuralNetworkArchitecture<T>(
+                inputFeatures: 256,
+                outputSize: 256),
+            sampleRate: 16000,
+            embeddingDimension: 256)
+    {
+    }
+
+    /// <summary>
     /// Creates a SpeakerVerifier for ONNX inference with a pretrained model.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>

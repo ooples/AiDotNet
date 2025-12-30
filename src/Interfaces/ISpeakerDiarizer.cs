@@ -163,6 +163,17 @@ public class DiarizationResult<T>
     public IReadOnlyList<SpeakerSegment<T>> Segments { get; set; } = Array.Empty<SpeakerSegment<T>>();
 
     /// <summary>
+    /// Gets the speaker turns (alias for Segments for legacy API compatibility).
+    /// </summary>
+    public IReadOnlyList<SpeakerTurn<T>> Turns => Segments.Select(s => new SpeakerTurn<T>
+    {
+        SpeakerId = s.Speaker,
+        StartTime = s.StartTime,
+        EndTime = s.EndTime,
+        Confidence = s.Confidence
+    }).ToList();
+
+    /// <summary>
     /// Gets or sets the number of unique speakers detected.
     /// </summary>
     public int NumSpeakers { get; set; }
@@ -178,6 +189,11 @@ public class DiarizationResult<T>
     public double TotalDuration { get; set; }
 
     /// <summary>
+    /// Gets the audio duration in seconds (alias for TotalDuration for legacy API compatibility).
+    /// </summary>
+    public double Duration => TotalDuration;
+
+    /// <summary>
     /// Gets or sets overlapping speech regions (if detected).
     /// </summary>
     public IReadOnlyList<OverlapRegion<T>> OverlapRegions { get; set; } = Array.Empty<OverlapRegion<T>>();
@@ -187,6 +203,33 @@ public class DiarizationResult<T>
     /// </summary>
     public IReadOnlyDictionary<string, SpeakerStatistics<T>> SpeakerStats { get; set; } =
         new Dictionary<string, SpeakerStatistics<T>>();
+}
+
+/// <summary>
+/// Represents a speaker turn in diarization output (legacy API compatibility).
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+public class SpeakerTurn<T>
+{
+    /// <summary>
+    /// Gets or sets the speaker ID.
+    /// </summary>
+    public string SpeakerId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the start time in seconds.
+    /// </summary>
+    public double StartTime { get; set; }
+
+    /// <summary>
+    /// Gets or sets the end time in seconds.
+    /// </summary>
+    public double EndTime { get; set; }
+
+    /// <summary>
+    /// Gets or sets the confidence score for this turn.
+    /// </summary>
+    public T Confidence { get; set; } = default!;
 }
 
 /// <summary>

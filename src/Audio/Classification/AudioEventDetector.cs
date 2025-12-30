@@ -253,6 +253,11 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
     public IReadOnlyList<string> SupportedEvents => ClassLabels;
 
     /// <summary>
+    /// Gets the event labels (alias for SupportedEvents for legacy API compatibility).
+    /// </summary>
+    public IReadOnlyList<string> EventLabels => ClassLabels;
+
+    /// <summary>
     /// Gets the time resolution for event detection in seconds.
     /// </summary>
     public double TimeResolution => _options.WindowSize * (1 - _options.WindowOverlap);

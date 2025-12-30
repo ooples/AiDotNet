@@ -133,6 +133,37 @@ public class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, ISpeakerE
     #region Constructors
 
     /// <summary>
+    /// Creates a SpeakerEmbeddingExtractor with default settings for native training mode.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the simplest way to create a speaker embedding extractor.
+    /// It uses default settings suitable for most use cases.
+    /// </para>
+    /// </remarks>
+    public SpeakerEmbeddingExtractor()
+        : this(new SpeakerEmbeddingOptions())
+    {
+    }
+
+    /// <summary>
+    /// Creates a SpeakerEmbeddingExtractor with custom options.
+    /// </summary>
+    /// <param name="options">Configuration options for the extractor.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this constructor to customize sample rate, embedding dimension, etc.
+    /// </para>
+    /// </remarks>
+    public SpeakerEmbeddingExtractor(SpeakerEmbeddingOptions options)
+        : this(
+            new NeuralNetworkArchitecture<T>(
+                inputFeatures: options.EmbeddingDimension,
+                outputSize: options.EmbeddingDimension),
+            options.SampleRate,
+            options.EmbeddingDimension)
+    {
+    }
+
+    /// <summary>
     /// Creates a SpeakerEmbeddingExtractor for ONNX inference with a pretrained model.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>

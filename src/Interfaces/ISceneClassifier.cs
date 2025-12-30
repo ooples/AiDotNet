@@ -149,6 +149,50 @@ public class SceneClassificationResult<T>
     /// Gets or sets detected acoustic characteristics.
     /// </summary>
     public AcousticCharacteristics<T>? Characteristics { get; set; }
+
+    /// <summary>
+    /// Gets all probabilities as a dictionary (legacy API compatibility).
+    /// </summary>
+    public IReadOnlyDictionary<string, T> AllProbabilities =>
+        AllScenes.ToDictionary(s => s.Scene, s => s.Probability);
+
+    /// <summary>
+    /// Gets top predictions as a list of tuples (legacy API compatibility).
+    /// </summary>
+    public IReadOnlyList<(string Scene, T Probability)> TopPredictions =>
+        AllScenes.Take(5).Select(s => (s.Scene, s.Probability)).ToList();
+
+    /// <summary>
+    /// Gets or sets extracted features used for classification (legacy API compatibility).
+    /// </summary>
+    public SceneFeatures<T>? Features { get; set; }
+}
+
+/// <summary>
+/// Features extracted for scene classification (generic version).
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+public class SceneFeatures<T>
+{
+    /// <summary>
+    /// Gets or sets the mean MFCC coefficients.
+    /// </summary>
+    public T[] MfccMean { get; set; } = Array.Empty<T>();
+
+    /// <summary>
+    /// Gets or sets the standard deviation of MFCC coefficients.
+    /// </summary>
+    public T[] MfccStd { get; set; } = Array.Empty<T>();
+
+    /// <summary>
+    /// Gets or sets the band energies.
+    /// </summary>
+    public T[] BandEnergies { get; set; } = Array.Empty<T>();
+
+    /// <summary>
+    /// Gets or sets the estimated tempo in BPM.
+    /// </summary>
+    public T Tempo { get; set; } = default!;
 }
 
 /// <summary>

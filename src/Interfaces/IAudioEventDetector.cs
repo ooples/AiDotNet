@@ -150,7 +150,7 @@ public interface IAudioEventDetector<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 /// Result of audio event detection.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class AudioEventResult<T>
+public class AudioEventResult<T> : IEnumerable<AudioEvent<T>>
 {
     /// <summary>
     /// Gets or sets the detected events.
@@ -180,6 +180,16 @@ public class AudioEventResult<T>
     /// <returns>Events of the specified type.</returns>
     public IEnumerable<AudioEvent<T>> GetEventsByType(string eventType) =>
         Events.Where(e => e.EventType == eventType);
+
+    /// <summary>
+    /// Returns an enumerator that iterates through the events.
+    /// </summary>
+    public IEnumerator<AudioEvent<T>> GetEnumerator() => Events.GetEnumerator();
+
+    /// <summary>
+    /// Returns an enumerator that iterates through the events.
+    /// </summary>
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => Events.GetEnumerator();
 }
 
 /// <summary>

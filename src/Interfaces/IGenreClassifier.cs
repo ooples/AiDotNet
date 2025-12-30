@@ -151,6 +151,45 @@ public class GenreClassificationResult<T>
     /// Gets or sets whether this is a multi-label result.
     /// </summary>
     public bool IsMultiLabel { get; set; }
+
+    /// <summary>
+    /// Gets all probabilities as a dictionary (legacy API compatibility).
+    /// </summary>
+    public IReadOnlyDictionary<string, T> AllProbabilities =>
+        AllGenres.ToDictionary(g => g.Genre, g => g.Probability);
+
+    /// <summary>
+    /// Gets top predictions as a list of tuples (legacy API compatibility).
+    /// </summary>
+    public IReadOnlyList<(string Genre, T Probability)> TopPredictions =>
+        AllGenres.Take(5).Select(g => (g.Genre, g.Probability)).ToList();
+
+    /// <summary>
+    /// Gets or sets extracted features used for classification (legacy API compatibility).
+    /// </summary>
+    public GenreFeatures<T>? Features { get; set; }
+}
+
+/// <summary>
+/// Features extracted for genre classification (generic version).
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+public class GenreFeatures<T>
+{
+    /// <summary>
+    /// Gets or sets the mean MFCC coefficients.
+    /// </summary>
+    public T[] MfccMean { get; set; } = Array.Empty<T>();
+
+    /// <summary>
+    /// Gets or sets the standard deviation of MFCC coefficients.
+    /// </summary>
+    public T[] MfccStd { get; set; } = Array.Empty<T>();
+
+    /// <summary>
+    /// Gets or sets the estimated tempo in BPM.
+    /// </summary>
+    public T Tempo { get; set; } = default!;
 }
 
 /// <summary>

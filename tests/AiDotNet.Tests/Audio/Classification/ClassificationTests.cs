@@ -217,7 +217,7 @@ namespace AiDotNet.Tests.Audio.Classification
                 Assert.True(evt.StartTime >= 0, $"StartTime {evt.StartTime} should be >= 0");
                 Assert.True(evt.EndTime > evt.StartTime,
                     $"EndTime {evt.EndTime} should be > StartTime {evt.StartTime}");
-                Assert.False(string.IsNullOrEmpty(evt.Label), "Label should not be empty");
+                Assert.False(string.IsNullOrEmpty(evt.EventType), "EventType should not be empty");
                 Assert.True(evt.Confidence >= 0 && evt.Confidence <= 1,
                     $"Confidence {evt.Confidence} should be in [0, 1]");
             }
@@ -332,7 +332,7 @@ namespace AiDotNet.Tests.Audio.Classification
 
             // Assert
             Assert.NotNull(classifier.Scenes);
-            Assert.True(classifier.Scenes.Length >= 10);
+            Assert.True(classifier.Scenes.Count >= 10);
         }
 
         [Fact]
