@@ -592,8 +592,8 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         // Encode audio features
         var encoderOutput = EncodeAudio(melFeatures);
 
-        // Decode to text tokens
-        var tokens = DecodeTokens(encoderOutput, effectiveLanguage);
+        // Decode to text tokens with confidence
+        var (tokens, confidence) = DecodeTokens(encoderOutput, effectiveLanguage);
 
         // Convert tokens to text
         var text = _tokenizer.Decode(tokens);
@@ -604,8 +604,8 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             Text = text,
             Language = effectiveLanguage,
-            Confidence = NumOps.FromDouble(1.0), // TODO: Extract from decoder
-            DurationSeconds = NumOps.ToDouble(audio[audio.Length - 1]) / SampleRate,
+            Confidence = NumOps.FromDouble(confidence),
+            DurationSeconds = (double)audio.Length / SampleRate,
             Segments = includeTimestamps ? ExtractSegments(tokens, text) : Array.Empty<TranscriptionSegment<T>>()
         };
     }
@@ -1029,9 +1029,10 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         return logits;
     }
 
-    private List<long> DecodeTokens(Tensor<T> encoderOutput, string language)
+    private (List<long> tokens, double confidence) DecodeTokens(Tensor<T> encoderOutput, string language)
     {
         var tokens = new List<long>();
+        var tokenProbabilities = new List<double>();
 
         // Start with special tokens
         tokens.Add(_tokenizer.StartOfTranscript);
@@ -1072,8 +1073,8 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
                 logits = output.Values.First();
             }
 
-            // Get next token (greedy decoding for now)
-            int nextToken = GetNextToken(logits, tokens.Count - 1);
+            // Get next token and its probability
+            var (nextToken, probability) = GetNextTokenWithProbability(logits, tokens.Count - 1);
 
             if (nextToken == _tokenizer.EndOfText)
             {
@@ -1081,9 +1082,60 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             }
 
             tokens.Add(nextToken);
+            tokenProbabilities.Add(probability);
         }
 
-        return tokens;
+        // Calculate overall confidence as geometric mean of token probabilities
+        double confidence = 1.0;
+        if (tokenProbabilities.Count > 0)
+        {
+            // Use log-sum for numerical stability, then convert back
+            double logSum = tokenProbabilities.Sum(p => Math.Log(Math.Max(p, 1e-10)));
+            confidence = Math.Exp(logSum / tokenProbabilities.Count);
+        }
+
+        return (tokens, confidence);
+    }
+
+    private (int token, double probability) GetNextTokenWithProbability(Tensor<T> logits, int position)
+    {
+        // Get logits for the last position
+        int vocabSize = logits.Shape[^1];
+
+        // Find max logit for numerical stability in softmax
+        double maxLogit = double.NegativeInfinity;
+        for (int v = 0; v < vocabSize; v++)
+        {
+            double value = NumOps.ToDouble(logits[0, position, v]);
+            if (value > maxLogit)
+            {
+                maxLogit = value;
+            }
+        }
+
+        // Compute softmax and find best token
+        double sumExp = 0;
+        int maxIdx = 0;
+        double maxValue = double.NegativeInfinity;
+
+        var expValues = new double[vocabSize];
+        for (int v = 0; v < vocabSize; v++)
+        {
+            double value = NumOps.ToDouble(logits[0, position, v]);
+            expValues[v] = Math.Exp(value - maxLogit);
+            sumExp += expValues[v];
+
+            if (value > maxValue)
+            {
+                maxValue = value;
+                maxIdx = v;
+            }
+        }
+
+        // Probability of selected token
+        double probability = expValues[maxIdx] / sumExp;
+
+        return (maxIdx, probability);
     }
 
     private Tensor<T> CreateTokenTensor(List<long> tokens)
@@ -1098,25 +1150,6 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         return tensor;
     }
 
-    private int GetNextToken(Tensor<T> logits, int position)
-    {
-        // Get logits for the last position
-        int vocabSize = logits.Shape[^1];
-        int maxIdx = 0;
-        double maxValue = double.NegativeInfinity;
-
-        for (int v = 0; v < vocabSize; v++)
-        {
-            double value = NumOps.ToDouble(logits[0, position, v]);
-            if (value > maxValue)
-            {
-                maxValue = value;
-                maxIdx = v;
-            }
-        }
-
-        return maxIdx;
-    }
 
     private IReadOnlyDictionary<string, T> ApplySoftmax(Dictionary<string, T> logits)
     {
