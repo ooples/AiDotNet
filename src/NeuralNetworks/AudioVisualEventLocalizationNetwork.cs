@@ -134,8 +134,10 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         _audioEncoderLayers = new MultiHeadAttentionLayer<T>[_numEncoderLayers];
         for (int i = 0; i < _numEncoderLayers; i++)
         {
+            // Constructor: (sequenceLength, embeddingDimension, headCount, activation)
+            // Use sequenceLength=1 as placeholder since attention works with variable-length sequences
             _audioEncoderLayers[i] = new MultiHeadAttentionLayer<T>(
-                _embeddingDimension, 8, _embeddingDimension / 8, geluActivation);
+                1, _embeddingDimension, 8, geluActivation);
         }
         _audioOutputProjection = new DenseLayer<T>(_embeddingDimension, _embeddingDimension, nullActivation);
 
@@ -145,7 +147,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         for (int i = 0; i < _numEncoderLayers; i++)
         {
             _visualEncoderLayers[i] = new MultiHeadAttentionLayer<T>(
-                _embeddingDimension, 8, _embeddingDimension / 8, geluActivation);
+                1, _embeddingDimension, 8, geluActivation);
         }
         _visualOutputProjection = new DenseLayer<T>(_embeddingDimension, _embeddingDimension, nullActivation);
 
@@ -154,7 +156,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         for (int i = 0; i < 4; i++)
         {
             _temporalAttentionLayers[i] = new MultiHeadAttentionLayer<T>(
-                _embeddingDimension, 8, _embeddingDimension / 8, geluActivation);
+                1, _embeddingDimension, 8, geluActivation);
         }
         _temporalProposalHead = new DenseLayer<T>(_embeddingDimension, 2, nullActivation); // start, end offsets
 
@@ -163,7 +165,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         for (int i = 0; i < 4; i++)
         {
             _crossModalAttentionLayers[i] = new MultiHeadAttentionLayer<T>(
-                _embeddingDimension * 2, 8, _embeddingDimension / 4, geluActivation);
+                1, _embeddingDimension * 2, 8, geluActivation);
         }
 
         // Task-specific heads

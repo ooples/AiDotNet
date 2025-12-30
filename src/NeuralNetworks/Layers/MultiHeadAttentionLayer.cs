@@ -585,12 +585,14 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _originalKeyShape = key.Shape;
         _originalValueShape = value.Shape;
 
-        // Validate minimum rank
-        if (query.Rank < 2)
+        // Handle 1D input by reshaping to 2D [1, dim]
+        bool was1D = query.Rank == 1;
+        if (was1D)
         {
-            throw new ArgumentException(
-                $"MultiHeadAttentionLayer expects at least 2D input [seq, dim], " +
-                $"but received {query.Rank}D tensor with shape [{string.Join(", ", query.Shape)}].");
+            // Treat 1D [dim] as single token sequence [1, dim]
+            query = query.Reshape([1, query.Shape[0]]);
+            key = key.Reshape([1, key.Shape[0]]);
+            value = value.Reshape([1, value.Shape[0]]);
         }
 
         // Flatten all batch dimensions to get 3D [batch, seq, dim]
@@ -695,6 +697,12 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Reshape output back to original batch dimensions
         // Output is currently [flatBatch, seq, dim], need to reshape to [origBatch..., seq, dim]
+        if (_originalQueryShape.Length == 1)
+        {
+            // 1D input -> 1D output [dim]
+            return _lastOutput.Reshape([embeddingDimension]);
+        }
+
         int[] outputShape = new int[_originalQueryShape.Length];
         for (int i = 0; i < _originalQueryShape.Length - 2; i++)
         {

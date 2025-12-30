@@ -291,7 +291,15 @@ public class RecurrentLayer<T> : LayerBase<T>
         int sequenceLength;
         int batchSize;
 
-        if (rank == 2)
+        if (rank == 1)
+        {
+            // 1D: [inputSize] -> treat as single timestep, single batch
+            sequenceLength = 1;
+            batchSize = 1;
+            int inputSize = input.Shape[0];
+            input3D = input.Reshape([1, 1, inputSize]);
+        }
+        else if (rank == 2)
         {
             // 2D: [sequenceLength, inputSize] -> add batch dim
             sequenceLength = input.Shape[0];
@@ -393,6 +401,11 @@ public class RecurrentLayer<T> : LayerBase<T>
         {
             // 2D input -> 2D output (remove batch dim)
             output = output.Reshape([sequenceLength, hiddenSize]);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 1)
+        {
+            // 1D input -> 1D output (just the hidden size)
+            output = output.Reshape([hiddenSize]);
         }
 
         return output;

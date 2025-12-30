@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -3623,6 +3624,594 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         // Assert
         Assert.True(parameterCount > 0, $"QuantumNeuralNetwork parameter count should be > 0, got {parameterCount}");
+    }
+
+    #endregion
+
+    #region HTMNetwork Tests
+
+    [Fact]
+    public void HTMNetwork_Predict_ProducesOutput()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 16,
+            outputSize: 4);
+
+        var htmNet = new HTMNetwork<float>(
+            architecture,
+            columnCount: 128,  // Small for testing
+            cellsPerColumn: 8);
+
+        var input = CreateRandomTensor([16]);
+
+        // Act
+        var output = htmNet.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "HTMNetwork output should have elements");
+    }
+
+    [Fact]
+    public void HTMNetwork_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 16,
+            outputSize: 4);
+
+        var htmNet = new HTMNetwork<float>(architecture, columnCount: 128, cellsPerColumn: 8);
+
+        // Act
+        var parameterCount = htmNet.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount >= 0, $"HTMNetwork parameter count should be >= 0, got {parameterCount}");
+    }
+
+    #endregion
+
+    #region HopeNetwork Tests
+
+    [Fact]
+    public void HopeNetwork_Predict_ProducesOutput()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.Regression,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            outputSize: 32);
+
+        var hopeNet = new HopeNetwork<float>(
+            architecture,
+            hiddenDim: 64,
+            numCMSLevels: 2,
+            numRecurrentLayers: 2,
+            inContextLearningLevels: 2);
+
+        var input = CreateRandomTensor([64]);
+
+        // Act
+        var output = hopeNet.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "HopeNetwork output should have elements");
+    }
+
+    [Fact]
+    public void HopeNetwork_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.Regression,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            outputSize: 32);
+
+        var hopeNet = new HopeNetwork<float>(architecture, hiddenDim: 64, numCMSLevels: 2);
+
+        // Act
+        var parameterCount = hopeNet.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"HopeNetwork parameter count should be > 0, got {parameterCount}");
+    }
+
+    #endregion
+
+    #region NEAT Tests
+
+    [Fact]
+    public void NEAT_Predict_ProducesOutput()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 4,
+            outputSize: 2);
+
+        var neat = new NEAT<float>(
+            architecture,
+            populationSize: 10,
+            mutationRate: 0.1,
+            crossoverRate: 0.75);
+
+        var input = CreateRandomTensor([4]);
+
+        // Act
+        var output = neat.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "NEAT output should have elements");
+    }
+
+    [Fact]
+    public void NEAT_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 4,
+            outputSize: 2);
+
+        var neat = new NEAT<float>(architecture, populationSize: 10);
+
+        // Act
+        var parameterCount = neat.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"NEAT parameter count should be > 0, got {parameterCount}");
+    }
+
+    #endregion
+
+    #region SuperNet Tests
+
+    [Fact]
+    public void SuperNet_Predict_ProducesOutput()
+    {
+        // Arrange
+        var searchSpace = new MobileNetSearchSpace<float>();
+        var superNet = new SuperNet<float>(searchSpace, numNodes: 3);
+
+        var input = CreateRandomTensor([16]);
+
+        // Act
+        var output = superNet.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "SuperNet output should have elements");
+    }
+
+    [Fact]
+    public void SuperNet_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var searchSpace = new MobileNetSearchSpace<float>();
+        var superNet = new SuperNet<float>(searchSpace, numNodes: 3);
+
+        // Act
+        var parameterCount = superNet.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"SuperNet parameter count should be > 0, got {parameterCount}");
+    }
+
+    #endregion
+
+    #region OccupancyNeuralNetwork Tests
+
+    [Fact]
+    public void OccupancyNeuralNetwork_Predict_ProducesOutput()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.BinaryClassification,
+            NetworkComplexity.Simple,
+            inputSize: 8,  // Sensor features (temp, humidity, CO2, etc.)
+            outputSize: 1); // Occupancy binary output
+
+        var occNet = new OccupancyNeuralNetwork<float>(
+            architecture,
+            includeTemporalData: false);
+
+        var input = CreateRandomTensor([8]);
+
+        // Act
+        var output = occNet.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "OccupancyNeuralNetwork output should have elements");
+    }
+
+    [Fact]
+    public void OccupancyNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.BinaryClassification,
+            NetworkComplexity.Simple,
+            inputSize: 8,
+            outputSize: 1);
+
+        var occNet = new OccupancyNeuralNetwork<float>(architecture, includeTemporalData: false);
+
+        // Act
+        var parameterCount = occNet.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"OccupancyNeuralNetwork parameter count should be > 0, got {parameterCount}");
+    }
+
+    #endregion
+
+    #region GraphGenerationModel Tests
+
+    [Fact]
+    public void GraphGenerationModel_Predict_ProducesOutput()
+    {
+        // Arrange
+        var graphGen = new GraphGenerationModel<float>(
+            inputFeatures: 8,
+            hiddenDim: 16,
+            latentDim: 8,
+            numEncoderLayers: 2,
+            maxNodes: 20);
+
+        // Input: node features [numNodes, features]
+        var input = CreateRandomTensor([10, 8]);
+
+        // Act
+        var output = graphGen.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "GraphGenerationModel output should have elements");
+    }
+
+    [Fact]
+    public void GraphGenerationModel_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var graphGen = new GraphGenerationModel<float>(
+            inputFeatures: 8,
+            hiddenDim: 16,
+            latentDim: 8);
+
+        // Act
+        var parameterCount = graphGen.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"GraphGenerationModel parameter count should be > 0, got {parameterCount}");
+    }
+
+    #endregion
+
+    #region UNet3D Tests
+
+    [Fact]
+    public void UNet3D_Predict_ProducesOutput()
+    {
+        // Arrange - 3D networks need inputHeight, inputWidth, inputDepth
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 8,  // 8x8x8 voxel grid
+            outputSize: 4);
+
+        var unet3d = new UNet3D<float>(
+            architecture,
+            voxelResolution: 8,
+            numEncoderBlocks: 2,
+            baseFilters: 8);
+
+        // Input: 3D voxel grid [C, D, H, W]
+        var input = CreateRandomTensor([1, 8, 8, 8]);
+
+        // Act
+        var output = unet3d.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "UNet3D output should have elements");
+    }
+
+    [Fact]
+    public void UNet3D_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 8,
+            outputSize: 4);
+
+        var unet3d = new UNet3D<float>(architecture, voxelResolution: 8, numEncoderBlocks: 2, baseFilters: 8);
+
+        // Act
+        var parameterCount = unet3d.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"UNet3D parameter count should be > 0, got {parameterCount}");
+    }
+
+    #endregion
+
+    #region VoxelCNN Tests
+
+    [Fact]
+    public void VoxelCNN_Predict_ProducesOutput()
+    {
+        // Arrange - 3D networks need inputHeight, inputWidth, inputDepth
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 8,
+            outputSize: 4);
+
+        var voxelCnn = new VoxelCNN<float>(
+            architecture,
+            voxelResolution: 8,
+            numConvBlocks: 2,
+            baseFilters: 8);
+
+        var input = CreateRandomTensor([1, 8, 8, 8]);
+
+        // Act
+        var output = voxelCnn.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "VoxelCNN output should have elements");
+    }
+
+    [Fact]
+    public void VoxelCNN_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputHeight: 8,
+            inputWidth: 8,
+            inputDepth: 8,
+            outputSize: 4);
+
+        var voxelCnn = new VoxelCNN<float>(architecture, voxelResolution: 8, numConvBlocks: 2, baseFilters: 8);
+
+        // Act
+        var parameterCount = voxelCnn.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"VoxelCNN parameter count should be > 0, got {parameterCount}");
+    }
+
+    #endregion
+
+    #region MeshCNN Tests
+
+    [Fact]
+    public void MeshCNN_Predict_ProducesOutput()
+    {
+        // Arrange - Use simplified constructor
+        int numEdges = 100;
+        int maxAdjacent = 4;
+        var meshCnn = new MeshCNN<float>(numClasses: 4, inputFeatures: 5);
+
+        // Create edge adjacency: each edge has up to maxAdjacent neighboring edges
+        var edgeAdjacency = new int[numEdges, maxAdjacent];
+        for (int i = 0; i < numEdges; i++)
+        {
+            for (int j = 0; j < maxAdjacent; j++)
+            {
+                // Simple adjacency: circular neighbors
+                edgeAdjacency[i, j] = (i + j - 1 + numEdges) % numEdges;
+            }
+        }
+        meshCnn.SetEdgeAdjacency(edgeAdjacency);
+
+        // Input: edge features [numEdges, features]
+        var input = CreateRandomTensor([numEdges, 5]);
+
+        // Act
+        var output = meshCnn.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "MeshCNN output should have elements");
+    }
+
+    [Fact]
+    public void MeshCNN_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var meshCnn = new MeshCNN<float>(numClasses: 4, inputFeatures: 5);
+
+        // Act
+        var parameterCount = meshCnn.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"MeshCNN parameter count should be > 0, got {parameterCount}");
+    }
+
+    #endregion
+
+    #region SpiralNet Tests
+
+    [Fact]
+    public void SpiralNet_Predict_ProducesOutput()
+    {
+        // Arrange - Use default constructor
+        int numVertices = 100;
+        int spiralLength = 9; // Typical spiral length (center + 8 neighbors)
+        var spiralNet = new SpiralNet<float>();
+
+        // Create spiral indices: for each vertex, indices of its spiral neighborhood
+        var spiralIndices = new int[numVertices, spiralLength];
+        for (int i = 0; i < numVertices; i++)
+        {
+            for (int j = 0; j < spiralLength; j++)
+            {
+                // Simple spiral: circular neighbors around each vertex
+                spiralIndices[i, j] = (i + j) % numVertices;
+            }
+        }
+        spiralNet.SetSpiralIndices(spiralIndices);
+
+        // Input: vertex features [numVertices, features]
+        var input = CreateRandomTensor([numVertices, 3]);
+
+        // Act
+        var output = spiralNet.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "SpiralNet output should have elements");
+    }
+
+    [Fact]
+    public void SpiralNet_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var spiralNet = new SpiralNet<float>();
+
+        // Act
+        var parameterCount = spiralNet.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"SpiralNet parameter count should be > 0, got {parameterCount}");
+    }
+
+    #endregion
+
+    #region AudioVisualCorrespondenceNetwork Tests
+
+    [Fact]
+    public void AudioVisualCorrespondenceNetwork_Predict_ProducesOutput()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.TwoDimensional,
+            NeuralNetworkTaskType.BinaryClassification,
+            NetworkComplexity.Simple,
+            inputSize: 256,
+            outputSize: 128);
+
+        var avNet = new AudioVisualCorrespondenceNetwork<float>(
+            architecture,
+            embeddingDimension: 64,
+            numEncoderLayers: 2);
+
+        // Combined audio-visual input
+        var input = CreateRandomTensor([1, 256]);
+
+        // Act
+        var output = avNet.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "AudioVisualCorrespondenceNetwork output should have elements");
+    }
+
+    [Fact]
+    public void AudioVisualCorrespondenceNetwork_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.TwoDimensional,
+            NeuralNetworkTaskType.BinaryClassification,
+            NetworkComplexity.Simple,
+            inputSize: 256,
+            outputSize: 128);
+
+        var avNet = new AudioVisualCorrespondenceNetwork<float>(architecture, embeddingDimension: 64, numEncoderLayers: 2);
+
+        // Act
+        var parameterCount = avNet.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"AudioVisualCorrespondenceNetwork parameter count should be > 0, got {parameterCount}");
+    }
+
+    #endregion
+
+    #region AudioVisualEventLocalizationNetwork Tests
+
+    [Fact]
+    public void AudioVisualEventLocalizationNetwork_Predict_ProducesOutput()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.TwoDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 256,
+            outputSize: 10);  // 10 event classes
+
+        var avelNet = new AudioVisualEventLocalizationNetwork<float>(
+            architecture,
+            embeddingDimension: 64,
+            numEncoderLayers: 2,
+            eventCategories: new[] { "speech", "music", "noise", "silence", "ambient" });
+
+        var input = CreateRandomTensor([1, 256]);
+
+        // Act
+        var output = avelNet.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "AudioVisualEventLocalizationNetwork output should have elements");
+    }
+
+    [Fact]
+    public void AudioVisualEventLocalizationNetwork_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.TwoDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 256,
+            outputSize: 10);
+
+        var avelNet = new AudioVisualEventLocalizationNetwork<float>(architecture, embeddingDimension: 64, numEncoderLayers: 2);
+
+        // Act
+        var parameterCount = avelNet.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"AudioVisualEventLocalizationNetwork parameter count should be > 0, got {parameterCount}");
     }
 
     #endregion

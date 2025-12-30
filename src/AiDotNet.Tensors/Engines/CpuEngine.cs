@@ -6686,22 +6686,28 @@ public class CpuEngine : IEngine
         var numOps = MathHelper.GetNumericOperations<T>();
         T eps = numOps.FromDouble(epsilon);
 
+        // Handle 1D [features] - treat as single sample [1, features]
+        bool was1D = input.Shape.Length == 1;
+        Tensor<T> workingInput = was1D ? input.Reshape([1, input.Shape[0]]) : input;
+
         // Handle 2D [batch, features], 3D [channels, height, width], and 4D [batch, channels, height, width] tensors
-        if (input.Shape.Length == 4)
+        if (workingInput.Shape.Length == 4)
         {
-            return BatchNorm4D(input, gamma, beta, eps, numOps, out mean, out variance);
+            var result4D = BatchNorm4D(workingInput, gamma, beta, eps, numOps, out mean, out variance);
+            return was1D ? result4D.Reshape([result4D.Shape[1]]) : result4D;
         }
 
-        if (input.Shape.Length == 3)
+        if (workingInput.Shape.Length == 3)
         {
-            return BatchNorm3D(input, gamma, beta, eps, numOps, out mean, out variance);
+            var result3D = BatchNorm3D(workingInput, gamma, beta, eps, numOps, out mean, out variance);
+            return was1D ? result3D.Reshape([result3D.Length]) : result3D;
         }
 
         // 2D case: [batch, features]
-        int batch = input.Shape[0];
-        int features = input.Shape[1];
+        int batch = workingInput.Shape[0];
+        int features = workingInput.Shape[1];
 
-        var inputData = input.ToArray();
+        var inputData = workingInput.ToArray();
         var gammaData = gamma.ToArray();
         var betaData = beta.ToArray();
 
@@ -6746,7 +6752,10 @@ public class CpuEngine : IEngine
 
         mean = new Tensor<T>([features], new Vector<T>(meanData));
         variance = new Tensor<T>([features], new Vector<T>(varData));
-        return new Tensor<T>(input.Shape, new Vector<T>(outputData));
+
+        // Return with original shape (restore 1D if input was 1D)
+        var result = new Tensor<T>(workingInput.Shape, new Vector<T>(outputData));
+        return was1D ? result.Reshape([features]) : result;
     }
 
     /// <summary>
