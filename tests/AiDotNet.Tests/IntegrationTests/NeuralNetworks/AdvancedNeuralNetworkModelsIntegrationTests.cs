@@ -4215,4 +4215,528 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
     }
 
     #endregion
+
+    #region Multimodal Vision-Language Model Tests
+
+    [Fact]
+    public void BlipNeuralNetwork_NativeMode_Predict_ProducesOutput()
+    {
+        // Arrange - using native mode constructor (no ONNX files required)
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.TwoDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 256,
+            outputSize: 10);
+
+        var blip = new BlipNeuralNetwork<float>(
+            architecture,
+            imageSize: 64,
+            channels: 3,
+            patchSize: 8,
+            vocabularySize: 1000,
+            maxSequenceLength: 16,
+            embeddingDimension: 64,
+            hiddenDim: 128,
+            numEncoderLayers: 2,
+            numDecoderLayers: 2,
+            numHeads: 4,
+            mlpDim: 256);
+
+        // Use image-like input: [channels, height, width] = [3, 64, 64]
+        var input = CreateRandomTensor([3, 64, 64]);
+
+        // Act
+        var output = blip.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "BlipNeuralNetwork output should have elements");
+    }
+
+    [Fact]
+    public void BlipNeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.TwoDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 256,
+            outputSize: 10);
+
+        var blip = new BlipNeuralNetwork<float>(
+            architecture,
+            imageSize: 64,
+            patchSize: 8,
+            embeddingDimension: 64,
+            hiddenDim: 128,
+            numEncoderLayers: 2,
+            numDecoderLayers: 2,
+            numHeads: 4);
+
+        // Act
+        var parameterCount = blip.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"BlipNeuralNetwork parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void Blip2NeuralNetwork_NativeMode_Predict_ProducesOutput()
+    {
+        // Arrange - using native mode constructor (no ONNX files required)
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.TwoDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 256,
+            outputSize: 10);
+
+        var blip2 = new Blip2NeuralNetwork<float>(
+            architecture,
+            imageSize: 56,
+            channels: 3,
+            patchSize: 14,
+            vocabularySize: 1000,
+            maxSequenceLength: 16,
+            embeddingDimension: 64,
+            qformerHiddenDim: 128,
+            visionHiddenDim: 128,
+            lmHiddenDim: 128,
+            numQformerLayers: 2,
+            numQueryTokens: 8,
+            numHeads: 4,
+            numLmDecoderLayers: 2);
+
+        // Use image-like input: [channels, height, width]
+        var input = CreateRandomTensor([3, 56, 56]);
+
+        // Act
+        var output = blip2.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "Blip2NeuralNetwork output should have elements");
+    }
+
+    [Fact]
+    public void Blip2NeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.TwoDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 256,
+            outputSize: 10);
+
+        var blip2 = new Blip2NeuralNetwork<float>(
+            architecture,
+            imageSize: 56,
+            patchSize: 14,
+            embeddingDimension: 64,
+            qformerHiddenDim: 128,
+            numQformerLayers: 2,
+            numQueryTokens: 8,
+            numHeads: 4);
+
+        // Act
+        var parameterCount = blip2.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"Blip2NeuralNetwork parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void FlamingoNeuralNetwork_NativeMode_Predict_ProducesOutput()
+    {
+        // Arrange - using native mode constructor
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.TwoDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 256,
+            outputSize: 10);
+
+        var flamingo = new FlamingoNeuralNetwork<float>(
+            architecture,
+            embeddingDimension: 64,
+            maxSequenceLength: 32,
+            imageSize: 56,
+            channels: 3,
+            numPerceiverTokens: 8,
+            maxImagesInContext: 2,
+            visionHiddenDim: 64,
+            lmHiddenDim: 128,
+            numVisionLayers: 2,
+            numLmLayers: 2,
+            numHeads: 4,
+            vocabularySize: 1000,
+            numPerceiverLayers: 2);
+
+        // Use image-like input
+        var input = CreateRandomTensor([3, 56, 56]);
+
+        // Act
+        var output = flamingo.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "FlamingoNeuralNetwork output should have elements");
+    }
+
+    [Fact]
+    public void FlamingoNeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.TwoDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 256,
+            outputSize: 10);
+
+        var flamingo = new FlamingoNeuralNetwork<float>(
+            architecture,
+            embeddingDimension: 64,
+            imageSize: 56,
+            visionHiddenDim: 64,
+            lmHiddenDim: 128,
+            numVisionLayers: 2,
+            numLmLayers: 2,
+            numHeads: 4);
+
+        // Act
+        var parameterCount = flamingo.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"FlamingoNeuralNetwork parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void LLaVANeuralNetwork_NativeMode_Predict_ProducesOutput()
+    {
+        // Arrange - using native mode constructor
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.TwoDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 256,
+            outputSize: 10);
+
+        var llava = new LLaVANeuralNetwork<float>(
+            architecture,
+            imageSize: 56,
+            channels: 3,
+            patchSize: 14,
+            vocabularySize: 1000,
+            maxSequenceLength: 32,
+            embeddingDimension: 128,
+            visionHiddenDim: 64,
+            numVisionLayers: 2,
+            numLmLayers: 2,
+            numHeads: 4);
+
+        // Use image-like input
+        var input = CreateRandomTensor([3, 56, 56]);
+
+        // Act
+        var output = llava.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "LLaVANeuralNetwork output should have elements");
+    }
+
+    [Fact]
+    public void LLaVANeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.TwoDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 256,
+            outputSize: 10);
+
+        var llava = new LLaVANeuralNetwork<float>(
+            architecture,
+            imageSize: 56,
+            patchSize: 14,
+            embeddingDimension: 128,
+            visionHiddenDim: 64,
+            numVisionLayers: 2,
+            numLmLayers: 2,
+            numHeads: 4);
+
+        // Act
+        var parameterCount = llava.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"LLaVANeuralNetwork parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void ImageBindNeuralNetwork_NativeMode_Predict_ProducesOutput()
+    {
+        // Arrange - using native mode constructor
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.TwoDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 256,
+            outputSize: 10);
+
+        var imageBind = new ImageBindNeuralNetwork<float>(
+            architecture,
+            imageSize: 56,
+            channels: 3,
+            patchSize: 14,
+            vocabularySize: 1000,
+            maxSequenceLength: 16,
+            embeddingDimension: 64,
+            hiddenDim: 128,
+            numEncoderLayers: 2,
+            numHeads: 4,
+            audioSampleRate: 16000,
+            audioMaxDuration: 2,
+            imuTimesteps: 100,
+            numVideoFrames: 2);
+
+        // Use image-like input
+        var input = CreateRandomTensor([3, 56, 56]);
+
+        // Act
+        var output = imageBind.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "ImageBindNeuralNetwork output should have elements");
+    }
+
+    [Fact]
+    public void ImageBindNeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.TwoDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 256,
+            outputSize: 10);
+
+        var imageBind = new ImageBindNeuralNetwork<float>(
+            architecture,
+            imageSize: 56,
+            patchSize: 14,
+            embeddingDimension: 64,
+            hiddenDim: 128,
+            numEncoderLayers: 2,
+            numHeads: 4);
+
+        // Act
+        var parameterCount = imageBind.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"ImageBindNeuralNetwork parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void VideoCLIPNeuralNetwork_NativeMode_Predict_ProducesOutput()
+    {
+        // Arrange - using native mode constructor
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.TwoDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 256,
+            outputSize: 10);
+
+        var videoCLIP = new VideoCLIPNeuralNetwork<float>(
+            architecture,
+            imageSize: 56,
+            channels: 3,
+            patchSize: 14,
+            vocabularySize: 1000,
+            maxSequenceLength: 16,
+            embeddingDimension: 64,
+            visionHiddenDim: 128,
+            textHiddenDim: 64,
+            numFrameEncoderLayers: 2,
+            numTemporalLayers: 2,
+            numTextLayers: 2,
+            numHeads: 4,
+            numFrames: 4,
+            frameRate: 1.0);
+
+        // Use video-like input: [frames, channels, height, width]
+        var input = CreateRandomTensor([4, 3, 56, 56]);
+
+        // Act
+        var output = videoCLIP.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "VideoCLIPNeuralNetwork output should have elements");
+    }
+
+    [Fact]
+    public void VideoCLIPNeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.TwoDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 256,
+            outputSize: 10);
+
+        var videoCLIP = new VideoCLIPNeuralNetwork<float>(
+            architecture,
+            imageSize: 56,
+            patchSize: 14,
+            embeddingDimension: 64,
+            visionHiddenDim: 128,
+            textHiddenDim: 64,
+            numFrameEncoderLayers: 2,
+            numTemporalLayers: 2,
+            numTextLayers: 2,
+            numHeads: 4,
+            numFrames: 4);
+
+        // Act
+        var parameterCount = videoCLIP.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"VideoCLIPNeuralNetwork parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void UnifiedMultimodalNetwork_Predict_ProducesOutput()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.TwoDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 256,
+            outputSize: 10);
+
+        var unified = new UnifiedMultimodalNetwork<float>(
+            architecture,
+            embeddingDimension: 64,
+            maxSequenceLength: 32,
+            numTransformerLayers: 2,
+            seed: 42);
+
+        // Use simple 2D input
+        var input = CreateRandomTensor([1, 64]);
+
+        // Act
+        var output = unified.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "UnifiedMultimodalNetwork output should have elements");
+    }
+
+    [Fact]
+    public void UnifiedMultimodalNetwork_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.TwoDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 256,
+            outputSize: 10);
+
+        var unified = new UnifiedMultimodalNetwork<float>(
+            architecture,
+            embeddingDimension: 64,
+            maxSequenceLength: 32,
+            numTransformerLayers: 2);
+
+        // Act
+        var parameterCount = unified.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"UnifiedMultimodalNetwork parameter count should be > 0, got {parameterCount}");
+    }
+
+    [Fact]
+    public void Gpt4VisionNeuralNetwork_NativeMode_Predict_ProducesOutput()
+    {
+        // Arrange - using native mode constructor with mock tokenizer
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.TwoDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 256,
+            outputSize: 10);
+
+        // Create a simple tokenizer for testing
+        var tokenizer = AiDotNet.Tokenization.ClipTokenizerFactory.CreateSimple();
+
+        var gpt4v = new Gpt4VisionNeuralNetwork<float>(
+            architecture,
+            tokenizer,
+            embeddingDimension: 128,
+            visionEmbeddingDim: 64,
+            maxSequenceLength: 32,
+            contextWindowSize: 256,
+            imageSize: 56,
+            hiddenDim: 128,
+            numVisionLayers: 2,
+            numLanguageLayers: 2,
+            numHeads: 4,
+            patchSize: 14,
+            vocabularySize: 1000,
+            maxImagesPerRequest: 2);
+
+        // Use image-like input
+        var input = CreateRandomTensor([3, 56, 56]);
+
+        // Act
+        var output = gpt4v.Predict(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "Gpt4VisionNeuralNetwork output should have elements");
+    }
+
+    [Fact]
+    public void Gpt4VisionNeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
+    {
+        // Arrange
+        var architecture = new NeuralNetworkArchitecture<float>(
+            InputType.TwoDimensional,
+            NeuralNetworkTaskType.MultiClassClassification,
+            NetworkComplexity.Simple,
+            inputSize: 256,
+            outputSize: 10);
+
+        var tokenizer = AiDotNet.Tokenization.ClipTokenizerFactory.CreateSimple();
+
+        var gpt4v = new Gpt4VisionNeuralNetwork<float>(
+            architecture,
+            tokenizer,
+            embeddingDimension: 128,
+            visionEmbeddingDim: 64,
+            imageSize: 56,
+            hiddenDim: 128,
+            numVisionLayers: 2,
+            numLanguageLayers: 2,
+            numHeads: 4,
+            patchSize: 14);
+
+        // Act
+        var parameterCount = gpt4v.ParameterCount;
+
+        // Assert
+        Assert.True(parameterCount > 0, $"Gpt4VisionNeuralNetwork parameter count should be > 0, got {parameterCount}");
+    }
+
+    #endregion
 }
