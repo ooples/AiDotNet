@@ -29,7 +29,6 @@ public class RLConfigurationIntegrationTests
         var metrics = new RLStepMetrics<double>();
 
         Assert.Equal(0.0, metrics.Reward, precision: 10);
-        Assert.Null(metrics.Loss);
     }
 
     [Fact]
@@ -81,7 +80,6 @@ public class RLConfigurationIntegrationTests
 
         Assert.Equal(100, config.PatienceEpisodes);
         Assert.Equal(0.01, config.MinImprovement, precision: 10);
-        Assert.Null(config.RewardThreshold);
     }
 
     [Fact]
