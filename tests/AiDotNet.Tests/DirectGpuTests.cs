@@ -114,8 +114,8 @@ public class DirectGpuTests
             return;
         }
 
-        // Test different matrix sizes
-        var sizes = new[] { 64, 128, 256, 512, 1024 };
+        // Test different matrix sizes - including large sizes for GPU performance
+        var sizes = new[] { 64, 128, 256, 512, 1024, 2048, 4096 };
 
         foreach (var size in sizes)
         {
@@ -146,7 +146,78 @@ public class DirectGpuTests
             double flops = 2.0 * M * N * K; // Multiply-add = 2 FLOPs per element
             double gflops = (flops / avgMs) * 1e-6; // GFLOPS
 
-            _output.WriteLine($"Size {size}x{size}: {avgMs:F2}ms avg, {gflops:F1} GFLOPS");
+            _output.WriteLine($"Size {size}x{size}: {avgMs:F2}ms avg, {gflops:F1} GFLOPS (includes data transfer)");
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "GPU")]
+    public void DirectGpuEngine_MatMul_Benchmark_KernelOnly()
+    {
+        // This benchmark measures ONLY kernel compute time by:
+        // 1. Uploading data once to GPU
+        // 2. Running GEMM multiple times with data staying on GPU
+        // 3. Downloading result once at the end
+        // This gives true GPU compute performance without PCIe transfer overhead.
+
+        using var engine = new DirectGpuEngine();
+        if (!engine.IsAvailable)
+        {
+            _output.WriteLine("DirectGpu not available - skipping benchmark");
+            return;
+        }
+
+        // Access the backend directly for GPU-resident operations
+        var backend = engine.Backend;
+        if (backend == null)
+        {
+            _output.WriteLine("Backend not available");
+            return;
+        }
+
+        _output.WriteLine($"Testing on: {engine.DeviceName} ({engine.DeviceVendor})");
+        _output.WriteLine($"Compute Units: {engine.ComputeUnits}");
+        _output.WriteLine("");
+        _output.WriteLine("Kernel-Only Performance (no PCIe transfer overhead):");
+
+        var sizes = new[] { 512, 1024, 2048, 4096 };
+
+        foreach (var size in sizes)
+        {
+            int M = size, K = size, N = size;
+            var A = new float[M * K];
+            var B = new float[K * N];
+
+            var rand = new Random(42);
+            for (int i = 0; i < A.Length; i++)
+                A[i] = (float)(rand.NextDouble() * 2 - 1);
+            for (int i = 0; i < B.Length; i++)
+                B[i] = (float)(rand.NextDouble() * 2 - 1);
+
+            // Upload once to GPU
+            using var bufferA = backend.AllocateBuffer(A);
+            using var bufferB = backend.AllocateBuffer(B);
+            using var bufferC = backend.AllocateBuffer(M * N);
+
+            // Warm up kernel (data already on GPU)
+            backend.Gemm(bufferA, bufferB, bufferC, M, N, K);
+            backend.Synchronize();
+
+            // Benchmark kernel only (data stays on GPU)
+            var sw = Stopwatch.StartNew();
+            const int iterations = 20;
+            for (int i = 0; i < iterations; i++)
+            {
+                backend.Gemm(bufferA, bufferB, bufferC, M, N, K);
+            }
+            backend.Synchronize(); // Wait for all kernels to complete
+            sw.Stop();
+
+            double avgMs = sw.Elapsed.TotalMilliseconds / iterations;
+            double flops = 2.0 * M * N * K;
+            double gflops = (flops / avgMs) * 1e-6;
+
+            _output.WriteLine($"Size {size}x{size}: {avgMs:F3}ms avg, {gflops:F1} GFLOPS (kernel only)");
         }
     }
 

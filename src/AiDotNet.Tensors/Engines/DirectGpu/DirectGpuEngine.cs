@@ -56,6 +56,12 @@ public sealed class DirectGpuEngine : IDisposable
     public string DeviceName => _backend?.DeviceName ?? "None";
 
     /// <summary>
+    /// Gets the underlying backend for direct GPU operations.
+    /// Use this for GPU-resident operations to avoid CPU-GPU transfer overhead.
+    /// </summary>
+    public IDirectGpuBackend? Backend => _backend;
+
+    /// <summary>
     /// Gets the GPU vendor.
     /// </summary>
     public string DeviceVendor => _backend?.DeviceVendor ?? "None";
