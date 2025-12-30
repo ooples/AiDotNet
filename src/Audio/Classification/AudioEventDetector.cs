@@ -704,9 +704,9 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
             logMel: true);
 
         // Restore ONNX model if in ONNX inference mode
-        if (!_useNativeMode && !string.IsNullOrEmpty(_options.ModelPath))
+        if (!_useNativeMode && _options.ModelPath is { } onnxModelPath && !string.IsNullOrEmpty(onnxModelPath))
         {
-            OnnxEncoder = new OnnxModel<T>(_options.ModelPath, _options.OnnxOptions);
+            OnnxEncoder = new OnnxModel<T>(onnxModelPath, _options.OnnxOptions);
         }
     }
 
@@ -785,6 +785,8 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
         }
         else
         {
+            // Fallback to rule-based classification when neither ONNX nor native mode is available
+            // This can occur after deserialization if the ONNX model file is missing
             return ClassifyWithRules(melSpec, audio);
         }
     }
