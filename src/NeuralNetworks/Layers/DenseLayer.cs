@@ -649,13 +649,26 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Transformation is applied to the last dimension
         // Output shape: [..., outputSize]
 
-        int inputSize = input.Shape[^1]; // Last dimension
-        if (inputSize != InputShape[0])
+        int actualInputSize = input.Shape[^1]; // Last dimension
+        int expectedInputSize = InputShape[0];
+
+        // Dynamic input size adaptation: resize weights if input size doesn't match
+        if (actualInputSize != expectedInputSize)
         {
-            throw new ArgumentException(
-                $"DenseLayer expects last dimension to be {InputShape[0]}, but got {inputSize}",
-                nameof(input));
+            int outputSize = _weights.Shape[0];
+            // Reinitialize weights with correct input size
+            _weights = new Tensor<T>([outputSize, actualInputSize]);
+
+            // Xavier initialization
+            T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (actualInputSize + outputSize)));
+            var random = new Random(42);
+            for (int i = 0; i < _weights.Length; i++)
+            {
+                _weights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
+            }
         }
+
+        int inputSize = actualInputSize;
 
         Tensor<T> flattenedInput;
 

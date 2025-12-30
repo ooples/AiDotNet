@@ -325,34 +325,55 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         _originalInputShape = input.Shape;
         int rank = input.Shape.Length;
 
-        // PrimaryCapsule expects 4D NHWC input [B, H, W, C], normalize to 4D
+        // PrimaryCapsule needs to handle both NCHW (from ConvolutionalLayer) and NHWC inputs
+        // Detect format: if first dim (for 3D) or second dim (for 4D) matches _inputChannels, it's NCHW
         Tensor<T> processInput;
         int batchSize;
+        bool inputIsNCHW = false;
 
         if (rank < 4)
         {
-            // Add leading dimensions to make 4D
-            // 3D [H, W, C] -> [1, H, W, C]
-            // 2D [W, C] -> [1, 1, W, C]
-            // 1D [C] -> [1, 1, 1, C]
-            var shape4D = new int[4];
-            int offset = 4 - rank;
-            for (int i = 0; i < offset; i++)
-                shape4D[i] = 1;
-            for (int i = 0; i < rank; i++)
-                shape4D[offset + i] = input.Shape[i];
-            processInput = input.Reshape(shape4D);
-            batchSize = shape4D[0];
+            // For 3D input, detect format:
+            // NCHW: [C, H, W] where C == _inputChannels
+            // NHWC: [H, W, C] where C == _inputChannels (last dim)
+            if (rank == 3 && input.Shape[0] == _inputChannels)
+            {
+                // NCHW format: [C, H, W] -> [1, C, H, W]
+                inputIsNCHW = true;
+                processInput = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+                batchSize = 1;
+            }
+            else
+            {
+                // NHWC format: add leading dimensions to make 4D
+                // 3D [H, W, C] -> [1, H, W, C]
+                // 2D [W, C] -> [1, 1, W, C]
+                // 1D [C] -> [1, 1, 1, C]
+                var shape4D = new int[4];
+                int offset = 4 - rank;
+                for (int i = 0; i < offset; i++)
+                    shape4D[i] = 1;
+                for (int i = 0; i < rank; i++)
+                    shape4D[offset + i] = input.Shape[i];
+                processInput = input.Reshape(shape4D);
+                batchSize = shape4D[0];
+            }
         }
         else if (rank == 4)
         {
-            // Standard 4D NHWC
+            // For 4D, detect NCHW vs NHWC by checking which dim matches _inputChannels
+            // NCHW: [B, C, H, W] where C == _inputChannels (dim 1)
+            // NHWC: [B, H, W, C] where C == _inputChannels (dim 3)
+            if (input.Shape[1] == _inputChannels && input.Shape[3] != _inputChannels)
+            {
+                inputIsNCHW = true;
+            }
             batchSize = input.Shape[0];
             processInput = input;
         }
         else
         {
-            // Higher-rank: collapse leading dims into batch
+            // Higher-rank: collapse leading dims into batch, assume NHWC for last 3 dims
             // e.g., 5D [B1, B2, H, W, C] -> [B1*B2, H, W, C]
             int flatBatch = 1;
             for (int d = 0; d < rank - 3; d++)
@@ -365,8 +386,21 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         }
 
         _lastInput = processInput;
-        int inputHeight = processInput.Shape[1];
-        int inputWidth = processInput.Shape[2];
+
+        // Get spatial dimensions based on format
+        int inputHeight, inputWidth;
+        if (inputIsNCHW)
+        {
+            // NCHW: [B, C, H, W]
+            inputHeight = processInput.Shape[2];
+            inputWidth = processInput.Shape[3];
+        }
+        else
+        {
+            // NHWC: [B, H, W, C]
+            inputHeight = processInput.Shape[1];
+            inputWidth = processInput.Shape[2];
+        }
 
         int outputHeight = (inputHeight - _kernelSize) / _stride + 1;
         int outputWidth = (inputWidth - _kernelSize) / _stride + 1;
@@ -375,8 +409,18 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         int outputChannels = _capsuleChannels * _capsuleDimension;
         var kernelNCHW = _convWeights.Reshape([outputChannels, _inputChannels, _kernelSize, _kernelSize]);
 
-        // Convert input to NCHW for Conv2D
-        var inputNCHW = processInput.Transpose([0, 3, 1, 2]);
+        // Convert input to NCHW for Conv2D if needed
+        Tensor<T> inputNCHW;
+        if (inputIsNCHW)
+        {
+            // Already NCHW, no transpose needed
+            inputNCHW = processInput;
+        }
+        else
+        {
+            // Convert from NHWC to NCHW
+            inputNCHW = processInput.Transpose([0, 3, 1, 2]);
+        }
 
         // Convolution
         var convNCHW = Engine.Conv2D(inputNCHW, kernelNCHW, new[] { _stride, _stride }, new[] { 0, 0 }, new[] { 1, 1 });
@@ -389,7 +433,12 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         var convNHWC = convNCHW.Transpose([0, 2, 3, 1]);
         var output = convNHWC.Reshape([batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
 
-        _lastOutput = ApplyActivation(output);
+        // Apply activation (Squash) to each capsule vector
+        // SquashActivation expects 2D input [numCapsules, capsuleDim], so reshape and apply
+        int totalCapsules = batchSize * outputHeight * outputWidth * _capsuleChannels;
+        var flatOutput = output.Reshape([totalCapsules, _capsuleDimension]);
+        var activatedFlat = ApplyActivation(flatOutput);
+        _lastOutput = activatedFlat.Reshape([batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
 
         // Restore output shape to match original input rank
         // Output is 5D [B, OH, OW, capsuleChannels, capsuleDim]

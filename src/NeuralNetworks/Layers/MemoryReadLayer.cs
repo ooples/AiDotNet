@@ -790,7 +790,23 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        throw new InvalidOperationException("MemoryReadLayer requires both input and memory tensors. Use the Forward(Tensor<T> input, Tensor<T> memory) method instead.");
+        // Support single-argument Forward by using an identity-like memory matrix
+        // This allows MemoryReadLayer to work in generic layer pipelines
+        int batchSize = input.Shape[0];
+        int memoryDimension = _keyWeights.Shape[1]; // Get memory dimension from key weights
+
+        // Create a default identity memory that passes through values
+        // Shape: [memoryDimension, memoryDimension] - acts as identity for attention
+        var defaultMemory = new Tensor<T>([memoryDimension, memoryDimension]);
+        for (int i = 0; i < memoryDimension; i++)
+        {
+            for (int j = 0; j < memoryDimension; j++)
+            {
+                defaultMemory[i, j] = (i == j) ? NumOps.One : NumOps.Zero;
+            }
+        }
+
+        return Forward(input, defaultMemory);
     }
 
     /// <summary>

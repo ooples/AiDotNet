@@ -344,30 +344,68 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         _originalInputShape = input.Shape;
         int rank = input.Shape.Length;
 
-        // Handle any-rank tensor: collapse to 2D for processing
+        // Handle any-rank tensor: collapse to 3D [B, I, D_in] for capsule processing
         Tensor<T> processInput;
         int batchSize;
 
         if (rank == 1)
         {
-            // 1D: add batch dim
+            // 1D: [I*D_in] -> [1, I, D_in]
             batchSize = 1;
-            processInput = input.Reshape([1, input.Shape[0]]);
+            processInput = input.Reshape([1, _inputCapsules, _inputCapsuleDimension]);
         }
         else if (rank == 2)
         {
-            // Standard 2D
+            // 2D: could be [I, D_in] or [B, I*D_in]
+            if (input.Shape[0] == _inputCapsules && input.Shape[1] == _inputCapsuleDimension)
+            {
+                // [I, D_in] -> [1, I, D_in]
+                batchSize = 1;
+                processInput = input.Reshape([1, _inputCapsules, _inputCapsuleDimension]);
+            }
+            else
+            {
+                // [B, I*D_in] -> [B, I, D_in]
+                batchSize = input.Shape[0];
+                processInput = input.Reshape([batchSize, _inputCapsules, _inputCapsuleDimension]);
+            }
+        }
+        else if (rank == 3)
+        {
+            // 3D: [B, I, D_in]
             batchSize = input.Shape[0];
             processInput = input;
         }
         else
         {
-            // Higher-rank: collapse leading dims into batch
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 1; d++)
-                flatBatch *= input.Shape[d];
-            batchSize = flatBatch;
-            processInput = input.Reshape([flatBatch, input.Shape[rank - 1]]);
+            // Higher-rank: typically from PrimaryCapsuleLayer [H, W, C, D] or [B, H, W, C, D]
+            // Last dim is capsule dimension, second-to-last is capsule channels
+            // Preceding dims are spatial (H, W) possibly with batch
+            int totalElements = 1;
+            for (int d = 0; d < rank; d++)
+                totalElements *= input.Shape[d];
+
+            // Check if this matches [I, D_in] pattern (no batch)
+            if (totalElements == _inputCapsules * _inputCapsuleDimension)
+            {
+                batchSize = 1;
+                processInput = input.Reshape([1, _inputCapsules, _inputCapsuleDimension]);
+            }
+            else
+            {
+                // Assume first dim is batch, rest collapses to [I, D_in]
+                batchSize = input.Shape[0];
+                int restElements = totalElements / batchSize;
+                if (restElements == _inputCapsules * _inputCapsuleDimension)
+                {
+                    processInput = input.Reshape([batchSize, _inputCapsules, _inputCapsuleDimension]);
+                }
+                else
+                {
+                    throw new ArgumentException(
+                        $"Input shape {string.Join(",", input.Shape)} cannot be reshaped to [B, {_inputCapsules}, {_inputCapsuleDimension}]");
+                }
+            }
         }
 
         _lastInput = processInput;
@@ -376,13 +414,13 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         // This approach keeps all dimensions aligned and avoids BatchMatMul shape issues
 
         // Input: [B, I, D_in] -> expand to [B, I, 1, D_in, 1] for broadcasting
-        var inputExpanded = input.Reshape([batchSize, _inputCapsules, 1, _inputCapsuleDimension, 1]);
+        var inputExpanded = processInput.Reshape([batchSize, _inputCapsules, 1, _inputCapsuleDimension, 1]);
 
         // Weights: [I, C, D_in, D_out] -> expand to [1, I, C, D_in, D_out] for broadcasting
         var weightsExpanded = _weights.Reshape([1, _inputCapsules, _numClasses, _inputCapsuleDimension, _outputCapsuleDimension]);
 
         // Elementwise multiply broadcasts to [B, I, C, D_in, D_out]
-        var multiplied = Engine.TensorMultiply(weightsExpanded, inputExpanded);
+        var multiplied = Engine.TensorBroadcastMultiply(weightsExpanded, inputExpanded);
 
         // Sum over D_in (axis 3) to get predictions: [B, I, C, D_out]
         var predictions = Engine.ReduceSum(multiplied, new[] { 3 }, keepDims: false);
@@ -399,18 +437,21 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
 
             // weightedSum = sum_i routing * predictions
             var routingExpanded = routingWeights.Reshape([batchSize, _inputCapsules, _numClasses, 1]);
-            var weightedPred = Engine.TensorMultiply(predictions, routingExpanded);
+            var weightedPred = Engine.TensorBroadcastMultiply(predictions, routingExpanded);
             var weightedSum = Engine.ReduceSum(weightedPred, new[] { 1 }, keepDims: false); // [B, C, outDim]
 
-            // activation
-            var activated = ApplyActivation(weightedSum);
+            // activation - SquashActivation expects 2D [numCapsules, capsuleDim]
+            // weightedSum is [B, C, outDim], reshape to [B*C, outDim] for activation
+            var flatWeightedSum = weightedSum.Reshape([batchSize * _numClasses, _outputCapsuleDimension]);
+            var flatActivated = ApplyActivation(flatWeightedSum);
+            var activated = flatActivated.Reshape([batchSize, _numClasses, _outputCapsuleDimension]);
             output = activated;
 
             if (iteration < _routingIterations - 1)
             {
                 // couplings += predictions · output
                 var outputExpanded = output.Reshape([batchSize, 1, _numClasses, _outputCapsuleDimension]);
-                var dot = Engine.ReduceSum(Engine.TensorMultiply(predictions, outputExpanded), new[] { 3 }, keepDims: false); // [B,I,C]
+                var dot = Engine.ReduceSum(Engine.TensorBroadcastMultiply(predictions, outputExpanded), new[] { 3 }, keepDims: false); // [B,I,C]
                 couplings = Engine.TensorAdd(couplings, dot);
             }
         }
@@ -418,32 +459,20 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         _lastOutput = output;
         _lastCouplings = couplings;
 
-        // Restore output to match input rank pattern for any-rank tensor support
-        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        // DigitCapsuleLayer outputs [batch, numClasses * outputCapsuleDimension] for compatibility
+        // with downstream layers (like ReconstructionLayer) that expect flattened capsule features
+        // The output is flattened from [batch, numClasses, outputCapsuleDimension] to [batch, numClasses * outputCapsuleDimension]
+        var flattenedOutput = output.Reshape([batchSize, _numClasses * _outputCapsuleDimension]);
+
+        // For single-sample with low-rank input, return appropriate shape
+        if (batchSize == 1 && _originalInputShape != null && _originalInputShape.Length < 3)
         {
-            if (_originalInputShape.Length == 1)
-            {
-                // Was 1D, return [numClasses * outputCapsuleDimension]
-                return output.Reshape([_numClasses * _outputCapsuleDimension]);
-            }
-            else if (_originalInputShape.Length == 2)
-            {
-                // Was 2D [batch, features], return [batch, numClasses * outputCapsuleDimension]
-                int origBatch = _originalInputShape[0];
-                return output.Reshape([origBatch, _numClasses * _outputCapsuleDimension]);
-            }
-            else
-            {
-                // Higher-rank: restore leading dimensions
-                var newShape = new int[_originalInputShape.Length];
-                for (int d = 0; d < _originalInputShape.Length - 1; d++)
-                    newShape[d] = _originalInputShape[d];
-                newShape[_originalInputShape.Length - 1] = _numClasses * _outputCapsuleDimension;
-                return output.Reshape(newShape);
-            }
+            // Single sample with low-rank input: return 1D [numClasses * outputCapsuleDimension]
+            return flattenedOutput.Reshape([_numClasses * _outputCapsuleDimension]);
         }
 
-        return output;
+        // Standard 2D output [batch, numClasses * outputCapsuleDimension]
+        return flattenedOutput;
     }
 
     /// <summary>

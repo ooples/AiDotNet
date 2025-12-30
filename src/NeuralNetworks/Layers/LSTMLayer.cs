@@ -833,9 +833,12 @@ public class LSTMLayer<T> : LayerBase<T>
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
 
-        // Scale by the scale factor and copy to weight tensor
+        // Scale by the scale factor and copy to weight tensor using flat indexer
         var scaled = Engine.TensorMultiplyScalar(shifted, scale);
-        Array.Copy(scaled.ToArray(), weight.ToArray(), weight.Length);
+        for (int i = 0; i < weight.Length; i++)
+        {
+            weight[i] = scaled[i];
+        }
     }
 
     /// <summary>
@@ -901,10 +904,13 @@ public class LSTMLayer<T> : LayerBase<T>
 
         if (rank == 2)
         {
-            // 2D input [timeSteps, inputSize] -> add batch dim
+            // 2D input for LSTM is always interpreted as [timeSteps, features] with batchSize=1
+            // This is the standard sequence format for LSTM processing.
+            // If users want batch processing, they should provide 3D input [batchSize, timeSteps, features]
             batchSize = 1;
             timeSteps = input.Shape[0];
-            input3D = input.Reshape([1, timeSteps, _inputSize]);
+            int featureSize = input.Shape[1];
+            input3D = input.Reshape([1, timeSteps, featureSize]);
         }
         else if (rank == 3)
         {

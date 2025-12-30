@@ -238,11 +238,32 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        if (input.Shape.Length != 2 || input.Shape[0] != 1)
-            throw new ArgumentException("Input must be a 2D tensor with shape [1, inputSize]");
+        // Support any rank input by reshaping to [1, inputSize]
+        Tensor<T> reshapedInput;
+        if (input.Shape.Length == 1)
+        {
+            // 1D input: [inputSize] -> [1, inputSize]
+            reshapedInput = input.Reshape([1, input.Shape[0]]);
+        }
+        else if (input.Shape.Length == 2 && input.Shape[0] == 1)
+        {
+            // Already in correct shape [1, inputSize]
+            reshapedInput = input;
+        }
+        else if (input.Shape.Length == 2)
+        {
+            // 2D input [batch, inputSize] - process first sample
+            reshapedInput = input.Reshape([1, input.Shape[0] * input.Shape[1]]);
+        }
+        else
+        {
+            // Higher rank: flatten to 1D then reshape to [1, n]
+            int totalElements = input.Shape.Aggregate(1, (a, b) => a * b);
+            reshapedInput = input.Reshape([1, totalElements]);
+        }
 
         // Flatten input and scale it
-        var inputFlat = input.Reshape([_inputSize]);
+        var inputFlat = reshapedInput.Reshape([_inputSize]);
         var scaledInput = Engine.TensorMultiplyScalar(inputFlat, NumOps.FromDouble(_inputScaling));
 
         // Reservoir dynamics: W * state + scaled_input

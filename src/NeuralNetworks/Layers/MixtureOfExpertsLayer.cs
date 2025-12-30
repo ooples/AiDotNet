@@ -1349,14 +1349,14 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private Tensor<T> ApplySoftmax(Tensor<T> logits)
     {
-        // Fully vectorized softmax using tensor operations
+        // Fully vectorized softmax using tensor operations with broadcasting
         // logits shape: [batchSize, numExperts]
 
         // Step 1: Find max per row for numerical stability (axis=1)
         var maxPerRow = Engine.ReduceMax(logits, new[] { 1 }, keepDims: true, out _); // [batchSize, 1]
 
         // Step 2: Subtract max for numerical stability - use broadcasting
-        var shiftedLogits = Engine.TensorSubtract<T>(logits, maxPerRow); // [batchSize, numExperts]
+        var shiftedLogits = Engine.TensorBroadcastSubtract<T>(logits, maxPerRow); // [batchSize, numExperts]
 
         // Step 3: Apply exp element-wise
         var expValues = Engine.TensorExp(shiftedLogits); // [batchSize, numExperts]
@@ -1365,7 +1365,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var expSum = Engine.ReduceSum(expValues, new[] { 1 }, keepDims: true); // [batchSize, 1]
 
         // Step 5: Normalize - divide each row by its sum (with broadcasting)
-        var softmax = Engine.TensorDivide<T>(expValues, expSum); // [batchSize, numExperts]
+        var softmax = Engine.TensorBroadcastDivide<T>(expValues, expSum); // [batchSize, numExperts]
 
         return softmax;
     }
@@ -1414,8 +1414,8 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // VECTORIZED: Compute row sums for normalization
         var sumPerRow = Engine.ReduceSum(topKValues, new[] { 1 }, keepDims: true); // [batchSize, 1]
 
-        // VECTORIZED: Normalize top-k values
-        var normalizedTopK = Engine.TensorDivide(topKValues, sumPerRow); // [batchSize, k]
+        // VECTORIZED: Normalize top-k values (with broadcasting for shape [batchSize, k] / [batchSize, 1])
+        var normalizedTopK = Engine.TensorBroadcastDivide(topKValues, sumPerRow); // [batchSize, k]
 
         // VECTORIZED: Scatter normalized values back to full expert dimension
         // Create zero tensor for sparse weights
@@ -1492,10 +1492,10 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             var weightColumn = Engine.TensorSlice(routingWeights, new[] { 0, i }, new[] { routingWeights.Shape[0], 1 });
 
             // Multiply expert output by weight (broadcasts across output dimensions)
-            var weightedOutput = Engine.TensorMultiply(expertOutput, weightColumn);
+            var weightedOutput = Engine.TensorBroadcastMultiply(expertOutput, weightColumn);
 
             // Accumulate
-            combined = Engine.TensorAdd(combined, weightedOutput);
+            combined = Engine.TensorBroadcastAdd(combined, weightedOutput);
         }
 
         return combined;
@@ -1566,7 +1566,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             if (expertOutput.Shape.Length == 2)
             {
                 // Element-wise multiply outputGradient with expertOutput, then sum over output dim
-                var product = Engine.TensorMultiply(outputGradient, expertOutput);
+                var product = Engine.TensorBroadcastMultiply(outputGradient, expertOutput);
                 var summed = Engine.ReduceSum(product, new[] { 1 }, keepDims: false); // [batchSize]
 
                 // Store in weightGradients column
@@ -1615,7 +1615,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Multiply gradient by weight (broadcasts across output dimensions)
         // outputGradient shape: [batchSize, outputDim]
         // weightColumn shape: [batchSize, 1] -> broadcasts to [batchSize, outputDim]
-        var weightedGradient = Engine.TensorMultiply(outputGradient, weightColumn);
+        var weightedGradient = Engine.TensorBroadcastMultiply(outputGradient, weightColumn);
 
         return weightedGradient;
     }

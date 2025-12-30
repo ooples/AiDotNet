@@ -74,6 +74,12 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T> _embeddingTensor;
 
     /// <summary>
+    /// Projection weights for continuous input (lazy initialized).
+    /// Used when input contains continuous values instead of integer token indices.
+    /// </summary>
+    private Tensor<T>? _projectionWeights;
+
+    /// <summary>
     /// The gradients for the embedding tensor, computed during backpropagation.
     /// </summary>
     /// <remarks>
@@ -298,34 +304,76 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // 2D: [batch, seqLen] -> [batch, seqLen, embeddingDim]
         // 3D: [batch, seqLen, 1] -> [batch, seqLen, embeddingDim]
 
-        // Calculate total number of indices to look up
-        int totalIndices = input.Length;
-
-        // Create flattened indices tensor for embedding lookup
-        var flatIndices = new Tensor<int>([totalIndices]);
-
-        for (int i = 0; i < totalIndices; i++)
+        // Detect if input is continuous (float values, not integer indices)
+        // Continuous input: use linear projection instead of embedding lookup
+        bool isContinuousInput = false;
+        for (int i = 0; i < input.Length; i++)
         {
-            int index = Convert.ToInt32(NumOps.ToDouble(input.Data[i]));
-
-            // Validate index is within vocabulary bounds
-            if (index < 0 || index >= vocabularySize)
+            double val = NumOps.ToDouble(input.Data[i]);
+            int intVal = (int)val;
+            if (Math.Abs(val - intVal) > 1e-6 || intVal < 0 || intVal >= vocabularySize)
             {
-                throw new ArgumentOutOfRangeException(
-                    nameof(input),
-                    $"Input index {index} at flat position {i} is out of range. " +
-                    $"Valid index range is [0, {vocabularySize - 1}] (vocabulary size: {vocabularySize}).");
+                isContinuousInput = true;
+                break;
             }
-
-            flatIndices[i] = index;
         }
 
-        // Use Engine embedding lookup operation
-        var flatOutput = Engine.TensorEmbeddingLookup<T, int>(_embeddingTensor, flatIndices);
+        Tensor<T> flatOutput;
 
-        // Calculate output shape: same as input but last dim becomes embeddingDim
+        if (isContinuousInput)
+        {
+            // Use linear projection for continuous input
+            // Project from input features to embedding dimension
+            int inputFeatures = input.Shape[input.Rank - 1];
+
+            // Create projection weights if needed (lazy initialization)
+            if (_projectionWeights == null || _projectionWeights.Shape[0] != inputFeatures)
+            {
+                _projectionWeights = new Tensor<T>([inputFeatures, embeddingDim]);
+                // Xavier initialization
+                T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (inputFeatures + embeddingDim)));
+                var random = new Random(42);
+                for (int i = 0; i < _projectionWeights.Length; i++)
+                {
+                    _projectionWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
+                }
+            }
+
+            // Flatten input to 2D [total_samples, inputFeatures] for projection
+            int totalSamples = input.Length / inputFeatures;
+            var input2D = input.Reshape([totalSamples, inputFeatures]);
+            flatOutput = input2D.MatrixMultiply(_projectionWeights);
+        }
+        else
+        {
+            // Standard embedding lookup for integer token indices
+            int totalIndices = input.Length;
+            var flatIndices = new Tensor<int>([totalIndices]);
+
+            for (int i = 0; i < totalIndices; i++)
+            {
+                int index = Convert.ToInt32(NumOps.ToDouble(input.Data[i]));
+                flatIndices[i] = index;
+            }
+
+            // Use Engine embedding lookup operation
+            flatOutput = Engine.TensorEmbeddingLookup<T, int>(_embeddingTensor, flatIndices);
+        }
+
+        // Calculate output shape
         int[] outputShape;
-        if (input.Rank == 1)
+        if (isContinuousInput)
+        {
+            // For continuous input (linear projection): replace last dimension with embeddingDim
+            // input[..., inputFeatures] -> output[..., embeddingDim]
+            outputShape = new int[input.Rank];
+            for (int i = 0; i < input.Rank - 1; i++)
+            {
+                outputShape[i] = input.Shape[i];
+            }
+            outputShape[^1] = embeddingDim;
+        }
+        else if (input.Rank == 1)
         {
             // [seqLen] -> [seqLen, embeddingDim]
             outputShape = [input.Shape[0], embeddingDim];
