@@ -154,11 +154,27 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         _videoEncoder = new DenseLayer<T>(1024, _embeddingDimension, geluActivation);
 
         // Unified transformer layers
+        // Parameters: (sequenceLength, embeddingDimension, headCount, activation)
+        // Use headCount that divides embeddingDimension evenly
+        int headCount = Math.Max(1, _embeddingDimension / 64); // At least 1 head, typically 8 for 512-dim
+        if (_embeddingDimension % headCount != 0)
+        {
+            // Find largest divisor <= 8
+            for (int h = 8; h >= 1; h--)
+            {
+                if (_embeddingDimension % h == 0)
+                {
+                    headCount = h;
+                    break;
+                }
+            }
+        }
+
         _transformerLayers = new MultiHeadAttentionLayer<T>[_numTransformerLayers];
         for (int i = 0; i < _numTransformerLayers; i++)
         {
             _transformerLayers[i] = new MultiHeadAttentionLayer<T>(
-                _embeddingDimension, 12, _embeddingDimension / 12, geluActivation);
+                1, _embeddingDimension, headCount, geluActivation);
         }
 
         // Cross-modal attention
@@ -166,7 +182,7 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         for (int i = 0; i < 4; i++)
         {
             _crossModalAttention[i] = new MultiHeadAttentionLayer<T>(
-                _embeddingDimension, 8, _embeddingDimension / 8, geluActivation);
+                1, _embeddingDimension, headCount, geluActivation);
         }
 
         // Modality decoders

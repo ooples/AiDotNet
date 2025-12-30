@@ -1069,6 +1069,77 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     #region NeuralNetworkBase Implementation
 
     /// <inheritdoc/>
+    public override int ParameterCount
+    {
+        get
+        {
+            if (!_useNativeMode)
+            {
+                return 0;
+            }
+
+            int count = 0;
+
+            // Vision encoder layers
+            foreach (var layer in _visionEncoderLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            // Projection layers
+            foreach (var layer in _projectionLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            // Language model layers
+            foreach (var layer in _languageModelLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            // Single layers
+            if (_patchEmbedding is not null)
+            {
+                count += _patchEmbedding.ParameterCount;
+            }
+
+            if (_textTokenEmbedding is not null)
+            {
+                count += _textTokenEmbedding.ParameterCount;
+            }
+
+            if (_outputProjection is not null)
+            {
+                count += _outputProjection.ParameterCount;
+            }
+
+            if (_groundingHead is not null)
+            {
+                count += _groundingHead.ParameterCount;
+            }
+
+            // Positional embeddings
+            if (_visionClsToken is not null)
+            {
+                count += _visionClsToken.Rows * _visionClsToken.Columns;
+            }
+
+            if (_visionPositionalEmbeddings is not null)
+            {
+                count += _visionPositionalEmbeddings.Rows * _visionPositionalEmbeddings.Columns;
+            }
+
+            if (_textPositionalEmbeddings is not null)
+            {
+                count += _textPositionalEmbeddings.Rows * _textPositionalEmbeddings.Columns;
+            }
+
+            return count;
+        }
+    }
+
+    /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         SetTrainingMode(false);

@@ -301,9 +301,13 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
         _textProjection = new DenseLayer<T>(_hiddenDim, _embeddingDimension, (IActivationFunction<T>?)null);
 
         // Audio encoder (processes mel spectrogram)
+        int audioPatchSize = 16;
         int audioSeqLen = (_audioSampleRate * _audioMaxDuration) / 160; // hop length 160
-        _audioConv = new PatchEmbeddingLayer<T>(128, audioSeqLen, 1, 16, _hiddenDim); // mel bins as "height"
-        _audioPositionalEmbeddings = Matrix<T>.CreateDefault(audioSeqLen / 16 + 1, _hiddenDim, NumOps.Zero);
+        // Ensure audioSeqLen is divisible by patch size
+        audioSeqLen = (audioSeqLen / audioPatchSize) * audioPatchSize;
+        if (audioSeqLen < audioPatchSize) audioSeqLen = audioPatchSize; // minimum one patch
+        _audioConv = new PatchEmbeddingLayer<T>(128, audioSeqLen, 1, audioPatchSize, _hiddenDim); // mel bins as "height"
+        _audioPositionalEmbeddings = Matrix<T>.CreateDefault(audioSeqLen / audioPatchSize + 1, _hiddenDim, NumOps.Zero);
 
         for (int i = 0; i < _numEncoderLayers; i++)
         {
@@ -1358,6 +1362,91 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
     #endregion
 
     #region NeuralNetworkBase Implementation
+
+    /// <inheritdoc/>
+    public override int ParameterCount
+    {
+        get
+        {
+            if (!_useNativeMode)
+            {
+                return 0;
+            }
+
+            int count = 0;
+
+            // Image encoder layers
+            foreach (var layer in _imageEncoderLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            // Text encoder layers
+            foreach (var layer in _textEncoderLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            // Audio encoder layers
+            foreach (var layer in _audioEncoderLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            // Thermal encoder layers
+            foreach (var layer in _thermalEncoderLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            // Depth encoder layers
+            foreach (var layer in _depthEncoderLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            // IMU encoder layers
+            foreach (var layer in _imuEncoderLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            // Video temporal layers
+            foreach (var layer in _videoTemporalLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            // Single layers
+            if (_imagePatchEmbedding is not null) count += _imagePatchEmbedding.ParameterCount;
+            if (_imageProjection is not null) count += _imageProjection.ParameterCount;
+            if (_textTokenEmbedding is not null) count += _textTokenEmbedding.ParameterCount;
+            if (_textProjection is not null) count += _textProjection.ParameterCount;
+            if (_audioConv is not null) count += _audioConv.ParameterCount;
+            if (_audioProjection is not null) count += _audioProjection.ParameterCount;
+            if (_thermalPatchEmbedding is not null) count += _thermalPatchEmbedding.ParameterCount;
+            if (_thermalProjection is not null) count += _thermalProjection.ParameterCount;
+            if (_depthPatchEmbedding is not null) count += _depthPatchEmbedding.ParameterCount;
+            if (_depthProjection is not null) count += _depthProjection.ParameterCount;
+            if (_imuEmbedding is not null) count += _imuEmbedding.ParameterCount;
+            if (_imuProjection is not null) count += _imuProjection.ParameterCount;
+            if (_videoProjection is not null) count += _videoProjection.ParameterCount;
+
+            // Positional embeddings and CLS tokens
+            if (_imageClsToken is not null) count += _imageClsToken.Rows * _imageClsToken.Columns;
+            if (_imagePositionalEmbeddings is not null) count += _imagePositionalEmbeddings.Rows * _imagePositionalEmbeddings.Columns;
+            if (_textPositionalEmbeddings is not null) count += _textPositionalEmbeddings.Rows * _textPositionalEmbeddings.Columns;
+            if (_audioPositionalEmbeddings is not null) count += _audioPositionalEmbeddings.Rows * _audioPositionalEmbeddings.Columns;
+            if (_thermalClsToken is not null) count += _thermalClsToken.Rows * _thermalClsToken.Columns;
+            if (_thermalPositionalEmbeddings is not null) count += _thermalPositionalEmbeddings.Rows * _thermalPositionalEmbeddings.Columns;
+            if (_depthClsToken is not null) count += _depthClsToken.Rows * _depthClsToken.Columns;
+            if (_depthPositionalEmbeddings is not null) count += _depthPositionalEmbeddings.Rows * _depthPositionalEmbeddings.Columns;
+            if (_imuPositionalEmbeddings is not null) count += _imuPositionalEmbeddings.Rows * _imuPositionalEmbeddings.Columns;
+            if (_videoTemporalPositionalEmbeddings is not null) count += _videoTemporalPositionalEmbeddings.Rows * _videoTemporalPositionalEmbeddings.Columns;
+
+            return count;
+        }
+    }
 
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)

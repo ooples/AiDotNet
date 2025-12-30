@@ -1405,7 +1405,45 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     public override Tensor<T> Predict(Tensor<T> input)
     {
         SetTrainingMode(false);
-        var frames = new List<Tensor<T>> { input };
+
+        // Parse input based on rank
+        var frames = new List<Tensor<T>>();
+
+        if (input.Shape.Length == 4)
+        {
+            // Input is [numFrames, channels, height, width] - split into individual frames
+            int numFrames = input.Shape[0];
+            int channels = input.Shape[1];
+            int height = input.Shape[2];
+            int width = input.Shape[3];
+
+            for (int f = 0; f < numFrames; f++)
+            {
+                var frame = Tensor<T>.CreateDefault([channels, height, width], NumOps.Zero);
+                for (int c = 0; c < channels; c++)
+                {
+                    for (int h = 0; h < height; h++)
+                    {
+                        for (int w = 0; w < width; w++)
+                        {
+                            frame[c, h, w] = input[f, c, h, w];
+                        }
+                    }
+                }
+                frames.Add(frame);
+            }
+        }
+        else if (input.Shape.Length == 3)
+        {
+            // Input is [channels, height, width] - treat as single frame
+            frames.Add(input);
+        }
+        else
+        {
+            // Fallback for other shapes
+            frames.Add(input);
+        }
+
         var embedding = GetVideoEmbedding(frames);
         var result = Tensor<T>.CreateDefault([1, embedding.Length], NumOps.Zero);
         for (int i = 0; i < embedding.Length; i++)
@@ -1447,7 +1485,44 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     {
         SetTrainingMode(true);
 
-        var frames = new List<Tensor<T>> { input };
+        // Parse input based on rank
+        var frames = new List<Tensor<T>>();
+
+        if (input.Shape.Length == 4)
+        {
+            // Input is [numFrames, channels, height, width] - split into individual frames
+            int numFrames = input.Shape[0];
+            int channels = input.Shape[1];
+            int height = input.Shape[2];
+            int width = input.Shape[3];
+
+            for (int f = 0; f < numFrames; f++)
+            {
+                var frame = Tensor<T>.CreateDefault([channels, height, width], NumOps.Zero);
+                for (int c = 0; c < channels; c++)
+                {
+                    for (int h = 0; h < height; h++)
+                    {
+                        for (int w = 0; w < width; w++)
+                        {
+                            frame[c, h, w] = input[f, c, h, w];
+                        }
+                    }
+                }
+                frames.Add(frame);
+            }
+        }
+        else if (input.Shape.Length == 3)
+        {
+            // Input is [channels, height, width] - treat as single frame
+            frames.Add(input);
+        }
+        else
+        {
+            // Fallback for other shapes
+            frames.Add(input);
+        }
+
         var embedding = GetVideoEmbedding(frames);
         var embeddingTensor = Tensor<T>.CreateDefault([1, embedding.Length], NumOps.Zero);
         for (int i = 0; i < embedding.Length; i++)
@@ -1502,6 +1577,41 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             }
         }
         return offset;
+    }
+
+    /// <inheritdoc/>
+    public override int ParameterCount
+    {
+        get
+        {
+            if (!_useNativeMode)
+            {
+                return 0; // ONNX mode doesn't expose parameters
+            }
+
+            int count = 0;
+
+            // Layer lists
+            foreach (var layer in _frameEncoderLayers) count += layer.ParameterCount;
+            foreach (var layer in _temporalEncoderLayers) count += layer.ParameterCount;
+            foreach (var layer in _textEncoderLayers) count += layer.ParameterCount;
+            foreach (var layer in _projectionLayers) count += layer.ParameterCount;
+
+            // Single layers
+            if (_patchEmbedding is not null) count += _patchEmbedding.ParameterCount;
+            if (_textTokenEmbedding is not null) count += _textTokenEmbedding.ParameterCount;
+            if (_videoProjection is not null) count += _videoProjection.ParameterCount;
+            if (_textProjection is not null) count += _textProjection.ParameterCount;
+            if (_captionHead is not null) count += _captionHead.ParameterCount;
+
+            // Positional embeddings and CLS tokens (these are also parameters)
+            if (_visionClsToken is not null) count += _visionClsToken.Rows * _visionClsToken.Columns;
+            if (_visionPositionalEmbeddings is not null) count += _visionPositionalEmbeddings.Rows * _visionPositionalEmbeddings.Columns;
+            if (_temporalPositionalEmbeddings is not null) count += _temporalPositionalEmbeddings.Rows * _temporalPositionalEmbeddings.Columns;
+            if (_textPositionalEmbeddings is not null) count += _textPositionalEmbeddings.Rows * _textPositionalEmbeddings.Columns;
+
+            return count;
+        }
     }
 
     /// <inheritdoc/>

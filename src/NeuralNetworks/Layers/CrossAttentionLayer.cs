@@ -210,14 +210,30 @@ public class CrossAttentionLayer<T> : LayerBase<T>
             query = query.Reshape(new[] { flatBatch, queryLen, _queryDim });
         }
 
-        // Handle context shape
-        int contextLen = contextShape.Length >= 2 ? contextShape[1] : 1;
-        int contextDimActual = contextShape.Length >= 3 ? contextShape[2] : contextShape[1];
+        // Handle context shape - for 2D [seqLen, dim], for 3D [batch, seqLen, dim]
+        int contextLen;
+        int contextDimActual;
 
-        // Ensure context is 3D
         if (contextShape.Length == 2)
         {
-            context = context.Reshape(new[] { batch, contextLen, contextDimActual });
+            // 2D: [seqLen, dim]
+            contextLen = contextShape[0];
+            contextDimActual = contextShape[1];
+            // Add batch dimension of 1, not 'batch' from query (they may differ)
+            context = context.Reshape(new[] { 1, contextLen, contextDimActual });
+        }
+        else if (contextShape.Length >= 3)
+        {
+            // 3D: [batch, seqLen, dim]
+            contextLen = contextShape[1];
+            contextDimActual = contextShape[2];
+        }
+        else
+        {
+            // Fallback for 1D
+            contextLen = 1;
+            contextDimActual = contextShape[0];
+            context = context.Reshape(new[] { 1, 1, contextDimActual });
         }
 
         _lastQuery = query;
