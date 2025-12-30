@@ -19,12 +19,21 @@ public readonly struct GemmConfig
     public int TileK { get; init; }
     public int ThreadTileM { get; init; }
     public int ThreadTileN { get; init; }
+    public int VectorWidthM { get; init; }
+    public int VectorWidthN { get; init; }
     public bool UseDoubleBuffering { get; init; }
     public bool UseVectorizedLoads { get; init; }
     public string KernelName { get; init; }
 
+    /// <summary>
+    /// Generates a unique cache key for this configuration.
+    /// Used by DynamicGemmKernel to cache compiled kernels.
+    /// </summary>
+    public string ToKey() =>
+        $"{TileM}_{TileN}_{TileK}_{ThreadTileM}_{ThreadTileN}_{VectorWidthM}_{VectorWidthN}_{UseDoubleBuffering}_{UseVectorizedLoads}";
+
     public override string ToString() =>
-        $"{KernelName}[{TileM}x{TileN}x{TileK}, TT:{ThreadTileM}x{ThreadTileN}, DB:{UseDoubleBuffering}, VL:{UseVectorizedLoads}]";
+        $"{KernelName}[{TileM}x{TileN}x{TileK}, TT:{ThreadTileM}x{ThreadTileN}, VW:{VectorWidthM}x{VectorWidthN}, DB:{UseDoubleBuffering}, VL:{UseVectorizedLoads}]";
 }
 
 /// <summary>
@@ -235,9 +244,7 @@ public sealed class GemmAutoTuner
         int benchmarkRuns = 3,
         int? seed = null)
     {
-        var bayesian = new GemmBayesianTuner(seed);
-        var allConfigs = GenerateConfigurationSpace(M, N, K, capabilities);
-
+        var allConfigs = GenerateConfigurationSpace(M, N, K, capabilities); var bayesian = new GemmFeatureBayesianTuner(allConfigs, seed);
         if (allConfigs.Length <= initialRandomSamples)
         {
             // Configuration space is small, just do exhaustive search

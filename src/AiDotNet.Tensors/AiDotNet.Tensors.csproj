@@ -63,6 +63,11 @@
     <PackageReference Include="ILGPU.Algorithms" Version="1.5.3" />
   </ItemGroup>
 
+  <!-- CLBlast native library for optimized OpenCL BLAS operations -->
+  <ItemGroup>
+    <ProjectReference Include="..\AiDotNet.Native.CLBlast\AiDotNet.Native.CLBlast.csproj" />
+  </ItemGroup>
+
   <!-- Exclude files that require .NET Core intrinsics from .NET Framework builds -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net471'">
     <Compile Remove="Helpers\SimdVector.cs" />

@@ -1327,7 +1327,15 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             using var bufB = AllocateBuffer(dataB);
             using var bufC = AllocateBuffer(M * N);
 
+            using var database = new GemmTuningDatabase();
             var tuner = new GemmAutoTuner();
+
+            // Check for cached result first
+            var cachedConfig = database.GetBestConfig(M, N, K);
+            if (cachedConfig.HasValue)
+            {
+                Console.WriteLine($"Using cached configuration: {cachedConfig.Value}");
+            }
 
             double BenchmarkConfig(GemmConfig config)
             {
@@ -1355,6 +1363,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             {
                 var best = results[0];
                 Console.WriteLine($"Best: {best.Config} - {best.GFlops:F2} GFLOPS");
+                database.StoreResult(M, N, K, best.Config, best.GFlops);
             }
 
             return results;
