@@ -61,7 +61,7 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
     private readonly AudioEventDetectorOptions _options;
     private MelSpectrogram<T>? _melSpectrogram;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
     private bool _disposed;
 
     /// <summary>
@@ -645,6 +645,10 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
     /// </summary>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
+        // Write ONNX mode state
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+
         // Write options
         writer.Write(_options.SampleRate);
         writer.Write(_options.NumMels);
@@ -664,6 +668,14 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
     /// </summary>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
+        // Restore ONNX mode state
+        _useNativeMode = reader.ReadBoolean();
+        string modelPath = reader.ReadString();
+        if (!string.IsNullOrEmpty(modelPath))
+        {
+            _options.ModelPath = modelPath;
+        }
+
         // Restore options properties
         _options.SampleRate = reader.ReadInt32();
         _options.NumMels = reader.ReadInt32();
@@ -690,6 +702,12 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
             fMin: _options.FMin,
             fMax: _options.FMax,
             logMel: true);
+
+        // Restore ONNX model if in ONNX inference mode
+        if (!_useNativeMode && !string.IsNullOrEmpty(_options.ModelPath))
+        {
+            OnnxEncoder = new OnnxModel<T>(_options.ModelPath, _options.OnnxOptions);
+        }
     }
 
     /// <summary>

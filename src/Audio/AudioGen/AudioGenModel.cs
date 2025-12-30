@@ -495,6 +495,12 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             throw new ArgumentOutOfRangeException(nameof(maxDurationSeconds), "MaxDurationSeconds must be positive.");
         if (durationSeconds > maxDurationSeconds)
             throw new ArgumentOutOfRangeException(nameof(durationSeconds), "DurationSeconds cannot exceed MaxDurationSeconds.");
+        if (numCodebooks <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numCodebooks), "NumCodebooks must be positive.");
+        if (codebookSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(codebookSize), "CodebookSize must be positive.");
+        if (maxTextLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxTextLength), "MaxTextLength must be positive.");
 
         _useNativeMode = true;
         _modelSize = modelSize;
