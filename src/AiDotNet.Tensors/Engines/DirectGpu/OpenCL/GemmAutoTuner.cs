@@ -822,6 +822,86 @@ public sealed class GemmAutoTuner
             KernelName = "simple_vec_32x128_v4"
         });
 
+        // ============================================================
+        // OPTIMIZED CONFIGS BASED ON CLBLAST ANALYSIS
+        // Key findings from CLBlast source analysis:
+        // 1. STRM/STRN for bank conflict avoidance
+        // 2. Double-buffering requires MWI*NWI <= 16
+        // 3. KREG=2 with proper K unrolling
+        // ============================================================
+
+        // Best config WITH STRM/STRN stride patterns (bank conflict avoidance)
+        configs.Add(new GemmConfig
+        {
+            TileM = 64, TileN = 128, TileK = 16,
+            ThreadTileM = 8, ThreadTileN = 16,   // MWI=8, NWI=8
+            VectorWidthM = 2, VectorWidthN = 2,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
+            StrideM = true, StrideN = true,      // STRM=1, STRN=1 for bank conflict avoidance!
+            CacheA = true, CacheB = true,
+            KernelName = "vec_64x128_stride"
+        });
+
+        // 32x128 with STRM/STRN
+        configs.Add(new GemmConfig
+        {
+            TileM = 32, TileN = 128, TileK = 8,
+            ThreadTileM = 8, ThreadTileN = 16,   // MWI=4, NWI=8
+            VectorWidthM = 2, VectorWidthN = 4,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
+            StrideM = true, StrideN = true,
+            KernelName = "vec_32x128_stride"
+        });
+
+        // HIGH-OCCUPANCY with TRUE DOUBLE-BUFFERING (MWI*NWI=16 triggers ping-pong!)
+        configs.Add(new GemmConfig
+        {
+            TileM = 64, TileN = 64, TileK = 16,
+            ThreadTileM = 16, ThreadTileN = 16,  // MWI=4, NWI=4 → 16 outputs/thread
+            VectorWidthM = 2, VectorWidthN = 2,
+            UseDoubleBuffering = true, UseVectorizedLoads = true,  // TRIGGERS PING-PONG!
+            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
+            StrideM = true, StrideN = true,
+            KernelName = "double_buf_64x64_4x4"
+        });
+
+        // Even smaller tile for maximum double-buffering efficiency
+        configs.Add(new GemmConfig
+        {
+            TileM = 32, TileN = 64, TileK = 16,
+            ThreadTileM = 8, ThreadTileN = 16,   // MWI=4, NWI=4 → 16 outputs/thread
+            VectorWidthM = 2, VectorWidthN = 2,
+            UseDoubleBuffering = true, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
+            KernelName = "double_buf_32x64"
+        });
+
+        // KREG=2 variant to test register tiling
+        configs.Add(new GemmConfig
+        {
+            TileM = 64, TileN = 128, TileK = 16,
+            ThreadTileM = 8, ThreadTileN = 16,   // MWI=8, NWI=8
+            VectorWidthM = 2, VectorWidthN = 2,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 2, KUnroll = 4, UseSubgroupOps = false,  // KREG=2!
+            StrideM = true, StrideN = true,
+            KernelName = "vec_64x128_kreg2"
+        });
+
+        // CLBlast AMD pattern: MWG>NWG, VWM=4
+        configs.Add(new GemmConfig
+        {
+            TileM = 128, TileN = 64, TileK = 16,
+            ThreadTileM = 16, ThreadTileN = 8,   // MWI=8, NWI=8
+            VectorWidthM = 4, VectorWidthN = 2,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 4, UseSubgroupOps = false,
+            StrideM = true, StrideN = false,
+            KernelName = "amd_128x64_v4x2"
+        });
+
         // Float4 vectorized WITHOUT KREG
         configs.Add(new GemmConfig
         {
