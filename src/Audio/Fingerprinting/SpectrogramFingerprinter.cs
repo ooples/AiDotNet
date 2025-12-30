@@ -147,7 +147,7 @@ public class SpectrogramFingerprinter<T> : AudioFingerprinterBase<T>
 
         // Keep only the strongest peaks per time window
         var filteredPeaks = new List<SpectralPeak>();
-        int windowSize = _options.PeaksPerSecond;
+        int windowSize = _options.PeakWindowSizeFrames;
 
         for (int start = 0; start < numFrames; start += windowSize)
         {

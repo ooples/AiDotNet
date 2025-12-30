@@ -36,9 +36,10 @@ public class SpectrogramFingerprintOptions
     public int MaxPeaksPerWindow { get; set; } = 5;
 
     /// <summary>
-    /// Gets or sets the number of peaks to keep per second.
+    /// Gets or sets the window size in frames for peak selection.
+    /// Peaks are selected from non-overlapping windows of this size.
     /// </summary>
-    public int PeaksPerSecond { get; set; } = 20;
+    public int PeakWindowSizeFrames { get; set; } = 20;
 
     /// <summary>
     /// Gets or sets the target zone start (frames ahead).
