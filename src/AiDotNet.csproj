@@ -105,6 +105,12 @@
 	  <None Remove="AiDotNet.Tensors\**\*" />
 	</ItemGroup>
 
+	<!-- Exclude the AiDotNet.Native.CLBlast project files from this project -->
+	<ItemGroup>	  
+	  <Compile Remove="AiDotNet.Native.CLBlast/**/*.cs" />	  
+	  <EmbeddedResource Remove="AiDotNet.Native.CLBlast/**/*" />	  
+	  <None Remove="AiDotNet.Native.CLBlast/**/*" />	</ItemGroup>
+
 	<!-- Exclude polyfills that are already provided by AiDotNet.Tensors -->
 	<ItemGroup>
 	  <Compile Remove="Polyfills\LanguageFeaturePolyfills.cs" />

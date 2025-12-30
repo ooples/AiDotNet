@@ -1307,6 +1307,19 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         /// <summary>
         /// Runs Bayesian optimization to find the optimal GEMM kernel configuration.
         /// </summary>
+        /// <summary>
+        /// Enable verbose diagnostics for GEMM tuning and kernel compilation.
+        /// </summary>
+        public static bool EnableTuningDiagnostics
+        {
+            get => GemmAutoTuner.EnableDiagnostics;
+            set
+            {
+                GemmAutoTuner.EnableDiagnostics = value;
+                DynamicGemmKernel.EnableDiagnostics = value;
+            }
+        }
+
         public TuningResult[] RunBayesianGemmOptimization(int M, int N, int K, int maxTrials = 20, int warmupRuns = 2, int benchmarkRuns = 3)
         {
             if (_context == null || _dynamicGemm == null)
@@ -1317,6 +1330,13 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
             Console.WriteLine("=== Bayesian GEMM Optimization ===");
             Console.WriteLine($"Matrix: {M}x{N}x{K}, Device: {DeviceName}, Max trials: {maxTrials}");
+
+            // Print GPU capabilities if diagnostics enabled
+            if (EnableTuningDiagnostics)
+            {
+                Console.WriteLine("[GPU Capabilities]");
+                Console.Write(capabilities.GetDiagnosticString());
+            }
 
             var dataA = new float[M * K];
             var dataB = new float[K * N];
@@ -1336,6 +1356,99 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             {
                 Console.WriteLine($"Using cached configuration: {cachedConfig.Value}");
             }
+
+            int benchmarkAttempts = 0;
+            int benchmarkFailures = 0;
+
+            double BenchmarkConfig(GemmConfig config)
+            {
+                benchmarkAttempts++;
+
+                // Validate config before attempting execution
+                var validationError = DynamicGemmKernel.ValidateConfig(config);
+                if (validationError != null)
+                {
+                    benchmarkFailures++;
+                    if (EnableTuningDiagnostics)
+                    {
+                        Console.WriteLine($"  [Validation] {config.KernelName}: {validationError}");
+                    }
+                    return double.MaxValue;
+                }
+
+                try
+                {
+                    for (int i = 0; i < warmupRuns; i++)
+                        GemmWithDynamicKernel(bufA, bufB, bufC, M, N, K, config);
+
+                    double totalTimeMs = 0;
+                    for (int i = 0; i < benchmarkRuns; i++)
+                        totalTimeMs += GemmWithDynamicKernel(bufA, bufB, bufC, M, N, K, config);
+
+                    return totalTimeMs / benchmarkRuns;
+                }
+                catch (Exception ex)
+                {
+                    benchmarkFailures++;
+                    Console.WriteLine($"  Config {config} failed: {ex.Message}");
+
+                    // Print kernel stats on failure
+                    if (EnableTuningDiagnostics && _dynamicGemm != null)
+                    {
+                        Console.WriteLine($"  [DynamicGemm Stats] {_dynamicGemm.GetDiagnosticStats()}");
+                    }
+
+                    return double.MaxValue;
+                }
+            }
+
+            var results = tuner.TuneWithBayesianOptimization(M, N, K, capabilities, BenchmarkConfig, maxTrials, Math.Min(5, maxTrials / 4), 0, 1);
+
+            // Print final statistics
+            if (EnableTuningDiagnostics)
+            {
+                Console.WriteLine($"\n[Benchmark Stats] Attempts: {benchmarkAttempts}, Failures: {benchmarkFailures}");
+                if (_dynamicGemm != null)
+                {
+                    Console.WriteLine($"[DynamicGemm Stats] {_dynamicGemm.GetDiagnosticStats()}");
+                }
+            }
+
+            if (results.Length > 0 && results[0].IsValid)
+            {
+                var best = results[0];
+                Console.WriteLine($"Best: {best.Config} - {best.GFlops:F2} GFLOPS");
+                database.StoreResult(M, N, K, best.Config, best.GFlops);
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// Runs EXHAUSTIVE optimization (tests ALL configurations) like CLBlast does.
+        /// This is slower but guarantees finding the global optimum.
+        /// </summary>
+        public TuningResult[] RunExhaustiveGemmOptimization(int M, int N, int K, int warmupRuns = 2, int benchmarkRuns = 3)
+        {
+            if (_context == null || _dynamicGemm == null)
+                throw new InvalidOperationException("OpenCL context or dynamic GEMM not available");
+
+            var capabilities = GpuCapabilities.Detect(ComputeUnits, GlobalMemoryBytes, (int)LocalMemoryBytes,
+                (int)_maxWorkGroupSize, DeviceVendor, DeviceName, _context.Extensions);
+
+            Console.WriteLine("=== EXHAUSTIVE GEMM Optimization (CLBlast-style) ===");
+            Console.WriteLine($"Matrix: {M}x{N}x{K}, Device: {DeviceName}");
+
+            var dataA = new float[M * K];
+            var dataB = new float[K * N];
+            for (int i = 0; i < dataA.Length; i++) dataA[i] = 1.0f;
+            for (int i = 0; i < dataB.Length; i++) dataB[i] = 1.0f;
+
+            using var bufA = AllocateBuffer(dataA);
+            using var bufB = AllocateBuffer(dataB);
+            using var bufC = AllocateBuffer(M * N);
+
+            var tuner = new GemmAutoTuner();
 
             double BenchmarkConfig(GemmConfig config)
             {
@@ -1357,12 +1470,15 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 }
             }
 
-            var results = tuner.TuneWithBayesianOptimization(M, N, K, capabilities, BenchmarkConfig, maxTrials, Math.Min(5, maxTrials / 4), 0, 1);
+            // Use exhaustive search - tests ALL configurations
+            var results = tuner.TuneForDimensions(M, N, K, capabilities, BenchmarkConfig, warmupRuns, benchmarkRuns);
 
             if (results.Length > 0 && results[0].IsValid)
             {
                 var best = results[0];
-                Console.WriteLine($"Best: {best.Config} - {best.GFlops:F2} GFLOPS");
+                Console.WriteLine($"EXHAUSTIVE Best: {best.Config} - {best.GFlops:F2} GFLOPS");
+
+                using var database = new GemmTuningDatabase();
                 database.StoreResult(M, N, K, best.Config, best.GFlops);
             }
 

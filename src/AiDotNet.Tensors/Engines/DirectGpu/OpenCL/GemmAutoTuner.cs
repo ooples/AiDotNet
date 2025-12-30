@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Text;
 
 namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL;
 
@@ -25,15 +26,32 @@ public readonly struct GemmConfig
     public bool UseVectorizedLoads { get; init; }
     public string KernelName { get; init; }
 
+    // CLBlast-style parameters for higher performance
+    public int KReg { get; init; }           // Register tiling in K dimension (1, 2, 4)
+    public int KUnroll { get; init; }         // K-loop unroll factor (1, 2, 4, 8)
+    public bool UseSubgroupOps { get; init; } // Use wavefront shuffle operations
+
+    // CLBlast stride parameters for local memory bank conflict avoidance
+    public bool StrideM { get; init; }  // STRM: Use strided access for A tile stores
+    public bool StrideN { get; init; }  // STRN: Use strided access for B tile stores
+
+    // CLBlast local memory caching parameters (SA/SB)
+    public bool CacheA { get; init; }   // SA: Cache A tile in local memory (GlobalToLocalA pattern)
+    public bool CacheB { get; init; }   // SB: Cache B tile in local memory (GlobalToLocalB pattern)
+
+    // CLBlast workgroup decomposition parameters
+    public int MdimaSize { get; init; } // MDIMA: Workgroup rows for A tile (8, 16, 32)
+    public int NdimbSize { get; init; } // NDIMB: Workgroup cols for B tile (8, 16, 32)
+
     /// <summary>
     /// Generates a unique cache key for this configuration.
     /// Used by DynamicGemmKernel to cache compiled kernels.
     /// </summary>
     public string ToKey() =>
-        $"{TileM}_{TileN}_{TileK}_{ThreadTileM}_{ThreadTileN}_{VectorWidthM}_{VectorWidthN}_{UseDoubleBuffering}_{UseVectorizedLoads}";
+        $"{TileM}_{TileN}_{TileK}_{ThreadTileM}_{ThreadTileN}_{VectorWidthM}_{VectorWidthN}_{UseDoubleBuffering}_{UseVectorizedLoads}_{KReg}_{KUnroll}_{UseSubgroupOps}_{StrideM}_{StrideN}_{CacheA}_{CacheB}_{MdimaSize}_{NdimbSize}";
 
     public override string ToString() =>
-        $"{KernelName}[{TileM}x{TileN}x{TileK}, TT:{ThreadTileM}x{ThreadTileN}, VW:{VectorWidthM}x{VectorWidthN}, DB:{UseDoubleBuffering}, VL:{UseVectorizedLoads}]";
+        $"{KernelName}[{TileM}x{TileN}x{TileK}, TT:{ThreadTileM}x{ThreadTileN}, VW:{VectorWidthM}x{VectorWidthN}, K:{KReg}x{KUnroll}, SG:{UseSubgroupOps}, SA/B:{(CacheA ? 1 : 0)}/{(CacheB ? 1 : 0)}, MD:{MdimaSize}x{NdimbSize}]";
 }
 
 /// <summary>
@@ -55,6 +73,27 @@ public sealed class GemmAutoTuner
 {
     private readonly Dictionary<(int M, int N, int K), GemmConfig> _cache = new();
     private readonly object _cacheLock = new();
+
+    /// <summary>
+    /// Enable verbose diagnostic output for debugging tuning progress.
+    /// </summary>
+    public static bool EnableDiagnostics { get; set; } = false;
+
+    /// <summary>
+    /// Show progress every N trials (default: 10).
+    /// </summary>
+    public static int ProgressInterval { get; set; } = 10;
+
+    /// <summary>
+    /// Logs a diagnostic message if diagnostics are enabled.
+    /// </summary>
+    private static void LogDiag(string message)
+    {
+        if (EnableDiagnostics)
+        {
+            Console.WriteLine($"[GemmTuner] {message}");
+        }
+    }
 
     // Predefined configurations for different matrix sizes (AMD-tuned)
     private static readonly GemmConfig[] _smallConfigs = new[]
@@ -244,30 +283,71 @@ public sealed class GemmAutoTuner
         int benchmarkRuns = 3,
         int? seed = null)
     {
-        var allConfigs = GenerateConfigurationSpace(M, N, K, capabilities); var bayesian = new GemmFeatureBayesianTuner(allConfigs, seed);
+        var tuningStopwatch = Stopwatch.StartNew();
+        var allConfigs = GenerateConfigurationSpace(M, N, K, capabilities);
+        var bayesian = new GemmFeatureBayesianTuner(allConfigs, seed);
+
+        // Count valid configurations for diagnostics
+        int validConfigs = 0;
+        int invalidConfigs = 0;
+        foreach (var cfg in allConfigs)
+        {
+            if (DynamicGemmKernel.ValidateConfig(cfg) == null)
+                validConfigs++;
+            else
+                invalidConfigs++;
+        }
+
+        LogDiag($"=== Bayesian Optimization for {M}x{N}x{K} ===");
+        LogDiag($"Configuration space: {allConfigs.Length} total, {validConfigs} valid, {invalidConfigs} invalid");
+        LogDiag($"Max trials: {maxTrials}, Random samples: {initialRandomSamples}");
+        LogDiag($"Warmup runs: {warmupRuns}, Benchmark runs: {benchmarkRuns}");
+
         if (allConfigs.Length <= initialRandomSamples)
         {
-            // Configuration space is small, just do exhaustive search
+            LogDiag("Config space too small, using exhaustive search");
             return TuneForDimensions(M, N, K, capabilities, benchmarkFunc, warmupRuns, benchmarkRuns);
         }
 
         var results = new List<TuningResult>();
         var testedIndices = new HashSet<int>();
+        double bestGflops = 0;
+        string bestConfig = "";
+        int failedTrials = 0;
 
         // Phase 1: Initial random sampling
+        LogDiag($"\n--- Phase 1: Random Exploration ({initialRandomSamples} trials) ---");
         for (int i = 0; i < initialRandomSamples && i < allConfigs.Length; i++)
         {
             int idx = bayesian.SampleRandomIndex(allConfigs.Length, testedIndices);
             testedIndices.Add(idx);
 
             var config = allConfigs[idx];
+            LogDiag($"Trial {i + 1}/{maxTrials}: {config.KernelName}");
             var result = BenchmarkConfig(config, benchmarkFunc, warmupRuns, benchmarkRuns, M, N, K);
             results.Add(result);
 
-            bayesian.AddObservation(idx, result.GFlops);
+            if (result.IsValid)
+            {
+                bayesian.AddObservation(idx, result.GFlops);
+                if (result.GFlops > bestGflops)
+                {
+                    bestGflops = result.GFlops;
+                    bestConfig = config.ToString();
+                    LogDiag($"  NEW BEST: {bestGflops:F2} GFLOPS");
+                }
+            }
+            else
+            {
+                failedTrials++;
+                bayesian.AddObservation(idx, 0);  // Record failure
+            }
         }
 
         // Phase 2: Bayesian optimization
+        LogDiag($"\n--- Phase 2: Bayesian Optimization ({maxTrials - initialRandomSamples} trials) ---");
+        LogDiag($"Current best: {bestGflops:F2} GFLOPS - {bestConfig}");
+
         for (int trial = initialRandomSamples; trial < maxTrials && testedIndices.Count < allConfigs.Length; trial++)
         {
             // Update GP model
@@ -278,21 +358,60 @@ public sealed class GemmAutoTuner
             testedIndices.Add(nextIdx);
 
             var config = allConfigs[nextIdx];
+
+            // Show progress at intervals
+            if ((trial + 1) % ProgressInterval == 0 || trial == maxTrials - 1)
+            {
+                double elapsed = tuningStopwatch.Elapsed.TotalSeconds;
+                double trialsPerSec = (trial + 1) / elapsed;
+                double eta = (maxTrials - trial - 1) / trialsPerSec;
+                LogDiag($"Trial {trial + 1}/{maxTrials}: Best={bestGflops:F2} GFLOPS, Failed={failedTrials}, ETA={eta:F1}s");
+            }
+
             var result = BenchmarkConfig(config, benchmarkFunc, warmupRuns, benchmarkRuns, M, N, K);
             results.Add(result);
 
-            bayesian.AddObservation(nextIdx, result.GFlops);
-
-            // Early stopping if we found a very good config
-            if (result.GFlops > bayesian.BestObservedValue * 0.99)
+            if (result.IsValid)
             {
-                // We're within 1% of best, likely near optimal
-                break;
+                bayesian.AddObservation(nextIdx, result.GFlops);
+                if (result.GFlops > bestGflops)
+                {
+                    bestGflops = result.GFlops;
+                    bestConfig = config.ToString();
+                    LogDiag($"  NEW BEST at trial {trial + 1}: {bestGflops:F2} GFLOPS - {config.KernelName}");
+                }
+            }
+            else
+            {
+                failedTrials++;
+                bayesian.AddObservation(nextIdx, 0);
             }
         }
 
+        tuningStopwatch.Stop();
+
         // Sort by GFLOPS (descending)
         results.Sort((a, b) => b.GFlops.CompareTo(a.GFlops));
+
+        // Log summary
+        int successfulTrials = results.Count(r => r.IsValid);
+        LogDiag($"\n=== Tuning Complete ===");
+        LogDiag($"Elapsed: {tuningStopwatch.Elapsed.TotalSeconds:F1}s");
+        LogDiag($"Trials: {results.Count} total, {successfulTrials} successful, {failedTrials} failed");
+        LogDiag($"Best: {bestGflops:F2} GFLOPS - {bestConfig}");
+
+        if (results.Count > 0)
+        {
+            LogDiag("\nTop 5 configurations:");
+            for (int i = 0; i < Math.Min(5, results.Count); i++)
+            {
+                var r = results[i];
+                if (r.IsValid)
+                {
+                    LogDiag($"  {i + 1}. {r.GFlops:F2} GFLOPS - {r.Config}");
+                }
+            }
+        }
 
         // Cache the best result
         if (results.Count > 0 && results[0].IsValid)
@@ -309,6 +428,21 @@ public sealed class GemmAutoTuner
     private TuningResult BenchmarkConfig(GemmConfig config, Func<GemmConfig, double> benchmarkFunc,
         int warmupRuns, int benchmarkRuns, int M, int N, int K)
     {
+        // First validate the configuration
+        var validationError = DynamicGemmKernel.ValidateConfig(config);
+        if (validationError != null)
+        {
+            LogDiag($"  Config invalid: {validationError}");
+            return new TuningResult
+            {
+                Config = config,
+                GFlops = 0,
+                TimeMs = double.MaxValue,
+                IsValid = false
+            };
+        }
+
+        var sw = Stopwatch.StartNew();
         try
         {
             // Warmup
@@ -317,11 +451,21 @@ public sealed class GemmAutoTuner
 
             // Benchmark
             double totalTimeMs = 0;
+            double minTime = double.MaxValue;
+            double maxTime = 0;
             for (int i = 0; i < benchmarkRuns; i++)
-                totalTimeMs += benchmarkFunc(config);
+            {
+                double time = benchmarkFunc(config);
+                totalTimeMs += time;
+                minTime = Math.Min(minTime, time);
+                maxTime = Math.Max(maxTime, time);
+            }
 
             double avgTimeMs = totalTimeMs / benchmarkRuns;
             double gflops = (2.0 * M * N * K) / (avgTimeMs * 1e6);
+            sw.Stop();
+
+            LogDiag($"  {config.KernelName}: {gflops:F2} GFLOPS (avg: {avgTimeMs:F3} ms, min: {minTime:F3}, max: {maxTime:F3})");
 
             return new TuningResult
             {
@@ -331,8 +475,10 @@ public sealed class GemmAutoTuner
                 IsValid = true
             };
         }
-        catch
+        catch (Exception ex)
         {
+            sw.Stop();
+            LogDiag($"  Config {config.KernelName} failed: {ex.Message}");
             return new TuningResult
             {
                 Config = config,
@@ -345,42 +491,366 @@ public sealed class GemmAutoTuner
 
     /// <summary>
     /// Generates the full configuration space for Bayesian optimization.
+    /// Includes CLBlast-proven configurations for AMD RDNA GPUs.
     /// </summary>
     private GemmConfig[] GenerateConfigurationSpace(int M, int N, int K, GpuCapabilities capabilities)
     {
         var configs = new List<GemmConfig>();
 
-        // Tile sizes to try
-        int[] tileSizes = { 16, 32, 64, 128 };
-        int[] tileSizesK = { 8, 16, 32 };
-        int[] threadTiles = { 2, 4, 8 };
+        // ============================================================
+        // CLBlast-optimal configurations for AMD RDNA1/RDNA2 GPUs
+        // These are proven high-performance configurations from CLBlast
+        // EXACT parameters from CLBlast's tuned database for gfx10xx
+        // ============================================================
+
+        // ============================================================
+        // CLBlast EXACT CONFIGS - These are the actual tuned values!
+        // From: https://github.com/CNugteren/CLBlast/blob/master/src/database/kernels/xgemm/
+        // ============================================================
+
+        // CLBlast RX 5700 XT exact: MWG=128, NWG=128, KWG=32, MDIMC=8, NDIMC=16, VWM=8, VWN=8
+        configs.Add(new GemmConfig
+        {
+            TileM = 128, TileN = 128, TileK = 32,
+            ThreadTileM = 8, ThreadTileN = 16,  // MDIMC=8, NDIMC=16
+            VectorWidthM = 8, VectorWidthN = 8,  // VWM=8, VWN=8 - KEY TO 2500 GFLOPS!
+            UseDoubleBuffering = true, UseVectorizedLoads = true,
+            KReg = 2, KUnroll = 4, UseSubgroupOps = capabilities.SupportsSubgroups,
+            StrideM = true, StrideN = true,  // Bank conflict avoidance
+            CacheA = true, CacheB = true,     // SA=1, SB=1 local memory caching
+            MdimaSize = 8, NdimbSize = 16,    // MDIMA=8, NDIMB=16
+            KernelName = "clblast_rx5700xt_exact"
+        });
+
+        // Same config without stride for comparison
+        configs.Add(new GemmConfig
+        {
+            TileM = 128, TileN = 128, TileK = 32,
+            ThreadTileM = 8, ThreadTileN = 16,
+            VectorWidthM = 8, VectorWidthN = 8,
+            UseDoubleBuffering = true, UseVectorizedLoads = true,
+            KReg = 2, KUnroll = 4, UseSubgroupOps = capabilities.SupportsSubgroups,
+            StrideM = false, StrideN = false,
+            CacheA = true, CacheB = true,     // SA=1, SB=1 local memory caching
+            MdimaSize = 8, NdimbSize = 16,
+            KernelName = "clblast_rx5700xt_nostride"
+        });
+
+        // CLBlast RX 5700 variant: MWG=128, NWG=128, KWG=16, MDIMC=16, NDIMC=8, VWM=8, VWN=4
+        configs.Add(new GemmConfig
+        {
+            TileM = 128, TileN = 128, TileK = 16,
+            ThreadTileM = 16, ThreadTileN = 8,
+            VectorWidthM = 8, VectorWidthN = 4,
+            UseDoubleBuffering = true, UseVectorizedLoads = true,
+            KReg = 2, KUnroll = 4, UseSubgroupOps = capabilities.SupportsSubgroups,
+            StrideM = true, StrideN = true,
+            CacheA = true, CacheB = true,
+            MdimaSize = 16, NdimbSize = 8,
+            KernelName = "clblast_rx5700_variant"
+        });
+
+        // CLBlast gfx10 default: MWG=64, NWG=64, KWG=32, MDIMC=16, NDIMC=16, VWM=2, VWN=4
+        configs.Add(new GemmConfig
+        {
+            TileM = 64, TileN = 64, TileK = 32,
+            ThreadTileM = 16, ThreadTileN = 16,
+            VectorWidthM = 2, VectorWidthN = 4,
+            UseDoubleBuffering = true, UseVectorizedLoads = true,
+            KReg = 2, KUnroll = 4, UseSubgroupOps = capabilities.SupportsSubgroups,
+            StrideM = true, StrideN = true,
+            CacheA = true, CacheB = true,
+            MdimaSize = 16, NdimbSize = 16,
+            KernelName = "clblast_gfx10_default"
+        });
+
+        // ============================================================
+        // VECTORIZED CONFIGS WITHOUT KREG (simpler kernel, often faster!)
+        // Based on our cached best results that achieved 1913 GFLOPS
+        // ============================================================
+
+        // Our best cached config for 2048x2048: VW:2x2, no KREG
+        configs.Add(new GemmConfig
+        {
+            TileM = 64, TileN = 128, TileK = 16,
+            ThreadTileM = 8, ThreadTileN = 16,
+            VectorWidthM = 2, VectorWidthN = 2,
+            UseDoubleBuffering = true, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 0, UseSubgroupOps = false,  // NO KREG - simpler is faster!
+            KernelName = "simple_vec_64x128"
+        });
+
+        // Our best for 1024x1024: VW:1x2, no KREG
+        configs.Add(new GemmConfig
+        {
+            TileM = 32, TileN = 128, TileK = 8,
+            ThreadTileM = 8, ThreadTileN = 16,
+            VectorWidthM = 1, VectorWidthN = 2,
+            UseDoubleBuffering = true, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 0, UseSubgroupOps = false,
+            KernelName = "simple_vec_32x128"
+        });
+
+        // Float4 vectorized WITHOUT KREG
+        configs.Add(new GemmConfig
+        {
+            TileM = 64, TileN = 128, TileK = 16,
+            ThreadTileM = 8, ThreadTileN = 16,
+            VectorWidthM = 4, VectorWidthN = 4,
+            UseDoubleBuffering = true, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 0, UseSubgroupOps = false,
+            KernelName = "simple_vec4_64x128"
+        });
+
+        // Float8 vectorized WITHOUT KREG (test if KREG is the bottleneck)
+        configs.Add(new GemmConfig
+        {
+            TileM = 128, TileN = 128, TileK = 16,
+            ThreadTileM = 16, ThreadTileN = 16,
+            VectorWidthM = 8, VectorWidthN = 8,
+            UseDoubleBuffering = true, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 0, UseSubgroupOps = false,
+            KernelName = "simple_vec8_128x128"
+        });
+
+        // ============================================================
+        // HIGH-PERFORMANCE CONFIGS WITH KREG AND SUBGROUP OPERATIONS
+        // These match CLBlast's actual implementation more closely
+        // ============================================================
+
+        // RX 5700 XT optimal with KREG=2 and subgroup ops (RDNA1)
+        configs.Add(new GemmConfig
+        {
+            TileM = 64, TileN = 64, TileK = 16,
+            ThreadTileM = 8, ThreadTileN = 8,
+            VectorWidthM = 2, VectorWidthN = 2,
+            UseDoubleBuffering = true, UseVectorizedLoads = true,
+            KReg = 2, KUnroll = 4, UseSubgroupOps = capabilities.SupportsSubgroups,
+            KernelName = "clblast_rdna1_optimal"
+        });
+
+        // High KREG variant for maximum compute density
+        configs.Add(new GemmConfig
+        {
+            TileM = 64, TileN = 64, TileK = 32,
+            ThreadTileM = 8, ThreadTileN = 8,
+            VectorWidthM = 2, VectorWidthN = 2,
+            UseDoubleBuffering = true, UseVectorizedLoads = true,
+            KReg = 4, KUnroll = 8, UseSubgroupOps = capabilities.SupportsSubgroups,
+            KernelName = "clblast_high_kreg"
+        });
+
+        // RX 5700 variant with more aggressive unrolling
+        configs.Add(new GemmConfig
+        {
+            TileM = 128, TileN = 64, TileK = 16,
+            ThreadTileM = 16, ThreadTileN = 8,
+            VectorWidthM = 4, VectorWidthN = 2,
+            UseDoubleBuffering = true, UseVectorizedLoads = true,
+            KReg = 2, KUnroll = 4, UseSubgroupOps = capabilities.SupportsSubgroups,
+            KernelName = "clblast_rdna1_alt1"
+        });
+
+        // AMD default with KREG
+        configs.Add(new GemmConfig
+        {
+            TileM = 64, TileN = 64, TileK = 32,
+            ThreadTileM = 16, ThreadTileN = 16,
+            VectorWidthM = 4, VectorWidthN = 4,
+            UseDoubleBuffering = true, UseVectorizedLoads = true,
+            KReg = 2, KUnroll = 4, UseSubgroupOps = capabilities.SupportsSubgroups,
+            KernelName = "clblast_amd_default"
+        });
+
+        // Large tile with subgroup shuffling
+        configs.Add(new GemmConfig
+        {
+            TileM = 128, TileN = 128, TileK = 16,
+            ThreadTileM = 16, ThreadTileN = 16,
+            VectorWidthM = 2, VectorWidthN = 2,
+            UseDoubleBuffering = true, UseVectorizedLoads = true,
+            KReg = 2, KUnroll = 4, UseSubgroupOps = capabilities.SupportsSubgroups,
+            KernelName = "clblast_large_tile"
+        });
+
+        // Extremely aggressive configuration for maximum throughput
+        configs.Add(new GemmConfig
+        {
+            TileM = 128, TileN = 128, TileK = 32,
+            ThreadTileM = 16, ThreadTileN = 16,
+            VectorWidthM = 4, VectorWidthN = 4,
+            UseDoubleBuffering = true, UseVectorizedLoads = true,
+            KReg = 4, KUnroll = 8, UseSubgroupOps = capabilities.SupportsSubgroups,
+            KernelName = "clblast_max_throughput"
+        });
+
+        // Balanced config for medium matrices
+        configs.Add(new GemmConfig
+        {
+            TileM = 64, TileN = 64, TileK = 16,
+            ThreadTileM = 8, ThreadTileN = 8,
+            VectorWidthM = 4, VectorWidthN = 4,
+            UseDoubleBuffering = true, UseVectorizedLoads = true,
+            KReg = 2, KUnroll = 4, UseSubgroupOps = false,  // No subgroup for baseline
+            KernelName = "clblast_balanced"
+        });
+
+        // ============================================================
+        // LOW-REGISTER CONFIGURATIONS for better occupancy
+        // Target: 40-60 registers per thread to allow 60-80% occupancy
+        // MWI×NWI = 4×4 = 16 outputs → ~20-30 registers
+        // ============================================================
+
+        // Low register config 1: 4×4 outputs, 16 threads
+        configs.Add(new GemmConfig
+        {
+            TileM = 32, TileN = 32, TileK = 16,
+            ThreadTileM = 8, ThreadTileN = 8,  // MWI=NWI=4
+            VectorWidthM = 2, VectorWidthN = 2,
+            UseDoubleBuffering = true, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
+            StrideM = true, StrideN = true,
+            CacheA = true, CacheB = true,
+            KernelName = "low_reg_4x4"
+        });
+
+        // Low register config 2: 4×4 outputs, larger tiles
+        configs.Add(new GemmConfig
+        {
+            TileM = 64, TileN = 64, TileK = 16,
+            ThreadTileM = 16, ThreadTileN = 16,  // MWI=NWI=4
+            VectorWidthM = 2, VectorWidthN = 2,
+            UseDoubleBuffering = true, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
+            StrideM = true, StrideN = true,
+            CacheA = true, CacheB = true,
+            KernelName = "low_reg_4x4_64"
+        });
+
+        // Low register config 3: 2×4 outputs, asymmetric
+        configs.Add(new GemmConfig
+        {
+            TileM = 32, TileN = 64, TileK = 16,
+            ThreadTileM = 16, ThreadTileN = 16,  // MWI=2, NWI=4
+            VectorWidthM = 1, VectorWidthN = 2,
+            UseDoubleBuffering = true, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
+            StrideM = true, StrideN = true,
+            CacheA = true, CacheB = true,
+            KernelName = "low_reg_2x4"
+        });
+
+        // Low register config 4: 2×2 outputs, minimal registers
+        configs.Add(new GemmConfig
+        {
+            TileM = 32, TileN = 32, TileK = 8,
+            ThreadTileM = 16, ThreadTileN = 16,  // MWI=NWI=2
+            VectorWidthM = 1, VectorWidthN = 1,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 1, UseSubgroupOps = false,
+            StrideM = false, StrideN = false,
+            CacheA = true, CacheB = true,
+            KernelName = "low_reg_2x2"
+        });
+
+        // ============================================================
+        // Additional vectorized configurations to explore
+        // ============================================================
+
+        // EXPANDED configuration space for Bayesian optimization
+        // Includes CLBlast parameters PLUS additional options to explore beyond their tunings
+        int[] tileSizes = { 32, 64, 128, 256 };  // Added 256 for very large matrices
+        int[] tileSizesK = { 8, 16, 32, 64 };    // Added 64 for deeper K unrolling
+        int[] threadTiles = { 4, 8, 16 };        // Added 4 for finer granularity
+        int[] vectorWidths = { 1, 2, 4, 8 };     // ADDED 8 - CLBlast's secret to 2500 GFLOPS!
+        int[] kregValues = { 0, 1, 2, 4 };       // KREG: register tiling in K (0=disable, 1,2,4)
+        int[] kwiValues = { 1, 2, 4 };           // KWI: K-loop unroll factor
+        bool[] cacheOptions = { false, true };   // SA/SB: local memory caching
 
         foreach (int tileM in tileSizes)
         {
             foreach (int tileN in tileSizes)
             {
+                // Skip oversized tiles for small matrices
+                if (tileM > M * 2 || tileN > N * 2) continue;
+
                 foreach (int tileK in tileSizesK)
                 {
                     foreach (int ttM in threadTiles)
                     {
                         foreach (int ttN in threadTiles)
                         {
-                            // Skip invalid configurations
-                            if (tileM < ttM * 4 || tileN < ttN * 4) continue;
-                            if (tileM > M * 2 || tileN > N * 2) continue;
+                            // Validate work group size (max 256 threads)
+                            if (ttM * ttN > 256) continue;
 
-                            // Add base config
-                            configs.Add(new GemmConfig
+                            // Validate tile divisibility
+                            if (tileM % ttM != 0 || tileN % ttN != 0) continue;
+
+                            int mwi = tileM / ttM;
+                            int nwi = tileN / ttN;
+
+                            // Skip if output per thread is too small
+                            if (mwi < 2 || nwi < 2) continue;
+
+                            foreach (int vwm in vectorWidths)
                             {
-                                TileM = tileM,
-                                TileN = tileN,
-                                TileK = tileK,
-                                ThreadTileM = ttM,
-                                ThreadTileN = ttN,
-                                UseDoubleBuffering = tileM >= 64,
-                                UseVectorizedLoads = tileK >= 16,
-                                KernelName = tileM >= 64 ? "gemm_double_buffered" : "gemm_small"
-                            });
+                                // Vector width must divide MWI
+                                if (mwi % vwm != 0) continue;
+
+                                foreach (int vwn in vectorWidths)
+                                {
+                                    // Vector width must divide NWI
+                                    if (nwi % vwn != 0) continue;
+
+                                    // Skip duplicate of CLBlast configs
+                                    if (tileM == 64 && tileN == 64 && tileK == 16 &&
+                                        ttM == 8 && ttN == 8 && vwm == 2 && vwn == 2) continue;
+
+                                    // Add configs with different KREG/KWI combinations for high-perf setups
+                                    foreach (int kreg in kregValues)
+                                    {
+                                        foreach (int kwi in kwiValues)
+                                        {
+                                            // Validate KREG/KWI compatibility with TileK
+                                            if (kreg > 0 && tileK % (kwi * kreg) != 0) continue;
+
+                                            // For large vector widths, test both SA/SB options
+                                            foreach (bool cacheA in cacheOptions)
+                                            {
+                                                foreach (bool cacheB in cacheOptions)
+                                                {
+                                                    // Only test both SA/SB options for high-perf configs
+                                                    // For simpler configs, just use both caching enabled
+                                                    if (vwm < 4 && vwn < 4 && !(cacheA && cacheB)) continue;
+
+                                                    configs.Add(new GemmConfig
+                                                    {
+                                                        TileM = tileM,
+                                                        TileN = tileN,
+                                                        TileK = tileK,
+                                                        ThreadTileM = ttM,
+                                                        ThreadTileN = ttN,
+                                                        VectorWidthM = vwm,
+                                                        VectorWidthN = vwn,
+                                                        UseDoubleBuffering = tileM >= 64,
+                                                        UseVectorizedLoads = tileK >= 16,
+                                                        KReg = kreg,
+                                                        KUnroll = kwi,
+                                                        UseSubgroupOps = capabilities.SupportsSubgroups && vwm >= 2,
+                                                        StrideM = true,
+                                                        StrideN = true,
+                                                        CacheA = cacheA,
+                                                        CacheB = cacheB,
+                                                        MdimaSize = ttM,  // MDIMA = ThreadTileM
+                                                        NdimbSize = ttN,  // NDIMB = ThreadTileN
+                                                        KernelName = $"gemm_{tileM}x{tileN}x{tileK}_v{vwm}x{vwn}_k{kreg}x{kwi}"
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -390,23 +860,22 @@ public sealed class GemmAutoTuner
         // Add mixed precision configs if supported
         if (capabilities.SupportsFP16)
         {
-            foreach (int tileM in new[] { 64, 128 })
+            configs.Add(new GemmConfig
             {
-                foreach (int tileN in new[] { 64, 128 })
-                {
-                    configs.Add(new GemmConfig
-                    {
-                        TileM = tileM,
-                        TileN = tileN,
-                        TileK = 32,
-                        ThreadTileM = 8,
-                        ThreadTileN = 8,
-                        UseDoubleBuffering = true,
-                        UseVectorizedLoads = true,
-                        KernelName = "gemm_mixed_precision"
-                    });
-                }
-            }
+                TileM = 64, TileN = 64, TileK = 32,
+                ThreadTileM = 8, ThreadTileN = 8,
+                VectorWidthM = 4, VectorWidthN = 4,
+                UseDoubleBuffering = true, UseVectorizedLoads = true,
+                KernelName = "gemm_mixed_precision"
+            });
+            configs.Add(new GemmConfig
+            {
+                TileM = 128, TileN = 128, TileK = 32,
+                ThreadTileM = 16, ThreadTileN = 16,
+                VectorWidthM = 4, VectorWidthN = 4,
+                UseDoubleBuffering = true, UseVectorizedLoads = true,
+                KernelName = "gemm_mixed_precision_large"
+            });
         }
 
         return configs.ToArray();
@@ -540,6 +1009,36 @@ public sealed class GpuCapabilities
             VendorName = "Unknown",
             DeviceName = "Unknown"
         };
+    }
+
+    /// <summary>
+    /// Gets a diagnostic string summarizing GPU capabilities.
+    /// </summary>
+    public string GetDiagnosticString()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"GPU: {DeviceName}");
+        sb.AppendLine($"Vendor: {VendorName}");
+        sb.AppendLine($"Compute Units: {ComputeUnits}");
+        sb.AppendLine($"Global Memory: {GlobalMemoryBytes / (1024 * 1024)} MB");
+        sb.AppendLine($"Local Memory: {LocalMemoryBytes / 1024} KB");
+        sb.AppendLine($"Max Work Group Size: {MaxWorkGroupSize}");
+        sb.AppendLine($"Wavefront Size: {WavefrontSize}");
+        sb.AppendLine($"Features: FP16={SupportsFP16}, Subgroups={SupportsSubgroups}, MFMA={SupportsMFMA}");
+
+        // Add performance expectations based on hardware
+        double theoreticalGflops = ComputeUnits * WavefrontSize * 2.0 * 1.5; // Rough estimate: CU * wave * FMA * boost
+        sb.AppendLine($"Theoretical Peak (estimate): {theoreticalGflops:F0} GFLOPS");
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Gets a short summary for logging.
+    /// </summary>
+    public override string ToString()
+    {
+        return $"{DeviceName} ({ComputeUnits} CUs, {GlobalMemoryBytes / (1024 * 1024)} MB, FP16={SupportsFP16})";
     }
 }
 

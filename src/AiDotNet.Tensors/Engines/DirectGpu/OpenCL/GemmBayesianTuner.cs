@@ -31,7 +31,12 @@ internal sealed class GemmFeatureBayesianTuner
     private const int FEAT_VECTOR_WIDTH_N = 6;
     private const int FEAT_DOUBLE_BUFFERING = 7;
     private const int FEAT_VECTORIZED_LOADS = 8;
-    private const int NUM_FEATURES = 9;
+    private const int FEAT_KREG = 9;
+    private const int FEAT_KUNROLL = 10;
+    private const int FEAT_SUBGROUP_OPS = 11;
+    private const int FEAT_STRIDE_M = 12;
+    private const int FEAT_STRIDE_N = 13;
+    private const int NUM_FEATURES = 14;
 
     // ARD length scales per feature (learned)
     private readonly double[] _lengthScales;
@@ -107,7 +112,12 @@ internal sealed class GemmFeatureBayesianTuner
             config.VectorWidthM,
             config.VectorWidthN,
             config.UseDoubleBuffering ? 1.0 : 0.0,
-            config.UseVectorizedLoads ? 1.0 : 0.0
+            config.UseVectorizedLoads ? 1.0 : 0.0,
+            config.KReg,       // Register tiling in K dimension (1, 2, 4)
+            config.KUnroll,    // K loop unroll factor (1, 2, 4, 8)
+            config.UseSubgroupOps ? 1.0 : 0.0,  // Subgroup/wave operations
+            config.StrideM ? 1.0 : 0.0,  // STRM: Strided A tile stores for bank conflict avoidance
+            config.StrideN ? 1.0 : 0.0   // STRN: Strided B tile stores for bank conflict avoidance
         };
     }
 
@@ -295,8 +305,9 @@ internal sealed class GemmFeatureBayesianTuner
         double[] candidates = { 0.5, 1.0, 2.0, 5.0 };
 
         // For efficiency, optimize a subset of features per update
-        // Focus on the most impactful features
-        int[] featuresToOptimize = { FEAT_TILE_M, FEAT_TILE_N, FEAT_TILE_K, FEAT_THREAD_TILE_M, FEAT_THREAD_TILE_N };
+        // Focus on the most impactful features including register tiling and unroll factors
+        int[] featuresToOptimize = { FEAT_TILE_M, FEAT_TILE_N, FEAT_TILE_K, FEAT_THREAD_TILE_M, FEAT_THREAD_TILE_N,
+                                     FEAT_VECTOR_WIDTH_M, FEAT_VECTOR_WIDTH_N, FEAT_KREG, FEAT_KUNROLL };
 
         foreach (int feat in featuresToOptimize)
         {
@@ -376,7 +387,8 @@ internal sealed class GemmFeatureBayesianTuner
     {
         var relevances = new Dictionary<string, double>();
         string[] featureNames = { "TileM", "TileN", "TileK", "ThreadTileM", "ThreadTileN",
-                                  "VectorWidthM", "VectorWidthN", "DoubleBuffering", "VectorizedLoads" };
+                                  "VectorWidthM", "VectorWidthN", "DoubleBuffering", "VectorizedLoads",
+                                  "KReg", "KUnroll", "SubgroupOps", "StrideM", "StrideN" };
 
         for (int i = 0; i < NUM_FEATURES; i++)
         {
