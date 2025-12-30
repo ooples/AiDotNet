@@ -126,6 +126,11 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     private readonly Random _random;
 
     /// <summary>
+    /// Lock object for thread-safe random access.
+    /// </summary>
+    private readonly object _randomLock = new();
+
+    /// <summary>
     /// Model size variant.
     /// </summary>
     private readonly AudioGenModelSize _modelSize;
@@ -573,7 +578,18 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     {
         ThrowIfDisposed();
 
-        int seedUsed = seed ?? _random.Next();
+        int seedUsed;
+        if (seed.HasValue)
+        {
+            seedUsed = seed.Value;
+        }
+        else
+        {
+            lock (_randomLock)
+            {
+                seedUsed = _random.Next();
+            }
+        }
 
         // Encode the text prompt
         var textEmbeddings = EncodeText(prompt);

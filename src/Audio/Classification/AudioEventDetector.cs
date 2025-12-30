@@ -686,6 +686,10 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
         int windowSamples = (int)(_options.WindowSize * _options.SampleRate);
         int hopSamples = (int)(windowSamples * (1 - _options.WindowOverlap));
 
+        // Ensure we don't divide by zero
+        if (hopSamples <= 0) hopSamples = 1;
+
+        int lastStart = 0;
         for (int start = 0; start + windowSamples <= audio.Length; start += hopSamples)
         {
             var window = new Tensor<T>([windowSamples]);
@@ -694,12 +698,29 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
                 window[i] = audio[start + i];
             }
             windows.Add(window);
+            lastStart = start + hopSamples;
         }
 
-        // Handle last partial window
-        if (windows.Count == 0 && audio.Length > 0)
+        // Handle last partial window - include remaining samples that weren't captured
+        int remainingStart = windows.Count > 0 ? lastStart : 0;
+        int remainingSamples = audio.Length - remainingStart;
+
+        // Add partial window if there's significant remaining audio (at least 10% of window size)
+        if (remainingSamples > windowSamples / 10)
         {
-            var window = new Tensor<T>([audio.Length]);
+            // Pad partial window to full window size for consistent processing
+            var window = new Tensor<T>([windowSamples]);
+            for (int i = 0; i < remainingSamples && i < windowSamples; i++)
+            {
+                window[i] = audio[remainingStart + i];
+            }
+            // Remaining values stay at default (zero-padded)
+            windows.Add(window);
+        }
+        else if (windows.Count == 0 && audio.Length > 0)
+        {
+            // No full windows and not enough for partial - still process what we have
+            var window = new Tensor<T>([windowSamples]);
             for (int i = 0; i < audio.Length; i++)
             {
                 window[i] = audio[i];

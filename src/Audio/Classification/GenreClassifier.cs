@@ -687,7 +687,8 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
             {
                 sum += NumOps.ToDouble(mfccs[t, c]);
             }
-            mfccMean[c] = sum / numFrames;
+            // Guard against division by zero for empty MFCC frames
+            mfccMean[c] = numFrames > 0 ? sum / numFrames : 0.0;
 
             double sumSq = 0;
             for (int t = 0; t < numFrames; t++)
@@ -695,7 +696,8 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
                 double diff = NumOps.ToDouble(mfccs[t, c]) - mfccMean[c];
                 sumSq += diff * diff;
             }
-            mfccStd[c] = Math.Sqrt(sumSq / numFrames);
+            // Guard against division by zero for empty MFCC frames
+            mfccStd[c] = numFrames > 0 ? Math.Sqrt(sumSq / numFrames) : 0.0;
         }
 
         // Extract spectral features
@@ -735,6 +737,9 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
 
     private double ComputeMean(Tensor<T> tensor)
     {
+        // Guard against division by zero for empty tensors
+        if (tensor.Length == 0) return 0.0;
+
         double sum = 0;
         for (int i = 0; i < tensor.Length; i++)
         {
@@ -745,6 +750,9 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
 
     private double ComputeStd(Tensor<T> tensor)
     {
+        // Guard against division by zero for empty tensors
+        if (tensor.Length == 0) return 0.0;
+
         double mean = ComputeMean(tensor);
         double sumSq = 0;
         for (int i = 0; i < tensor.Length; i++)
@@ -848,15 +856,6 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
         {
             throw new ObjectDisposedException(GetType().FullName ?? nameof(GenreClassifier<T>));
         }
-    }
-
-    /// <summary>
-    /// Disposes resources.
-    /// </summary>
-    public new void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
     }
 
     /// <summary>

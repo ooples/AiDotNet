@@ -941,7 +941,19 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         int hopLength = _options.HopLength;
         int numMels = _options.NumMelBins;
 
-        int numFrames = (audio.Length - nFft) / hopLength + 1;
+        // Handle edge case when audio is shorter than FFT window
+        if (audio.Length < nFft)
+        {
+            // Pad audio with zeros to reach FFT window size
+            var paddedAudio = new Tensor<T>(new int[] { nFft });
+            for (int i = 0; i < audio.Length; i++)
+            {
+                paddedAudio.SetFlat(i, audio.GetFlat(i));
+            }
+            audio = paddedAudio;
+        }
+
+        int numFrames = Math.Max(1, (audio.Length - nFft) / hopLength + 1);
         var melSpec = new Tensor<T>(new int[] { numMels, numFrames });
 
         for (int frame = 0; frame < numFrames; frame++)
@@ -1010,16 +1022,25 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         {
             double energy = 0;
 
-            for (int k = binPoints[m]; k < binPoints[m + 1] && k < powerSpectrum.Length; k++)
+            // Guard against division by zero when bin points are equal
+            int denom1 = binPoints[m + 1] - binPoints[m];
+            if (denom1 > 0)
             {
-                double weight = (double)(k - binPoints[m]) / (binPoints[m + 1] - binPoints[m]);
-                energy += powerSpectrum[k] * weight;
+                for (int k = binPoints[m]; k < binPoints[m + 1] && k < powerSpectrum.Length; k++)
+                {
+                    double weight = (double)(k - binPoints[m]) / denom1;
+                    energy += powerSpectrum[k] * weight;
+                }
             }
 
-            for (int k = binPoints[m + 1]; k < binPoints[m + 2] && k < powerSpectrum.Length; k++)
+            int denom2 = binPoints[m + 2] - binPoints[m + 1];
+            if (denom2 > 0)
             {
-                double weight = (double)(binPoints[m + 2] - k) / (binPoints[m + 2] - binPoints[m + 1]);
-                energy += powerSpectrum[k] * weight;
+                for (int k = binPoints[m + 1]; k < binPoints[m + 2] && k < powerSpectrum.Length; k++)
+                {
+                    double weight = (double)(binPoints[m + 2] - k) / denom2;
+                    energy += powerSpectrum[k] * weight;
+                }
             }
 
             melEnergies[m] = Math.Log(Math.Max(energy, 1e-10));
@@ -1113,7 +1134,18 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
     private Tensor<T> ComputeStft(Tensor<T> waveform, int nFft, int hopLength)
     {
-        int numFrames = (waveform.Length - nFft) / hopLength + 1;
+        // Handle edge case when waveform is shorter than FFT window
+        Tensor<T> paddedWaveform = waveform;
+        if (waveform.Length < nFft)
+        {
+            paddedWaveform = new Tensor<T>(new int[] { nFft });
+            for (int i = 0; i < waveform.Length; i++)
+            {
+                paddedWaveform.SetFlat(i, waveform.GetFlat(i));
+            }
+        }
+
+        int numFrames = Math.Max(1, (paddedWaveform.Length - nFft) / hopLength + 1);
         int numBins = nFft / 2 + 1;
         var stft = new Tensor<T>(new int[] { numBins, numFrames, 2 });
 
@@ -1121,10 +1153,10 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         {
             int startIdx = frame * hopLength;
             var frameData = new double[nFft];
-            for (int i = 0; i < nFft && startIdx + i < waveform.Length; i++)
+            for (int i = 0; i < nFft && startIdx + i < paddedWaveform.Length; i++)
             {
                 double window = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / (nFft - 1)));
-                frameData[i] = NumOps.ToDouble(waveform.GetFlat(startIdx + i)) * window;
+                frameData[i] = NumOps.ToDouble(paddedWaveform.GetFlat(startIdx + i)) * window;
             }
 
             var spectrum = FftSharp.FFT.Forward(frameData);

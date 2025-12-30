@@ -102,6 +102,10 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
     private readonly Dictionary<string, int> _languageCodeToId;
     private readonly Dictionary<string, string> _languageCodeToName;
 
+    // MFA gradient flow tracking
+    private readonly List<int> _blockOutputLengths = [];
+    private Tensor<T>? _lastTdnnOutput;
+
     #endregion
 
     #region Properties
@@ -583,8 +587,12 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
             output = layer.Forward(output);
         }
 
-        // Collect MFA outputs
+        // Cache TDNN output for backward pass
+        _lastTdnnOutput = output;
+
+        // Collect MFA outputs and track lengths for gradient flow
         var blockOutputs = new List<Tensor<T>>();
+        _blockOutputLengths.Clear();
 
         int blockIdx = 0;
         foreach (int _ in _options.Dilations)
@@ -611,6 +619,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
 
             output = AddTensors(output, residual);
             blockOutputs.Add(output);
+            _blockOutputLengths.Add(output.Length);
             blockIdx++;
         }
 
@@ -639,23 +648,87 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
     {
         var grad = gradient;
 
+        // Backward through classifier
         if (_classifierLayer is not null)
             grad = _classifierLayer.Backward(grad);
 
+        // Backward through final batch norm
         if (_finalBatchNorm is not null)
             grad = _finalBatchNorm.Backward(grad);
 
+        // Backward through pooling layer
         if (_poolingLayer is not null)
             grad = _poolingLayer.Backward(grad);
 
-        for (int i = _seBlocks.Count - 1; i >= 0; i--)
-            grad = _seBlocks[i].Backward(grad);
+        // MFA gradient splitting: the forward pass concatenated outputs from each block
+        // We need to split the gradient back to each block's portion
+        var blockGradients = new List<Tensor<T>>();
+        int gradOffset = 0;
+        foreach (int blockLen in _blockOutputLengths)
+        {
+            var blockGrad = new T[blockLen];
+            for (int i = 0; i < blockLen && gradOffset + i < grad.Length; i++)
+            {
+                blockGrad[i] = grad.GetFlat(gradOffset + i);
+            }
+            blockGradients.Add(new Tensor<T>(blockGrad, [blockLen]));
+            gradOffset += blockLen;
+        }
 
-        for (int i = _resBlocks.Count - 1; i >= 0; i--)
-            grad = _resBlocks[i].Backward(grad);
+        // Backward through each SE-Res2 block (in reverse order)
+        Tensor<T>? tdnnGrad = null;
+        for (int blockIdx = _blockOutputLengths.Count - 1; blockIdx >= 0; blockIdx--)
+        {
+            var blockGrad = blockGradients[blockIdx];
 
-        for (int i = _tdnnLayers.Count - 1; i >= 0; i--)
-            grad = _tdnnLayers[i].Backward(grad);
+            // Backward through SE block for this block
+            int seIdx = blockIdx * 2;
+            if (seIdx + 1 < _seBlocks.Count)
+            {
+                blockGrad = _seBlocks[seIdx + 1].Backward(blockGrad);
+            }
+            if (seIdx < _seBlocks.Count)
+            {
+                blockGrad = _seBlocks[seIdx].Backward(blockGrad);
+            }
+
+            // Backward through res block layers (6 layers per block)
+            for (int i = 5; i >= 0; i--)
+            {
+                int layerIdx = blockIdx * 6 + i;
+                if (layerIdx < _resBlocks.Count)
+                {
+                    blockGrad = _resBlocks[layerIdx].Backward(blockGrad);
+                }
+            }
+
+            // Accumulate gradient for TDNN output (residual connection)
+            if (tdnnGrad is null)
+            {
+                tdnnGrad = blockGrad;
+            }
+            else
+            {
+                // Add gradients from multiple blocks
+                var combined = new T[Math.Max(tdnnGrad.Length, blockGrad.Length)];
+                for (int i = 0; i < combined.Length; i++)
+                {
+                    T val1 = i < tdnnGrad.Length ? tdnnGrad.GetFlat(i) : _numOps.Zero;
+                    T val2 = i < blockGrad.Length ? blockGrad.GetFlat(i) : _numOps.Zero;
+                    combined[i] = _numOps.Add(val1, val2);
+                }
+                tdnnGrad = new Tensor<T>(combined, [combined.Length]);
+            }
+        }
+
+        // Backward through TDNN layers
+        if (tdnnGrad is not null)
+        {
+            for (int i = _tdnnLayers.Count - 1; i >= 0; i--)
+            {
+                tdnnGrad = _tdnnLayers[i].Backward(tdnnGrad);
+            }
+        }
     }
 
     private IEnumerable<ILayer<T>> GetAllLayers()
