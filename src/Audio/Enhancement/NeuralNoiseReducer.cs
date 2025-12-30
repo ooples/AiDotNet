@@ -400,9 +400,14 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     /// <inheritdoc/>
     public Tensor<T> EnhanceWithReference(Tensor<T> audio, Tensor<T> reference)
     {
-        // For echo cancellation, combine reference info with enhancement
-        // Simplified: just enhance the audio
-        return Enhance(audio);
+        // Reference-based enhancement (e.g., echo cancellation) requires:
+        // 1. Time-alignment between audio and reference signals
+        // 2. Adaptive filtering to estimate the echo path
+        // 3. Subtracting the estimated echo from the audio
+        // This is a significant feature that is not yet implemented.
+        throw new NotImplementedException(
+            "Reference-based enhancement (echo cancellation) is not yet implemented. " +
+            "Use Enhance() for basic noise reduction.");
     }
 
     /// <inheritdoc/>
@@ -550,12 +555,27 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     /// </summary>
     private T[] EnhanceSpectrum(T[] magnitudes)
     {
-        // Create input tensor from magnitudes
-        var input = new Tensor<T>([1, magnitudes.Length, 1]);
-        var inputVector = input.ToVector();
-        for (int i = 0; i < magnitudes.Length; i++)
+        // Apply spectral subtraction if noise profile is available
+        var processedMagnitudes = magnitudes;
+        if (_noiseProfile is not null && _noiseProfile.Length == magnitudes.Length)
         {
-            inputVector[i] = magnitudes[i];
+            processedMagnitudes = new T[magnitudes.Length];
+            for (int i = 0; i < magnitudes.Length; i++)
+            {
+                // Spectral subtraction: subtract estimated noise magnitude
+                double mag = NumOps.ToDouble(magnitudes[i]);
+                double noise = NumOps.ToDouble(_noiseProfile[i]);
+                double subtracted = Math.Max(0.0, mag - EnhancementStrength * noise);
+                processedMagnitudes[i] = NumOps.FromDouble(subtracted);
+            }
+        }
+
+        // Create input tensor from magnitudes
+        var input = new Tensor<T>([1, processedMagnitudes.Length, 1]);
+        var inputVector = input.ToVector();
+        for (int i = 0; i < processedMagnitudes.Length; i++)
+        {
+            inputVector[i] = processedMagnitudes[i];
         }
 
         Tensor<T> mask;
@@ -576,7 +596,7 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         for (int i = 0; i < magnitudes.Length; i++)
         {
             // mask is in range 0-1, where 1 = keep, 0 = remove
-            double mag = NumOps.ToDouble(magnitudes[i]);
+            double mag = NumOps.ToDouble(processedMagnitudes[i]);
             double m = i < maskVector.Length ? NumOps.ToDouble(maskVector[i]) : 1.0;
 
             // Apply enhancement strength to control how aggressively we use the mask
