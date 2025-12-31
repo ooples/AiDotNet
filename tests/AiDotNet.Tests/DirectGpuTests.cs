@@ -1124,6 +1124,9 @@ public class DirectGpuTests
     [Trait("Category", "GPU")]
     public void DirectGpuEngine_ClBlast_HeadToHead_Comparison()
     {
+        // Enable diagnostics to see which kernels are being selected
+        AiDotNet.Tensors.Engines.DirectGpu.OpenCL.DynamicGemmKernel.EnableDiagnostics = true;
+
         // Head-to-head comparison: Our kernel vs CLBlast library
         using var engine = new DirectGpuEngine();
         if (!engine.IsAvailable)
