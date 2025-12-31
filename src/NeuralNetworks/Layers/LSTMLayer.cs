@@ -970,6 +970,10 @@ public class LSTMLayer<T> : LayerBase<T>
         var WihT = Engine.TensorTranspose(_weightsIh);
         var WchT = Engine.TensorTranspose(_weightsCh);
         var WohT = Engine.TensorTranspose(_weightsOh);
+        var biasF2D = _biasF.Reshape([1, _hiddenSize]);
+        var biasI2D = _biasI.Reshape([1, _hiddenSize]);
+        var biasC2D = _biasC.Reshape([1, _hiddenSize]);
+        var biasO2D = _biasO.Reshape([1, _hiddenSize]);
 
         for (int t = 0; t < timeSteps; t++)
         {
@@ -980,25 +984,25 @@ public class LSTMLayer<T> : LayerBase<T>
             // Forget Gate - using TensorBroadcastAdd for bias (supports [batch, hidden] + [hidden] broadcasting)
             var f = Engine.TensorMatMul(xt, WfiT);
             f = Engine.TensorAdd(f, Engine.TensorMatMul(currentH, WfhT));
-            f = Engine.TensorBroadcastAdd(f, _biasF);
+            f = Engine.TensorBroadcastAdd(f, biasF2D);
             f = Engine.Sigmoid(f);
 
             // Input Gate
             var i = Engine.TensorMatMul(xt, WiiT);
             i = Engine.TensorAdd(i, Engine.TensorMatMul(currentH, WihT));
-            i = Engine.TensorBroadcastAdd(i, _biasI);
+            i = Engine.TensorBroadcastAdd(i, biasI2D);
             i = Engine.Sigmoid(i);
 
             // Cell Candidate
             var c_tilde = Engine.TensorMatMul(xt, WciT);
             c_tilde = Engine.TensorAdd(c_tilde, Engine.TensorMatMul(currentH, WchT));
-            c_tilde = Engine.TensorBroadcastAdd(c_tilde, _biasC);
+            c_tilde = Engine.TensorBroadcastAdd(c_tilde, biasC2D);
             c_tilde = Engine.Tanh(c_tilde);
 
             // Output Gate
             var o = Engine.TensorMatMul(xt, WoiT);
             o = Engine.TensorAdd(o, Engine.TensorMatMul(currentH, WohT));
-            o = Engine.TensorBroadcastAdd(o, _biasO);
+            o = Engine.TensorBroadcastAdd(o, biasO2D);
             o = Engine.Sigmoid(o);
 
             // Update Cell State
@@ -1419,6 +1423,10 @@ public class LSTMLayer<T> : LayerBase<T>
         // Forward pass calculations (needed for backward pass)
         // concat has shape [batchSize, inputSize + hiddenSize]
         var concat = Tensor<T>.Concatenate(new[] { x, prev_h }, 1);
+        var biasF2D = _biasF.Reshape([1, _hiddenSize]);
+        var biasI2D = _biasI.Reshape([1, _hiddenSize]);
+        var biasC2D = _biasC.Reshape([1, _hiddenSize]);
+        var biasO2D = _biasO.Reshape([1, _hiddenSize]);
 
         // For LSTM gate computation: f = σ(concat @ W^T + b)
         // W_fi has shape [hiddenSize, inputSize], W_fh has shape [hiddenSize, hiddenSize]
@@ -1429,13 +1437,13 @@ public class LSTMLayer<T> : LayerBase<T>
         // concat @ W_combined = [batchSize, inputSize + hiddenSize] @ [inputSize + hiddenSize, hiddenSize] = [batchSize, hiddenSize]
         // _biasF is [hiddenSize], need to broadcast across batch dimension
         var f = ActivateTensorConditional(_sigmoidVectorActivation, _sigmoidActivation,
-            Engine.TensorBroadcastAdd(concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsFi.Transpose(new[] { 1, 0 }), _weightsFh.Transpose(new[] { 1, 0 }) }, 0)), _biasF));
+            Engine.TensorBroadcastAdd(concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsFi.Transpose(new[] { 1, 0 }), _weightsFh.Transpose(new[] { 1, 0 }) }, 0)), biasF2D));
         var i = ActivateTensorConditional(_sigmoidVectorActivation, _sigmoidActivation,
-            Engine.TensorBroadcastAdd(concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsIi.Transpose(new[] { 1, 0 }), _weightsIh.Transpose(new[] { 1, 0 }) }, 0)), _biasI));
+            Engine.TensorBroadcastAdd(concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsIi.Transpose(new[] { 1, 0 }), _weightsIh.Transpose(new[] { 1, 0 }) }, 0)), biasI2D));
         var c_bar = ActivateTensorConditional(_tanhVectorActivation, _tanhActivation,
-            Engine.TensorBroadcastAdd(concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsCi.Transpose(new[] { 1, 0 }), _weightsCh.Transpose(new[] { 1, 0 }) }, 0)), _biasC));
+            Engine.TensorBroadcastAdd(concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsCi.Transpose(new[] { 1, 0 }), _weightsCh.Transpose(new[] { 1, 0 }) }, 0)), biasC2D));
         var o = ActivateTensorConditional(_sigmoidVectorActivation, _sigmoidActivation,
-            Engine.TensorBroadcastAdd(concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsOi.Transpose(new[] { 1, 0 }), _weightsOh.Transpose(new[] { 1, 0 }) }, 0)), _biasO));
+            Engine.TensorBroadcastAdd(concat.Multiply(Tensor<T>.Concatenate(new[] { _weightsOi.Transpose(new[] { 1, 0 }), _weightsOh.Transpose(new[] { 1, 0 }) }, 0)), biasO2D));
         var c = f.PointwiseMultiply(prev_c).Add(i.PointwiseMultiply(c_bar));
         var h = o.PointwiseMultiply(ActivateTensor(_tanhActivation, c));
 
