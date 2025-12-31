@@ -1156,4 +1156,180 @@ public class AdvancedLayersIntegrationTests
     }
 
     #endregion
+
+    #region ReshapeLayer Tests
+
+    [Fact]
+    public void ReshapeLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange - Reshape from [8, 4] to [32]
+        int[] inputShape = [8, 4];
+        int[] outputShape = [32];
+        var layer = new ReshapeLayer<float>(inputShape, outputShape);
+
+        var input = Tensor<float>.CreateRandom([2, 8, 4]); // batch + inputShape
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+        Assert.Equal(32, output.Shape[1]); // reshaped
+    }
+
+    [Fact]
+    public void ReshapeLayer_FlattenToExpand_Works()
+    {
+        // Arrange - Reshape from [16] to [4, 4]
+        int[] inputShape = [16];
+        int[] outputShape = [4, 4];
+        var layer = new ReshapeLayer<float>(inputShape, outputShape);
+
+        var input = Tensor<float>.CreateRandom([2, 16]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal(3, output.Shape.Length); // batch + 2D output
+        Assert.Equal(2, output.Shape[0]);
+        Assert.Equal(4, output.Shape[1]);
+        Assert.Equal(4, output.Shape[2]);
+    }
+
+    [Fact]
+    public void ReshapeLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] inputShape = [8, 4];
+        int[] outputShape = [32];
+        var original = new ReshapeLayer<float>(inputShape, outputShape);
+        var input = Tensor<float>.CreateRandom([1, 8, 4]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+    }
+
+    #endregion
+
+    #region Conv3DLayer Tests
+
+    [Fact]
+    public void Conv3DLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange - 3D convolution for volumetric data
+        int inputChannels = 1;
+        int outputChannels = 8;
+        int kernelSize = 3;
+        int inputDepth = 8, inputHeight = 8, inputWidth = 8;
+        var layer = new Conv3DLayer<float>(inputChannels, outputChannels, kernelSize,
+            inputDepth, inputHeight, inputWidth, 1, 1, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([2, inputChannels, inputDepth, inputHeight, inputWidth]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(5, output.Shape.Length);
+        Assert.Equal(2, output.Shape[0]); // batch
+        Assert.Equal(outputChannels, output.Shape[1]); // channels
+    }
+
+    [Fact]
+    public void Conv3DLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputChannels = 1;
+        int outputChannels = 4;
+        int kernelSize = 3;
+        var original = new Conv3DLayer<float>(inputChannels, outputChannels, kernelSize,
+            4, 4, 4, 1, 1, (IActivationFunction<float>?)null);
+        var input = Tensor<float>.CreateRandom([1, inputChannels, 4, 4, 4]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+    }
+
+    #endregion
+
+    #region GRULayer Tests
+
+    [Fact]
+    public void GRULayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange - GRU for sequence data
+        int inputSize = 16;
+        int hiddenSize = 32;
+        bool returnSequences = false;
+        var layer = new GRULayer<float>(inputSize, hiddenSize, returnSequences, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([2, 5, inputSize]); // [batch, sequence, features]
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        // When returnSequences=false, output is [batch, hiddenSize]
+        Assert.Equal(2, output.Shape[0]); // batch
+    }
+
+    [Fact]
+    public void GRULayer_ReturnSequences_ProducesSequenceOutput()
+    {
+        // Arrange - GRU returning full sequence
+        int inputSize = 16;
+        int hiddenSize = 32;
+        bool returnSequences = true;
+        var layer = new GRULayer<float>(inputSize, hiddenSize, returnSequences, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([2, 5, inputSize]); // [batch, sequence, features]
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        // When returnSequences=true, output is [batch, sequence, hiddenSize]
+        Assert.Equal(2, output.Shape[0]); // batch
+    }
+
+    [Fact]
+    public void GRULayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputSize = 8;
+        int hiddenSize = 16;
+        var original = new GRULayer<float>(inputSize, hiddenSize, false, (IActivationFunction<float>?)null);
+        var input = Tensor<float>.CreateRandom([1, 3, inputSize]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+    }
+
+    #endregion
 }
