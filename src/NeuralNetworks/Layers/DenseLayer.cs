@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Helpers;
 
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -681,7 +682,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
             // Xavier initialization
             T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (actualInputSize + outputSize)));
-            var random = new Random(42);
+            var random = RandomHelper.CreateSecureRandom();
             for (int i = 0; i < _weights.Length; i++)
             {
                 _weights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
