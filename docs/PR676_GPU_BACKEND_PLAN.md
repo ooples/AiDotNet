@@ -14,17 +14,21 @@
 ## Decisions
 - NVIDIA API: CUDA Driver API (P/Invoke) + PTX (NVRTC for runtime codegen).
 - NVIDIA GEMM fallback: cuBLAS.
+- NVIDIA non-GEMM fallback: cuDNN (custom CUDA kernels remain primary).
 - OpenCL GEMM fallback: CLBlast.
 - Kernel coverage: replace all ILGPU kernels with direct backends.
 - Removal: delete ILGPU packages/types after parity + tests are in place.
+- Type conversion: convert to float at GPU boundary, convert back via INumericOperations.
+- NVRTC: add fallback probing for multiple DLL versions.
 
 ## Decisions (TBD)
-- NVIDIA non-GEMM primitives: cuDNN vs custom CUDA kernels?
+- cuDNN version support list (8/9 and platform-specific names).
+- NVRTC DLL name list to probe (Windows + Linux).
 - CI strategy for CUDA (env-gated tests or no CUDA in CI)?
 
 ## Architecture Outline
 - Engine selection:
-  - NVIDIA GPU -> DirectCudaBackend (primary) -> cuBLAS fallback -> CPU
+  - NVIDIA GPU -> DirectCudaBackend (custom kernels) -> cuDNN/cuBLAS fallback -> CPU
   - Non-NVIDIA GPU -> DirectOpenClBackend (primary) -> CLBlast fallback -> CPU
 - Shared abstractions:
   - IGpuBackend, IGpuAllocator, IGpuKernel, IGpuStream, IGpuTuner
@@ -38,6 +42,8 @@
    - Device discovery, context, stream, memory, kernel launch.
    - GEMM baseline + tuned kernels; packing and layout parity with OpenCL.
    - NVRTC-based kernel compile for tuned kernels and elementwise ops.
+   - Custom CUDA kernels are primary; cuDNN is fallback for non-GEMM primitives.
+   - Add NVRTC DLL fallback probing.
    - Hook Bayesian tuning pipeline + diagnostics.
 3. Remove ILGPU
    - Delete ILGPU package refs and types.
