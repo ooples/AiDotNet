@@ -558,7 +558,19 @@ public class NeuralNetworkLayersIntegrationTests
 
         // Assert
         Assert.NotNull(gradient);
-        // Gradient should be zero where output was zero (same mask applied)
+        // Gradient should be zero where output was zero (same mask applied)    
+        for (int i = 0; i < output.Shape[1]; i++)
+        {
+            if (Math.Abs(output[0, i]) < Tolerance)
+            {
+                Assert.True(Math.Abs(gradient[0, i]) < Tolerance,
+                    $"Gradient[{i}] should be zero where output was dropped");
+            }
+            else
+            {
+                Assert.Equal(output[0, i], gradient[0, i], Tolerance);
+            }
+        }
     }
 
     #endregion
