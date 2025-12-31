@@ -815,7 +815,7 @@ public class AdvancedLayersIntegrationTests
 
     #region ConvLSTMLayer Tests
 
-    [Fact(Skip = "ConvLSTMLayer has a bug in ConvLSTMCell where tensor Add operation fails due to shape mismatch")]
+    [Fact]
     public void ConvLSTMLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - ConvLSTM for spatiotemporal data
@@ -835,7 +835,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape[0]); // batch preserved
     }
 
-    [Fact(Skip = "ConvLSTMLayer has a bug in ConvLSTMCell where tensor Add operation fails due to shape mismatch")]
+    [Fact]
     public void ConvLSTMLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -897,7 +897,7 @@ public class AdvancedLayersIntegrationTests
     }
 
     [Fact]
-    public void GatedLinearUnitLayer_ParameterCount_IsNonNegative()
+    public void GatedLinearUnitLayer_ParameterCount_IsPositive()
     {
         // Arrange
         var layer = new GatedLinearUnitLayer<float>(64, 32, (IActivationFunction<float>?)null);
@@ -905,8 +905,10 @@ public class AdvancedLayersIntegrationTests
         // Act
         int paramCount = layer.ParameterCount;
 
-        // Assert - ParameterCount property is accessible and returns valid value
-        Assert.True(paramCount >= 0);
+        // Assert - GLU has linearWeights (64*32) + gateWeights (64*32) + linearBias (32) + gateBias (32)
+        // = 2048 + 2048 + 32 + 32 = 4160 parameters
+        Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
+        Assert.Equal(4160, paramCount);
     }
 
     #endregion
@@ -949,7 +951,7 @@ public class AdvancedLayersIntegrationTests
     }
 
     [Fact]
-    public void HighwayLayer_ParameterCount_IsNonNegative()
+    public void HighwayLayer_ParameterCount_IsPositive()
     {
         // Arrange
         var layer = new HighwayLayer<float>(64, (IActivationFunction<float>?)null, (IActivationFunction<float>?)null);
@@ -957,8 +959,10 @@ public class AdvancedLayersIntegrationTests
         // Act
         int paramCount = layer.ParameterCount;
 
-        // Assert - ParameterCount property is accessible and returns valid value
-        Assert.True(paramCount >= 0);
+        // Assert - Highway has transformWeights (64*64) + transformBias (64) + gateWeights (64*64) + gateBias (64)
+        // = 4096 + 64 + 4096 + 64 = 8320 parameters
+        Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
+        Assert.Equal(8320, paramCount);
     }
 
     #endregion
