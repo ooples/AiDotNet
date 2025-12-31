@@ -153,7 +153,7 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// Initializes a new instance of the <see cref="DeepQNetwork{T}"/> class with the specified architecture and exploration rate.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="epsilon">The initial exploration rate (probability of taking random actions). Default is a high value for exploration.</param>
+    /// <param name="epsilon">The initial exploration rate (probability of taking random actions). Default is 1.0 for full exploration.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new Deep Q-Network with the specified architecture and exploration rate.
@@ -171,7 +171,7 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// a curiosity level (epsilon) that determines how often they'll experiment versus stick with what they know.
     /// </para>
     /// </remarks>
-    public DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, double epsilon = 1e16) :
+    public DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, double epsilon = 1.0) :
         this(architecture, lossFunction, epsilon, isTargetNetwork: false)
     {
     }
