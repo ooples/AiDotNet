@@ -389,6 +389,10 @@ public class NeuralNetworkLayersIntegrationTests
 
         var input = new Tensor<double>([8, numFeatures]);
         InitializeRandomTensor(input, scale: 5.0);
+        for (int i = 0; i < input.Length; i++)
+        {
+            input[i] += 3.5;
+        }
 
         // Act - Training mode
         layer.SetTrainingMode(true);
@@ -397,11 +401,29 @@ public class NeuralNetworkLayersIntegrationTests
         // Act - Inference mode
         layer.SetTrainingMode(false);
         var inferenceOutput = layer.Forward(input);
+        var inferenceOutputRepeat = layer.Forward(input);
 
         // Assert - Both should produce valid outputs
         Assert.NotNull(trainingOutput);
         Assert.NotNull(inferenceOutput);
-        // Note: Outputs may differ due to running statistics vs batch statistics
+        Assert.Equal(trainingOutput.Shape, inferenceOutput.Shape);
+
+        bool outputsDiffer = false;
+        for (int i = 0; i < trainingOutput.Length; i++)
+        {
+            if (Math.Abs(trainingOutput[i] - inferenceOutput[i]) > 1e-6)
+            {
+                outputsDiffer = true;
+                break;
+            }
+        }
+
+        Assert.True(outputsDiffer);
+
+        for (int i = 0; i < inferenceOutput.Length; i++)
+        {
+            Assert.Equal(inferenceOutput[i], inferenceOutputRepeat[i], 8);
+        }
     }
 
     [Fact]
