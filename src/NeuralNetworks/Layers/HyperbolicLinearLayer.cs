@@ -414,9 +414,12 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         return inputGradient.Reshape(_originalInputShape);
     }
 
-    /// <summary> using the calculated gradients.
-    /// Uses Riemannian gradient descent (exponential map of negative gradient).
+    /// <summary>
+    /// Updates the parameters of the layer using the calculated gradients.
     /// </summary>
+    /// <remarks>
+    /// Uses Riemannian gradient descent (exponential map of negative gradient).
+    /// </remarks>
     /// <param name="learningRate">The learning rate to use for the update.</param>
     public override void UpdateParameters(T learningRate)
     {
