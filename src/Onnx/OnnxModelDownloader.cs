@@ -60,7 +60,8 @@ public class OnnxModelDownloader : IOnnxModelDownloader, IDisposable
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _ownsHttpClient = ownsHttpClient;
 
-if (cacheDirectory is not null && !string.IsNullOrWhiteSpace(cacheDirectory))        {            _cacheDirectory = cacheDirectory;        }        else        {            var userHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);            _cacheDirectory = Path.Combine(userHome, ".aidotnet", "models");        }        Directory.CreateDirectory(_cacheDirectory);
+        if (cacheDirectory is not null && !string.IsNullOrWhiteSpace(cacheDirectory)) { _cacheDirectory = cacheDirectory; } else { var userHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile); _cacheDirectory = Path.Combine(userHome, ".aidotnet", "models"); }
+        Directory.CreateDirectory(_cacheDirectory);
     }
 
     /// <inheritdoc/>
@@ -271,7 +272,7 @@ if (cacheDirectory is not null && !string.IsNullOrWhiteSpace(cacheDirectory))   
             totalBytes += existingLength;
         }
 
-        #if NET6_0_OR_GREATER
+#if NET6_0_OR_GREATER
         using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
 #else
         using var contentStream = await response.Content.ReadAsStreamAsync();
@@ -284,13 +285,13 @@ if (cacheDirectory is not null && !string.IsNullOrWhiteSpace(cacheDirectory))   
         long totalBytesRead = existingLength;
         int bytesRead;
 
-        #if NET6_0_OR_GREATER
+#if NET6_0_OR_GREATER
         while ((bytesRead = await contentStream.ReadAsync(buffer, cancellationToken)) > 0)
 #else
         while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
 #endif
         {
-            #if NET6_0_OR_GREATER
+#if NET6_0_OR_GREATER
             await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
 #else
             await fileStream.WriteAsync(buffer, 0, bytesRead);
