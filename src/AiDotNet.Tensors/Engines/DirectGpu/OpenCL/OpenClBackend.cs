@@ -27,10 +27,15 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
     public sealed class OpenClBackend : IDirectGpuBackend
     {
         private DirectOpenClContext? _context;
-        private readonly Dictionary<string, DirectOpenClKernel> _kernelCache;
+        private readonly Dictionary<string, DirectOpenClKernel> _kernelCache;   
         private readonly List<DirectOpenClProgram> _programs;
         private DynamicGemmKernel? _dynamicGemm;
         private bool _disposed;
+        private const string OfflineTuningEnvVar = "AIDOTNET_GPU_TUNE";
+        private const string OfflineTuningTrialsEnvVar = "AIDOTNET_GPU_TUNE_TRIALS";
+        private const int DefaultBayesianTrials = 60;
+        private readonly Dictionary<(int M, int N, int K), GemmConfig> _tunedConfigCache = new();
+        private readonly object _tunedConfigLock = new();
 
         public bool IsAvailable { get; }
         public string BackendName => "OpenCL";
@@ -128,7 +133,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             // -cl-unsafe-math-optimizations: More aggressive optimizations
             // -cl-finite-math-only: Assume no NaN/Inf (safe for GEMM)
             // -cl-no-signed-zeros: Ignore sign of zeros for faster math
-            const string optimizationFlags = "-cl-fast-relaxed-math -cl-mad-enable -cl-unsafe-math-optimizations -cl-finite-math-only -cl-no-signed-zeros";
+            const string optimizationFlags = OpenClBuildOptions.OptimizationFlags;
 
             try
             {
@@ -175,6 +180,17 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                     _kernelCache[name] = new DirectOpenClKernel(_context, reductionProgram, name);
                 }
                 Console.WriteLine($"[OpenClBackend] Reduction kernels: {string.Join(", ", ReductionKernels.GetKernelNames())}");
+
+                // Compile packing/pad-copy kernels
+                Console.WriteLine("[OpenClBackend] Compiling packing kernels...");
+                var packingProgram = new DirectOpenClProgram(_context, PackingKernels.GetSource());
+                packingProgram.Build(optimizationFlags);
+                _programs.Add(packingProgram);
+                foreach (var name in PackingKernels.GetKernelNames())
+                {
+                    _kernelCache[name] = new DirectOpenClKernel(_context, packingProgram, name);
+                }
+                Console.WriteLine($"[OpenClBackend] Packing kernels: {string.Join(", ", PackingKernels.GetKernelNames())}");
 
                 // Compile sparse GEMM kernels (2:4 structured sparsity)
                 Console.WriteLine("[OpenClBackend] Compiling sparse GEMM kernels...");
@@ -258,6 +274,44 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             return localSize;
         }
 
+        private string GetDeviceSignature()
+        {
+            if (_context == null)
+                return string.Empty;
+
+            return $"{_context.DeviceVendor}|{_context.DeviceName}|{_context.DriverVersion}|{_context.OpenClVersion}";
+        }
+
+        private static int GetEnvInt(string name, int defaultValue)
+        {
+            var value = Environment.GetEnvironmentVariable(name);
+            return int.TryParse(value, out var parsed) && parsed > 0 ? parsed : defaultValue;
+        }
+
+        private static bool TryGetOfflineTuningMode(out bool useExhaustive)
+        {
+            useExhaustive = false;
+            var value = Environment.GetEnvironmentVariable(OfflineTuningEnvVar);
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            if (value.Equals("0", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("false", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("off", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (value.Equals("exhaustive", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("full", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("all", StringComparison.OrdinalIgnoreCase))
+            {
+                useExhaustive = true;
+            }
+
+            return true;
+        }
+
         #region Memory Management
 
         public IGpuBuffer AllocateBuffer(float[] data)
@@ -294,6 +348,199 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
         #region GEMM Operations
 
+        private bool TryGetTunedConfig(int M, int N, int K, out GemmConfig config)
+        {
+            config = default;
+            var key = (M, N, K);
+
+            lock (_tunedConfigLock)
+            {
+                if (_tunedConfigCache.TryGetValue(key, out var cachedConfig))
+                {
+                    config = cachedConfig;
+                    return true;
+                }
+            }
+
+            try
+            {
+                string deviceSignature = GetDeviceSignature();
+                using var database = new GemmTuningDatabase(deviceSignature: deviceSignature);
+                var cachedEntry = database.GetBestConfigWithGflops(M, N, K);
+                if (cachedEntry.HasValue && cachedEntry.Value.GFlops > 0)
+                {
+                    var cachedConfig = cachedEntry.Value.Config;
+                    var validationError = DynamicGemmKernel.ValidateConfig(cachedConfig);
+                    if (validationError == null)
+                    {
+                        lock (_tunedConfigLock)
+                        {
+                            _tunedConfigCache[key] = cachedConfig;
+                        }
+
+                        config = cachedConfig;
+                        return true;
+                    }
+
+                    if (EnableTuningDiagnostics)
+                    {
+                        Console.WriteLine($"[GEMM] Cached config invalid: {validationError}");
+                    }
+                }
+
+                if (!TryGetOfflineTuningMode(out bool useExhaustive))
+                    return false;
+
+                if (useExhaustive)
+                {
+                    var results = RunExhaustiveGemmOptimization(M, N, K);
+                    if (results.Length > 0 && results[0].IsValid)
+                    {
+                        lock (_tunedConfigLock)
+                        {
+                            _tunedConfigCache[key] = results[0].Config;
+                        }
+
+                        config = results[0].Config;
+                        return true;
+                    }
+
+                    return false;
+                }
+
+                int maxTrials = GetEnvInt(OfflineTuningTrialsEnvVar, DefaultBayesianTrials);
+                var tunedResults = RunBayesianGemmOptimization(M, N, K, maxTrials);
+                if (tunedResults.Length > 0 && tunedResults[0].IsValid)
+                {
+                    lock (_tunedConfigLock)
+                    {
+                        _tunedConfigCache[key] = tunedResults[0].Config;
+                    }
+
+                    config = tunedResults[0].Config;
+                    return true;
+                }
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                if (EnableTuningDiagnostics)
+                {
+                    Console.WriteLine($"[GEMM] Tuning lookup failed: {ex.Message}");
+                }
+
+                return false;
+            }
+        }
+
+        private static int CeilDiv(int value, int divisor)
+        {
+            return (value + divisor - 1) / divisor;
+        }
+
+        private void PadCopyMatrix(IGpuBuffer src, IGpuBuffer dst, int srcRows, int srcCols, int dstRows, int dstCols)
+        {
+            var kernel = _kernelCache["pad_copy"];
+            kernel.SetArg(0, ((DirectOpenClGpuBuffer)src).Buffer.Handle);
+            kernel.SetArg(1, ((DirectOpenClGpuBuffer)dst).Buffer.Handle);
+            kernel.SetArg(2, srcRows);
+            kernel.SetArg(3, srcCols);
+            kernel.SetArg(4, dstRows);
+            kernel.SetArg(5, dstCols);
+
+            var (localSizeX, localSizeY) = CalculateOptimalWorkGroupSize(dstRows, dstCols);
+            kernel.Execute2D(dstRows, dstCols, localSizeX, localSizeY);
+        }
+
+        private void CopySubmatrix(IGpuBuffer src, IGpuBuffer dst, int rows, int cols, int srcStride, int dstStride)
+        {
+            var kernel = _kernelCache["copy_submatrix"];
+            kernel.SetArg(0, ((DirectOpenClGpuBuffer)src).Buffer.Handle);
+            kernel.SetArg(1, ((DirectOpenClGpuBuffer)dst).Buffer.Handle);
+            kernel.SetArg(2, rows);
+            kernel.SetArg(3, cols);
+            kernel.SetArg(4, srcStride);
+            kernel.SetArg(5, dstStride);
+
+            var (localSizeX, localSizeY) = CalculateOptimalWorkGroupSize(rows, cols);
+            kernel.Execute2D(rows, cols, localSizeX, localSizeY);
+        }
+
+        private bool TryExecutePackedDynamicGemm(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha, float beta, GemmConfig config)
+        {
+            int kReg = config.KReg > 0 ? config.KReg : 1;
+            int kUnit = config.TileK * kReg;
+            if (config.TileM <= 0 || config.TileN <= 0 || kUnit <= 0)
+                return false;
+
+            int mPad = CeilDiv(M, config.TileM) * config.TileM;
+            int nPad = CeilDiv(N, config.TileN) * config.TileN;
+            int kPad = CeilDiv(K, kUnit) * kUnit;
+
+            if (mPad == M && nPad == N && kPad == K)
+                return TryExecuteDynamicGemm(A, B, C, M, N, K, alpha, beta, config);
+
+            long aSize = (long)mPad * kPad;
+            long bSize = (long)kPad * nPad;
+            long cSize = (long)mPad * nPad;
+            if (aSize > int.MaxValue || bSize > int.MaxValue || cSize > int.MaxValue)
+                return false;
+
+            if (EnableTuningDiagnostics)
+            {
+                Console.WriteLine($"[GEMM] Packed GEMM: {M}x{N}x{K} -> {mPad}x{nPad}x{kPad}");
+            }
+
+            using var aPad = AllocateBuffer(mPad * kPad);
+            using var bPad = AllocateBuffer(kPad * nPad);
+            using var cPad = AllocateBuffer(mPad * nPad);
+
+            PadCopyMatrix(A, aPad, M, K, mPad, kPad);
+            PadCopyMatrix(B, bPad, K, N, kPad, nPad);
+            if (beta != 0.0f)
+                PadCopyMatrix(C, cPad, M, N, mPad, nPad);
+            else
+                PadCopyMatrix(C, cPad, 0, 0, mPad, nPad);
+
+            if (!TryExecuteDynamicGemm(aPad, bPad, cPad, mPad, nPad, kPad, alpha, beta, config))
+                return false;
+
+            CopySubmatrix(cPad, C, M, N, nPad, N);
+            return true;
+        }
+
+        private bool TryExecuteDynamicGemm(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha, float beta, GemmConfig config)
+        {
+            if (_dynamicGemm == null)
+                return false;
+
+            var validationError = DynamicGemmKernel.ValidateConfig(config);
+            if (validationError != null)
+            {
+                if (EnableTuningDiagnostics)
+                {
+                    Console.WriteLine($"[GEMM] Dynamic config invalid: {validationError}");
+                }
+                return false;
+            }
+
+            try
+            {
+                var kernel = _dynamicGemm.GetKernel(config);
+                _dynamicGemm.Execute(kernel, config, A, B, C, M, N, K, alpha, beta);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                if (EnableTuningDiagnostics)
+                {
+                    Console.WriteLine($"[GEMM] Dynamic kernel failed ({config.KernelName}): {ex.Message}");
+                }
+                return false;
+            }
+        }
+
         public void Gemm(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha = 1.0f, float beta = 0.0f)
         {
             if (_context == null)
@@ -302,6 +549,13 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             var bufferA = ((DirectOpenClGpuBuffer)A).Buffer;
             var bufferB = ((DirectOpenClGpuBuffer)B).Buffer;
             var bufferC = ((DirectOpenClGpuBuffer)C).Buffer;
+
+            if (_dynamicGemm != null && M >= 128 && N >= 128 && K >= 64 &&
+                TryGetTunedConfig(M, N, K, out var tunedConfig))
+            {
+                if (TryExecutePackedDynamicGemm(A, B, C, M, N, K, alpha, beta, tunedConfig))
+                    return;
+            }
 
             // Choose kernel based on matrix size
             // Use optimized kernel for matrices >= 128 in any dimension
@@ -1347,13 +1601,15 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             using var bufB = AllocateBuffer(dataB);
             using var bufC = AllocateBuffer(M * N);
 
-            using var database = new GemmTuningDatabase();
+            string deviceSignature = GetDeviceSignature();
+            using var database = new GemmTuningDatabase(deviceSignature: deviceSignature);
             var tuner = new GemmAutoTuner();
 
             int benchmarkAttempts = 0;
             int benchmarkFailures = 0;
+            double ops = 2.0 * M * N * K;
 
-            double BenchmarkConfig(GemmConfig config)
+            double BenchmarkConfig(GemmConfig config, bool allowCached)
             {
                 benchmarkAttempts++;
 
@@ -1366,7 +1622,25 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                     {
                         Console.WriteLine($"  [Validation] {config.KernelName}: {validationError}");
                     }
-                    return double.MaxValue;
+                    database.MarkAsTested(M, N, K, config, 0);
+                    return double.NaN;
+                }
+
+                if (allowCached && database.HasBeenTested(M, N, K, config))
+                {
+                    var cachedGflops = database.GetCachedGflops(M, N, K, config);
+                    if (cachedGflops.HasValue && cachedGflops.Value > 0)
+                    {
+                        if (EnableTuningDiagnostics)
+                        {
+                            Console.WriteLine($"  [Cache] {config.KernelName}: {cachedGflops.Value:F2} GFLOPS");
+                        }
+
+                        return ops / (cachedGflops.Value * 1e6);
+                    }
+
+                    benchmarkFailures++;
+                    return double.NaN;
                 }
 
                 try
@@ -1378,7 +1652,17 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                     for (int i = 0; i < benchmarkRuns; i++)
                         totalTimeMs += GemmWithDynamicKernel(bufA, bufB, bufC, M, N, K, config);
 
-                    return totalTimeMs / benchmarkRuns;
+                    double avgTimeMs = totalTimeMs / benchmarkRuns;
+                    if (double.IsNaN(avgTimeMs) || double.IsInfinity(avgTimeMs) || avgTimeMs <= 0)
+                    {
+                        benchmarkFailures++;
+                        database.MarkAsTested(M, N, K, config, 0);
+                        return double.NaN;
+                    }
+
+                    double gflops = ops / (avgTimeMs * 1e6);
+                    database.MarkAsTested(M, N, K, config, gflops);
+                    return avgTimeMs;
                 }
                 catch (Exception ex)
                 {
@@ -1391,9 +1675,13 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                         Console.WriteLine($"  [DynamicGemm Stats] {_dynamicGemm.GetDiagnosticStats()}");
                     }
 
-                    return double.MaxValue;
+                    database.MarkAsTested(M, N, K, config, 0);
+                    return double.NaN;
                 }
             }
+
+            double BenchmarkConfigCached(GemmConfig config) => BenchmarkConfig(config, true);
+            double BenchmarkConfigNoCache(GemmConfig config) => BenchmarkConfig(config, false);
 
             // Check for cached result first - use DATABASE GFLOPS as baseline
             var cachedEntry = database.GetBestConfigWithGflops(M, N, K);
@@ -1408,10 +1696,9 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 Console.WriteLine($"Database best: {databaseGflops:F2} GFLOPS (threshold to beat)");
 
                 // Re-benchmark to validate config works and add to result set
-                var cachedTimeMs = BenchmarkConfig(cachedConfig);
-                if (cachedTimeMs < double.MaxValue)
+                var cachedTimeMs = BenchmarkConfigNoCache(cachedConfig);
+                if (!double.IsNaN(cachedTimeMs))
                 {
-                    double ops = 2.0 * M * N * K;
                     double revalidatedGflops = (ops / (cachedTimeMs / 1000.0)) / 1e9;
                     cachedResult = new TuningResult
                     {
@@ -1425,7 +1712,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             }
 
             // Run Bayesian optimization
-            var results = tuner.TuneWithBayesianOptimization(M, N, K, capabilities, BenchmarkConfig, maxTrials, Math.Min(5, maxTrials / 4), 0, 1);
+            var results = tuner.TuneWithBayesianOptimization(M, N, K, capabilities, BenchmarkConfigCached, maxTrials, Math.Min(5, maxTrials / 4), 0, 1);
 
             // Print final statistics
             if (EnableTuningDiagnostics)
@@ -1492,10 +1779,41 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             using var bufB = AllocateBuffer(dataB);
             using var bufC = AllocateBuffer(M * N);
 
+            string deviceSignature = GetDeviceSignature();
+            using var database = new GemmTuningDatabase(deviceSignature: deviceSignature);
             var tuner = new GemmAutoTuner();
+            double ops = 2.0 * M * N * K;
 
-            double BenchmarkConfig(GemmConfig config)
+            double BenchmarkConfig(GemmConfig config, bool allowCached)
             {
+                // Validate config before attempting execution
+                var validationError = DynamicGemmKernel.ValidateConfig(config);
+                if (validationError != null)
+                {
+                    if (EnableTuningDiagnostics)
+                    {
+                        Console.WriteLine($"  [Validation] {config.KernelName}: {validationError}");
+                    }
+                    database.MarkAsTested(M, N, K, config, 0);
+                    return double.NaN;
+                }
+
+                if (allowCached && database.HasBeenTested(M, N, K, config))
+                {
+                    var cachedGflops = database.GetCachedGflops(M, N, K, config);
+                    if (cachedGflops.HasValue && cachedGflops.Value > 0)
+                    {
+                        if (EnableTuningDiagnostics)
+                        {
+                            Console.WriteLine($"  [Cache] {config.KernelName}: {cachedGflops.Value:F2} GFLOPS");
+                        }
+
+                        return ops / (cachedGflops.Value * 1e6);
+                    }
+
+                    return double.NaN;
+                }
+
                 try
                 {
                     for (int i = 0; i < warmupRuns; i++)
@@ -1505,24 +1823,35 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                     for (int i = 0; i < benchmarkRuns; i++)
                         totalTimeMs += GemmWithDynamicKernel(bufA, bufB, bufC, M, N, K, config);
 
-                    return totalTimeMs / benchmarkRuns;
+                    double avgTimeMs = totalTimeMs / benchmarkRuns;
+                    if (double.IsNaN(avgTimeMs) || double.IsInfinity(avgTimeMs) || avgTimeMs <= 0)
+                    {
+                        database.MarkAsTested(M, N, K, config, 0);
+                        return double.NaN;
+                    }
+
+                    double gflops = ops / (avgTimeMs * 1e6);
+                    database.MarkAsTested(M, N, K, config, gflops);
+                    return avgTimeMs;
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"  Config {config} failed: {ex.Message}");
-                    return double.MaxValue;
+                    database.MarkAsTested(M, N, K, config, 0);
+                    return double.NaN;
                 }
             }
 
+            double BenchmarkConfigCached(GemmConfig config) => BenchmarkConfig(config, true);
+
             // Use exhaustive search - tests ALL configurations
-            var results = tuner.TuneForDimensions(M, N, K, capabilities, BenchmarkConfig, warmupRuns, benchmarkRuns);
+            var results = tuner.TuneForDimensions(M, N, K, capabilities, BenchmarkConfigCached, 0, 1);
 
             if (results.Length > 0 && results[0].IsValid)
             {
                 var best = results[0];
                 Console.WriteLine($"EXHAUSTIVE Best: {best.Config} - {best.GFlops:F2} GFLOPS");
 
-                using var database = new GemmTuningDatabase();
                 database.StoreResult(M, N, K, best.Config, best.GFlops);
             }
 

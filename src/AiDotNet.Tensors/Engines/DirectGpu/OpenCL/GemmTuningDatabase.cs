@@ -3,7 +3,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
+using System.Text;
 
 namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL;
 
@@ -14,26 +16,31 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL;
 /// </summary>
 internal sealed class GemmTuningDatabase : IDisposable
 {
+    private readonly string _signature;
     private readonly string _databasePath;
     private readonly string _historyPath;  // Tracks ALL tested configs, not just best
     private readonly Dictionary<string, (GemmConfig Config, double GFlops)> _cache;
     private readonly HashSet<string> _testedConfigs;  // ConfigKey -> already tested
+    private readonly Dictionary<string, double> _testedGflops;
     private readonly object _lock = new();
     private bool _isDirty;
     private bool _disposed;
 
-    public GemmTuningDatabase(string? customPath = null)
+    public GemmTuningDatabase(string? customPath = null, string? deviceSignature = null)
     {
         _cache = new Dictionary<string, (GemmConfig, double)>();
         _testedConfigs = new HashSet<string>();
+        _testedGflops = new Dictionary<string, double>();
+        _signature = NormalizeSignature(deviceSignature);
 
         // Use app data folder for persistence
         var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var aiDotNetPath = Path.Combine(appDataPath, "AiDotNet", "GpuTuning");
         Directory.CreateDirectory(aiDotNetPath);
 
-        _databasePath = customPath ?? Path.Combine(aiDotNetPath, "gemm_tuning.json");
-        _historyPath = Path.Combine(aiDotNetPath, "gemm_history.txt");
+        string suffix = string.IsNullOrEmpty(_signature) ? string.Empty : $"_{_signature}";
+        _databasePath = customPath ?? Path.Combine(aiDotNetPath, $"gemm_tuning{suffix}.json");
+        _historyPath = Path.Combine(aiDotNetPath, $"gemm_history{suffix}.txt");
 
         LoadFromDisk();
         LoadHistoryFromDisk();
@@ -47,7 +54,7 @@ internal sealed class GemmTuningDatabase : IDisposable
     {
         lock (_lock)
         {
-            var historyKey = FormattableString.Invariant($"{M}x{N}x{K}|{config.ToKey()}");
+            var historyKey = BuildHistoryKey(M, N, K, config);
             return _testedConfigs.Contains(historyKey);
         }
     }
@@ -60,17 +67,9 @@ internal sealed class GemmTuningDatabase : IDisposable
     {
         lock (_lock)
         {
-            var historyKey = FormattableString.Invariant($"{M}x{N}x{K}|{config.ToKey()}");
-            if (_testedConfigs.Contains(historyKey))
-            {
-                // Try to find the exact GFLOPS from history
-                var matrixKey = FormattableString.Invariant($"{M}x{N}x{K}");
-                if (_cache.TryGetValue(matrixKey, out var entry) &&
-                    entry.Config.ToKey() == config.ToKey())
-                {
-                    return entry.GFlops;
-                }
-            }
+            var historyKey = BuildHistoryKey(M, N, K, config);
+            if (_testedGflops.TryGetValue(historyKey, out var gflops))
+                return gflops;
             return null;
         }
     }
@@ -83,11 +82,10 @@ internal sealed class GemmTuningDatabase : IDisposable
     {
         lock (_lock)
         {
-            var historyKey = FormattableString.Invariant($"{M}x{N}x{K}|{config.ToKey()}");
-            if (_testedConfigs.Add(historyKey))
-            {
-                _isDirty = true;
-            }
+            var historyKey = BuildHistoryKey(M, N, K, config);
+            _testedConfigs.Add(historyKey);
+            _testedGflops[historyKey] = gflops;
+            _isDirty = true;
         }
     }
 
@@ -98,7 +96,7 @@ internal sealed class GemmTuningDatabase : IDisposable
     {
         lock (_lock)
         {
-            var prefix = FormattableString.Invariant($"{M}x{N}x{K}|");
+            var prefix = BuildMatrixKey(M, N, K) + "|";
             int count = 0;
             foreach (var key in _testedConfigs)
             {
@@ -116,7 +114,7 @@ internal sealed class GemmTuningDatabase : IDisposable
     {
         lock (_lock)
         {
-            var key = FormattableString.Invariant($"{M}x{N}x{K}");
+            var key = BuildMatrixKey(M, N, K);
             if (_cache.TryGetValue(key, out var entry))
                 return entry.Config;
             return null;
@@ -131,7 +129,7 @@ internal sealed class GemmTuningDatabase : IDisposable
     {
         lock (_lock)
         {
-            var key = FormattableString.Invariant($"{M}x{N}x{K}");
+            var key = BuildMatrixKey(M, N, K);
             if (_cache.TryGetValue(key, out var entry))
                 return (entry.Config, entry.GFlops);
             return null;
@@ -145,7 +143,7 @@ internal sealed class GemmTuningDatabase : IDisposable
     {
         lock (_lock)
         {
-            var key = FormattableString.Invariant($"{M}x{N}x{K}");
+            var key = BuildMatrixKey(M, N, K);
             if (!_cache.TryGetValue(key, out var existing) || gflops > existing.GFlops)
             {
                 _cache[key] = (config, gflops);
@@ -206,10 +204,15 @@ internal sealed class GemmTuningDatabase : IDisposable
 
             foreach (var line in File.ReadLines(_historyPath))
             {
-                if (!string.IsNullOrWhiteSpace(line))
-                {
-                    _testedConfigs.Add(line.Trim());
-                }
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+
+                var parsed = ParseHistoryLine(line);
+                if (parsed == null)
+                    continue;
+
+                _testedConfigs.Add(parsed.Value.Key);
+                _testedGflops[parsed.Value.Key] = parsed.Value.Gflops;
             }
         }
         catch (Exception)
@@ -222,12 +225,74 @@ internal sealed class GemmTuningDatabase : IDisposable
     {
         try
         {
-            File.WriteAllLines(_historyPath, _testedConfigs);
+            var lines = new List<string>(_testedConfigs.Count);
+            foreach (var key in _testedConfigs)
+            {
+                if (_testedGflops.TryGetValue(key, out var gflops))
+                {
+                    lines.Add(FormattableString.Invariant($"{key}\t{gflops}"));
+                }
+                else
+                {
+                    lines.Add(key);
+                }
+            }
+
+            File.WriteAllLines(_historyPath, lines);
         }
         catch (Exception)
         {
             // Silently ignore save failures
         }
+    }
+
+    private string BuildMatrixKey(int M, int N, int K)
+    {
+        var baseKey = FormattableString.Invariant($"{M}x{N}x{K}");
+        return string.IsNullOrEmpty(_signature) ? baseKey : $"{_signature}|{baseKey}";
+    }
+
+    private string BuildHistoryKey(int M, int N, int K, GemmConfig config)
+    {
+        return FormattableString.Invariant($"{BuildMatrixKey(M, N, K)}|{config.ToKey()}");
+    }
+
+    private static string NormalizeSignature(string? signature)
+    {
+        if (string.IsNullOrWhiteSpace(signature))
+            return string.Empty;
+
+        var sb = new StringBuilder(signature.Length);
+        foreach (var ch in signature)
+        {
+            if (ch <= 0x7F && (char.IsLetterOrDigit(ch) || ch == '-' || ch == '_'))
+                sb.Append(ch);
+            else
+                sb.Append('_');
+        }
+
+        var normalized = sb.ToString().Trim('_');
+        return normalized.Length > 80 ? normalized[..80] : normalized;
+    }
+
+    private static (string Key, double Gflops)? ParseHistoryLine(string line)
+    {
+        var trimmed = line.Trim();
+        if (trimmed.Length == 0)
+            return null;
+
+        var parts = trimmed.Split('\t');
+        var key = parts[0].Trim();
+        if (key.Length == 0)
+            return null;
+
+        if (parts.Length > 1 &&
+            double.TryParse(parts[1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var gflops))
+        {
+            return (key, gflops);
+        }
+
+        return (key, 0.0);
     }
 
     private void SaveToDisk()

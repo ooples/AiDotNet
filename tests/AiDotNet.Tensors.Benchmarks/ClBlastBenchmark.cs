@@ -3,6 +3,8 @@ using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.DirectGpu.OpenCL;
 
 namespace AiDotNet.Tensors.Benchmarks;
 
@@ -176,6 +178,95 @@ public static class ClBlastBenchmark
         Console.WriteLine();
         Console.WriteLine("Large matrix (batch=128, in=4096, out=4096):");
         BenchmarkDenseLayer(context, matmul, 128, 4096, 4096);
+
+        using var backend = new OpenClBackend();
+        if (backend.IsAvailable)
+        {
+            Console.WriteLine();
+            Console.WriteLine("DirectGpu TUNED (OpenClBackend) vs CLBlast:");
+            Console.WriteLine("Size       |  CLBlast (GFLOPS)  |  AiDotNet (GFLOPS)  |  Ratio");
+            Console.WriteLine(new string('-', 70));
+
+            foreach (int size in sizes)
+            {
+                BenchmarkSizeTuned(context, backend, size);
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("DenseLayer-style TUNED (batch=64, in=768, out=3072):");
+            BenchmarkDenseLayerTuned(context, backend, 64, 768, 3072);
+
+            Console.WriteLine();
+            Console.WriteLine("Large matrix TUNED (batch=128, in=4096, out=4096):");
+            BenchmarkDenseLayerTuned(context, backend, 128, 4096, 4096);
+        }
+    }
+
+    private static void BenchmarkSizeTuned(OpenClContext context, OpenClBackend backend, int size)
+    {
+        int m = size, k = size, n = size;
+        double flops = 2.0 * m * n * k;
+
+        // Generate test data
+        var random = new Random(42);
+        var A = new float[m * k];
+        var B = new float[k * n];
+        for (int i = 0; i < A.Length; i++) A[i] = (float)(random.NextDouble() * 2 - 1);
+        for (int i = 0; i < B.Length; i++) B[i] = (float)(random.NextDouble() * 2 - 1);
+
+        // Benchmark CLBlast
+        double clblastGflops = 0;
+        if (IsClBlastAvailable)
+        {
+            clblastGflops = BenchmarkClBlast(context, A, B, m, k, n, flops);
+        }
+
+        // Benchmark AiDotNet TUNED OpenCL
+        double aidotnetGflops = BenchmarkAiDotNetTuned(backend, A, B, m, k, n, flops);
+
+        // Calculate ratio
+        string ratio = (clblastGflops > 0 && aidotnetGflops > 0)
+            ? $"{clblastGflops / aidotnetGflops:F2}x"
+            : "N/A";
+
+        string clblastStr = clblastGflops > 0 ? $"{clblastGflops,12:F1}" : "N/A".PadLeft(12);
+        string aidotnetStr = aidotnetGflops > 0 ? $"{aidotnetGflops,12:F1}" : "FAILED".PadLeft(12);
+
+        Console.WriteLine($"{size,5}x{size,-4} |  {clblastStr}      |  {aidotnetStr}       |  {ratio}");
+    }
+
+    private static void BenchmarkDenseLayerTuned(OpenClContext context, OpenClBackend backend, int batch, int inputSize, int outputSize)
+    {
+        Console.WriteLine($"Batch={batch}, InputSize={inputSize}, OutputSize={outputSize}");
+
+        int m = batch, k = inputSize, n = outputSize;
+        double flops = 2.0 * m * n * k;
+
+        var random = new Random(42);
+        var input = new float[m * k];
+        var weights = new float[k * n];
+        for (int i = 0; i < input.Length; i++) input[i] = (float)(random.NextDouble() * 2 - 1);
+        for (int i = 0; i < weights.Length; i++) weights[i] = (float)(random.NextDouble() * 0.1 - 0.05);
+
+        double clblastGflops = 0;
+        if (IsClBlastAvailable)
+        {
+            clblastGflops = BenchmarkClBlast(context, input, weights, m, k, n, flops);
+        }
+
+        double aidotnetGflops = BenchmarkAiDotNetTuned(backend, input, weights, m, k, n, flops);
+
+        Console.WriteLine($"  CLBlast:  {(clblastGflops > 0 ? $"{clblastGflops:F1} GFLOPS" : "N/A")}");
+        Console.WriteLine($"  AiDotNet TUNED: {(aidotnetGflops > 0 ? $"{aidotnetGflops:F1} GFLOPS" : "FAILED")}");
+
+        if (clblastGflops > 0 && aidotnetGflops > 0)
+        {
+            double ratio = clblastGflops / aidotnetGflops;
+            if (ratio > 1)
+                Console.WriteLine($"  CLBlast is {ratio:F2}x faster");
+            else
+                Console.WriteLine($"  AiDotNet is {1/ratio:F2}x faster!");
+        }
     }
 
     private static void BenchmarkSize(OpenClContext context, OpenClMatMul matmul, int size)
@@ -307,6 +398,45 @@ public static class ClBlastBenchmark
         catch (Exception ex)
         {
             Console.WriteLine($"AiDotNet error: {ex.Message}");
+            return 0;
+        }
+    }
+
+    /// <summary>
+    /// Benchmark using DirectGpuEngine which uses the auto-tuned GEMM kernels from the database.
+    /// </summary>
+    private static double BenchmarkAiDotNetTuned(OpenClBackend backend, float[] A, float[] B, int m, int k, int n, double flops)
+    {
+        try
+        {
+            // Create GPU buffers
+            using var bufA = backend.AllocateBuffer(A);
+            using var bufB = backend.AllocateBuffer(B);
+            using var bufC = backend.AllocateBuffer(m * n);
+
+            // Warmup
+            for (int i = 0; i < 3; i++)
+            {
+                backend.Gemm(bufA, bufB, bufC, m, n, k, 1.0f, 0.0f);
+            }
+            backend.Synchronize();
+
+            // Benchmark
+            const int iterations = 10;
+            var sw = Stopwatch.StartNew();
+            for (int i = 0; i < iterations; i++)
+            {
+                backend.Gemm(bufA, bufB, bufC, m, n, k, 1.0f, 0.0f);
+            }
+            backend.Synchronize();
+            sw.Stop();
+
+            double seconds = sw.Elapsed.TotalSeconds / iterations;
+            return (flops / seconds) / 1e9;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"AiDotNet tuned error: {ex.Message}");
             return 0;
         }
     }

@@ -36,7 +36,9 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         public IntPtr Device => _device;
 
         public string DeviceName { get; private set; } = string.Empty;
-        public string DeviceVendor { get; private set; } = string.Empty;
+        public string DeviceVendor { get; private set; } = string.Empty;        
+        public string DriverVersion { get; private set; } = string.Empty;
+        public string OpenClVersion { get; private set; } = string.Empty;
         public uint MaxComputeUnits { get; private set; }
         public ulong GlobalMemSize { get; private set; }
         public ulong LocalMemSize { get; private set; }
@@ -126,6 +128,8 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             // Get device info
             DeviceName = OpenClNativeBindings.GetDeviceInfoString(_device, OpenClNativeBindings.CL_DEVICE_NAME);
             DeviceVendor = OpenClNativeBindings.GetDeviceInfoString(_device, OpenClNativeBindings.CL_DEVICE_VENDOR);
+            DriverVersion = OpenClNativeBindings.GetDeviceInfoString(_device, OpenClNativeBindings.CL_DEVICE_DRIVER_VERSION);
+            OpenClVersion = OpenClNativeBindings.GetDeviceInfoString(_device, OpenClNativeBindings.CL_DEVICE_VERSION);
             MaxComputeUnits = OpenClNativeBindings.GetDeviceInfoUInt(_device, OpenClNativeBindings.CL_DEVICE_MAX_COMPUTE_UNITS);
             GlobalMemSize = OpenClNativeBindings.GetDeviceInfoULong(_device, OpenClNativeBindings.CL_DEVICE_GLOBAL_MEM_SIZE);
             LocalMemSize = OpenClNativeBindings.GetDeviceInfoULong(_device, OpenClNativeBindings.CL_DEVICE_LOCAL_MEM_SIZE);

@@ -163,7 +163,7 @@ internal sealed class DynamicGemmKernel : IDisposable
         try
         {
             program = new DirectOpenClProgram(_context, source);
-            program.Build("-cl-mad-enable -cl-fast-relaxed-math");
+            program.Build(OpenClBuildOptions.OptimizationFlags);
             kernel = new DirectOpenClKernel(_context, program, "gemm_tuned");
         }
         catch (Exception ex)

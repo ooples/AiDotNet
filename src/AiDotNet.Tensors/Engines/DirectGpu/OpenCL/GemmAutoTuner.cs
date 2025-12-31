@@ -252,14 +252,31 @@ public sealed class GemmAutoTuner
             {
                 // Warmup
                 for (int i = 0; i < warmupRuns; i++)
-                    benchmarkFunc(config);
+                {
+                    double time = benchmarkFunc(config);
+                    if (!IsValidTime(time))
+                    {
+                        LogDiag($"  {config.KernelName}: invalid warmup time {time}");
+                        throw new InvalidOperationException("Invalid warmup timing result");
+                    }
+                }
 
                 // Benchmark
                 double totalTimeMs = 0;
                 for (int i = 0; i < benchmarkRuns; i++)
-                    totalTimeMs += benchmarkFunc(config);
+                {
+                    double time = benchmarkFunc(config);
+                    if (!IsValidTime(time))
+                    {
+                        LogDiag($"  {config.KernelName}: invalid benchmark time {time}");
+                        throw new InvalidOperationException("Invalid benchmark timing result");
+                    }
+                    totalTimeMs += time;
+                }
 
                 double avgTimeMs = totalTimeMs / benchmarkRuns;
+                if (!IsValidTime(avgTimeMs))
+                    throw new InvalidOperationException("Invalid average timing result");
                 double gflops = (2.0 * M * N * K) / (avgTimeMs * 1e6);
 
                 results.Add(new TuningResult
@@ -270,8 +287,9 @@ public sealed class GemmAutoTuner
                     IsValid = true
                 });
             }
-            catch
+            catch (Exception ex)
             {
+                LogDiag($"  Config {config.KernelName} failed: {ex.Message}");
                 results.Add(new TuningResult
                 {
                     Config = config,
@@ -491,6 +509,14 @@ public sealed class GemmAutoTuner
         return results.ToArray();
     }
 
+    private static bool IsValidTime(double timeMs)
+    {
+        return !double.IsNaN(timeMs) &&
+               !double.IsInfinity(timeMs) &&
+               timeMs > 0 &&
+               timeMs < double.MaxValue / 4;
+    }
+
     private TuningResult BenchmarkConfig(GemmConfig config, Func<GemmConfig, double> benchmarkFunc,
         int warmupRuns, int benchmarkRuns, int M, int N, int K)
     {
@@ -513,7 +539,20 @@ public sealed class GemmAutoTuner
         {
             // Warmup
             for (int i = 0; i < warmupRuns; i++)
-                benchmarkFunc(config);
+            {
+                double time = benchmarkFunc(config);
+                if (!IsValidTime(time))
+                {
+                    LogDiag($"  {config.KernelName}: invalid warmup time {time}");
+                    return new TuningResult
+                    {
+                        Config = config,
+                        GFlops = 0,
+                        TimeMs = double.MaxValue,
+                        IsValid = false
+                    };
+                }
+            }
 
             // Benchmark
             double totalTimeMs = 0;
@@ -522,12 +561,34 @@ public sealed class GemmAutoTuner
             for (int i = 0; i < benchmarkRuns; i++)
             {
                 double time = benchmarkFunc(config);
+                if (!IsValidTime(time))
+                {
+                    LogDiag($"  {config.KernelName}: invalid benchmark time {time}");
+                    return new TuningResult
+                    {
+                        Config = config,
+                        GFlops = 0,
+                        TimeMs = double.MaxValue,
+                        IsValid = false
+                    };
+                }
                 totalTimeMs += time;
                 minTime = Math.Min(minTime, time);
                 maxTime = Math.Max(maxTime, time);
             }
 
             double avgTimeMs = totalTimeMs / benchmarkRuns;
+            if (!IsValidTime(avgTimeMs))
+            {
+                LogDiag($"  {config.KernelName}: invalid average time {avgTimeMs}");
+                return new TuningResult
+                {
+                    Config = config,
+                    GFlops = 0,
+                    TimeMs = double.MaxValue,
+                    IsValid = false
+                };
+            }
             double gflops = (2.0 * M * N * K) / (avgTimeMs * 1e6);
             sw.Stop();
 
@@ -579,6 +640,7 @@ public sealed class GemmAutoTuner
             KReg = 1, KUnroll = 2, UseSubgroupOps = false,
             StrideM = false, StrideN = true,
             CacheA = true, CacheB = true,
+            MdimaSize = 16, NdimbSize = 8,
             UseTrueVectorLDS = true,  // THE KEY!
             KernelName = "clblast_true_vec_64x64"
         });
@@ -593,6 +655,7 @@ public sealed class GemmAutoTuner
             KReg = 1, KUnroll = 2, UseSubgroupOps = false,
             StrideM = true, StrideN = false,
             CacheA = true, CacheB = true,
+            MdimaSize = 16, NdimbSize = 16,
             UseTrueVectorLDS = true,
             KernelName = "clblast_true_vec_128x64"
         });
@@ -644,59 +707,64 @@ public sealed class GemmAutoTuner
         // From: https://github.com/CNugteren/CLBlast/blob/master/src/database/kernels/xgemm/
         // ============================================================
 
-        // CLBlast RX 5700 XT exact: MWG=128, NWG=128, KWG=32, MDIMC=8, NDIMC=16, VWM=8, VWN=8
+        // CLBlast RX 5700 XT exact (gfx1010 DB): MWG=64, NWG=64, KWG=16, MDIMC=8, NDIMC=8, VWM=2, VWN=2
+        // RX 5500 XT (gfx1012) has no CLBlast entry; reuse this seed.
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 128, TileK = 32,
-            ThreadTileM = 8, ThreadTileN = 16,  // MDIMC=8, NDIMC=16
-            VectorWidthM = 8, VectorWidthN = 8,  // VWM=8, VWN=8 - KEY TO 2500 GFLOPS!
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 2, KUnroll = 4, UseSubgroupOps = capabilities.SupportsSubgroups,
-            StrideM = true, StrideN = true,  // Bank conflict avoidance
+            TileM = 64, TileN = 64, TileK = 16,
+            ThreadTileM = 8, ThreadTileN = 8,  // MDIMC=8, NDIMC=8
+            VectorWidthM = 2, VectorWidthN = 2,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 1, KUnroll = 2, UseSubgroupOps = false,
+            StrideM = false, StrideN = true,  // STRM=0, STRN=1
             CacheA = true, CacheB = true,     // SA=1, SB=1 local memory caching
-            MdimaSize = 8, NdimbSize = 16,    // MDIMA=8, NDIMB=16
+            MdimaSize = 16, NdimbSize = 8,    // MDIMA=16, NDIMB=8
+            UseTrueVectorLDS = true,
             KernelName = "clblast_rx5700xt_exact"
         });
 
         // Same config without stride for comparison
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 128, TileK = 32,
-            ThreadTileM = 8, ThreadTileN = 16,
-            VectorWidthM = 8, VectorWidthN = 8,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 2, KUnroll = 4, UseSubgroupOps = capabilities.SupportsSubgroups,
+            TileM = 64, TileN = 64, TileK = 16,
+            ThreadTileM = 8, ThreadTileN = 8,
+            VectorWidthM = 2, VectorWidthN = 2,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 1, KUnroll = 2, UseSubgroupOps = false,
             StrideM = false, StrideN = false,
             CacheA = true, CacheB = true,     // SA=1, SB=1 local memory caching
-            MdimaSize = 8, NdimbSize = 16,
+            MdimaSize = 16, NdimbSize = 8,
+            UseTrueVectorLDS = true,
             KernelName = "clblast_rx5700xt_nostride"
         });
 
-        // CLBlast RX 5700 variant: MWG=128, NWG=128, KWG=16, MDIMC=16, NDIMC=8, VWM=8, VWN=4
+        // CLBlast RX 5700 exact (gfx1010 DB): MWG=128, NWG=64, KWG=32, MDIMC=16, NDIMC=8, VWM=4, VWN=1
         configs.Add(new GemmConfig
         {
-            TileM = 128, TileN = 128, TileK = 16,
+            TileM = 128, TileN = 64, TileK = 32,
             ThreadTileM = 16, ThreadTileN = 8,
-            VectorWidthM = 8, VectorWidthN = 4,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 2, KUnroll = 4, UseSubgroupOps = capabilities.SupportsSubgroups,
-            StrideM = true, StrideN = true,
+            VectorWidthM = 4, VectorWidthN = 1,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 1, KUnroll = 2, UseSubgroupOps = false,
+            StrideM = true, StrideN = false,
             CacheA = true, CacheB = true,
-            MdimaSize = 16, NdimbSize = 8,
-            KernelName = "clblast_rx5700_variant"
+            MdimaSize = 16, NdimbSize = 16,
+            UseTrueVectorLDS = true,
+            KernelName = "clblast_rx5700_exact"
         });
 
-        // CLBlast gfx10 default: MWG=64, NWG=64, KWG=32, MDIMC=16, NDIMC=16, VWM=2, VWN=4
+        // CLBlast gfx10 default (gfx1010 DB): MWG=64, NWG=64, KWG=32, MDIMC=16, NDIMC=16, VWM=4, VWN=4
         configs.Add(new GemmConfig
         {
             TileM = 64, TileN = 64, TileK = 32,
             ThreadTileM = 16, ThreadTileN = 16,
-            VectorWidthM = 2, VectorWidthN = 4,
-            UseDoubleBuffering = true, UseVectorizedLoads = true,
-            KReg = 2, KUnroll = 4, UseSubgroupOps = capabilities.SupportsSubgroups,
-            StrideM = true, StrideN = true,
-            CacheA = true, CacheB = true,
+            VectorWidthM = 4, VectorWidthN = 4,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 1, KUnroll = 2, UseSubgroupOps = false,
+            StrideM = false, StrideN = false,
+            CacheA = false, CacheB = false,
             MdimaSize = 16, NdimbSize = 16,
+            UseTrueVectorLDS = true,
             KernelName = "clblast_gfx10_default"
         });
 
@@ -1707,7 +1775,7 @@ public sealed class GemmAutoTuner
             KernelName = "coop_256x256_md32_nd32"
         });
 
-        // CLBlast RX 5700 style: specific MDIMA/NDIMB values
+        // CLBlast RX 5700 style: cooperative loading variant with explicit MDIMA/NDIMB
         configs.Add(new GemmConfig
         {
             TileM = 128, TileN = 128, TileK = 16,
@@ -1718,7 +1786,7 @@ public sealed class GemmAutoTuner
             StrideM = true, StrideN = true,
             CacheA = true, CacheB = true,
             MdimaSize = 16, NdimbSize = 16,  // CLBlast-style MDIMA/NDIMB
-            KernelName = "clblast_rx5700_variant"
+            KernelName = "clblast_rx5700_coop_md16"
         });
 
         // Add mixed precision configs if supported
