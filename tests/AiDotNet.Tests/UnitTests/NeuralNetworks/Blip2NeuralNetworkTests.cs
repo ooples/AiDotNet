@@ -178,11 +178,11 @@ public class Blip2NeuralNetworkTests
         var network = new Blip2NeuralNetwork<float>(
             architecture,
             numQueryTokens: 32,
-            languageModelType: "opt-2.7b");
+            languageModelBackbone: LanguageModelBackbone.OPT);
 
         // Assert
         Assert.Equal(32, network.NumQueryTokens);
-        Assert.Equal("opt-2.7b", network.LanguageModelType);
+        Assert.Equal(LanguageModelBackbone.OPT, network.LanguageModelBackbone);
     }
 
     [Fact]
@@ -286,7 +286,7 @@ public class Blip2NeuralNetworkTests
         var network = new Blip2NeuralNetwork<float>(
             architecture,
             numQueryTokens: 32,
-            languageModelType: "flan-t5-xl");
+            languageModelBackbone: LanguageModelBackbone.FlanT5);
 
         // Act
         var metadata = network.GetModelMetadata();
@@ -294,7 +294,7 @@ public class Blip2NeuralNetworkTests
         // Assert
         Assert.NotNull(metadata.AdditionalInfo);
         Assert.Equal(32, metadata.AdditionalInfo["NumQueryTokens"]);
-        Assert.Equal("flan-t5-xl", metadata.AdditionalInfo["LanguageModelType"]);
+        Assert.Equal("FlanT5", metadata.AdditionalInfo["LanguageModelBackbone"]);
     }
 
     [Fact]
