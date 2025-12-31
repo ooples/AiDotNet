@@ -360,14 +360,89 @@ public sealed class CudaBackend : IDirectGpuBackend
         LaunchElementwiseKernel("add_vectors", A, B, C, size);
     }
 
-    public void Multiply(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+    public void Subtract(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+    {
+        LaunchElementwiseKernel("subtract_vectors", A, B, C, size);
+    }
+
+    public void Multiply(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)    
     {
         LaunchElementwiseKernel("multiply_vectors", A, B, C, size);
     }
 
-    public void Scale(IGpuBuffer A, IGpuBuffer B, float scalar, int size)
+    public void Divide(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+    {
+        LaunchElementwiseKernel("divide_vectors", A, B, C, size);
+    }
+
+    public void Min(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+    {
+        LaunchElementwiseKernel("min_vectors", A, B, C, size);
+    }
+
+    public void Max(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+    {
+        LaunchElementwiseKernel("max_vectors", A, B, C, size);
+    }
+
+    public void Scale(IGpuBuffer A, IGpuBuffer B, float scalar, int size)       
     {
         LaunchScaleKernel(A, B, scalar, size);
+    }
+
+    public void Power(IGpuBuffer A, IGpuBuffer B, float exponent, int size)
+    {
+        LaunchUnaryWithScalarKernel("power_scalar", A, B, exponent, size);
+    }
+
+    public void Abs(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("abs_vector", A, B, size);
+    }
+
+    public void Exp(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("exp_vector", A, B, size);
+    }
+
+    public void Exp2(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("exp2_vector", A, B, size);
+    }
+
+    public void Exp10(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("exp10_vector", A, B, size);
+    }
+
+    public void ExpM1(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("expm1_vector", A, B, size);
+    }
+
+    public void Log(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("log_vector", A, B, size);
+    }
+
+    public void Log2(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("log2_vector", A, B, size);
+    }
+
+    public void Log1P(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("log1p_vector", A, B, size);
+    }
+
+    public void Sqrt(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("sqrt_vector", A, B, size);
+    }
+
+    public void Sign(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("sign_vector", A, B, size);
     }
 
     public void Relu(IGpuBuffer A, IGpuBuffer B, int size)
@@ -479,6 +554,25 @@ public sealed class CudaBackend : IDirectGpuBackend
     {
         if (!_kernelCache.TryGetValue("scale_vector", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: scale_vector");
+
+        using var _ = PushContext();
+        uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr aPtr = A.Handle;
+        IntPtr bPtr = B.Handle;
+        float scalarVal = scalar;
+        int n = size;
+        void** args = stackalloc void*[4];
+        args[0] = &aPtr;
+        args[1] = &bPtr;
+        args[2] = &scalarVal;
+        args[3] = &n;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    private unsafe void LaunchUnaryWithScalarKernel(string kernelName, IGpuBuffer A, IGpuBuffer B, float scalar, int size)
+    {
+        if (!_kernelCache.TryGetValue(kernelName, out var kernel))
+            throw new InvalidOperationException($"CUDA kernel not found: {kernelName}");
 
         using var _ = PushContext();
         uint grid = (uint)((size + DefaultBlockSize - 1) / DefaultBlockSize);

@@ -1069,9 +1069,29 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             ExecuteElementwise("add_vectors", A, B, C, size);
         }
 
+        public void Subtract(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+        {
+            ExecuteElementwise("subtract_vectors", A, B, C, size);
+        }
+
         public void Multiply(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
         {
             ExecuteElementwise("multiply_vectors", A, B, C, size);
+        }
+
+        public void Divide(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+        {
+            ExecuteElementwise("divide_vectors", A, B, C, size);
+        }
+
+        public void Min(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+        {
+            ExecuteElementwise("min_vectors", A, B, C, size);
+        }
+
+        public void Max(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+        {
+            ExecuteElementwise("max_vectors", A, B, C, size);
         }
 
         public void Scale(IGpuBuffer A, IGpuBuffer B, float scalar, int size)
@@ -1093,6 +1113,74 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             // No sync - element-wise ops can be chained asynchronously
         }
 
+        public void Power(IGpuBuffer A, IGpuBuffer B, float exponent, int size)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var bufferA = ((DirectOpenClGpuBuffer)A).Buffer;
+            var bufferB = ((DirectOpenClGpuBuffer)B).Buffer;
+
+            var kernel = _kernelCache["power_scalar"];
+            kernel.SetArg(0, bufferA.Handle);
+            kernel.SetArg(1, bufferB.Handle);
+            kernel.SetArg(2, exponent);
+            kernel.SetArg(3, size);
+
+            int localSize = CalculateOptimalWorkGroupSize1D(size);
+            kernel.Execute1D(size, localSize);
+        }
+
+        public void Abs(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("abs_vector", A, B, size);
+        }
+
+        public void Exp(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("exp_vector", A, B, size);
+        }
+
+        public void Exp2(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("exp2_vector", A, B, size);
+        }
+
+        public void Exp10(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("exp10_vector", A, B, size);
+        }
+
+        public void ExpM1(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("expm1_vector", A, B, size);
+        }
+
+        public void Log(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("log_vector", A, B, size);
+        }
+
+        public void Log2(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("log2_vector", A, B, size);
+        }
+
+        public void Log1P(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("log1p_vector", A, B, size);
+        }
+
+        public void Sqrt(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("sqrt_vector", A, B, size);
+        }
+
+        public void Sign(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("sign_vector", A, B, size);
+        }
+
         private void ExecuteElementwise(string kernelName, IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
         {
             if (_context == null)
@@ -1111,6 +1199,11 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             int localSize = CalculateOptimalWorkGroupSize1D(size);
             kernel.Execute1D(size, localSize);
             // No sync - element-wise ops can be chained asynchronously
+        }
+
+        private void ExecuteUnary(string kernelName, IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteActivation(kernelName, A, B, size);
         }
 
         public void Relu(IGpuBuffer A, IGpuBuffer B, int size)

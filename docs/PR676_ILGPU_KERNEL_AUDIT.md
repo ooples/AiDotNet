@@ -4,8 +4,12 @@
 This inventory captures operations currently accelerated by ILGPU in `GpuEngine` and maps them to the direct backends that must replace them (DirectOpenClBackend + DirectCudaBackend).
 
 ## Notes
-- Direct GPU path is float32-first. Double/other types can be handled by float conversion or CPU fallback; confirm desired behavior.
-- CUDA path can use cuBLAS for GEMM and (optionally) cuDNN for conv/pool/norm/activation to reach parity faster.
+- Direct GPU path is float32-first. Double/other types are converted via INumericOperations.
+- CUDA path uses custom kernels as primary, cuBLAS for GEMM fallback, and cuDNN for conv/pool/norm fallback.
+
+## Progress
+- CUDA/OpenCL elementwise + unary kernels expanded (add/sub/mul/div/min/max, abs/exp/log/log2/exp2/exp10/expm1/log1p/sqrt/sign, power-scalar).
+- HIP backend mirrors these ops via CPU fallback for now.
 
 ## Kernel Families to Replace
 - Elementwise arithmetic: add/sub/mul/div, scalar ops, negate, clamp, lerp, reciprocal, rsqrt, min/max magnitude, round/floor/ceil/truncate/frac.

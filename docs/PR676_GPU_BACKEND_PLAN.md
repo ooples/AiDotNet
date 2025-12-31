@@ -6,6 +6,11 @@
 - Keep CLBlast as a fallback option when direct kernels are unavailable or fail.
 - Preserve tuning + diagnostics so we can beat CLBlast on end-to-end performance.
 
+## Progress
+- CUDA backend scaffolded with cuBLAS GEMM + NVRTC kernels.
+- NVRTC fallback probing added for multiple DLL/SO names.
+- Elementwise/unary kernel coverage expanded for CUDA + OpenCL (HIP uses CPU fallback).
+
 ## Non-goals
 - Multi-node/distributed GPU execution.
 - Full coverage of every kernel outside GEMM unless explicitly requested.

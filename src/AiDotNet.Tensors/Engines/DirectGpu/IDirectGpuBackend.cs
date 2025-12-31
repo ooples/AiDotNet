@@ -173,14 +173,89 @@ public interface IDirectGpuBackend : IDisposable
     void Add(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size);
 
     /// <summary>
+    /// Element-wise subtraction: C = A - B
+    /// </summary>
+    void Subtract(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size);
+
+    /// <summary>
     /// Element-wise multiplication: C = A * B
     /// </summary>
     void Multiply(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size);
 
     /// <summary>
+    /// Element-wise division: C = A / B
+    /// </summary>
+    void Divide(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size);
+
+    /// <summary>
+    /// Element-wise minimum: C = min(A, B)
+    /// </summary>
+    void Min(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size);
+
+    /// <summary>
+    /// Element-wise maximum: C = max(A, B)
+    /// </summary>
+    void Max(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size);
+
+    /// <summary>
     /// Scalar multiplication: B = A * scalar
     /// </summary>
     void Scale(IGpuBuffer A, IGpuBuffer B, float scalar, int size);
+
+    /// <summary>
+    /// Power with scalar exponent: B = A ^ exponent
+    /// </summary>
+    void Power(IGpuBuffer A, IGpuBuffer B, float exponent, int size);
+
+    /// <summary>
+    /// Absolute value: B = abs(A)
+    /// </summary>
+    void Abs(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Exponential: B = exp(A)
+    /// </summary>
+    void Exp(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Base-2 exponential: B = 2^A
+    /// </summary>
+    void Exp2(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Base-10 exponential: B = 10^A
+    /// </summary>
+    void Exp10(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Expm1: B = exp(A) - 1
+    /// </summary>
+    void ExpM1(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Natural log: B = log(A)
+    /// </summary>
+    void Log(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Base-2 log: B = log2(A)
+    /// </summary>
+    void Log2(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Log1p: B = log(1 + A)
+    /// </summary>
+    void Log1P(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Square root: B = sqrt(A)
+    /// </summary>
+    void Sqrt(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Sign: B = sign(A)
+    /// </summary>
+    void Sign(IGpuBuffer A, IGpuBuffer B, int size);
 
     /// <summary>
     /// ReLU activation: B = max(0, A)

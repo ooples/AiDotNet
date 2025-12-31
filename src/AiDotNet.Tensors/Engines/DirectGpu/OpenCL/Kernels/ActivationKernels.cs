@@ -150,6 +150,19 @@ __kernel void add_vectors(
     C[idx] = A[idx] + B[idx];
 }
 
+// Vector subtraction: C = A - B
+__kernel void subtract_vectors(
+    __global const float* A,
+    __global const float* B,
+    __global float* C,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    C[idx] = A[idx] - B[idx];
+}
+
 // Vector multiplication: C = A * B (element-wise)
 __kernel void multiply_vectors(
     __global const float* A,
@@ -161,6 +174,45 @@ __kernel void multiply_vectors(
     if (idx >= size) return;
 
     C[idx] = A[idx] * B[idx];
+}
+
+// Vector division: C = A / B (element-wise)
+__kernel void divide_vectors(
+    __global const float* A,
+    __global const float* B,
+    __global float* C,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    C[idx] = A[idx] / B[idx];
+}
+
+// Vector min: C = min(A, B)
+__kernel void min_vectors(
+    __global const float* A,
+    __global const float* B,
+    __global float* C,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    C[idx] = fmin(A[idx], B[idx]);
+}
+
+// Vector max: C = max(A, B)
+__kernel void max_vectors(
+    __global const float* A,
+    __global const float* B,
+    __global float* C,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    C[idx] = fmax(A[idx], B[idx]);
 }
 
 // Scalar multiplication: B = A * scalar
@@ -175,6 +227,140 @@ __kernel void scale_vector(
 
     B[idx] = A[idx] * scalar;
 }
+
+// Absolute value
+__kernel void abs_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = fabs(A[idx]);
+}
+
+// Exponential
+__kernel void exp_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = exp(A[idx]);
+}
+
+// Natural log
+__kernel void log_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = log(A[idx]);
+}
+
+// Base-2 log
+__kernel void log2_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = log2(A[idx]);
+}
+
+// Base-2 exp
+__kernel void exp2_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = exp2(A[idx]);
+}
+
+// Base-10 exp
+__kernel void exp10_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = pow(10.0f, A[idx]);
+}
+
+// exp(x) - 1
+__kernel void expm1_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = exp(A[idx]) - 1.0f;
+}
+
+// log(1 + x)
+__kernel void log1p_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = log(1.0f + A[idx]);
+}
+
+// Square root
+__kernel void sqrt_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = sqrt(A[idx]);
+}
+
+// Sign
+__kernel void sign_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    float x = A[idx];
+    B[idx] = x > 0.0f ? 1.0f : (x < 0.0f ? -1.0f : 0.0f);
+}
+
+// Power with scalar exponent
+__kernel void power_scalar(
+    __global const float* A,
+    __global float* B,
+    const float exponent,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = pow(A[idx], exponent);
+}
 ";
         }
 
@@ -187,7 +373,12 @@ __kernel void scale_vector(
             {
                 "relu", "leaky_relu", "sigmoid", "tanh_activation",
                 "gelu", "swish", "softmax",
-                "add_vectors", "multiply_vectors", "scale_vector"
+                "add_vectors", "subtract_vectors", "multiply_vectors",
+                "divide_vectors", "min_vectors", "max_vectors",
+                "scale_vector", "abs_vector", "exp_vector", "log_vector",
+                "log2_vector", "exp2_vector", "exp10_vector",
+                "expm1_vector", "log1p_vector", "sqrt_vector",
+                "sign_vector", "power_scalar"
             };
         }
     }

@@ -653,7 +653,19 @@ public sealed class HipBackend : IDirectGpuBackend
         UploadToBuffer(C, cData);
     }
 
-    public void Multiply(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+    public void Subtract(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = DownloadBuffer(B);
+        var cData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            cData[i] = aData[i] - bData[i];
+
+        UploadToBuffer(C, cData);
+    }
+
+    public void Multiply(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)    
     {
         var aData = DownloadBuffer(A);
         var bData = DownloadBuffer(B);
@@ -665,13 +677,170 @@ public sealed class HipBackend : IDirectGpuBackend
         UploadToBuffer(C, cData);
     }
 
-    public void Scale(IGpuBuffer A, IGpuBuffer B, float scalar, int size)
+    public void Divide(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = DownloadBuffer(B);
+        var cData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            cData[i] = aData[i] / bData[i];
+
+        UploadToBuffer(C, cData);
+    }
+
+    public void Min(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = DownloadBuffer(B);
+        var cData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            cData[i] = MathF.Min(aData[i], bData[i]);
+
+        UploadToBuffer(C, cData);
+    }
+
+    public void Max(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = DownloadBuffer(B);
+        var cData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            cData[i] = MathF.Max(aData[i], bData[i]);
+
+        UploadToBuffer(C, cData);
+    }
+
+    public void Scale(IGpuBuffer A, IGpuBuffer B, float scalar, int size)       
     {
         var aData = DownloadBuffer(A);
         var bData = new float[size];
 
         for (int i = 0; i < size; i++)
             bData[i] = aData[i] * scalar;
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Power(IGpuBuffer A, IGpuBuffer B, float exponent, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Pow(aData[i], exponent);
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Abs(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Abs(aData[i]);
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Exp(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Exp(aData[i]);
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Exp2(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Pow(2.0f, aData[i]);
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Exp10(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Pow(10.0f, aData[i]);
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void ExpM1(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Exp(aData[i]) - 1.0f;
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Log(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Log(aData[i]);
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Log2(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Log2(aData[i]);
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Log1P(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Log(1.0f + aData[i]);
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Sqrt(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Sqrt(aData[i]);
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Sign(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = aData[i] > 0.0f ? 1.0f : (aData[i] < 0.0f ? -1.0f : 0.0f);
 
         UploadToBuffer(B, bData);
     }
