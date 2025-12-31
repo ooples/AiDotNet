@@ -15,6 +15,7 @@
 - NVIDIA API: CUDA Driver API (P/Invoke) + PTX (NVRTC for runtime codegen).
 - NVIDIA GEMM fallback: cuBLAS.
 - NVIDIA non-GEMM fallback: cuDNN (custom CUDA kernels remain primary).
+- cuDNN fallback scope: convolution, pooling, normalization (activations/custom elementwise stay custom).
 - OpenCL GEMM fallback: CLBlast.
 - Kernel coverage: replace all ILGPU kernels with direct backends.
 - Removal: delete ILGPU packages/types after parity + tests are in place.
