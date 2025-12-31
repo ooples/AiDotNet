@@ -446,7 +446,8 @@ public class NeuralNetworkModelsIntegrationTests
         Assert.Equal(output1.Shape, output2.Shape);
         for (int i = 0; i < output1.Length; i++)
         {
-            Assert.Equal(output1.Data[i], output2.Data[i], Tolerance);
+            var diff = Math.Abs(output1.Data[i] - output2.Data[i]);
+            Assert.True(diff <= Tolerance, $"Outputs diverged more than {Tolerance} at index {i}: diff={diff}");
         }
     }
 
