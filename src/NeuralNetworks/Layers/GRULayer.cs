@@ -876,7 +876,8 @@ public class GRULayer<T> : LayerBase<T>
             List<Tensor<T>> timeStepHCandidate = new List<Tensor<T>>(sequenceLength);
 
             // If we have _allHiddenStates, use those states
-            if (_allHiddenStates != null && _allHiddenStates.Count == sequenceLength)
+            bool useCachedHiddenStates = _allHiddenStates != null && _allHiddenStates.Count == sequenceLength;
+            if (useCachedHiddenStates)
             {
                 timeStepHidden = _allHiddenStates;
                 // Still need to recompute z, r, h_candidate for backward pass
@@ -905,7 +906,7 @@ public class GRULayer<T> : LayerBase<T>
                 currentH = newH;
 
                 // Add to lists (not assign by index)
-                if (_allHiddenStates == null || _allHiddenStates.Count != sequenceLength)
+                if (!useCachedHiddenStates)
                 {
                     timeStepHidden.Add(currentH.Clone());
                 }
