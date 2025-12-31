@@ -693,6 +693,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private static int CalculateOutputDimension(int inputDim, int kernelSize, int stride, int padding)
     {
+        if (inputDim + 2 * padding < kernelSize)
+            throw new ArgumentException("Input dimensions with padding must be at least kernel size.");
+
         return (inputDim - kernelSize + 2 * padding) / stride + 1;
     }
 

@@ -697,21 +697,9 @@ public class NeuralNetworkLayersIntegrationTests
         int outputDepth = 1;
         int kernelSize = 3;
 
-        // Act & Assert
-        try
-        {
-            var layer = new ConvolutionalLayer<double>(
-                inputDepth, inputHeight, inputWidth, outputDepth, kernelSize);
-            var input = new Tensor<double>([1, inputDepth, inputHeight, inputWidth]);
-            var output = layer.Forward(input);
-            // If we get here, output shape should be valid (possibly 0 or padded)
-            Assert.NotNull(output);
-        }
-        catch (ArgumentException)
-        {
-            // Expected - input too small for kernel
-            Assert.True(true);
-        }
+        // Act & Assert - input too small for kernel should throw
+        Assert.Throws<ArgumentException>(() =>
+            new ConvolutionalLayer<double>(inputDepth, inputHeight, inputWidth, outputDepth, kernelSize));
     }
 
     #endregion
