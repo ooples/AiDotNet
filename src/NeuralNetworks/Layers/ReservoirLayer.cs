@@ -540,6 +540,15 @@ public class ReservoirLayer<T> : LayerBase<T>
             }
         }
 
+        // Initialize input weights so inputs influence reservoir state
+        for (int i = 0; i < _reservoirSize; i++)
+        {
+            for (int j = 0; j < _inputSize; j++)
+            {
+                _inputWeights[i, j] = NumOps.FromDouble(Random.NextDouble() - 0.5);
+            }
+        }
+
         // Scale the reservoir weights to achieve the desired spectral radius
         T maxEigenvalue = ComputeMaxEigenvalue(_reservoirWeights);
         T scaleFactor = NumOps.FromDouble(_spectralRadius / Convert.ToDouble(maxEigenvalue));
