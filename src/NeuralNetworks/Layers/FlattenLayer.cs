@@ -181,8 +181,9 @@ public class FlattenLayer<T> : LayerBase<T>
     /// <para>
     /// This method implements the forward pass of the flatten layer. It takes a multi-dimensional tensor
     /// and reshapes it into a 2D tensor where each row corresponds to a flattened example from the batch.
-    /// The values are preserved and their order is maintained according to a row-major traversal of the
-    /// input tensor. The input tensor is cached for use during the backward pass.
+    /// For unbatched inputs (rank <= 3), it returns a 1D vector of length input.Length. The values are
+    /// preserved and their order is maintained according to a row-major traversal of the input tensor.
+    /// The input tensor is cached for use during the backward pass.
     /// </para>
     /// <para><b>For Beginners:</b> This method converts multi-dimensional data into simple vectors.
     /// 
@@ -196,6 +197,7 @@ public class FlattenLayer<T> : LayerBase<T>
     /// For example, with a batch of 3D data like [batchSize, height, width, channels]:
     /// - Input shape: [32, 7, 7, 64] (32 examples, each 7×7 with 64 channels)
     /// - Output shape: [32, 3136] (32 examples, each with 7×7—64=3136 values)
+    /// - For an unbatched input like [7, 7, 64], the output is a 1D vector of length 3136
     /// 
     /// The method carefully preserves the order of values so they can be
     /// "unflattened" back to the original shape during backpropagation.
@@ -265,8 +267,16 @@ public class FlattenLayer<T> : LayerBase<T>
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
 
         // Replay forward pass: flatten is just a reshape operation
-        int batchSize = _lastInput.Shape[0];
-        var flattenedShape = new int[] { batchSize, _outputSize };
+        int[] flattenedShape;
+        if (_lastInput.Rank <= 3)
+        {
+            flattenedShape = new[] { _outputSize };
+        }
+        else
+        {
+            int batchSize = _lastInput.Shape[0];
+            flattenedShape = new[] { batchSize, _outputSize };
+        }
         var outputNode = Autodiff.TensorOperations<T>.Reshape(inputNode, flattenedShape);
 
         // Set the output gradient and perform backward pass manually
