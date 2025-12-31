@@ -217,7 +217,6 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
         // Use square-ish shape to minimize condition number issues
         int rows = (int)Math.Ceiling(Math.Sqrt(paramCount));
         int cols = (paramCount + rows - 1) / rows;
-        int paddedSize = rows * cols;
 
         // Create weight tensor [rows, cols] with zero-padding if needed
         var weights = new Tensor<T>([rows, cols]);
