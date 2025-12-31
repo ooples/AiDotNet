@@ -555,9 +555,9 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var attScoresTGrad = Engine.TensorMatMul(attentionScoresT, activationGradient);
         _valueWeightsGradient = Engine.TensorMatMul(memoryT, attScoresTGrad);
 
-        // Input gradient: attentionWeightsGradient × keyWeights^T
+        // Input gradient: (attentionWeightsGradient × memory) × keyWeights^T
         var keyWeightsT = Engine.TensorTranspose(_keyWeights);
-        var inputGradient = Engine.TensorMatMul(attentionWeightsGradient, keyWeightsT);
+        var inputGradient = Engine.TensorMatMul(attGradTimesMemory, keyWeightsT);
 
         // Memory gradient: attentionWeightsGradient^T × (input × keyWeights)
         var attGradT = Engine.TensorTranspose(attentionWeightsGradient);
@@ -716,7 +716,20 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private static Tensor<T> CombineGradients(Tensor<T> inputGradient, Tensor<T> memoryGradient)
     {
-        // Assuming we want to concatenate the gradients along the first dimension
+        // Only concatenate when shapes match on all non-concatenated axes.
+        if (inputGradient.Shape.Length != memoryGradient.Shape.Length)
+        {
+            return inputGradient;
+        }
+
+        for (int i = 1; i < inputGradient.Shape.Length; i++)
+        {
+            if (inputGradient.Shape[i] != memoryGradient.Shape[i])
+            {
+                return inputGradient;
+            }
+        }
+
         return Tensor<T>.Concatenate([inputGradient, memoryGradient], 0);
     }
 

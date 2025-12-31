@@ -68,6 +68,16 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Indicates whether this network supports training (learning from data).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// NeuralNetwork is intended to be trainable using backpropagation.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => true;
+
+    /// <summary>
     /// Initializes the layers of the neural network based on the architecture.
     /// </summary>
     /// <remarks>

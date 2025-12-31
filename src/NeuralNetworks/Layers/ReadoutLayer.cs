@@ -90,6 +90,8 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T>? _lastPreActivation;
 
+    private int[] _originalInputShape = [];
+
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
@@ -224,39 +226,65 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Flatten to 1D tensor if needed
-        _lastInput = input.Shape.Length == 1
-            ? input
-            : input.Reshape([input.Length]);
+        _lastInput = input;
+        _originalInputShape = input.Shape;
 
-        // Use Engine operations for matrix-vector multiplication
-        // Reshape input to [inputSize, 1] for matrix multiplication
-        var inputTensor = _lastInput.Reshape([_lastInput.Length, 1]);
-
-        // weights: [outputSize, inputSize], input: [inputSize, 1] -> result: [outputSize, 1]
-        var product = Engine.TensorMatMul(_weights, inputTensor);
-
-        // Add bias: reshape bias to [outputSize, 1] for addition
-        var biasReshaped = _bias.Reshape([_bias.Shape[0], 1]);
-        var withBias = Engine.TensorAdd(product, biasReshaped);
-
-        // Flatten to [outputSize] for activation
-        _lastPreActivation = withBias.Reshape([_bias.Shape[0]]);
-
-        if (UsingVectorActivation)
+        int inputSize = input.Shape[^1];
+        if (inputSize != InputShape[0])
         {
-            _lastOutput = VectorActivation!.Activate(_lastPreActivation);
-            return _lastOutput;
+            throw new ArgumentException(
+                $"Input size {inputSize} does not match expected {InputShape[0]}.");
         }
 
-        var activated = new Tensor<T>(_lastPreActivation.Shape);
-        for (int i = 0; i < activated.Length; i++)
+        Tensor<T> flattenedInput;
+        if (input.Rank == 1)
         {
-            activated[i] = ScalarActivation!.Activate(_lastPreActivation[i]);
+            flattenedInput = input.Reshape(1, inputSize);
         }
+        else if (input.Rank == 2)
+        {
+            flattenedInput = input;
+        }
+        else
+        {
+            int batchDim = 1;
+            for (int i = 0; i < input.Rank - 1; i++)
+            {
+                batchDim *= input.Shape[i];
+            }
+            flattenedInput = input.Reshape(batchDim, inputSize);
+        }
+
+        // Forward: output = input @ weights.T + bias
+        var weightsTransposed = Engine.TensorTranspose(_weights);
+        var matmul = Engine.TensorMatMul(flattenedInput, weightsTransposed);
+        var withBias = Engine.TensorBroadcastAdd(matmul, _bias);
+
+        _lastPreActivation = withBias;
+
+        Tensor<T> activated = UsingVectorActivation
+            ? VectorActivation!.Activate(withBias)
+            : ScalarActivation!.Activate(withBias);
 
         _lastOutput = activated;
-        return _lastOutput;
+
+        if (input.Rank == 1)
+        {
+            return activated.Reshape([OutputShape[0]]);
+        }
+
+        if (input.Rank > 2)
+        {
+            var outputShape = new int[input.Rank];
+            for (int i = 0; i < input.Rank - 1; i++)
+            {
+                outputShape[i] = _originalInputShape[i];
+            }
+            outputShape[^1] = OutputShape[0];
+            return activated.Reshape(outputShape);
+        }
+
+        return activated;
     }
 
     /// <summary>
@@ -308,37 +336,91 @@ public class ReadoutLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        Tensor<T> gradTensor;
-        if (UsingVectorActivation)
+        bool shapeMatches = outputGradient.Shape.Length == _lastPreActivation.Shape.Length;
+        if (shapeMatches)
         {
-            var activationDerivative = VectorActivation!.Derivative(_lastPreActivation);
-            gradTensor = Engine.TensorMultiply(outputGradient, activationDerivative);
-        }
-        else
-        {
-            gradTensor = new Tensor<T>(_lastPreActivation.Shape);
-            for (int i = 0; i < gradTensor.Length; i++)
+            for (int i = 0; i < _lastPreActivation.Shape.Length; i++)
             {
-                gradTensor[i] = NumOps.Multiply(outputGradient[i], ScalarActivation!.Derivative(_lastPreActivation[i]));
+                if (outputGradient.Shape[i] != _lastPreActivation.Shape[i])
+                {
+                    shapeMatches = false;
+                    break;
+                }
             }
         }
 
-        // Compute weight gradients using outer product via Engine: gradient outer input
-        // gradient: [outputSize], input: [inputSize] -> outer product: [outputSize, inputSize]
-        var gradReshaped = gradTensor.Reshape([gradTensor.Length, 1]);
-        var inputReshaped = _lastInput.Reshape([1, _lastInput.Length]);
-        _weightGradients = Engine.TensorMatMul(gradReshaped, inputReshaped);
+        Tensor<T> normalizedOutputGradient = outputGradient;
+        if (!shapeMatches)
+        {
+            if (outputGradient.Length == _lastPreActivation.Length)
+            {
+                normalizedOutputGradient = outputGradient.Reshape(_lastPreActivation.Shape);
+            }
+            else
+            {
+                throw new ArgumentException("Output gradient shape does not match the last pre-activation output.");
+            }
+        }
 
-        // Bias gradients are just the gradient tensor
-        _biasGradients = gradTensor;
+        Tensor<T> activationGradient;
+        if (UsingVectorActivation)
+        {
+            activationGradient = VectorActivation!.Backward(_lastPreActivation, normalizedOutputGradient);
+        }
+        else if (ScalarActivation != null)
+        {
+            activationGradient = ScalarActivation.Backward(_lastPreActivation, normalizedOutputGradient);
+        }
+        else
+        {
+            activationGradient = normalizedOutputGradient;
+        }
 
-        // Compute input gradients using weights transpose
-        // weights^T: [inputSize, outputSize], gradient: [outputSize, 1] -> result: [inputSize, 1]
-        var weightsT = Engine.TensorTranspose(_weights);
-        var gradCol = gradTensor.Reshape([gradTensor.Length, 1]);
-        var inputGrad = Engine.TensorMatMul(weightsT, gradCol);
+        int inputSize = _lastInput.Shape[^1];
+        int batchDim;
+        Tensor<T> flattenedInput;
+        if (_lastInput.Rank == 1)
+        {
+            batchDim = 1;
+            flattenedInput = _lastInput.Reshape(1, inputSize);
+        }
+        else if (_lastInput.Rank == 2)
+        {
+            batchDim = _lastInput.Shape[0];
+            flattenedInput = _lastInput;
+        }
+        else
+        {
+            batchDim = 1;
+            for (int i = 0; i < _lastInput.Rank - 1; i++)
+            {
+                batchDim *= _lastInput.Shape[i];
+            }
+            flattenedInput = _lastInput.Reshape(batchDim, inputSize);
+        }
 
-        return inputGrad.Reshape([_lastInput.Length]);
+        Tensor<T> flattenedGradient;
+        if (activationGradient.Rank == 1)
+        {
+            flattenedGradient = activationGradient.Reshape(1, OutputShape[0]);
+        }
+        else if (activationGradient.Rank == 2)
+        {
+            flattenedGradient = activationGradient;
+        }
+        else
+        {
+            flattenedGradient = activationGradient.Reshape(batchDim, OutputShape[0]);
+        }
+
+        var gradientTransposed = Engine.TensorTranspose(flattenedGradient);
+        _weightGradients = Engine.TensorMatMul(gradientTransposed, flattenedInput);
+
+        _biasGradients = flattenedGradient.Sum([0]);
+
+        var inputGradient = Engine.TensorMatMul(flattenedGradient, _weights);
+
+        return inputGradient.Reshape(_originalInputShape);
     }
 
     /// <summary>
@@ -359,45 +441,82 @@ public class ReadoutLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastPreActivation == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Compute activation derivative on tensors
+        bool shapeMatches = outputGradient.Shape.Length == _lastPreActivation.Shape.Length;
+        if (shapeMatches)
+        {
+            for (int i = 0; i < _lastPreActivation.Shape.Length; i++)
+            {
+                if (outputGradient.Shape[i] != _lastPreActivation.Shape[i])
+                {
+                    shapeMatches = false;
+                    break;
+                }
+            }
+        }
+
+        Tensor<T> normalizedOutputGradient = outputGradient;
+        if (!shapeMatches)
+        {
+            if (outputGradient.Length == _lastPreActivation.Length)
+            {
+                normalizedOutputGradient = outputGradient.Reshape(_lastPreActivation.Shape);
+            }
+            else
+            {
+                throw new ArgumentException("Output gradient shape does not match the last pre-activation output.");
+            }
+        }
+
         Tensor<T> preActGradTensor;
         if (UsingVectorActivation)
         {
-            var activationDerivative = VectorActivation!.Derivative(_lastPreActivation);
-            preActGradTensor = Engine.TensorMultiply(outputGradient, activationDerivative);
+            preActGradTensor = VectorActivation!.Backward(_lastPreActivation, normalizedOutputGradient);
         }
-        else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
+        else if (ScalarActivation != null)
         {
-            preActGradTensor = new Tensor<T>(_lastPreActivation.Shape);
-            for (int i = 0; i < preActGradTensor.Length; i++)
-            {
-                preActGradTensor[i] = NumOps.Multiply(outputGradient[i], ScalarActivation!.Derivative(_lastPreActivation[i]));
-            }
+            preActGradTensor = ScalarActivation.Backward(_lastPreActivation, normalizedOutputGradient);
         }
         else
         {
-            preActGradTensor = outputGradient;
+            preActGradTensor = normalizedOutputGradient;
         }
 
-        var inputTensor = _lastInput.Reshape([1, _lastInput.Length]);
+        int inputSize = _lastInput.Shape[^1];
+        int batchDim;
+        Tensor<T> flattenedInput;
 
-        // Build minimal autodiff graph for linear part only (gradient routing)
-        var inputNode = Autodiff.TensorOperations<T>.Variable(inputTensor, "input", requiresGradient: true);
+        if (_lastInput.Rank == 1)
+        {
+            batchDim = 1;
+            flattenedInput = _lastInput.Reshape(1, inputSize);
+        }
+        else if (_lastInput.Rank == 2)
+        {
+            batchDim = _lastInput.Shape[0];
+            flattenedInput = _lastInput;
+        }
+        else
+        {
+            batchDim = 1;
+            for (int i = 0; i < _lastInput.Rank - 1; i++)
+            {
+                batchDim *= _lastInput.Shape[i];
+            }
+            flattenedInput = _lastInput.Reshape(batchDim, inputSize);
+        }
+
+        var inputNode = Autodiff.TensorOperations<T>.Variable(flattenedInput, "input", requiresGradient: true);
         var weightsNode = Autodiff.TensorOperations<T>.Variable(
             _weights, "weights", requiresGradient: true);
         var biasNode = Autodiff.TensorOperations<T>.Variable(
             _bias, "bias", requiresGradient: true);
 
-        // Forward pass for linear part: output = weights * input.T + bias
-        var matmulNode = Autodiff.TensorOperations<T>.MatrixMultiply(weightsNode, Autodiff.TensorOperations<T>.Transpose(inputNode));
+        var weightsTransposed = Autodiff.TensorOperations<T>.Transpose(weightsNode);
+        var matmulNode = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, weightsTransposed);
+        var preActivationNode = Autodiff.TensorOperations<T>.Add(matmulNode, biasNode);
 
-        var matmulFlatNode = Autodiff.TensorOperations<T>.Reshape(matmulNode, _bias.Shape[0]);
-        var preActivationNode = Autodiff.TensorOperations<T>.Add(matmulFlatNode, biasNode);
-
-        // Set pre-activation gradient (activation derivative already applied)
         preActivationNode.Gradient = preActGradTensor;
 
-        // Inline topological sort and backward pass
         var visited = new HashSet<Autodiff.ComputationNode<T>>();
         var topoOrder = new List<Autodiff.ComputationNode<T>>();
         var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
@@ -436,7 +555,6 @@ public class ReadoutLayer<T> : LayerBase<T>
             }
         }
 
-        // Update parameter gradients (already in Tensor<T> format)
         if (weightsNode.Gradient != null)
         {
             _weightGradients = weightsNode.Gradient;
@@ -447,17 +565,13 @@ public class ReadoutLayer<T> : LayerBase<T>
             _biasGradients = biasNode.Gradient;
         }
 
-        // Convert input gradient back to tensor
-        var inputGradient = new Tensor<T>([_lastInput.Length]);
-        if (inputNode.Gradient != null)
+        if (inputNode.Gradient == null)
         {
-            for (int i = 0; i < _lastInput.Length; i++)
-                inputGradient[i] = inputNode.Gradient[0, i];
+            throw new InvalidOperationException("Input gradient is null after backward pass");
         }
 
-        return inputGradient;
+        return inputNode.Gradient.Reshape(_originalInputShape);
     }
-
 
     /// <summary>
     /// Updates the parameters of the readout layer using the calculated gradients.
@@ -615,6 +729,7 @@ public class ReadoutLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastOutput = null;
         _lastPreActivation = null;
+        _originalInputShape = [];
 
         // Reset gradients using Tensor<T>
         _weightGradients = new Tensor<T>([_weights.Shape[0], _weights.Shape[1]]);

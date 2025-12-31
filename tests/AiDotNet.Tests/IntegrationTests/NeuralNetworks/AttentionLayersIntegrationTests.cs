@@ -1,6 +1,7 @@
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using Xunit;
@@ -342,6 +343,66 @@ public class AttentionLayersIntegrationTests
         // Assert
         Assert.NotSame(original, cloned);
         Assert.Equal(originalOutput.Shape, clonedOutput.Shape);
+    }
+
+    #endregion
+
+    #region FlashAttentionLayer Tests
+
+    [Fact]
+    public void FlashAttentionLayer_ForwardPass_2D_ProducesValidOutput()
+    {
+        // Arrange - 2D input [seqLen, embedDim]
+        int seqLen = 8;
+        int embedDim = 32;
+        int headCount = 4;
+        var layer = new FlashAttentionLayer<float>(seqLen, embedDim, headCount);
+        var input = CreateRandomTensor<float>([seqLen, embedDim]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal(input.Shape, output.Shape);
+        Assert.False(ContainsNaN(output));
+    }
+
+    [Fact]
+    public void FlashAttentionLayer_ForwardPass_4D_ProducesValidOutput()
+    {
+        // Arrange - 4D input [batch1, batch2, seqLen, embedDim]
+        int seqLen = 6;
+        int embedDim = 24;
+        int headCount = 4;
+        var layer = new FlashAttentionLayer<float>(seqLen, embedDim, headCount);
+        var input = CreateRandomTensor<float>([2, 3, seqLen, embedDim]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal(input.Shape, output.Shape);
+        Assert.False(ContainsNaN(output));
+    }
+
+    [Fact]
+    public void FlashAttentionLayer_BackwardPass_ProducesValidGradients()
+    {
+        // Arrange
+        int seqLen = 8;
+        int embedDim = 32;
+        int headCount = 4;
+        var layer = new FlashAttentionLayer<float>(seqLen, embedDim, headCount);
+        var input = CreateRandomTensor<float>([2, seqLen, embedDim]);
+
+        // Act
+        var output = layer.Forward(input);
+        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var inputGradient = layer.Backward(outputGradient);
+
+        // Assert
+        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.False(ContainsNaN(inputGradient));
     }
 
     #endregion

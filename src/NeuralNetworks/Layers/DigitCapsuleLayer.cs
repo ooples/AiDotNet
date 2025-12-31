@@ -263,7 +263,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public DigitCapsuleLayer(int inputCapsules, int inputCapsuleDimension, int numClasses, int outputCapsuleDimension, int routingIterations)
-        : base([inputCapsules, inputCapsuleDimension], [numClasses, outputCapsuleDimension], new SquashActivation<T>() as IActivationFunction<T>)
+        : base([inputCapsules, inputCapsuleDimension], [numClasses, outputCapsuleDimension], (IVectorActivationFunction<T>)new SquashActivation<T>())
     {
         _inputCapsules = inputCapsules;
         _inputCapsuleDimension = inputCapsuleDimension;
@@ -518,7 +518,17 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
 
         int batchSize = _lastInput.Shape[0];
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        Tensor<T> outputGradient3D = outputGradient;
+        if (outputGradient.Shape.Length == 1)
+        {
+            outputGradient3D = outputGradient.Reshape([1, _numClasses, _outputCapsuleDimension]);
+        }
+        else if (outputGradient.Shape.Length == 2)
+        {
+            outputGradient3D = outputGradient.Reshape([batchSize, _numClasses, _outputCapsuleDimension]);
+        }
+
+        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient3D);
 
         _weightsGradient = new Tensor<T>(_weights.Shape);
         var inputGradient = new Tensor<T>(_lastInput.Shape);
@@ -692,7 +702,17 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         }
 
         // 4. Set Gradient
-        output.Gradient = outputGradient;
+        Tensor<T> outputGradient3D = outputGradient;
+        if (outputGradient.Shape.Length == 1)
+        {
+            outputGradient3D = outputGradient.Reshape([1, numClasses, outputDim]);
+        }
+        else if (outputGradient.Shape.Length == 2)
+        {
+            outputGradient3D = outputGradient.Reshape([batchSize, numClasses, outputDim]);
+        }
+
+        output.Gradient = outputGradient3D;
 
         // 5. Backward
         output.Backward();

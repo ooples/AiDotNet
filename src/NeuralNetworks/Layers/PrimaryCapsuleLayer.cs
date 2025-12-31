@@ -81,6 +81,11 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     private int[]? _originalInputShape;
 
     /// <summary>
+    /// Stores whether the original input was provided in NCHW layout.
+    /// </summary>
+    private bool _inputWasNCHW;
+
+    /// <summary>
     /// The output tensor from the most recent forward pass.
     /// </summary>
     /// <remarks>
@@ -385,6 +390,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
             processInput = input.Reshape([flatBatch, height, width, channels]);
         }
 
+        _inputWasNCHW = inputIsNCHW;
         _lastInput = processInput;
 
         // Get spatial dimensions based on format
@@ -580,7 +586,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         var kernelNCHW = _convWeights.Reshape([outputChannels, _inputChannels, _kernelSize, _kernelSize]);
 
         // Input in NCHW
-        var inputNCHW = _lastInput.Transpose([0, 3, 1, 2]);
+        var inputNCHW = _inputWasNCHW ? _lastInput : _lastInput.Transpose([0, 3, 1, 2]);
 
         // Gradients via Conv2D ops
         var inputGradNCHW = Engine.Conv2DBackwardInput(gradNCHW, kernelNCHW, inputNCHW.Shape, new[] { _stride, _stride }, new[] { 0, 0 }, new[] { 1, 1 });
@@ -592,8 +598,8 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         // Reshape kernel gradient back to [outC, flatPatch]
         _convWeightsGradient = kernelGrad.Reshape([outputChannels, _inputChannels * _kernelSize * _kernelSize]);
 
-        // Input gradient back to NHWC
-        var inputGradient = inputGradNCHW.Transpose([0, 2, 3, 1]);
+        // Input gradient back to original layout
+        var inputGradient = _inputWasNCHW ? inputGradNCHW : inputGradNCHW.Transpose([0, 2, 3, 1]);
 
         // Restore gradient shape to match original input shape
         if (_originalInputShape != null && _originalInputShape.Length != 4)
@@ -870,6 +876,8 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         _lastOutput = null;
         _convWeightsGradient = null;
         _convBiasGradient = null;
+        _originalInputShape = null;
+        _inputWasNCHW = false;
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

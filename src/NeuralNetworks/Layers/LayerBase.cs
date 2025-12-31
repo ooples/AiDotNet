@@ -1278,8 +1278,38 @@ public abstract class LayerBase<T> : ILayer<T>
 
         if (VectorActivation != null)
         {
-            // Use the vector activation function's derivative method
-            return VectorActivation.Derivative(input).Multiply(outputGradient);
+            var derivative = VectorActivation.Derivative(input);
+
+            if (derivative.Rank == input.Rank)
+            {
+                return derivative.ElementwiseMultiply(outputGradient);
+            }
+
+            if (derivative.Rank != input.Rank + 1)
+            {
+                throw new ArgumentException("Vector activation derivative tensor has an unexpected rank.");
+            }
+
+            int vectorLength = input.Shape[input.Shape.Length - 1];
+            int batchElements = input.Length / vectorLength;
+            var flatDerivative = derivative.Reshape(new[] { batchElements, vectorLength, vectorLength });
+            var flatOutputGrad = outputGradient.Reshape(new[] { batchElements, vectorLength });
+            var flatInputGrad = new Tensor<T>(new[] { batchElements, vectorLength });
+
+            for (int i = 0; i < batchElements; i++)
+            {
+                for (int j = 0; j < vectorLength; j++)
+                {
+                    T sum = NumOps.Zero;
+                    for (int k = 0; k < vectorLength; k++)
+                    {
+                        sum = NumOps.Add(sum, NumOps.Multiply(flatDerivative[i, j, k], flatOutputGrad[i, k]));
+                    }
+                    flatInputGrad[i, j] = sum;
+                }
+            }
+
+            return flatInputGrad.Reshape(input.Shape);
         }
         else if (ScalarActivation != null)
         {

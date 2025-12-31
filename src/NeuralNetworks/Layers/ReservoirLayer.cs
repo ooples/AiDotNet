@@ -110,6 +110,14 @@ public class ReservoirLayer<T> : LayerBase<T>
     private Tensor<T> _reservoirWeights;
 
     /// <summary>
+    /// The input weight tensor mapping inputs into the reservoir space.
+    /// </summary>
+    /// <remarks>
+    /// Shape: [reservoirSize, inputSize]. These weights remain fixed during training.
+    /// </remarks>
+    private Tensor<T> _inputWeights;
+
+    /// <summary>
     /// The current state of the reservoir, representing the activation of all neurons.
     /// </summary>
     /// <remarks>
@@ -202,6 +210,7 @@ public class ReservoirLayer<T> : LayerBase<T>
         _leakingRate = leakingRate;
 
         _reservoirWeights = new Tensor<T>([_reservoirSize, _reservoirSize]);
+        _inputWeights = new Tensor<T>([_reservoirSize, _inputSize]);
         _reservoirState = new Tensor<T>([_reservoirSize]);
 
         InitializeReservoir();
@@ -238,52 +247,63 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Support any rank input by reshaping to [1, inputSize]
-        Tensor<T> reshapedInput;
-        if (input.Shape.Length == 1)
+        if (input.Shape.Length < 1)
+            throw new ArgumentException("Input must have at least one dimension.", nameof(input));
+
+        int rank = input.Shape.Length;
+        int inputDimension = input.Shape[^1];
+        if (inputDimension != _inputSize)
+            throw new ArgumentException($"Expected input feature size {_inputSize} but got {inputDimension}.", nameof(input));
+
+        int flatBatch = 1;
+        for (int d = 0; d < rank - 1; d++)
         {
-            // 1D input: [inputSize] -> [1, inputSize]
-            reshapedInput = input.Reshape([1, input.Shape[0]]);
-        }
-        else if (input.Shape.Length == 2 && input.Shape[0] == 1)
-        {
-            // Already in correct shape [1, inputSize]
-            reshapedInput = input;
-        }
-        else if (input.Shape.Length == 2)
-        {
-            // 2D input [batch, inputSize] - process first sample
-            reshapedInput = input.Reshape([1, input.Shape[0] * input.Shape[1]]);
-        }
-        else
-        {
-            // Higher rank: flatten to 1D then reshape to [1, n]
-            int totalElements = input.Shape.Aggregate(1, (a, b) => a * b);
-            reshapedInput = input.Reshape([1, totalElements]);
+            flatBatch *= input.Shape[d];
         }
 
-        // Flatten input and scale it
-        var inputFlat = reshapedInput.Reshape([_inputSize]);
-        var scaledInput = Engine.TensorMultiplyScalar(inputFlat, NumOps.FromDouble(_inputScaling));
+        var input2D = rank == 1
+            ? input.Reshape([1, _inputSize])
+            : input.Reshape([flatBatch, _inputSize]);
 
-        // Reservoir dynamics: W * state + scaled_input
-        var stateColumn = _reservoirState.Reshape([_reservoirSize, 1]);
-        var weightedState = Engine.TensorMatMul(_reservoirWeights, stateColumn);
-        var weightedStateFlat = weightedState.Reshape([_reservoirSize]);
+        var outputs = new Tensor<T>([flatBatch, _reservoirSize]);
+        T inputScale = NumOps.FromDouble(_inputScaling);
 
-        var reservoirInput = Engine.TensorAdd(weightedStateFlat, scaledInput);
+        for (int i = 0; i < flatBatch; i++)
+        {
+            var stepInput = input2D.GetSlice(i);
+            var scaledInput = Engine.TensorMultiplyScalar(stepInput, inputScale);
 
-        // Apply activation to get new state
-        var newStateTensor = ApplyActivation(reservoirInput.Reshape([1, _reservoirSize]));
-        var newState = newStateTensor.Reshape([_reservoirSize]);
+            var inputColumn = scaledInput.Reshape([_inputSize, 1]);
+            var inputContribution = Engine.TensorMatMul(_inputWeights, inputColumn).Reshape([_reservoirSize]);
 
-        // Leaky integration: (1-α)*old_state + α*new_state
-        var oldComponent = Engine.TensorMultiplyScalar(_reservoirState, NumOps.FromDouble(1 - _leakingRate));
-        var newComponent = Engine.TensorMultiplyScalar(newState, NumOps.FromDouble(_leakingRate));
-        _reservoirState = Engine.TensorAdd(oldComponent, newComponent);
+            var stateColumn = _reservoirState.Reshape([_reservoirSize, 1]);
+            var weightedState = Engine.TensorMatMul(_reservoirWeights, stateColumn).Reshape([_reservoirSize]);
 
-        return _reservoirState.Reshape([1, _reservoirSize]);
+            var reservoirInput = Engine.TensorAdd(weightedState, inputContribution);
+
+            var newState = ApplyActivation(reservoirInput.Reshape([1, _reservoirSize])).Reshape([_reservoirSize]);
+            var oldComponent = Engine.TensorMultiplyScalar(_reservoirState, NumOps.FromDouble(1 - _leakingRate));
+            var newComponent = Engine.TensorMultiplyScalar(newState, NumOps.FromDouble(_leakingRate));
+            _reservoirState = Engine.TensorAdd(oldComponent, newComponent);
+
+            outputs.SetSlice(0, i, _reservoirState);
+        }
+
+        if (rank == 1)
+        {
+            return outputs.Reshape([_reservoirSize]);
+        }
+
+        var outputShape = new int[rank];
+        for (int d = 0; d < rank - 1; d++)
+        {
+            outputShape[d] = input.Shape[d];
+        }
+        outputShape[rank - 1] = _reservoirSize;
+
+        return outputs.Reshape(outputShape);
     }
+
 
     /// <summary>
     /// Performs the backward pass of the reservoir layer.

@@ -312,22 +312,22 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         for (int b = 0; b < batchSize; b++)
         {
             // === VECTORIZED: Extract sequence for this batch item ===
-            var batchSeq = Engine.TensorSliceAxis(sequenceScores, 0, b); // [sequenceLength, numClasses]
+            var batchSeq = sequenceScores.GetSliceAlongDimension(b, 0); // [sequenceLength, numClasses]
 
             // === VECTORIZED Viterbi Algorithm ===
             var viterbi = new Tensor<T>([_sequenceLength, _numClasses]);
             var backpointers = new Matrix<int>(_sequenceLength, _numClasses);
 
             // VECTORIZED: Initialize first timestep - startScores + emissions[0]
-            var firstEmissions = Engine.TensorSliceAxis(batchSeq, 0, 0); // [numClasses]
+            var firstEmissions = batchSeq.GetSliceAlongDimension(0, 0); // [numClasses]
             var firstViterbi = Engine.TensorAdd(firstEmissions, _startScores);
-            Engine.TensorSetSliceAxis(viterbi, firstViterbi, 0, 0);
+            viterbi.SetSlice(0, 0, firstViterbi);
 
             // Recursion over time (inherently sequential)
             for (int t = 1; t < _sequenceLength; t++)
             {
-                var currentEmissions = Engine.TensorSliceAxis(batchSeq, 0, t); // [numClasses]
-                var prevViterbi = Engine.TensorSliceAxis(viterbi, 0, t - 1); // [numClasses]
+                var currentEmissions = batchSeq.GetSliceAlongDimension(t, 0); // [numClasses]
+                var prevViterbi = viterbi.GetSliceAlongDimension(t - 1, 0); // [numClasses]
 
                 // For each current class, compute max over prev classes
                 // score[c] = max_prevC(viterbi[t-1, prevC] + transition[prevC, c]) + emissions[t, c]
@@ -336,7 +336,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
                 // Then max over axis 0
 
                 var prevExpanded = prevViterbi.Reshape([_numClasses, 1]); // [numClasses, 1]
-                var scoresWithTrans = Engine.TensorAdd(prevExpanded, _transitionMatrix); // [numClasses, numClasses]
+                var scoresWithTrans = Engine.TensorBroadcastAdd(prevExpanded, _transitionMatrix); // [numClasses, numClasses]
 
                 // Get max over previous classes and store backpointers
                 var maxScores = new Tensor<T>([_numClasses]);
@@ -359,11 +359,11 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
 
                 // Add emissions: maxScores + currentEmissions
                 var currentViterbi = Engine.TensorAdd(maxScores, currentEmissions);
-                Engine.TensorSetSliceAxis(viterbi, currentViterbi, 0, t);
+                viterbi.SetSlice(0, t, currentViterbi);
             }
 
             // === VECTORIZED Termination ===
-            var lastViterbi = Engine.TensorSliceAxis(viterbi, 0, _sequenceLength - 1);
+            var lastViterbi = viterbi.GetSliceAlongDimension(_sequenceLength - 1, 0);
             var finalScores = Engine.TensorAdd(lastViterbi, _endScores);
 
             // Find argmax
@@ -399,26 +399,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         // Restore original rank if needed for any-rank tensor support
         if (_originalInputShape != null && _originalInputShape.Length != 3)
         {
-            if (_originalInputShape.Length == 1)
-            {
-                // Was 1D, return [_sequenceLength * _numClasses]
-                return output.Reshape([_sequenceLength * _numClasses]);
-            }
-            else if (_originalInputShape.Length == 2)
-            {
-                // Was 2D [batch, features], return [batch, _sequenceLength * _numClasses]
-                int origBatch = _originalInputShape[0];
-                return output.Reshape([origBatch, _sequenceLength * _numClasses]);
-            }
-            else
-            {
-                // Higher-rank: restore leading dimensions
-                var newShape = new int[_originalInputShape.Length];
-                for (int d = 0; d < _originalInputShape.Length - 1; d++)
-                    newShape[d] = _originalInputShape[d];
-                newShape[_originalInputShape.Length - 1] = _sequenceLength * _numClasses;
-                return output.Reshape(newShape);
-            }
+            return output.Reshape(_originalInputShape);
         }
 
         return output;
@@ -473,26 +454,27 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        var outputGradient3D = NormalizeOutputGradient(outputGradient);
         int batchSize = _lastInput.Shape[0];
 
         // === VECTORIZED Gradient Computation ===
 
         // Input gradient starts as a copy of output gradient
-        var inputGradient = outputGradient.Clone();
+        var inputGradient = outputGradient3D.Clone();
 
         // Start scores gradient: sum of gradients at t=0 over all batches
         // outputGradient[:, 0, :] summed over batch
-        var firstTimestep = Engine.TensorSliceAxis(outputGradient, 1, 0); // [batchSize, numClasses]
+        var firstTimestep = Engine.TensorSliceAxis(outputGradient3D, 1, 0); // [batchSize, numClasses]
         _startScoresGradient = Engine.ReduceSum(firstTimestep, new[] { 0 }, keepDims: false);
 
         // End scores gradient: sum of gradients at t=seqLen-1 over all batches
-        var lastTimestep = Engine.TensorSliceAxis(outputGradient, 1, _sequenceLength - 1); // [batchSize, numClasses]
+        var lastTimestep = Engine.TensorSliceAxis(outputGradient3D, 1, _sequenceLength - 1); // [batchSize, numClasses]
         _endScoresGradient = Engine.ReduceSum(lastTimestep, new[] { 0 }, keepDims: false);
 
         // Transition matrix gradient: sum of gradients for all t > 0
         // For simplicity, we sum all gradients across batch and time (except t=0), then broadcast
         // A more accurate gradient would involve the actual paths, but this is an approximation
-        var allGradients = Engine.ReduceSum(outputGradient, new[] { 0, 1 }, keepDims: false); // [numClasses]
+        var allGradients = Engine.ReduceSum(outputGradient3D, new[] { 0, 1 }, keepDims: false); // [numClasses]
 
         // Create transition gradient: outer product approximation
         // Each transition gets the sum of class gradients
@@ -501,7 +483,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         var onesCol = new Tensor<T>([_numClasses, 1]);
         onesCol.Fill(NumOps.One);
         // transGrad[i, j] = sumGrad[j] for all i
-        var transGrad = Engine.TensorMultiply(onesCol, gradExpanded);
+        var transGrad = Engine.TensorBroadcastMultiply(onesCol, gradExpanded);
         // Scale by (seqLen - 1) / seqLen to account for t=0 not having transitions
         var scale = NumOps.FromDouble((_sequenceLength - 1.0) / _sequenceLength);
         _transitionMatrixGradient = Engine.TensorMultiplyScalar(transGrad, scale);
@@ -539,6 +521,8 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        var outputGradient3D = NormalizeOutputGradient(outputGradient);
+
         // Build computation graph using differentiable CRF forward op
         var emissionsNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "crf_emissions", requiresGradient: true);
         var transitionsNode = Autodiff.TensorOperations<T>.Variable(_transitionMatrix, "crf_transitions", requiresGradient: true);
@@ -546,7 +530,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         var endNode = Autodiff.TensorOperations<T>.Variable(_endScores, "crf_end", requiresGradient: true);
 
         var outputNode = Autodiff.TensorOperations<T>.CRFForward(emissionsNode, transitionsNode, startNode, endNode);
-        outputNode.Gradient = outputGradient;
+        outputNode.Gradient = outputGradient3D;
 
         // Inline topological sort
         var visited = new HashSet<Autodiff.ComputationNode<T>>();
@@ -610,6 +594,38 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         }
 
         return inputGradient;
+    }
+
+    private Tensor<T> NormalizeOutputGradient(Tensor<T> outputGradient)
+    {
+        if (_originalInputShape == null || _originalInputShape.Length == 3)
+        {
+            return outputGradient;
+        }
+
+        if (_originalInputShape.Length == 2)
+        {
+            return outputGradient.Reshape([1, _originalInputShape[0], _originalInputShape[1]]);
+        }
+
+        if (_originalInputShape.Length == 1)
+        {
+            int expected = _sequenceLength * _numClasses;
+            if (outputGradient.Length == expected)
+            {
+                return outputGradient.Reshape([1, _sequenceLength, _numClasses]);
+            }
+
+            return outputGradient.Reshape([1, 1, outputGradient.Shape[0]]);
+        }
+
+        int flatBatch = 1;
+        for (int d = 0; d < _originalInputShape.Length - 2; d++)
+        {
+            flatBatch *= _originalInputShape[d];
+        }
+
+        return outputGradient.Reshape([flatBatch, _sequenceLength, _numClasses]);
     }
 
     /// <summary>

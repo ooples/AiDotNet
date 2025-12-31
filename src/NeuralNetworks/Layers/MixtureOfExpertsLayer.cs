@@ -193,6 +193,12 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private List<Tensor<T>>? _lastExpertOutputs;
 
     /// <summary>
+    /// Cached combined output before activation from the most recent forward pass.
+    /// </summary>
+    private Tensor<T>? _lastPreActivation;
+
+
+    /// <summary>
     /// Cached routing logits (before softmax) from the most recent forward pass.
     /// </summary>
     /// <remarks>
@@ -569,7 +575,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 else
                 {
                     // Create a zero tensor for inactive experts
-                    _lastExpertOutputs.Add(new Tensor<T>(new int[] { batchSize }.Concat(OutputShape.Skip(1)).ToArray()));
+                    _lastExpertOutputs.Add(new Tensor<T>(new int[] { batchSize }.Concat(OutputShape).ToArray()));
                 }
             }
         }
@@ -584,6 +590,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Step 5: Combine expert outputs using routing weights
         var combinedOutput = CombineExpertOutputs(_lastExpertOutputs, routingWeights);
+        _lastPreActivation = combinedOutput;
 
         // Step 6: Apply activation function
         var output = ApplyActivation(combinedOutput);
@@ -666,13 +673,14 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastRoutingWeights == null || _lastExpertOutputs == null || _lastRoutingLogits == null)
+        if (_lastInput == null || _lastRoutingWeights == null || _lastExpertOutputs == null || _lastRoutingLogits == null || _lastPreActivation == null)
         {
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
         // Step 1: Apply activation derivative
-        var activationGradient = ApplyActivationDerivative(_lastInput, outputGradient);
+        var normalizedOutputGradient = NormalizeOutputGradient(outputGradient);
+        var activationGradient = ApplyActivationDerivative(_lastPreActivation, normalizedOutputGradient);
 
         // Step 2: Backpropagate through experts
         var inputGradientFromExperts = new Tensor<T>(_lastInput.Shape);
@@ -701,7 +709,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Step 5: Combine gradients from both paths
         var totalInputGradient = inputGradientFromExperts.Add(inputGradientFromRouter);
 
-        return totalInputGradient;
+        return ReshapeToOriginalInput(totalInputGradient);
     }
 
     /// <summary>
@@ -717,11 +725,12 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastRoutingWeights == null || _lastExpertOutputs == null || _lastRoutingLogits == null)
+        if (_lastInput == null || _lastRoutingWeights == null || _lastExpertOutputs == null || _lastRoutingLogits == null || _lastPreActivation == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         // Step 1: Apply activation derivative
-        var activationGradient = ApplyActivationDerivative(_lastInput, outputGradient);
+        var normalizedOutputGradient = NormalizeOutputGradient(outputGradient);
+        var activationGradient = ApplyActivationDerivative(_lastPreActivation, normalizedOutputGradient);
 
         // Step 2: Backpropagate through experts (composite - each expert handles its own autodiff)
         var inputGradientFromExperts = new Tensor<T>(_lastInput.Shape);
@@ -750,7 +759,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Step 5: Combine gradients from both paths
         var totalInputGradient = inputGradientFromExperts.Add(inputGradientFromRouter);
 
-        return totalInputGradient;
+        return ReshapeToOriginalInput(totalInputGradient);
     }
 
 
@@ -919,7 +928,9 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastRoutingWeights = null;
         _lastRoutingLogits = null;
         _lastExpertOutputs = null;
+        _lastPreActivation = null;
         _lastTopKIndices = null;
+        _originalInputShape = null;
 
         // Reset router state
         _router.ResetState();
@@ -1488,8 +1499,18 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             var expertOutput = expertOutputs[i];
 
-            // Extract routing weight for expert i as a column tensor [batchSize, 1]
-            var weightColumn = Engine.TensorSlice(routingWeights, new[] { 0, i }, new[] { routingWeights.Shape[0], 1 });
+            // Extract routing weight for expert i as a vector [batchSize]
+            var weightVector = routingWeights.GetSliceAlongDimension(1, i);
+
+            // Reshape for broadcasting across any-rank expert outputs
+            var broadcastShape = new int[expertOutput.Shape.Length];
+            broadcastShape[0] = weightVector.Shape[0];
+            for (int d = 1; d < broadcastShape.Length; d++)
+            {
+                broadcastShape[d] = 1;
+            }
+
+            var weightColumn = weightVector.Reshape(broadcastShape);
 
             // Multiply expert output by weight (broadcasts across output dimensions)
             var weightedOutput = Engine.TensorBroadcastMultiply(expertOutput, weightColumn);
@@ -1570,7 +1591,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 var summed = Engine.ReduceSum(product, new[] { 1 }, keepDims: false); // [batchSize]
 
                 // Store in weightGradients column
-                Engine.TensorSetSliceAxis(weightGradients, summed.Reshape([batchSize, 1]), 1, i);
+                weightGradients.SetSlice(1, i, summed.Reshape([batchSize, 1]));
             }
         }
 
@@ -1643,6 +1664,54 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// - Track which experts are being utilized
     /// </para>
     /// </remarks>
+    private Tensor<T> NormalizeOutputGradient(Tensor<T> outputGradient)
+    {
+        if (_lastPreActivation == null)
+        {
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+        }
+
+        bool shapeMatches = outputGradient.Shape.Length == _lastPreActivation.Shape.Length;
+        if (shapeMatches)
+        {
+            for (int i = 0; i < _lastPreActivation.Shape.Length; i++)
+            {
+                if (outputGradient.Shape[i] != _lastPreActivation.Shape[i])
+                {
+                    shapeMatches = false;
+                    break;
+                }
+            }
+        }
+
+        if (!shapeMatches)
+        {
+            if (outputGradient.Length == _lastPreActivation.Length)
+            {
+                return outputGradient.Reshape(_lastPreActivation.Shape);
+            }
+
+            throw new ArgumentException("Output gradient shape does not match layer output.");
+        }
+
+        return outputGradient;
+    }
+
+    private Tensor<T> ReshapeToOriginalInput(Tensor<T> inputGradient)
+    {
+        if (_originalInputShape == null)
+        {
+            return inputGradient;
+        }
+
+        if (_originalInputShape.Length == 1 || _originalInputShape.Length > 2)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
+    }
+
     private bool IsExpertActive(int batchIndex, int expertIndex)
     {
         if (_lastTopKIndices == null || _topK == 0)

@@ -235,16 +235,23 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
-        Tensor<T> output = new([.. input.Shape, input.Shape.Last()]);
-        int batchSize = input.Shape[0];
-        int vectorLength = input.Shape[1];
+        if (input.Shape.Length < 2)
+        {
+            throw new ArgumentException("Input tensor must have at least 2 dimensions.", nameof(input));
+        }
 
-        for (int i = 0; i < batchSize; i++)
+        int vectorLength = input.Shape[input.Shape.Length - 1];
+        int batchElements = input.Length / vectorLength;
+
+        var flattenedInput = input.Reshape(new[] { batchElements, vectorLength });
+        var flatOutput = new Tensor<T>(new[] { batchElements, vectorLength, vectorLength });
+
+        for (int i = 0; i < batchElements; i++)
         {
             Vector<T> vector = new Vector<T>(vectorLength);
             for (int j = 0; j < vectorLength; j++)
             {
-                vector[j] = input[i, j];
+                vector[j] = flattenedInput[i, j];
             }
 
             Matrix<T> jacobian = Derivative(vector);
@@ -253,12 +260,19 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
             {
                 for (int k = 0; k < vectorLength; k++)
                 {
-                    output[i, j, k] = jacobian[j, k];
+                    flatOutput[i, j, k] = jacobian[j, k];
                 }
             }
         }
 
-        return output;
+        var outputShape = new int[input.Shape.Length + 1];
+        for (int i = 0; i < input.Shape.Length; i++)
+        {
+            outputShape[i] = input.Shape[i];
+        }
+        outputShape[outputShape.Length - 1] = vectorLength;
+
+        return flatOutput.Reshape(outputShape);
     }
 
 

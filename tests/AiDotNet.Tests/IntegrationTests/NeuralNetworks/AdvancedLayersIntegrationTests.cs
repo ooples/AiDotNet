@@ -1379,7 +1379,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape.Length);
     }
 
-    [Fact(Skip = "SelfAttentionLayer backward pass has dimension mismatch issues in both manual and autodiff paths - needs architectural fix")]
+    [Fact]
     public void SelfAttentionLayer_BackwardPass_ProducesValidGradients()
     {
         // Arrange
@@ -3745,7 +3745,7 @@ public class AdvancedLayersIntegrationTests
 
     #region TimeDistributedLayer Tests
 
-    [Fact(Skip = "TimeDistributedLayer has slicing issue in Forward implementation")]
+    [Fact]
     public void TimeDistributedLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -3766,7 +3766,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Skip = "TimeDistributedLayer has slicing issue in Forward implementation")]
+    [Fact]
     public void TimeDistributedLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -4045,7 +4045,7 @@ public class AdvancedLayersIntegrationTests
 
     #region DecoderLayer Tests
 
-    [Fact(Skip = "DecoderLayer requires multiple inputs (decoder input and encoder output)")]
+    [Fact]
     public void DecoderLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -4066,7 +4066,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Skip = "DecoderLayer requires multiple inputs (decoder input and encoder output)")]
+    [Fact]
     public void DecoderLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -4092,7 +4092,7 @@ public class AdvancedLayersIntegrationTests
 
     #region RBMLayer Tests
 
-    [Fact(Skip = "RBMLayer has tensor reshape issue in Forward")]
+    [Fact]
     public void RBMLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -4112,7 +4112,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Skip = "RBMLayer has tensor reshape issue in Forward")]
+    [Fact]
     public void RBMLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -4137,7 +4137,7 @@ public class AdvancedLayersIntegrationTests
 
     #region ReservoirLayer Tests
 
-    [Fact(Skip = "ReservoirLayer has tensor reshape issue in Forward")]
+    [Fact]
     public void ReservoirLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -4156,7 +4156,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Skip = "ReservoirLayer has tensor reshape issue in Forward")]
+    [Fact]
     public void ReservoirLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -4223,7 +4223,7 @@ public class AdvancedLayersIntegrationTests
 
     #region SpatialTransformerLayer Tests
 
-    [Fact(Skip = "SpatialTransformerLayer has tensor reshape issue in Forward")]
+    [Fact]
     public void SpatialTransformerLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -4245,7 +4245,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Skip = "SpatialTransformerLayer has tensor reshape issue in Forward")]
+    [Fact]
     public void SpatialTransformerLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -4462,7 +4462,7 @@ public class AdvancedLayersIntegrationTests
 
     #region CapsuleLayer Tests
 
-    [Fact(Skip = "CapsuleLayer has tensor multiplication shape mismatch")]
+    [Fact]
     public void CapsuleLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -4484,7 +4484,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Skip = "CapsuleLayer has tensor multiplication shape mismatch")]
+    [Fact]
     public void CapsuleLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -4511,7 +4511,7 @@ public class AdvancedLayersIntegrationTests
 
     #region DenseBlock Tests
 
-    [Fact(Skip = "DenseBlock crashes test host")]
+    [Fact]
     public void DenseBlock_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -4533,7 +4533,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Skip = "DenseBlock crashes test host")]
+    [Fact]
     public void DenseBlock_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -4863,7 +4863,7 @@ public class AdvancedLayersIntegrationTests
 
     #region AnomalyDetectorLayer Tests
 
-    [Fact(Skip = "AnomalyDetectorLayer has slice dimension mismatch")]
+    [Fact]
     public void AnomalyDetectorLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -4882,7 +4882,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact(Skip = "AnomalyDetectorLayer has slice dimension mismatch")]
+    [Fact]
     public void AnomalyDetectorLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -4998,6 +4998,297 @@ public class AdvancedLayersIntegrationTests
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
         Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+    }
+
+    #endregion
+
+    #region HyperbolicLinearLayer Tests
+
+    [Fact]
+    public void HyperbolicLinearLayer_ForwardPass_2D_ProducesValidOutput()
+    {
+        // Arrange
+        int inputFeatures = 6;
+        int outputFeatures = 4;
+        var layer = new HyperbolicLinearLayer<float>(inputFeatures, outputFeatures);
+        var input = Tensor<float>.CreateRandom([3, inputFeatures]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal([3, outputFeatures], output.Shape);
+    }
+
+    [Fact]
+    public void HyperbolicLinearLayer_ForwardPass_3D_ProducesValidOutput()
+    {
+        // Arrange
+        int inputFeatures = 5;
+        int outputFeatures = 3;
+        var layer = new HyperbolicLinearLayer<float>(inputFeatures, outputFeatures);
+        var input = Tensor<float>.CreateRandom([2, 4, inputFeatures]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal([2, 4, outputFeatures], output.Shape);
+    }
+
+    [Fact]
+    public void HyperbolicLinearLayer_BackwardPass_ProducesValidGradients()
+    {
+        // Arrange
+        int inputFeatures = 4;
+        int outputFeatures = 3;
+        var layer = new HyperbolicLinearLayer<float>(inputFeatures, outputFeatures);
+        var input = Tensor<float>.CreateRandom([2, inputFeatures]);
+
+        // Act
+        var output = layer.Forward(input);
+        var outputGradient = Tensor<float>.CreateRandom(output.Shape);
+        var inputGradient = layer.Backward(outputGradient);
+
+        // Assert
+        Assert.Equal(input.Shape, inputGradient.Shape);
+    }
+
+    #endregion
+
+    #region OctonionLinearLayer Tests
+
+    [Fact]
+    public void OctonionLinearLayer_ForwardPass_2D_ProducesValidOutput()
+    {
+        // Arrange
+        int inputFeatures = 3;
+        int outputFeatures = 2;
+        var layer = new OctonionLinearLayer<float>(inputFeatures, outputFeatures);
+        var input = Tensor<float>.CreateRandom([4, inputFeatures * 8]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal([4, outputFeatures * 8], output.Shape);
+    }
+
+    [Fact]
+    public void OctonionLinearLayer_ForwardPass_3D_ProducesValidOutput()
+    {
+        // Arrange
+        int inputFeatures = 2;
+        int outputFeatures = 3;
+        var layer = new OctonionLinearLayer<float>(inputFeatures, outputFeatures);
+        var input = Tensor<float>.CreateRandom([2, 3, inputFeatures * 8]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal([2, 3, outputFeatures * 8], output.Shape);
+    }
+
+    [Fact]
+    public void OctonionLinearLayer_BackwardPass_ProducesValidGradients()
+    {
+        // Arrange
+        int inputFeatures = 2;
+        int outputFeatures = 2;
+        var layer = new OctonionLinearLayer<float>(inputFeatures, outputFeatures);
+        var input = Tensor<float>.CreateRandom([3, inputFeatures * 8]);
+
+        // Act
+        var output = layer.Forward(input);
+        var outputGradient = Tensor<float>.CreateRandom(output.Shape);
+        var inputGradient = layer.Backward(outputGradient);
+
+        // Assert
+        Assert.Equal(input.Shape, inputGradient.Shape);
+    }
+
+    #endregion
+
+    #region ReadoutLayer Tests
+
+    [Fact]
+    public void ReadoutLayer_ForwardPass_2D_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 8;
+        int outputSize = 5;
+        var layer = new ReadoutLayer<float>(inputSize, outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
+        var input = Tensor<float>.CreateRandom([3, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal([3, outputSize], output.Shape);
+    }
+
+    [Fact]
+    public void ReadoutLayer_ForwardPass_3D_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 6;
+        int outputSize = 4;
+        var layer = new ReadoutLayer<float>(inputSize, outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
+        var input = Tensor<float>.CreateRandom([2, 3, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal([2, 3, outputSize], output.Shape);
+    }
+
+    [Fact]
+    public void ReadoutLayer_BackwardPass_ProducesValidGradients()
+    {
+        // Arrange
+        int inputSize = 5;
+        int outputSize = 3;
+        var layer = new ReadoutLayer<float>(inputSize, outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
+        var input = Tensor<float>.CreateRandom([2, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+        var outputGradient = Tensor<float>.CreateRandom(output.Shape);
+        var inputGradient = layer.Backward(outputGradient);
+
+        // Assert
+        Assert.Equal(input.Shape, inputGradient.Shape);
+    }
+
+    #endregion
+
+    #region MeasurementLayer Tests
+
+    [Fact]
+    public void MeasurementLayer_ForwardPass_2D_ProducesValidOutput()
+    {
+        // Arrange
+        int size = 8;
+        var layer = new MeasurementLayer<float>(size);
+        var input = Tensor<float>.CreateRandom([3, size]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal(input.Shape, output.Shape);
+    }
+
+    [Fact]
+    public void MeasurementLayer_ForwardPass_3D_ProducesValidOutput()
+    {
+        // Arrange
+        int size = 6;
+        var layer = new MeasurementLayer<float>(size);
+        var input = Tensor<float>.CreateRandom([2, 4, size]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal(input.Shape, output.Shape);
+    }
+
+    [Fact]
+    public void MeasurementLayer_BackwardPass_ProducesValidGradients()
+    {
+        // Arrange
+        int size = 5;
+        var layer = new MeasurementLayer<float>(size);
+        var input = Tensor<float>.CreateRandom([2, size]);
+
+        // Act
+        var output = layer.Forward(input);
+        var outputGradient = Tensor<float>.CreateRandom(output.Shape);
+        var inputGradient = layer.Backward(outputGradient);
+
+        // Assert
+        Assert.Equal(input.Shape, inputGradient.Shape);
+    }
+
+    #endregion
+
+    #region MixtureOfExpertsLayer Tests
+
+    [Fact]
+    public void MixtureOfExpertsLayer_ForwardPass_3D_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 6;
+        int outputSize = 4;
+        int numExperts = 2;
+        var experts = new List<ILayer<float>>
+        {
+            new DenseLayer<float>(inputSize, outputSize),
+            new DenseLayer<float>(inputSize, outputSize)
+        };
+        var router = new DenseLayer<float>(inputSize, numExperts);
+        var layer = new MixtureOfExpertsLayer<float>(experts, router, [inputSize], [outputSize]);
+        var input = Tensor<float>.CreateRandom([2, 3, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal([2, 3, outputSize], output.Shape);
+    }
+
+    [Fact]
+    public void MixtureOfExpertsLayer_BackwardPass_ProducesValidGradients()
+    {
+        // Arrange
+        int inputSize = 4;
+        int outputSize = 3;
+        int numExperts = 3;
+        var experts = new List<ILayer<float>>
+        {
+            new DenseLayer<float>(inputSize, outputSize),
+            new DenseLayer<float>(inputSize, outputSize),
+            new DenseLayer<float>(inputSize, outputSize)
+        };
+        var router = new DenseLayer<float>(inputSize, numExperts);
+        var layer = new MixtureOfExpertsLayer<float>(experts, router, [inputSize], [outputSize]);
+        var input = Tensor<float>.CreateRandom([2, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+        var outputGradient = Tensor<float>.CreateRandom(output.Shape);
+        var inputGradient = layer.Backward(outputGradient);
+
+        // Assert
+        Assert.Equal(input.Shape, inputGradient.Shape);
+    }
+
+    [Fact]
+    public void MixtureOfExpertsLayer_TopKRouting_ProducesValidOutput()
+    {
+        // Arrange
+        int inputSize = 5;
+        int outputSize = 2;
+        int numExperts = 3;
+        var experts = new List<ILayer<float>>
+        {
+            new DenseLayer<float>(inputSize, outputSize),
+            new DenseLayer<float>(inputSize, outputSize),
+            new DenseLayer<float>(inputSize, outputSize)
+        };
+        var router = new DenseLayer<float>(inputSize, numExperts);
+        var layer = new MixtureOfExpertsLayer<float>(experts, router, [inputSize], [outputSize], topK: 1);
+        var input = Tensor<float>.CreateRandom([3, inputSize]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.Equal([3, outputSize], output.Shape);
     }
 
     #endregion
