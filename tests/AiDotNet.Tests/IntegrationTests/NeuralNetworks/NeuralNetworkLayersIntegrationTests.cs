@@ -2,6 +2,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
+using System.Reflection;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
@@ -612,7 +613,11 @@ public class NeuralNetworkLayersIntegrationTests
 
         // Assert
         Assert.NotNull(layer);
-        // Head dimension should be embeddingDimension / headCount = 8
+        var headDimField = typeof(MultiHeadAttentionLayer<double>)
+            .GetField("_headDimension", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(headDimField);
+        var headDimension = (int)(headDimField?.GetValue(layer) ?? 0);
+        Assert.Equal(embeddingDimension / headCount, headDimension);
     }
 
     [Fact]
