@@ -641,23 +641,10 @@ public class NeuralNetworkLayersIntegrationTests
     #region Edge Cases and Error Handling
 
     [Fact]
-    public void DenseLayer_ZeroOutput_HandlesGracefully()
+    public void DenseLayer_ZeroOutput_ThrowsArgumentOutOfRange()
     {
-        // Arrange
-        var layer = new DenseLayer<double>(5, 0);
-        var input = new Tensor<double>([1, 5]);
-
-        // Act & Assert - Should either throw or handle gracefully
-        try
-        {
-            var output = layer.Forward(input);
-            Assert.Equal(0, output.Shape[^1]);
-        }
-        catch (ArgumentException)
-        {
-            // Expected - zero output is invalid
-            Assert.True(true);
-        }
+        // Arrange, Act & Assert - zero output size is invalid
+        Assert.Throws<ArgumentOutOfRangeException>(() => new DenseLayer<double>(5, 0));
     }
 
     [Fact]

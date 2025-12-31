@@ -310,6 +310,16 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public DenseLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
         : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
+        if (inputSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(inputSize), "Input size must be greater than zero.");
+        }
+
+        if (outputSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size must be greater than zero.");
+        }
+
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         L1Strength = NumOps.FromDouble(0.01);
         L2Strength = NumOps.FromDouble(0.01);
@@ -354,6 +364,16 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public DenseLayer(int inputSize, int outputSize, IVectorActivationFunction<T> vectorActivation)
         : base([inputSize], [outputSize], vectorActivation)
     {
+        if (inputSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(inputSize), "Input size must be greater than zero.");
+        }
+
+        if (outputSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size must be greater than zero.");
+        }
+
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         L1Strength = NumOps.FromDouble(0.01);
         L2Strength = NumOps.FromDouble(0.01);
