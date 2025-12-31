@@ -282,6 +282,17 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets the total number of trainable parameters in this layer.
+    /// </summary>
+    /// <value>
+    /// The total number of parameters: 3 weight matrices (Q, K, V) each of size [embeddingDimension × embeddingDimension],
+    /// plus an output bias of size [embeddingDimension].
+    /// Total = 3 × E² + E = E × (3E + 1) where E is the embedding dimension.
+    /// </value>
+    public override int ParameterCount =>
+        3 * (_embeddingDimension * _embeddingDimension) + _embeddingDimension;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="SelfAttentionLayer{T}"/> class with a scalar activation function.
     /// </summary>
     /// <param name="sequenceLength">The length of the input sequence.</param>
@@ -627,7 +638,9 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Reshape and transpose input for further calculations
         var reshapedLastInput = _lastInput.Reshape([batchSize, sequenceLength, _headCount, _headDimension]);
         var transposedLastInput = reshapedLastInput.Transpose([0, 2, 1, 3]);
-        var attentionScoresGradient = attentionOutputGradient.Multiply(transposedLastInput);
+        // For attention scores gradient: [B,H,S,D] × [B,H,D,S] → [B,H,S,S]
+        var transposedLastInputT = transposedLastInput.Transpose([0, 1, 3, 2]);
+        var attentionScoresGradient = attentionOutputGradient.Multiply(transposedLastInputT);
 
         var softmaxActivation = new SoftmaxActivation<T>();
         var softmaxDerivative = softmaxActivation.Derivative(_lastAttentionScores);

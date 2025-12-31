@@ -169,6 +169,20 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets the total number of trainable parameters in this layer.
+    /// </summary>
+    /// <value>
+    /// The number of elements in the embedding matrix (vocabulary size × embedding dimension).
+    /// </value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This counts the total number of adjustable values in the layer.
+    /// For an embedding layer with 10,000 vocabulary size and 300 dimensions,
+    /// the parameter count would be 10,000 × 300 = 3,000,000 parameters.
+    /// </para>
+    /// </remarks>
+    public override int ParameterCount => _embeddingTensor.Shape[0] * _embeddingTensor.Shape[1];
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="EmbeddingLayer{T}"/> class.
     /// </summary>
     /// <param name="vocabularySize">The number of unique tokens in the vocabulary.</param>

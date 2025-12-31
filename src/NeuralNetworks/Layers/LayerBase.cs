@@ -509,10 +509,10 @@ public abstract class LayerBase<T> : ILayer<T>
     /// </remarks>
     public virtual void SetTrainingMode(bool isTraining)
     {
-        if (SupportsTraining)
-        {
-            IsTrainingMode = isTraining;
-        }
+        // Always set training mode, regardless of SupportsTraining.
+        // Layers like GaussianNoiseLayer and DropoutLayer need training mode
+        // to control their behavior even though they have no trainable parameters.
+        IsTrainingMode = isTraining;
     }
 
     /// <summary>

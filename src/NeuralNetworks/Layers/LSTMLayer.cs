@@ -542,6 +542,27 @@ public class LSTMLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets the total number of trainable parameters in this layer.
+    /// </summary>
+    /// <value>
+    /// The total number of parameters across all weight matrices and bias vectors.
+    /// For an LSTM with input size I and hidden size H, this is:
+    /// 4 * (H * I) + 4 * (H * H) + 4 * H = 4 * H * (I + H + 1)
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// The LSTM has 4 gates (forget, input, cell, output), each with:
+    /// - Input-to-hidden weights: [hiddenSize × inputSize]
+    /// - Hidden-to-hidden weights: [hiddenSize × hiddenSize]
+    /// - Biases: [hiddenSize]
+    /// </para>
+    /// </remarks>
+    public override int ParameterCount =>
+        4 * (_hiddenSize * _inputSize) +  // 4 input weight matrices
+        4 * (_hiddenSize * _hiddenSize) + // 4 hidden weight matrices
+        4 * _hiddenSize;                  // 4 bias vectors
+
+    /// <summary>
     /// Gets the forget gate input weights for weight loading.
     /// </summary>
     public Tensor<T> WeightsFi => _weightsFi;
