@@ -30,12 +30,12 @@ public static class GemmTuningTest
             Console.WriteLine();
         }
 
-        // Test matrix sizes (commonly used in neural networks)
+        // Test matrix sizes (target shapes for performance comparison)
         var testSizes = new[]
         {
-            (512, 512, 512),     // Small
-            (1024, 1024, 1024),  // Medium
-            (2048, 2048, 2048),  // Large
+            (1024, 1024, 1024),
+            (2048, 2048, 2048),
+            (4096, 4096, 4096),
         };
 
         int maxTrials;

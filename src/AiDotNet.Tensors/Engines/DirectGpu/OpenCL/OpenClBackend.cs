@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using AiDotNet.Tensors.Engines.DirectGpu.OpenCL.Kernels;
+using Microsoft.Extensions.Logging;
 
 namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 {
@@ -33,9 +34,17 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         private bool _disposed;
         private const string OfflineTuningEnvVar = "AIDOTNET_GPU_TUNE";
         private const string OfflineTuningTrialsEnvVar = "AIDOTNET_GPU_TUNE_TRIALS";
-        private const int DefaultBayesianTrials = 60;
+        private const string OfflineTuningDiagEnvVar = "AIDOTNET_GPU_TUNE_DIAG";
+        private const string OfflineTuningLogEnvVar = "AIDOTNET_GPU_TUNE_LOG";
+        private const string OfflineTuningCsvEnvVar = "AIDOTNET_GPU_TUNE_CSV";
+        private const string OfflineTuningProgressEnvVar = "AIDOTNET_GPU_TUNE_PROGRESS";
+        private const string OfflineTuningResetEnvVar = "AIDOTNET_GPU_TUNE_RESET";
+        private const string OfflineTuningHeartbeatEnvVar = "AIDOTNET_GPU_TUNE_HEARTBEAT";
+        private const int DefaultBayesianTrials = 500;
         private readonly Dictionary<(int M, int N, int K), GemmConfig> _tunedConfigCache = new();
         private readonly object _tunedConfigLock = new();
+        private bool _tuningDbResetDone;
+        private readonly ILogger? _logger;
 
         public bool IsAvailable { get; }
         public string BackendName => "OpenCL";
@@ -56,8 +65,9 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         /// </summary>
         public static bool IsOpenClAvailable => DirectOpenClContext.IsAvailable;
 
-        public OpenClBackend()
+        public OpenClBackend(ILogger? logger = null)
         {
+            _logger = logger;
             _kernelCache = new Dictionary<string, DirectOpenClKernel>();
             _programs = new List<DirectOpenClProgram>();
             _maxWorkItemSizes = Array.Empty<ulong>();
@@ -288,6 +298,31 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             return int.TryParse(value, out var parsed) && parsed > 0 ? parsed : defaultValue;
         }
 
+        private static bool GetEnvBool(string name, bool defaultValue = false)
+        {
+            var value = Environment.GetEnvironmentVariable(name);
+            if (string.IsNullOrWhiteSpace(value))
+                return defaultValue;
+
+            if (value.Equals("1", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("yes", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("on", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (value.Equals("0", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("false", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("no", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("off", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return defaultValue;
+        }
+
         private static bool TryGetOfflineTuningMode(out bool useExhaustive)
         {
             useExhaustive = false;
@@ -310,6 +345,83 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             }
 
             return true;
+        }
+
+        private void ConfigureOfflineTuning()
+        {
+            bool enableDiag = GetEnvBool(OfflineTuningDiagEnvVar);
+            if (enableDiag)
+                EnableTuningDiagnostics = true;
+
+            var logPath = Environment.GetEnvironmentVariable(OfflineTuningLogEnvVar);
+            if (!string.IsNullOrWhiteSpace(logPath))
+                GemmAutoTuner.LogFilePath = logPath;
+
+            var csvPath = Environment.GetEnvironmentVariable(OfflineTuningCsvEnvVar);
+            if (!string.IsNullOrWhiteSpace(csvPath))
+                GemmAutoTuner.TrialLogFilePath = csvPath;
+
+            var progressEnv = Environment.GetEnvironmentVariable(OfflineTuningProgressEnvVar);
+            if (!string.IsNullOrWhiteSpace(progressEnv))
+                GemmAutoTuner.ProgressInterval = GetEnvInt(OfflineTuningProgressEnvVar, GemmAutoTuner.ProgressInterval);
+
+            GemmAutoTuner.TrialHeartbeatSeconds = GetEnvInt(OfflineTuningHeartbeatEnvVar, enableDiag ? 10 : 0);
+
+            if (_logger != null)
+            {
+                GemmAutoTuner.Logger = _logger;
+            }
+            else if (enableDiag && GemmAutoTuner.Logger == null)
+            {
+                GemmAutoTuner.Logger = new SimpleConsoleLogger();
+            }
+        }
+
+        private sealed class SimpleConsoleLogger : ILogger
+        {
+            private sealed class NullScope : IDisposable
+            {
+                public static readonly NullScope Instance = new();
+                public void Dispose() { }
+            }
+
+            public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+            public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Information;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+                Func<TState, Exception?, string> formatter)
+            {
+                if (!IsEnabled(logLevel))
+                    return;
+
+                string message = formatter(state, exception);
+                if (exception != null)
+                    message = $"{message} ({exception.GetType().Name}: {exception.Message})";
+
+                var color = GetDiagColor(message);
+                if (color.HasValue)
+                {
+                    var previous = Console.ForegroundColor;
+                    Console.ForegroundColor = color.Value;
+                    Console.WriteLine(message);
+                    Console.ForegroundColor = previous;
+                }
+                else
+                {
+                    Console.WriteLine(message);
+                }
+            }
+
+            private static ConsoleColor? GetDiagColor(string message)
+            {
+                if (message.Contains("Diag[HIGH]", StringComparison.OrdinalIgnoreCase))
+                    return ConsoleColor.Red;
+                if (message.Contains("Diag[MED]", StringComparison.OrdinalIgnoreCase))
+                    return ConsoleColor.Yellow;
+                if (message.Contains("Diag[LOW]", StringComparison.OrdinalIgnoreCase))
+                    return ConsoleColor.Green;
+                return null;
+            }
         }
 
         #region Memory Management
@@ -352,13 +464,22 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         {
             config = default;
             var key = (M, N, K);
+            bool offlineEnabled = TryGetOfflineTuningMode(out bool useExhaustive);
+            if (offlineEnabled)
+                ConfigureOfflineTuning();
 
+            GemmConfig? fallbackConfig = null;
             lock (_tunedConfigLock)
             {
                 if (_tunedConfigCache.TryGetValue(key, out var cachedConfig))
                 {
-                    config = cachedConfig;
-                    return true;
+                    if (!offlineEnabled)
+                    {
+                        config = cachedConfig;
+                        return true;
+                    }
+
+                    fallbackConfig = cachedConfig;
                 }
             }
 
@@ -366,6 +487,17 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             {
                 string deviceSignature = GetDeviceSignature();
                 using var database = new GemmTuningDatabase(deviceSignature: deviceSignature);
+                if (offlineEnabled && GetEnvBool(OfflineTuningResetEnvVar) && !_tuningDbResetDone)
+                {
+                    database.Clear();
+                    lock (_tunedConfigLock)
+                    {
+                        _tunedConfigCache.Clear();
+                    }
+                    fallbackConfig = null;
+                    _tuningDbResetDone = true;
+                }
+
                 var cachedEntry = database.GetBestConfigWithGflops(M, N, K);
                 if (cachedEntry.HasValue && cachedEntry.Value.GFlops > 0)
                 {
@@ -373,13 +505,18 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                     var validationError = DynamicGemmKernel.ValidateConfig(cachedConfig);
                     if (validationError == null)
                     {
-                        lock (_tunedConfigLock)
-                        {
-                            _tunedConfigCache[key] = cachedConfig;
-                        }
+                        fallbackConfig ??= cachedConfig;
 
-                        config = cachedConfig;
-                        return true;
+                        if (!offlineEnabled)
+                        {
+                            lock (_tunedConfigLock)
+                            {
+                                _tunedConfigCache[key] = cachedConfig;
+                            }
+
+                            config = cachedConfig;
+                            return true;
+                        }
                     }
 
                     if (EnableTuningDiagnostics)
@@ -388,7 +525,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                     }
                 }
 
-                if (!TryGetOfflineTuningMode(out bool useExhaustive))
+                if (!offlineEnabled)
                     return false;
 
                 if (useExhaustive)
@@ -405,6 +542,17 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                         return true;
                     }
 
+                    if (fallbackConfig.HasValue)
+                    {
+                        lock (_tunedConfigLock)
+                        {
+                            _tunedConfigCache[key] = fallbackConfig.Value;
+                        }
+
+                        config = fallbackConfig.Value;
+                        return true;
+                    }
+
                     return false;
                 }
 
@@ -418,6 +566,17 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                     }
 
                     config = tunedResults[0].Config;
+                    return true;
+                }
+
+                if (fallbackConfig.HasValue)
+                {
+                    lock (_tunedConfigLock)
+                    {
+                        _tunedConfigCache[key] = fallbackConfig.Value;
+                    }
+
+                    config = fallbackConfig.Value;
                     return true;
                 }
 
@@ -442,6 +601,34 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         private void PadCopyMatrix(IGpuBuffer src, IGpuBuffer dst, int srcRows, int srcCols, int dstRows, int dstCols)
         {
             var kernel = _kernelCache["pad_copy"];
+            kernel.SetArg(0, ((DirectOpenClGpuBuffer)src).Buffer.Handle);
+            kernel.SetArg(1, ((DirectOpenClGpuBuffer)dst).Buffer.Handle);
+            kernel.SetArg(2, srcRows);
+            kernel.SetArg(3, srcCols);
+            kernel.SetArg(4, dstRows);
+            kernel.SetArg(5, dstCols);
+
+            var (localSizeX, localSizeY) = CalculateOptimalWorkGroupSize(dstRows, dstCols);
+            kernel.Execute2D(dstRows, dstCols, localSizeX, localSizeY);
+        }
+
+        private void PadCopyTransposeMatrix(IGpuBuffer src, IGpuBuffer dst, int srcRows, int srcCols, int dstRows, int dstCols)
+        {
+            var kernel = _kernelCache["pad_copy_transpose"];
+            kernel.SetArg(0, ((DirectOpenClGpuBuffer)src).Buffer.Handle);
+            kernel.SetArg(1, ((DirectOpenClGpuBuffer)dst).Buffer.Handle);
+            kernel.SetArg(2, srcRows);
+            kernel.SetArg(3, srcCols);
+            kernel.SetArg(4, dstRows);
+            kernel.SetArg(5, dstCols);
+
+            var (localSizeX, localSizeY) = CalculateOptimalWorkGroupSize(dstRows, dstCols);
+            kernel.Execute2D(dstRows, dstCols, localSizeX, localSizeY);
+        }
+
+        private void PadCopyFromColumnMajorMatrix(IGpuBuffer src, IGpuBuffer dst, int srcRows, int srcCols, int dstRows, int dstCols)
+        {
+            var kernel = _kernelCache["pad_copy_from_column_major"];
             kernel.SetArg(0, ((DirectOpenClGpuBuffer)src).Buffer.Handle);
             kernel.SetArg(1, ((DirectOpenClGpuBuffer)dst).Buffer.Handle);
             kernel.SetArg(2, srcRows);
@@ -478,7 +665,10 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             int nPad = CeilDiv(N, config.TileN) * config.TileN;
             int kPad = CeilDiv(K, kUnit) * kUnit;
 
-            if (mPad == M && nPad == N && kPad == K)
+            bool useColumnMajorA = config.UseColumnMajorA || IsClBlastBaselineKernel0(config);
+            bool useColumnMajorC = IsClBlastBaselineKernel0(config);
+            bool needsPadding = mPad != M || nPad != N || kPad != K;
+            if (!needsPadding && !useColumnMajorA && !useColumnMajorC)
                 return TryExecuteDynamicGemm(A, B, C, M, N, K, alpha, beta, config);
 
             long aSize = (long)mPad * kPad;
@@ -496,18 +686,40 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             using var bPad = AllocateBuffer(kPad * nPad);
             using var cPad = AllocateBuffer(mPad * nPad);
 
-            PadCopyMatrix(A, aPad, M, K, mPad, kPad);
-            PadCopyMatrix(B, bPad, K, N, kPad, nPad);
-            if (beta != 0.0f)
-                PadCopyMatrix(C, cPad, M, N, mPad, nPad);
+            if (useColumnMajorA)
+                PadCopyTransposeMatrix(A, aPad, M, K, mPad, kPad);
             else
-                PadCopyMatrix(C, cPad, 0, 0, mPad, nPad);
+                PadCopyMatrix(A, aPad, M, K, mPad, kPad);
+            PadCopyMatrix(B, bPad, K, N, kPad, nPad);
+            if (useColumnMajorC)
+            {
+                if (beta != 0.0f)
+                    PadCopyTransposeMatrix(C, cPad, M, N, mPad, nPad);
+                else
+                    PadCopyMatrix(C, cPad, 0, 0, mPad, nPad);
+            }
+            else
+            {
+                if (beta != 0.0f)
+                    PadCopyMatrix(C, cPad, M, N, mPad, nPad);
+                else
+                    PadCopyMatrix(C, cPad, 0, 0, mPad, nPad);
+            }
 
             if (!TryExecuteDynamicGemm(aPad, bPad, cPad, mPad, nPad, kPad, alpha, beta, config))
                 return false;
 
-            CopySubmatrix(cPad, C, M, N, nPad, N);
+            if (useColumnMajorC)
+                PadCopyFromColumnMajorMatrix(cPad, C, mPad, nPad, M, N);
+            else
+                CopySubmatrix(cPad, C, M, N, nPad, N);
             return true;
+        }
+
+        private static bool IsClBlastBaselineKernel0(GemmConfig config)
+        {
+            return !string.IsNullOrWhiteSpace(config.KernelName) &&
+                config.KernelName.StartsWith("clblast_baseline_k0", StringComparison.OrdinalIgnoreCase);
         }
 
         private bool TryExecuteDynamicGemm(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha, float beta, GemmConfig config)
@@ -1550,8 +1762,8 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 throw new InvalidOperationException("OpenCL context or dynamic GEMM not available");
 
             var sw = Stopwatch.StartNew();
-            var kernel = _dynamicGemm.GetKernel(config);
-            _dynamicGemm.Execute(kernel, config, A, B, C, M, N, K);
+            if (!TryExecutePackedDynamicGemm(A, B, C, M, N, K, 1.0f, 0.0f, config))
+                throw new InvalidOperationException("Packed GEMM execution failed");
             _dynamicGemm.Synchronize();
             sw.Stop();
 
@@ -1579,6 +1791,8 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             if (_context == null || _dynamicGemm == null)
                 throw new InvalidOperationException("OpenCL context or dynamic GEMM not available");
 
+            ConfigureOfflineTuning();
+
             var capabilities = GpuCapabilities.Detect(ComputeUnits, GlobalMemoryBytes, (int)LocalMemoryBytes,
                 (int)_maxWorkGroupSize, DeviceVendor, DeviceName, _context.Extensions);
 
@@ -1603,6 +1817,15 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
             string deviceSignature = GetDeviceSignature();
             using var database = new GemmTuningDatabase(deviceSignature: deviceSignature);
+            if (GetEnvBool(OfflineTuningResetEnvVar) && !_tuningDbResetDone)
+            {
+                database.Clear();
+                lock (_tunedConfigLock)
+                {
+                    _tunedConfigCache.Clear();
+                }
+                _tuningDbResetDone = true;
+            }
             var tuner = new GemmAutoTuner();
 
             int benchmarkAttempts = 0;
@@ -1712,7 +1935,8 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             }
 
             // Run Bayesian optimization
-            var results = tuner.TuneWithBayesianOptimization(M, N, K, capabilities, BenchmarkConfigCached, maxTrials, Math.Min(5, maxTrials / 4), 0, 1);
+            int initialRandomSamples = Math.Min(maxTrials, Math.Max(12, maxTrials / 10));
+            var results = tuner.TuneWithBayesianOptimization(M, N, K, capabilities, BenchmarkConfigCached, maxTrials, initialRandomSamples, 0, 1);
 
             // Print final statistics
             if (EnableTuningDiagnostics)
@@ -1764,6 +1988,8 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             if (_context == null || _dynamicGemm == null)
                 throw new InvalidOperationException("OpenCL context or dynamic GEMM not available");
 
+            ConfigureOfflineTuning();
+
             var capabilities = GpuCapabilities.Detect(ComputeUnits, GlobalMemoryBytes, (int)LocalMemoryBytes,
                 (int)_maxWorkGroupSize, DeviceVendor, DeviceName, _context.Extensions);
 
@@ -1781,6 +2007,15 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
             string deviceSignature = GetDeviceSignature();
             using var database = new GemmTuningDatabase(deviceSignature: deviceSignature);
+            if (GetEnvBool(OfflineTuningResetEnvVar) && !_tuningDbResetDone)
+            {
+                database.Clear();
+                lock (_tunedConfigLock)
+                {
+                    _tunedConfigCache.Clear();
+                }
+                _tuningDbResetDone = true;
+            }
             var tuner = new GemmAutoTuner();
             double ops = 2.0 * M * N * K;
 
@@ -1845,7 +2080,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             double BenchmarkConfigCached(GemmConfig config) => BenchmarkConfig(config, true);
 
             // Use exhaustive search - tests ALL configurations
-            var results = tuner.TuneForDimensions(M, N, K, capabilities, BenchmarkConfigCached, 0, 1);
+            var results = tuner.TuneForDimensions(M, N, K, capabilities, BenchmarkConfigCached, 0, 1, useFullSearchSpace: true);
 
             if (results.Length > 0 && results[0].IsValid)
             {

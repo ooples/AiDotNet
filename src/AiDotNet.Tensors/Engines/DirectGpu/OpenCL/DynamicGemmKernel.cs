@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using AiDotNet.Tensors.Engines.DirectGpu.OpenCL.Kernels;
 
 namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL;
 
@@ -160,11 +161,12 @@ internal sealed class DynamicGemmKernel : IDisposable
 
         DirectOpenClProgram program;
         DirectOpenClKernel kernel;
+        string kernelEntryName = GetKernelEntryName(config);
         try
         {
             program = new DirectOpenClProgram(_context, source);
             program.Build(OpenClBuildOptions.OptimizationFlags);
-            kernel = new DirectOpenClKernel(_context, program, "gemm_tuned");
+            kernel = new DirectOpenClKernel(_context, program, kernelEntryName);
         }
         catch (Exception ex)
         {
@@ -236,11 +238,23 @@ internal sealed class DynamicGemmKernel : IDisposable
         if (config.VectorWidthN > 1 && nwi % config.VectorWidthN != 0)
             return $"NWI ({nwi}) not divisible by VectorWidthN ({config.VectorWidthN})";
 
-        // Check KWG divisibility by vector widths for vectorized loading
-        if (config.VectorWidthM > 1 && KWG % config.VectorWidthM != 0)
-            return $"TileK ({KWG}) not divisible by VectorWidthM ({config.VectorWidthM})";
-        if (config.VectorWidthN > 1 && KWG % config.VectorWidthN != 0)
-            return $"TileK ({KWG}) not divisible by VectorWidthN ({config.VectorWidthN})";
+        bool isClBlastKernel1 = TryGetClBlastBaselineKernel(config, out int gemmK) && gemmK == 1;
+        if (!isClBlastKernel1)
+        {
+            // Check KWG divisibility by vector widths for vectorized loading
+            if (config.VectorWidthM > 1 && KWG % config.VectorWidthM != 0)
+                return $"TileK ({KWG}) not divisible by VectorWidthM ({config.VectorWidthM})";
+            if (config.VectorWidthN > 1 && KWG % config.VectorWidthN != 0)
+                return $"TileK ({KWG}) not divisible by VectorWidthN ({config.VectorWidthN})";
+        }
+
+        if (config.UseColumnMajorA)
+        {
+            if (!config.UseTrueVectorLDS)
+                return "Column-major A requires UseTrueVectorLDS";
+            if (config.VectorWidthM <= 1)
+                return "Column-major A requires VectorWidthM > 1";
+        }
 
         return null;
     }
@@ -265,6 +279,13 @@ internal sealed class DynamicGemmKernel : IDisposable
     /// </summary>
     private static string GenerateKernelSource(GemmConfig config)
     {
+        if (TryGetClBlastBaselineKernel(config, out int gemmK))
+        {
+            if (EnableDiagnostics)
+                Console.WriteLine($"[DynamicGemm] SELECTED CLBlast BASELINE kernel: {config.KernelName} GEMMK={gemmK}");
+            return ClBlastXgemmKernel.BuildSource(config, gemmK);
+        }
+
         // CLBlast-style parameters
         int MWG = config.TileM;        // Work group tile M
         int NWG = config.TileN;        // Work group tile N
@@ -347,6 +368,15 @@ internal sealed class DynamicGemmKernel : IDisposable
         sb.AppendLine($"#define MDIMA {MDIMA}");          // Workgroup rows for A tile
         sb.AppendLine($"#define NDIMB {NDIMB}");          // Workgroup cols for B tile
         sb.AppendLine();
+
+        sb.AppendLine($"#define A_COL_MAJOR {(config.UseColumnMajorA ? 1 : 0)}");
+        sb.AppendLine(@"
+#if A_COL_MAJOR == 1
+  #define A_INDEX(r, c) ((c) * M + (r))
+#else
+  #define A_INDEX(r, c) ((r) * K + (c))
+#endif
+");
 
         // Add vector type definitions (supports float, float2, float4, float8)
         sb.AppendLine(@"// Vector type aliases for vectorized memory operations
@@ -433,7 +463,7 @@ internal sealed class DynamicGemmKernel : IDisposable
             // This achieves maximum performance by using vector types throughout
             if (EnableDiagnostics)
                 Console.WriteLine($"[DynamicGemm] SELECTED TRUE VECTORIZED kernel: {config.KernelName} VWM={VWM} VWN={VWN} MWI={MWI} NWI={NWI}");
-            GenerateCLBlastTrueVectorizedKernel(sb, MWI, NWI, VWM, VWN, KWI, KREG);
+            GenerateCLBlastTrueVectorizedKernel(sb, MWI, NWI, VWM, VWN, KWI, KREG, config.UseColumnMajorA);
         }
         else if (useCooperativeLoading)
         {
@@ -472,6 +502,32 @@ internal sealed class DynamicGemmKernel : IDisposable
         }
 
         return sb.ToString();
+    }
+
+    private static bool TryGetClBlastBaselineKernel(GemmConfig config, out int gemmK)
+    {
+        gemmK = 0;
+        if (string.IsNullOrWhiteSpace(config.KernelName))
+            return false;
+
+        if (config.KernelName.StartsWith("clblast_baseline_k1", StringComparison.OrdinalIgnoreCase))
+        {
+            gemmK = 1;
+            return true;
+        }
+
+        if (config.KernelName.StartsWith("clblast_baseline_k0", StringComparison.OrdinalIgnoreCase))
+        {
+            gemmK = 0;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string GetKernelEntryName(GemmConfig config)
+    {
+        return TryGetClBlastBaselineKernel(config, out _) ? "clblast_xgemm" : "gemm_tuned";
     }
 
     /// <summary>
@@ -1985,14 +2041,15 @@ void gemm_tuned(
     /// - Stores: Direct vector store to LDS vs unpack scalar stores
     /// - Accumulators: floatM cpm[NWI*(MWI/VWM)] (vectorized SIMD FMA) vs float acc[NWI][MWI] (scalar)
     /// </summary>
-    private static void GenerateCLBlastTrueVectorizedKernel(StringBuilder sb, int MWI, int NWI, int VWM, int VWN, int KWI, int KREG)
+    private static void GenerateCLBlastTrueVectorizedKernel(StringBuilder sb, int MWI, int NWI, int VWM, int VWN, int KWI, int KREG, bool useColumnMajorA)
     {
         // Calculate vectorized dimensions
-        int MWIVEC = MWI / VWM;  // Number of vector registers in M dimension
-        int NWIVEC = NWI / VWN;  // Number of vector registers in N dimension
+        int MWIVEC = MWI / VWM;  // Number of vector registers in M dimension   
+        int NWIVEC = NWI / VWN;  // Number of vector registers in N dimension   
 
+        sb.AppendLine($"// A layout: {(useColumnMajorA ? "column-major" : "row-major")}");
         sb.AppendLine($@"
-// TRUE CLBlast-STYLE GEMM kernel with VECTORIZED LDS and SIMD accumulators
+// TRUE CLBlast-STYLE GEMM kernel with VECTORIZED LDS and SIMD accumulators     
 // This kernel uses vector types throughout for maximum memory bandwidth and ALU efficiency
 // LDS layout: floatM alm[KWG][MWG/VWM] - stores vectors directly, no scalar unpacking
 // Accumulators: floatM cpm[NWI*(MWI/VWM)] - uses SIMD FMA instructions
@@ -2072,26 +2129,26 @@ void gemm_tuned(
                     int globalRowStart = wgRowStart + mStart;
                     if (globalRowStart + VWM <= M && globalCol < K) {{
                         // All elements in bounds - use vectorized load
-                        // Note: A is row-major, so consecutive M indices are VWM apart in memory
+                        // Note: A uses A_INDEX (row/column-major based on A_COL_MAJOR)
                         // We need to gather VWM elements from different rows
                         floatM aVec;
 #if VWM == 2
-                        aVec.x = A[(globalRowStart + 0) * K + globalCol];
-                        aVec.y = A[(globalRowStart + 1) * K + globalCol];
+                        aVec.x = A[A_INDEX(globalRowStart + 0, globalCol)];
+                        aVec.y = A[A_INDEX(globalRowStart + 1, globalCol)];
 #elif VWM == 4
-                        aVec.x = A[(globalRowStart + 0) * K + globalCol];
-                        aVec.y = A[(globalRowStart + 1) * K + globalCol];
-                        aVec.z = A[(globalRowStart + 2) * K + globalCol];
-                        aVec.w = A[(globalRowStart + 3) * K + globalCol];
+                        aVec.x = A[A_INDEX(globalRowStart + 0, globalCol)];
+                        aVec.y = A[A_INDEX(globalRowStart + 1, globalCol)];
+                        aVec.z = A[A_INDEX(globalRowStart + 2, globalCol)];
+                        aVec.w = A[A_INDEX(globalRowStart + 3, globalCol)];
 #elif VWM == 8
-                        aVec.s0 = A[(globalRowStart + 0) * K + globalCol];
-                        aVec.s1 = A[(globalRowStart + 1) * K + globalCol];
-                        aVec.s2 = A[(globalRowStart + 2) * K + globalCol];
-                        aVec.s3 = A[(globalRowStart + 3) * K + globalCol];
-                        aVec.s4 = A[(globalRowStart + 4) * K + globalCol];
-                        aVec.s5 = A[(globalRowStart + 5) * K + globalCol];
-                        aVec.s6 = A[(globalRowStart + 6) * K + globalCol];
-                        aVec.s7 = A[(globalRowStart + 7) * K + globalCol];
+                        aVec.s0 = A[A_INDEX(globalRowStart + 0, globalCol)];
+                        aVec.s1 = A[A_INDEX(globalRowStart + 1, globalCol)];
+                        aVec.s2 = A[A_INDEX(globalRowStart + 2, globalCol)];
+                        aVec.s3 = A[A_INDEX(globalRowStart + 3, globalCol)];
+                        aVec.s4 = A[A_INDEX(globalRowStart + 4, globalCol)];
+                        aVec.s5 = A[A_INDEX(globalRowStart + 5, globalCol)];
+                        aVec.s6 = A[A_INDEX(globalRowStart + 6, globalCol)];
+                        aVec.s7 = A[A_INDEX(globalRowStart + 7, globalCol)];
 #endif
                         alm[kLoad][vecIdx] = aVec;
                     }} else {{
@@ -2100,21 +2157,21 @@ void gemm_tuned(
 #if VWM == 2
                         int row0 = wgRowStart + mStart + 0;
                         int row1 = wgRowStart + mStart + 1;
-                        aVec.x = (row0 < M && globalCol < K) ? A[row0 * K + globalCol] : 0.0f;
-                        aVec.y = (row1 < M && globalCol < K) ? A[row1 * K + globalCol] : 0.0f;
+                        aVec.x = (row0 < M && globalCol < K) ? A[A_INDEX(row0, globalCol)] : 0.0f;
+                        aVec.y = (row1 < M && globalCol < K) ? A[A_INDEX(row1, globalCol)] : 0.0f;
 #elif VWM == 4
                         int row0 = wgRowStart + mStart + 0;
                         int row1 = wgRowStart + mStart + 1;
                         int row2 = wgRowStart + mStart + 2;
                         int row3 = wgRowStart + mStart + 3;
-                        aVec.x = (row0 < M && globalCol < K) ? A[row0 * K + globalCol] : 0.0f;
-                        aVec.y = (row1 < M && globalCol < K) ? A[row1 * K + globalCol] : 0.0f;
-                        aVec.z = (row2 < M && globalCol < K) ? A[row2 * K + globalCol] : 0.0f;
-                        aVec.w = (row3 < M && globalCol < K) ? A[row3 * K + globalCol] : 0.0f;
+                        aVec.x = (row0 < M && globalCol < K) ? A[A_INDEX(row0, globalCol)] : 0.0f;
+                        aVec.y = (row1 < M && globalCol < K) ? A[A_INDEX(row1, globalCol)] : 0.0f;
+                        aVec.z = (row2 < M && globalCol < K) ? A[A_INDEX(row2, globalCol)] : 0.0f;
+                        aVec.w = (row3 < M && globalCol < K) ? A[A_INDEX(row3, globalCol)] : 0.0f;
 #elif VWM == 8
                         for (int i = 0; i < 8; i++) {{
                             int row = wgRowStart + mStart + i;
-                            float val = (row < M && globalCol < K) ? A[row * K + globalCol] : 0.0f;
+                            float val = (row < M && globalCol < K) ? A[A_INDEX(row, globalCol)] : 0.0f;
                             if (i == 0) aVec.s0 = val;
                             else if (i == 1) aVec.s1 = val;
                             else if (i == 2) aVec.s2 = val;
@@ -2327,6 +2384,30 @@ void gemm_tuned(
         LogDiag($"Execute: {config.KernelName} for {M}x{N}x{K}");
         LogDiag($"  Work groups: {numWorkGroupsM}x{numWorkGroupsN} = {totalWorkGroups}");
         LogDiag($"  Global size: {globalM}x{globalN}, Local: {config.ThreadTileM}x{config.ThreadTileN}");
+
+        if (TryGetClBlastBaselineKernel(config, out int gemmK))
+        {
+            kernel.SetArg(0, M);
+            kernel.SetArg(1, N);
+            kernel.SetArg(2, K);
+            kernel.SetArg(3, alpha);
+            kernel.SetArg(4, beta);
+            kernel.SetArg(5, bufA.Buffer.Handle);
+            kernel.SetArg(6, bufB.Buffer.Handle);
+            kernel.SetArg(7, bufC.Buffer.Handle);
+            kernel.SetArg(8, 0);
+            kernel.SetArg(9, 0);
+
+            int globalX = gemmK == 1 ? numWorkGroupsN * config.ThreadTileM : globalM;
+            int globalY = gemmK == 1 ? numWorkGroupsM * config.ThreadTileN : globalN;
+            if (gemmK == 1 && EnableDiagnostics)
+            {
+                LogDiag($"  CLBlast kernel1 grid swap: global {globalX}x{globalY}");
+            }
+
+            kernel.Execute2D(globalX, globalY, config.ThreadTileM, config.ThreadTileN);
+            return;
+        }
 
         kernel.SetArg(0, bufA.Buffer.Handle);
         kernel.SetArg(1, bufB.Buffer.Handle);

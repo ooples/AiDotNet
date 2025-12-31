@@ -55,7 +55,45 @@ internal sealed class GemmFeatureBayesianTuner
     private const int FEAT_COOP_LOADING = 27;      // 1.0 if MDIMA != MDIMC or NDIMB != NDIMC
     private const int FEAT_REGISTERS_EST = 28;     // Estimated registers per thread
     private const int FEAT_ILP_FACTOR = 29;        // Instruction-level parallelism (KREG * KUnroll)
-    private const int NUM_FEATURES = 30;
+    private const int FEAT_TRUE_VECTOR_LDS = 30;   // UseTrueVectorLDS flag
+    private const int FEAT_COLUMN_MAJOR_A = 31;    // UseColumnMajorA flag
+    private const int NUM_FEATURES = 32;
+
+    internal static readonly string[] FeatureNames =
+    {
+        "TileM",
+        "TileN",
+        "TileK",
+        "ThreadTileM",
+        "ThreadTileN",
+        "VectorWidthM",
+        "VectorWidthN",
+        "DoubleBuffering",
+        "VectorizedLoads",
+        "KReg",
+        "KUnroll",
+        "SubgroupOps",
+        "StrideM",
+        "StrideN",
+        "Mdima",
+        "Ndimb",
+        "CacheA",
+        "CacheB",
+        "Mwi",
+        "Nwi",
+        "ComputeIntensity",
+        "WorkgroupSize",
+        "LdsUsageKb",
+        "OccupancyEst",
+        "TileRatio",
+        "KTileRatio",
+        "VecBandwidth",
+        "CoopLoading",
+        "RegistersEst",
+        "IlpFactor",
+        "TrueVectorLds",
+        "ColumnMajorA"
+    };
 
     // ARD length scales per feature (learned)
     private readonly double[] _lengthScales;
@@ -96,7 +134,7 @@ internal sealed class GemmFeatureBayesianTuner
         var allFeatures = new double[_configSpace.Length][];
         for (int i = 0; i < _configSpace.Length; i++)
         {
-            allFeatures[i] = ExtractFeatures(_configSpace[i]);
+            allFeatures[i] = ExtractFeatureVector(_configSpace[i]);
         }
 
         // Compute mean and std for each feature
@@ -119,7 +157,7 @@ internal sealed class GemmFeatureBayesianTuner
         }
     }
 
-    private double[] ExtractFeatures(GemmConfig config)
+    internal static double[] ExtractFeatureVector(GemmConfig config)
     {
         // Basic parameters
         int tileM = config.TileM;
@@ -197,7 +235,7 @@ internal sealed class GemmFeatureBayesianTuner
             config.CacheA ? 1.0 : 0.0,         // SA: cache A in local memory
             config.CacheB ? 1.0 : 0.0,         // SB: cache B in local memory
 
-            // Derived performance-critical features (12 features)
+            // Derived performance-critical features
             mwi,                               // Outputs per thread in M
             nwi,                               // Outputs per thread in N
             computeIntensity,                  // MWI * NWI
@@ -209,7 +247,9 @@ internal sealed class GemmFeatureBayesianTuner
             vecBandwidth,                      // Combined vectorization
             coopLoading,                       // 1.0 if using cooperative loading
             registersEst,                      // Estimated registers per thread
-            ilpFactor                          // ILP from KREG * KUnroll
+            ilpFactor,                         // ILP from KREG * KUnroll
+            config.UseTrueVectorLDS ? 1.0 : 0.0,
+            config.UseColumnMajorA ? 1.0 : 0.0
         };
     }
 
@@ -247,7 +287,7 @@ internal sealed class GemmFeatureBayesianTuner
 
     public void AddObservation(int configIndex, double gflops)
     {
-        var features = ExtractFeatures(_configSpace[configIndex]);
+        var features = ExtractFeatureVector(_configSpace[configIndex]);
         var normalized = NormalizeFeatures(features);
         _observedFeatures.Add(normalized);
         _observedValues.Add(gflops);
@@ -307,6 +347,60 @@ internal sealed class GemmFeatureBayesianTuner
         return bestIndex >= 0 ? bestIndex : SampleRandomIndex(totalConfigs, excluded);
     }
 
+    public int SelectNextPointByUncertainty(int totalConfigs, HashSet<int> excluded)
+    {
+        if (_observedFeatures.Count < 2 || _covarianceMatrixInverse == null)
+        {
+            return SampleRandomIndex(totalConfigs, excluded);
+        }
+
+        double bestVariance = double.NegativeInfinity;
+        int bestIndex = -1;
+
+        for (int idx = 0; idx < totalConfigs; idx++)
+        {
+            if (excluded.Contains(idx))
+                continue;
+
+            var (_, variance) = PredictGP(idx);
+            if (variance > bestVariance)
+            {
+                bestVariance = variance;
+                bestIndex = idx;
+            }
+        }
+
+        return bestIndex >= 0 ? bestIndex : SampleRandomIndex(totalConfigs, excluded);
+    }
+
+    public int SelectNextPointByUcb(int totalConfigs, HashSet<int> excluded, double beta)
+    {
+        if (_observedFeatures.Count < 2 || _covarianceMatrixInverse == null)
+        {
+            return SampleRandomIndex(totalConfigs, excluded);
+        }
+
+        double bestScore = double.NegativeInfinity;
+        int bestIndex = -1;
+
+        for (int idx = 0; idx < totalConfigs; idx++)
+        {
+            if (excluded.Contains(idx))
+                continue;
+
+            var (mean, variance) = PredictGP(idx);
+            double std = Math.Sqrt(Math.Max(0, variance));
+            double score = mean + beta * std;
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestIndex = idx;
+            }
+        }
+
+        return bestIndex >= 0 ? bestIndex : SampleRandomIndex(totalConfigs, excluded);
+    }
+
     private double ComputeExpectedImprovement(int candidateIdx)
     {
         var (mean, variance) = PredictGP(candidateIdx);
@@ -331,7 +425,7 @@ internal sealed class GemmFeatureBayesianTuner
             return (0.0, _signalVariance);
         }
 
-        var candidateFeatures = ExtractFeatures(_configSpace[candidateIdx]);
+        var candidateFeatures = ExtractFeatureVector(_configSpace[candidateIdx]);
         var candidateNormalized = NormalizeFeatures(candidateFeatures);
 
         int n = _observedFeatures.Count;
@@ -478,14 +572,11 @@ internal sealed class GemmFeatureBayesianTuner
     public Dictionary<string, double> GetFeatureRelevances()
     {
         var relevances = new Dictionary<string, double>();
-        string[] featureNames = { "TileM", "TileN", "TileK", "ThreadTileM", "ThreadTileN",
-                                  "VectorWidthM", "VectorWidthN", "DoubleBuffering", "VectorizedLoads",
-                                  "KReg", "KUnroll", "SubgroupOps", "StrideM", "StrideN" };
 
         for (int i = 0; i < NUM_FEATURES; i++)
         {
             // Relevance = 1 / lengthScale² (smaller length scale = more relevant)
-            relevances[featureNames[i]] = 1.0 / (_lengthScales[i] * _lengthScales[i]);
+            relevances[FeatureNames[i]] = 1.0 / (_lengthScales[i] * _lengthScales[i]);
         }
 
         return relevances;

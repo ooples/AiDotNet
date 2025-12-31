@@ -1,5 +1,6 @@
 #if !NET462
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using AiDotNet.Tensors.Engines;
@@ -76,6 +77,35 @@ public static class ClBlastBenchmark
         DatabaseError = -2048,
         UnknownError = -4096,
         UnexpectedError = -8192
+    }
+
+    private static int[] GetSizesFromEnv(string name, int[] defaultSizes)
+    {
+        var value = Environment.GetEnvironmentVariable(name);
+        if (string.IsNullOrWhiteSpace(value))
+            return defaultSizes;
+
+        var parts = value.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        var sizes = new List<int>(parts.Length);
+        foreach (var part in parts)
+        {
+            if (int.TryParse(part.Trim(), out var size) && size > 0)
+                sizes.Add(size);
+        }
+
+        return sizes.Count > 0 ? sizes.ToArray() : defaultSizes;
+    }
+
+    private static bool GetEnvBool(string name)
+    {
+        var value = Environment.GetEnvironmentVariable(name);
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        return value.Equals("1", StringComparison.OrdinalIgnoreCase) ||
+               value.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+               value.Equals("yes", StringComparison.OrdinalIgnoreCase) ||
+               value.Equals("on", StringComparison.OrdinalIgnoreCase);
     }
 
     public enum CLBlastLayout
@@ -157,8 +187,9 @@ public static class ClBlastBenchmark
         Console.WriteLine($"Max Work Group Size: {context.MaxWorkGroupSize}");
         Console.WriteLine();
 
-        // Test sizes
-        int[] sizes = { 256, 512, 1024, 2048, 4096 };
+        // Test sizes (override via AIDOTNET_CLBLAST_SIZES="256,512")
+        int[] sizes = GetSizesFromEnv("AIDOTNET_CLBLAST_SIZES", new[] { 256, 512, 1024, 2048, 4096 });
+        bool skipDense = GetEnvBool("AIDOTNET_CLBLAST_SKIP_DENSE");
 
         Console.WriteLine("Matrix Multiplication (C = A x B, square matrices):");
         Console.WriteLine("Size       |  CLBlast (GFLOPS)  |  AiDotNet (GFLOPS)  |  Ratio");
@@ -171,13 +202,16 @@ public static class ClBlastBenchmark
             BenchmarkSize(context, matmul, size);
         }
 
-        Console.WriteLine();
-        Console.WriteLine("DenseLayer-style (batch=64, in=768, out=3072):");
-        BenchmarkDenseLayer(context, matmul, 64, 768, 3072);
+        if (!skipDense)
+        {
+            Console.WriteLine();
+            Console.WriteLine("DenseLayer-style (batch=64, in=768, out=3072):");
+            BenchmarkDenseLayer(context, matmul, 64, 768, 3072);
 
-        Console.WriteLine();
-        Console.WriteLine("Large matrix (batch=128, in=4096, out=4096):");
-        BenchmarkDenseLayer(context, matmul, 128, 4096, 4096);
+            Console.WriteLine();
+            Console.WriteLine("Large matrix (batch=128, in=4096, out=4096):");
+            BenchmarkDenseLayer(context, matmul, 128, 4096, 4096);
+        }
 
         using var backend = new OpenClBackend();
         if (backend.IsAvailable)
@@ -192,13 +226,16 @@ public static class ClBlastBenchmark
                 BenchmarkSizeTuned(context, backend, size);
             }
 
-            Console.WriteLine();
-            Console.WriteLine("DenseLayer-style TUNED (batch=64, in=768, out=3072):");
-            BenchmarkDenseLayerTuned(context, backend, 64, 768, 3072);
+            if (!skipDense)
+            {
+                Console.WriteLine();
+                Console.WriteLine("DenseLayer-style TUNED (batch=64, in=768, out=3072):");
+                BenchmarkDenseLayerTuned(context, backend, 64, 768, 3072);
 
-            Console.WriteLine();
-            Console.WriteLine("Large matrix TUNED (batch=128, in=4096, out=4096):");
-            BenchmarkDenseLayerTuned(context, backend, 128, 4096, 4096);
+                Console.WriteLine();
+                Console.WriteLine("Large matrix TUNED (batch=128, in=4096, out=4096):");
+                BenchmarkDenseLayerTuned(context, backend, 128, 4096, 4096);
+            }
         }
     }
 

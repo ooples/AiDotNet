@@ -33,7 +33,50 @@ __kernel void pad_copy(
     }
 }
 
-// Copies a submatrix from src to dst (row-major, configurable strides).
+// Copies src into dst with zero-padding and transposition (row-major -> column-major).
+// dst uses column-major indexing: dst[col * dstRows + row].
+__kernel void pad_copy_transpose(
+    __global const float* src,
+    __global float* dst,
+    const int srcRows,
+    const int srcCols,
+    const int dstRows,
+    const int dstCols)
+{
+    const int row = get_global_id(0);
+    const int col = get_global_id(1);
+
+    if (row >= dstRows || col >= dstCols) return;
+
+    if (row < srcRows && col < srcCols) {
+        dst[col * dstRows + row] = src[row * srcCols + col];
+    } else {
+        dst[col * dstRows + row] = 0.0f;
+    }
+}
+
+// Copies src (column-major) into dst (row-major) with zero-padding.
+__kernel void pad_copy_from_column_major(
+    __global const float* src,
+    __global float* dst,
+    const int srcRows,
+    const int srcCols,
+    const int dstRows,
+    const int dstCols)
+{
+    const int row = get_global_id(0);
+    const int col = get_global_id(1);
+
+    if (row >= dstRows || col >= dstCols) return;
+
+    if (row < srcRows && col < srcCols) {
+        dst[row * dstCols + col] = src[col * srcRows + row];
+    } else {
+        dst[row * dstCols + col] = 0.0f;
+    }
+}
+
+// Copies a submatrix from src to dst (row-major, configurable strides).        
 __kernel void copy_submatrix(
     __global const float* src,
     __global float* dst,
@@ -57,6 +100,8 @@ __kernel void copy_submatrix(
             return new[]
             {
                 "pad_copy",
+                "pad_copy_transpose",
+                "pad_copy_from_column_major",
                 "copy_submatrix"
             };
         }

@@ -29,9 +29,13 @@ For licensing questions or commercial inquiries, please contact:
 THIRD-PARTY COMPONENTS
 --------------------------------------------------------------------------------
 
-This project may include or depend on third-party libraries and components,
-each with their own license terms. Please refer to the respective component
+This project may include or depend on third-party libraries and components,     
+each with their own license terms. Please refer to the respective component     
 documentation for specific license information.
+
+CLBlast (Apache 2.0)
+  https://github.com/CNugteren/CLBlast
+  Portions of OpenCL kernel sources are included for baseline GEMM tuning.
 
 For a complete list of dependencies and their licenses, see the project
 documentation or run dependency analysis tools on the source code.

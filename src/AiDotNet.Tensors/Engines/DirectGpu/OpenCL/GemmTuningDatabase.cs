@@ -221,6 +221,40 @@ internal sealed class GemmTuningDatabase : IDisposable
         }
     }
 
+    /// <summary>
+    /// Clears all cached results and test history, and removes persisted files.
+    /// </summary>
+    public void Clear()
+    {
+        lock (_lock)
+        {
+            _cache.Clear();
+            _testedConfigs.Clear();
+            _testedGflops.Clear();
+            _isDirty = true;
+        }
+
+        try
+        {
+            if (File.Exists(_databasePath))
+                File.Delete(_databasePath);
+        }
+        catch (Exception)
+        {
+            // Silently ignore delete failures
+        }
+
+        try
+        {
+            if (File.Exists(_historyPath))
+                File.Delete(_historyPath);
+        }
+        catch (Exception)
+        {
+            // Silently ignore delete failures
+        }
+    }
+
     private void SaveHistoryToDisk()
     {
         try
@@ -334,6 +368,7 @@ internal sealed class GemmTuningDatabase : IDisposable
                 sb.Append(FormattableString.Invariant($"\"NdimbSize\": {config.NdimbSize}, "));
                 sb.Append(FormattableString.Invariant($"\"KernelName\": \"{config.KernelName}\", "));
                 sb.Append(FormattableString.Invariant($"\"UseTrueVectorLDS\": {config.UseTrueVectorLDS.ToString().ToLower()}, "));
+                sb.Append(FormattableString.Invariant($"\"UseColumnMajorA\": {config.UseColumnMajorA.ToString().ToLower()}, "));
                 sb.Append(FormattableString.Invariant($"\"GFlops\": {gflops:F2}}}"));
             }
 
@@ -418,7 +453,8 @@ internal sealed class GemmTuningDatabase : IDisposable
                     MdimaSize = GetIntValue("MdimaSize"),
                     NdimbSize = GetIntValue("NdimbSize"),
                     KernelName = GetStringValue("KernelName"),
-                    UseTrueVectorLDS = GetBoolValue("UseTrueVectorLDS")
+                    UseTrueVectorLDS = GetBoolValue("UseTrueVectorLDS"),
+                    UseColumnMajorA = GetBoolValue("UseColumnMajorA")
                 };
 
                 var gflops = GetDoubleValue("GFlops");

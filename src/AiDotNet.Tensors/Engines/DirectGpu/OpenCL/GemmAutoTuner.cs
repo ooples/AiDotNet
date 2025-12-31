@@ -5,8 +5,11 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
+using Microsoft.Extensions.Logging;
 
 namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL;
 
@@ -45,16 +48,17 @@ public readonly struct GemmConfig
 
     // True CLBlast-style vectorized LDS (THE KEY TO 2500+ GFLOPS)
     public bool UseTrueVectorLDS { get; init; }  // Use vectorized LDS arrays instead of scalar
+    public bool UseColumnMajorA { get; init; }   // Treat A as column-major (packed/transpose path)
 
     /// <summary>
     /// Generates a unique cache key for this configuration.
     /// Used by DynamicGemmKernel to cache compiled kernels.
     /// </summary>
     public string ToKey() =>
-        $"{TileM}_{TileN}_{TileK}_{ThreadTileM}_{ThreadTileN}_{VectorWidthM}_{VectorWidthN}_{UseDoubleBuffering}_{UseVectorizedLoads}_{KReg}_{KUnroll}_{UseSubgroupOps}_{StrideM}_{StrideN}_{CacheA}_{CacheB}_{MdimaSize}_{NdimbSize}_{UseTrueVectorLDS}";
+        $"{(string.IsNullOrWhiteSpace(KernelName) ? "default" : KernelName)}_{TileM}_{TileN}_{TileK}_{ThreadTileM}_{ThreadTileN}_{VectorWidthM}_{VectorWidthN}_{UseDoubleBuffering}_{UseVectorizedLoads}_{KReg}_{KUnroll}_{UseSubgroupOps}_{StrideM}_{StrideN}_{CacheA}_{CacheB}_{MdimaSize}_{NdimbSize}_{UseTrueVectorLDS}_{UseColumnMajorA}";
 
     public override string ToString() =>
-        $"{KernelName}[{TileM}x{TileN}x{TileK}, TT:{ThreadTileM}x{ThreadTileN}, VW:{VectorWidthM}x{VectorWidthN}, K:{KReg}x{KUnroll}, SG:{UseSubgroupOps}, SA/B:{(CacheA ? 1 : 0)}/{(CacheB ? 1 : 0)}, MD:{MdimaSize}x{NdimbSize}]";
+        $"{KernelName}[{TileM}x{TileN}x{TileK}, TT:{ThreadTileM}x{ThreadTileN}, VW:{VectorWidthM}x{VectorWidthN}, K:{KReg}x{KUnroll}, SG:{UseSubgroupOps}, SA/B:{(CacheA ? 1 : 0)}/{(CacheB ? 1 : 0)}, MD:{MdimaSize}x{NdimbSize}, ACol:{(UseColumnMajorA ? 1 : 0)}]";
 }
 
 /// <summary>
@@ -66,6 +70,7 @@ public readonly struct TuningResult
     public double GFlops { get; init; }
     public double TimeMs { get; init; }
     public bool IsValid { get; init; }
+    public string? Error { get; init; }
 }
 
 /// <summary>
@@ -83,9 +88,19 @@ public sealed class GemmAutoTuner
     public static bool EnableDiagnostics { get; set; } = false;
 
     /// <summary>
+    /// Optional logger for live tuning diagnostics.
+    /// </summary>
+    public static ILogger? Logger { get; set; }
+
+    /// <summary>
     /// Show progress every N trials (default: 10).
     /// </summary>
     public static int ProgressInterval { get; set; } = 10;
+
+    /// <summary>
+    /// Emit a heartbeat log for long-running trials (seconds). Set to 0 to disable.
+    /// </summary>
+    public static int TrialHeartbeatSeconds { get; set; } = 0;
 
     /// <summary>
     /// Log file path for diagnostic output. If null, logs to console.
@@ -98,20 +113,33 @@ public sealed class GemmAutoTuner
     }
 
     /// <summary>
+    /// CSV log file path for trial features and results.
+    /// </summary>
+    public static string? TrialLogFilePath { get; set; }
+
+    private static readonly object _trialLogLock = new();
+    private static string? _trialLogHeader;
+
+    /// <summary>
     /// Logs a diagnostic message if diagnostics are enabled.
     /// Uses same log file as DynamicGemmKernel if configured.
     /// </summary>
     private static void LogDiag(string message)
     {
-        if (!EnableDiagnostics)
+        if (!EnableDiagnostics && Logger == null && string.IsNullOrEmpty(LogFilePath))
             return;
 
         string logLine = $"[{DateTime.Now:HH:mm:ss.fff}] [GemmTuner] {message}";
 
+        if (Logger != null)
+        {
+            Logger.LogInformation(logLine);
+        }
+
         if (!string.IsNullOrEmpty(LogFilePath))
         {
-            // Use DynamicGemmKernel's logging mechanism
-            DynamicGemmKernel.EnableDiagnostics = true;
+            if (EnableDiagnostics)
+                DynamicGemmKernel.EnableDiagnostics = true;
             try
             {
                 using var sw = new System.IO.StreamWriter(LogFilePath, append: true);
@@ -119,12 +147,424 @@ public sealed class GemmAutoTuner
             }
             catch
             {
-                Console.WriteLine(logLine);
+                if (EnableDiagnostics && Logger == null)
+                    Console.WriteLine(logLine);
             }
         }
-        else
+        else if (EnableDiagnostics && Logger == null)
         {
             Console.WriteLine(logLine);
+        }
+    }
+
+    private static string GetTrialLogHeader()
+    {
+        if (_trialLogHeader != null)
+            return _trialLogHeader;
+
+        lock (_trialLogLock)
+        {
+            if (_trialLogHeader != null)
+                return _trialLogHeader;
+
+            var headers = new List<string>
+            {
+                "TimestampUtc",
+                "TrialIndex",
+                "Phase",
+                "Strategy",
+                "M",
+                "N",
+                "K",
+                "KernelName",
+                "IsValid",
+                "GFlops",
+                "TimeMs",
+                "Error",
+                "ConfigKey",
+                "TileM",
+                "TileN",
+                "TileK",
+                "ThreadTileM",
+                "ThreadTileN",
+                "VectorWidthM",
+                "VectorWidthN",
+                "UseDoubleBuffering",
+                "UseVectorizedLoads",
+                "KReg",
+                "KUnroll",
+                "UseSubgroupOps",
+                "StrideM",
+                "StrideN",
+                "CacheA",
+                "CacheB",
+                "MdimaSize",
+                "NdimbSize",
+                "UseTrueVectorLDS",
+                "UseColumnMajorA",
+                "Diag_OccupancyEst",
+                "Diag_LdsUsageKb",
+                "Diag_LdsLimitKb",
+                "Diag_RegistersEst",
+                "Diag_RegisterLimit",
+                "Diag_WorkgroupSize",
+                "Diag_WavefrontSize",
+                "Diag_WaveUtilization",
+                "Diag_ComputeIntensity",
+                "Diag_VectorBandwidth",
+                "Diag_IlpFactor",
+                "Diag_PadRatio",
+                "Diag_BottleneckHints",
+                "Diag_BottleneckSeverity",
+                "Diag_BottleneckSummary"
+            };
+
+            foreach (var name in GemmFeatureBayesianTuner.FeatureNames)
+                headers.Add($"Feature_{name}");
+
+            _trialLogHeader = string.Join(",", headers);
+            return _trialLogHeader;
+        }
+    }
+
+    private static void LogTrialCsv(int trialIndex, string phase, string strategy, int M, int N, int K,
+        TuningResult result, GpuCapabilities? capabilities)
+    {
+        if (string.IsNullOrWhiteSpace(TrialLogFilePath))
+            return;
+
+        try
+        {
+            string path = TrialLogFilePath!;
+            string? dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir))
+                Directory.CreateDirectory(dir);
+
+            var config = result.Config;
+            var values = new List<string>
+            {
+                DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                trialIndex.ToString(CultureInfo.InvariantCulture),
+                phase,
+                strategy,
+                M.ToString(CultureInfo.InvariantCulture),
+                N.ToString(CultureInfo.InvariantCulture),
+                K.ToString(CultureInfo.InvariantCulture),
+                config.KernelName ?? string.Empty,
+                result.IsValid ? "1" : "0",
+                result.GFlops.ToString("G17", CultureInfo.InvariantCulture),
+                result.TimeMs.ToString("G17", CultureInfo.InvariantCulture),
+                result.Error ?? string.Empty,
+                config.ToKey(),
+                config.TileM.ToString(CultureInfo.InvariantCulture),
+                config.TileN.ToString(CultureInfo.InvariantCulture),
+                config.TileK.ToString(CultureInfo.InvariantCulture),
+                config.ThreadTileM.ToString(CultureInfo.InvariantCulture),
+                config.ThreadTileN.ToString(CultureInfo.InvariantCulture),
+                config.VectorWidthM.ToString(CultureInfo.InvariantCulture),
+                config.VectorWidthN.ToString(CultureInfo.InvariantCulture),
+                config.UseDoubleBuffering ? "1" : "0",
+                config.UseVectorizedLoads ? "1" : "0",
+                config.KReg.ToString(CultureInfo.InvariantCulture),
+                config.KUnroll.ToString(CultureInfo.InvariantCulture),
+                config.UseSubgroupOps ? "1" : "0",
+                config.StrideM ? "1" : "0",
+                config.StrideN ? "1" : "0",
+                config.CacheA ? "1" : "0",
+                config.CacheB ? "1" : "0",
+                config.MdimaSize.ToString(CultureInfo.InvariantCulture),
+                config.NdimbSize.ToString(CultureInfo.InvariantCulture),
+                config.UseTrueVectorLDS ? "1" : "0",
+                config.UseColumnMajorA ? "1" : "0"
+            };
+
+            var diag = AnalyzeBottlenecks(config, capabilities ?? GpuCapabilities.CreateDefault(), M, N, K);
+            values.Add(diag.OccupancyEst.ToString("G17", CultureInfo.InvariantCulture));
+            values.Add(diag.LdsUsageKb.ToString("G17", CultureInfo.InvariantCulture));
+            values.Add(diag.LdsLimitKb.ToString("G17", CultureInfo.InvariantCulture));
+            values.Add(diag.RegistersEst.ToString("G17", CultureInfo.InvariantCulture));
+            values.Add(diag.RegisterLimit.ToString("G17", CultureInfo.InvariantCulture));
+            values.Add(diag.WorkgroupSize.ToString(CultureInfo.InvariantCulture));
+            values.Add(diag.WavefrontSize.ToString(CultureInfo.InvariantCulture));
+            values.Add(diag.WaveUtilization.ToString("G17", CultureInfo.InvariantCulture));
+            values.Add(diag.ComputeIntensity.ToString("G17", CultureInfo.InvariantCulture));
+            values.Add(diag.VectorBandwidth.ToString("G17", CultureInfo.InvariantCulture));
+            values.Add(diag.IlpFactor.ToString("G17", CultureInfo.InvariantCulture));
+            values.Add(diag.PadRatio.ToString("G17", CultureInfo.InvariantCulture));
+            values.Add(diag.Hints);
+            values.Add(diag.Severity);
+            values.Add(diag.Summary);
+
+            var featureValues = GemmFeatureBayesianTuner.ExtractFeatureVector(config);
+            foreach (var feature in featureValues)
+            {
+                values.Add(feature.ToString("G17", CultureInfo.InvariantCulture));
+            }
+
+            string line = string.Join(",", values.Select(EscapeCsv));
+
+            lock (_trialLogLock)
+            {
+                bool needsHeader = !File.Exists(path) || new FileInfo(path).Length == 0;
+                using var sw = new StreamWriter(path, append: true);
+                if (needsHeader)
+                    sw.WriteLine(GetTrialLogHeader());
+                sw.WriteLine(line);
+            }
+        }
+        catch
+        {
+            // Ignore CSV logging failures to avoid interrupting tuning.
+        }
+    }
+
+    private static string EscapeCsv(string value)
+    {
+        if (value.IndexOfAny(new[] { ',', '"', '\n', '\r' }) >= 0)
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
+        return value;
+    }
+
+    private readonly struct BottleneckDiagnostics
+    {
+        public double OccupancyEst { get; init; }
+        public double LdsUsageKb { get; init; }
+        public double LdsLimitKb { get; init; }
+        public double RegistersEst { get; init; }
+        public double RegisterLimit { get; init; }
+        public int WorkgroupSize { get; init; }
+        public int WavefrontSize { get; init; }
+        public double WaveUtilization { get; init; }
+        public double ComputeIntensity { get; init; }
+        public double VectorBandwidth { get; init; }
+        public double IlpFactor { get; init; }
+        public double PadRatio { get; init; }
+        public string Hints { get; init; }
+        public string Severity { get; init; }
+        public string Summary { get; init; }
+    }
+
+    private static BottleneckDiagnostics AnalyzeBottlenecks(GemmConfig config, GpuCapabilities capabilities, int M, int N, int K)
+    {
+        static int CeilDiv(int value, int divisor) => (value + divisor - 1) / divisor;
+
+        int tileM = Math.Max(1, config.TileM);
+        int tileN = Math.Max(1, config.TileN);
+        int tileK = Math.Max(1, config.TileK);
+        int threadTileM = Math.Max(1, config.ThreadTileM > 0 ? config.ThreadTileM : 8);
+        int threadTileN = Math.Max(1, config.ThreadTileN > 0 ? config.ThreadTileN : 8);
+        int vwm = Math.Max(1, config.VectorWidthM > 0 ? config.VectorWidthM : 1);
+        int vwn = Math.Max(1, config.VectorWidthN > 0 ? config.VectorWidthN : 1);
+        int kreg = Math.Max(1, config.KReg > 0 ? config.KReg : 1);
+        int kunroll = Math.Max(1, config.KUnroll > 0 ? config.KUnroll : 1);
+        bool usesClBlastBaselineK0 = !string.IsNullOrWhiteSpace(config.KernelName) &&
+            config.KernelName.StartsWith("clblast_baseline_k0", StringComparison.OrdinalIgnoreCase);
+
+        int mwi = Math.Max(1, tileM / threadTileM);
+        int nwi = Math.Max(1, tileN / threadTileN);
+        double computeIntensity = mwi * nwi;
+        int workgroupSize = Math.Max(1, threadTileM * threadTileN);
+        int wavefrontSize = Math.Max(1, capabilities.WavefrontSize);
+        double waveCount = Math.Ceiling((double)workgroupSize / wavefrontSize);
+        double waveUtilization = wavefrontSize > 0 ? workgroupSize / (waveCount * wavefrontSize) : 1.0;
+
+        double ldsUsageKb = (tileK * (tileM + 1) + tileK * (tileN + 1)) * sizeof(float) / 1024.0;
+        if (config.UseDoubleBuffering)
+            ldsUsageKb *= 2.0;
+
+        double ldsLimitKb = Math.Max(1.0, capabilities.LocalMemoryBytes / 1024.0);
+        double ldsOccupancy = Math.Min(1.0, ldsLimitKb / Math.Max(0.001, ldsUsageKb));
+
+        double registersEst = computeIntensity + mwi + nwi + 8.0;
+        bool isNvidia = capabilities.VendorName.IndexOf("NVIDIA", StringComparison.OrdinalIgnoreCase) >= 0;
+        double registerLimit = isNvidia ? 255.0 : 256.0;
+        double regOccupancy = Math.Min(1.0, registerLimit / Math.Max(1.0, registersEst));
+        double occupancyEst = Math.Min(ldsOccupancy, regOccupancy);
+
+        double vecBandwidth = vwm * vwn;
+        double ilpFactor = kreg * kunroll;
+
+        double padRatio = 1.0;
+        if (M > 0 && N > 0 && K > 0)
+        {
+            int kUnit = tileK * kreg;
+            int mPad = CeilDiv(M, tileM) * tileM;
+            int nPad = CeilDiv(N, tileN) * tileN;
+            int kPad = CeilDiv(K, kUnit) * kUnit;
+            double baseElems = (double)M * K + (double)K * N + (double)M * N;
+            double paddedElems = (double)mPad * kPad + (double)kPad * nPad + (double)mPad * nPad;
+            if (baseElems > 0)
+                padRatio = paddedElems / baseElems;
+        }
+
+        var hints = new List<string>();
+        var summaryParts = new List<string>();
+        if (workgroupSize < wavefrontSize)
+        {
+            hints.Add("workgroup smaller than wavefront");
+            summaryParts.Add("not enough threads per wave");
+        }
+        else if (workgroupSize % wavefrontSize != 0)
+        {
+            hints.Add("workgroup not multiple of wavefront");
+            summaryParts.Add("workgroup doesn't align with wavefront");
+        }
+        if (waveUtilization < 0.9)
+        {
+            hints.Add("wave underutilization");
+            summaryParts.Add("wavefronts underutilized");
+        }
+        if (occupancyEst < 0.5)
+        {
+            hints.Add("low occupancy");
+            summaryParts.Add("low occupancy limits throughput");
+        }
+        if (ldsUsageKb > ldsLimitKb * 0.8)
+        {
+            hints.Add("lds near limit");
+            summaryParts.Add("shared memory pressure");
+        }
+        if (registersEst > registerLimit * 0.8)
+        {
+            hints.Add("register pressure");
+            summaryParts.Add("register pressure limits occupancy");
+        }
+        if (computeIntensity < 8)
+        {
+            hints.Add("low compute intensity");
+            summaryParts.Add("likely memory-bound");
+        }
+        if (vecBandwidth < 2)
+        {
+            hints.Add("low vector width");
+            summaryParts.Add("low vectorization");
+        }
+        if (!config.UseVectorizedLoads)
+        {
+            hints.Add("scalar loads");
+            summaryParts.Add("scalar memory loads");
+        }
+        if (!config.CacheA || !config.CacheB)
+        {
+            hints.Add("no lds cache for A/B");
+            summaryParts.Add("no local cache for A/B tiles");
+        }
+        if (!config.UseTrueVectorLDS && (config.CacheA || config.CacheB))
+        {
+            hints.Add("scalar lds");
+            summaryParts.Add("scalar LDS path");
+        }
+        if (config.UseColumnMajorA)
+        {
+            hints.Add("packed A path");
+            summaryParts.Add("extra packing/transpose overhead");
+        }
+        if (usesClBlastBaselineK0)
+        {
+            hints.Add("packed C path");
+            summaryParts.Add("extra C transpose overhead");
+        }
+        if (padRatio > 1.05)
+        {
+            hints.Add(string.Format(CultureInfo.InvariantCulture, "padding +{0:F0}%", (padRatio - 1.0) * 100.0));
+            summaryParts.Add("padding overhead");
+        }
+        if (ilpFactor < 2)
+        {
+            hints.Add("low ilp");
+            summaryParts.Add("low instruction-level parallelism");
+        }
+
+        int severityScore = 0;
+        if (occupancyEst < 0.4)
+            severityScore += 2;
+        else if (occupancyEst < 0.7)
+            severityScore += 1;
+        if (padRatio > 1.2)
+            severityScore += 2;
+        else if (padRatio > 1.05)
+            severityScore += 1;
+        if (waveUtilization < 0.8)
+            severityScore += 1;
+        if (ldsUsageKb > ldsLimitKb * 0.85)
+            severityScore += 2;
+        else if (ldsUsageKb > ldsLimitKb * 0.7)
+            severityScore += 1;
+        if (registersEst > registerLimit * 0.9)
+            severityScore += 2;
+        else if (registersEst > registerLimit * 0.75)
+            severityScore += 1;
+        if (!config.UseVectorizedLoads || vecBandwidth < 2)
+            severityScore += 1;
+        if (computeIntensity < 8)
+            severityScore += 1;
+
+        string severity = severityScore >= 5 ? "HIGH" : severityScore >= 3 ? "MED" : "LOW";
+        string summary = summaryParts.Count == 0
+            ? "no obvious bottleneck"
+            : $"likely bottlenecks: {string.Join(", ", summaryParts.Take(3))}";
+
+        string hintText = hints.Count == 0 ? "none" : string.Join(";", hints);
+
+        return new BottleneckDiagnostics
+        {
+            OccupancyEst = occupancyEst,
+            LdsUsageKb = ldsUsageKb,
+            LdsLimitKb = ldsLimitKb,
+            RegistersEst = registersEst,
+            RegisterLimit = registerLimit,
+            WorkgroupSize = workgroupSize,
+            WavefrontSize = wavefrontSize,
+            WaveUtilization = waveUtilization,
+            ComputeIntensity = computeIntensity,
+            VectorBandwidth = vecBandwidth,
+            IlpFactor = ilpFactor,
+            PadRatio = padRatio,
+            Hints = hintText,
+            Severity = severity,
+            Summary = summary
+        };
+    }
+
+    private static void LogBottleneckDiagnostics(GemmConfig config, GpuCapabilities capabilities, int M, int N, int K)
+    {
+        if (!EnableDiagnostics)
+            return;
+
+        var diag = AnalyzeBottlenecks(config, capabilities, M, N, K);
+        LogDiag($"    Diag[{diag.Severity}]: occ={diag.OccupancyEst:F2} (lds={diag.LdsUsageKb:F1}KB/{diag.LdsLimitKb:F0}KB, " +
+                $"reg={diag.RegistersEst:F0}/{diag.RegisterLimit:F0}) wg={diag.WorkgroupSize} wave={diag.WavefrontSize} " +
+                $"util={diag.WaveUtilization:F2} ci={diag.ComputeIntensity:F0} vec={diag.VectorBandwidth:F0} " +
+                $"ilp={diag.IlpFactor:F0} pad={diag.PadRatio:F2} summary={diag.Summary} hints={diag.Hints}");
+    }
+
+    private sealed class TrialHeartbeat : IDisposable
+    {
+        private readonly string _label;
+        private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
+        private readonly System.Threading.Timer _timer;
+        private bool _disposed;
+
+        public TrialHeartbeat(string label, int intervalSeconds)
+        {
+            _label = label;
+            int intervalMs = Math.Max(1, intervalSeconds) * 1000;
+            _timer = new System.Threading.Timer(_ => Tick(), null, intervalMs, intervalMs);
+        }
+
+        private void Tick()
+        {
+            if (_disposed)
+                return;
+
+            double elapsed = _stopwatch.Elapsed.TotalSeconds;
+            LogDiag($"    ... still running ({_label}), elapsed {elapsed:F1}s");
+        }
+
+        public void Dispose()
+        {
+            _disposed = true;
+            _timer.Dispose();
         }
     }
 
@@ -241,13 +681,28 @@ public sealed class GemmAutoTuner
     /// Use this for production workloads that will run many times.
     /// </summary>
     public TuningResult[] TuneForDimensions(int M, int N, int K, GpuCapabilities capabilities,
-        Func<GemmConfig, double> benchmarkFunc, int warmupRuns = 2, int benchmarkRuns = 5)
+        Func<GemmConfig, double> benchmarkFunc, int warmupRuns = 2, int benchmarkRuns = 5, bool useFullSearchSpace = false)
     {
-        var candidates = GetCandidateConfigs(M, N, K, capabilities);
+        var candidates = useFullSearchSpace
+            ? GenerateConfigurationSpace(M, N, K, capabilities)
+            : GetCandidateConfigs(M, N, K, capabilities);
+        if (useFullSearchSpace)
+        {
+            var unique = new Dictionary<string, GemmConfig>(StringComparer.Ordinal);
+            foreach (var config in candidates)
+            {
+                var key = config.ToKey();
+                if (!unique.ContainsKey(key))
+                    unique[key] = config;
+            }
+            candidates = unique.Values.ToArray();
+        }
         var results = new List<TuningResult>();
+        int trialIndex = 0;
 
         foreach (var config in candidates)
         {
+            trialIndex++;
             try
             {
                 // Warmup
@@ -279,24 +734,31 @@ public sealed class GemmAutoTuner
                     throw new InvalidOperationException("Invalid average timing result");
                 double gflops = (2.0 * M * N * K) / (avgTimeMs * 1e6);
 
-                results.Add(new TuningResult
+                var result = new TuningResult
                 {
                     Config = config,
                     GFlops = gflops,
                     TimeMs = avgTimeMs,
-                    IsValid = true
-                });
+                    IsValid = true,
+                    Error = null
+                };
+                results.Add(result);
+                LogTrialCsv(trialIndex, "exhaustive", "exhaustive", M, N, K, result, capabilities);
+                LogBottleneckDiagnostics(config, capabilities, M, N, K);
             }
             catch (Exception ex)
             {
                 LogDiag($"  Config {config.KernelName} failed: {ex.Message}");
-                results.Add(new TuningResult
+                var result = new TuningResult
                 {
                     Config = config,
                     GFlops = 0,
                     TimeMs = double.MaxValue,
-                    IsValid = false
-                });
+                    IsValid = false,
+                    Error = ex.Message
+                };
+                results.Add(result);
+                LogTrialCsv(trialIndex, "exhaustive", "exhaustive", M, N, K, result, capabilities);
             }
         }
 
@@ -336,6 +798,7 @@ public sealed class GemmAutoTuner
     {
         var tuningStopwatch = Stopwatch.StartNew();
         var allConfigs = GenerateConfigurationSpace(M, N, K, capabilities);
+        var random = seed.HasValue ? new Random(seed.Value) : new Random();
         var bayesian = new GemmFeatureBayesianTuner(allConfigs, seed);
 
         // Count valid configurations for diagnostics
@@ -348,6 +811,10 @@ public sealed class GemmAutoTuner
             else
                 invalidConfigs++;
         }
+
+        var stratifiedSamples = GetStratifiedSamples(allConfigs, random);
+        initialRandomSamples = Math.Min(maxTrials, Math.Max(initialRandomSamples, stratifiedSamples.Count));
+        initialRandomSamples = Math.Min(initialRandomSamples, allConfigs.Length);
 
         LogDiag($"=== Bayesian Optimization for {M}x{N}x{K} ===");
         LogDiag($"Configuration space: {allConfigs.Length} total, {validConfigs} valid, {invalidConfigs} invalid");
@@ -371,30 +838,37 @@ public sealed class GemmAutoTuner
         // Phase 1: Stratified sampling for kernel type diversity
         LogDiag($"\n--- Phase 1: Stratified Exploration ({initialRandomSamples} trials) ---");
 
-        // Get one sample from each kernel category to ensure diversity
-        var stratifiedSamples = GetStratifiedSamples(allConfigs);
-
         for (int i = 0; i < initialRandomSamples && i < allConfigs.Length; i++)
         {
             int idx;
+            string strategy;
             if (i < stratifiedSamples.Count)
             {
                 // Use stratified sample for the first samples (one from each category)
                 idx = stratifiedSamples[i];
                 if (testedIndices.Contains(idx))
+                {
                     idx = bayesian.SampleRandomIndex(allConfigs.Length, testedIndices);
+                    strategy = "random";
+                }
+                else
+                {
+                    strategy = "stratified";
+                }
             }
             else
             {
                 // After covering all categories, use random sampling
                 idx = bayesian.SampleRandomIndex(allConfigs.Length, testedIndices);
+                strategy = "random";
             }
             testedIndices.Add(idx);
 
             var config = allConfigs[idx];
-            LogDiag($"Trial {i + 1}/{maxTrials}: {config.KernelName}");
-            var result = BenchmarkConfig(config, benchmarkFunc, warmupRuns, benchmarkRuns, M, N, K);
+            LogDiag($"Trial {i + 1}/{maxTrials}: {config.KernelName} [{strategy}]");
+            var result = BenchmarkConfig(config, benchmarkFunc, warmupRuns, benchmarkRuns, M, N, K, capabilities);
             results.Add(result);
+            LogTrialCsv(i + 1, "explore", strategy, M, N, K, result, capabilities);
 
             if (result.IsValid)
             {
@@ -413,62 +887,103 @@ public sealed class GemmAutoTuner
             }
         }
 
-        // Phase 2: Bayesian optimization
-        LogDiag($"\n--- Phase 2: Bayesian Optimization ({maxTrials - initialRandomSamples} trials) ---");
-        LogDiag($"Current best: {bestGflops:F2} GFLOPS - {bestConfig}");
-        LogDiag($"Early stopping patience: {earlyStopPatience} trials without improvement");
-
-        for (int trial = initialRandomSamples; trial < maxTrials && testedIndices.Count < allConfigs.Length; trial++)
+        if (testedIndices.Count >= allConfigs.Length)
         {
-            // Check early stopping
-            if (trialsSinceImprovement >= earlyStopPatience)
+            LogDiag("\nAll configurations tested during stratified exploration.");
+        }
+        else
+        {
+            // Phase 2: Bayesian optimization
+            LogDiag($"\n--- Phase 2: Bayesian Optimization ({maxTrials - initialRandomSamples} trials) ---");
+            LogDiag($"Current best: {bestGflops:F2} GFLOPS - {bestConfig}");
+            LogDiag($"Early stopping patience: {earlyStopPatience} trials without improvement");
+
+            for (int trial = initialRandomSamples; trial < maxTrials && testedIndices.Count < allConfigs.Length; trial++)
             {
-                LogDiag($"\n*** EARLY STOPPING: No improvement for {earlyStopPatience} trials ***");
-                LogDiag($"Stopped at trial {trial}/{maxTrials}, saved {maxTrials - trial} trials");
-                break;
-            }
-
-            // Update GP model
-            bayesian.UpdateModel();
-
-            // Find next point using Expected Improvement
-            int nextIdx = bayesian.SelectNextPoint(allConfigs.Length, testedIndices);
-            testedIndices.Add(nextIdx);
-
-            var config = allConfigs[nextIdx];
-
-            // Show progress at intervals
-            if ((trial + 1) % ProgressInterval == 0 || trial == maxTrials - 1)
-            {
-                double elapsed = tuningStopwatch.Elapsed.TotalSeconds;
-                double trialsPerSec = (trial + 1) / elapsed;
-                double eta = (maxTrials - trial - 1) / trialsPerSec;
-                LogDiag($"Trial {trial + 1}/{maxTrials}: Best={bestGflops:F2} GFLOPS, Failed={failedTrials}, NoImprove={trialsSinceImprovement}/{earlyStopPatience}, ETA={eta:F1}s");
-            }
-
-            var result = BenchmarkConfig(config, benchmarkFunc, warmupRuns, benchmarkRuns, M, N, K);
-            results.Add(result);
-
-            if (result.IsValid)
-            {
-                bayesian.AddObservation(nextIdx, result.GFlops);
-                if (result.GFlops > bestGflops)
+                // Check early stopping
+                if (trialsSinceImprovement >= earlyStopPatience)
                 {
-                    bestGflops = result.GFlops;
-                    bestConfig = config.ToString();
-                    trialsSinceImprovement = 0;  // Reset counter on improvement
-                    LogDiag($"  NEW BEST at trial {trial + 1}: {bestGflops:F2} GFLOPS - {config.KernelName}");
+                    LogDiag($"\n*** EARLY STOPPING: No improvement for {earlyStopPatience} trials ***");
+                    LogDiag($"Stopped at trial {trial}/{maxTrials}, saved {maxTrials - trial} trials");
+                    break;
+                }
+
+                int? coverageIdx = TrySelectCoverageCandidate(allConfigs, testedIndices, random);
+                string strategy;
+                int nextIdx;
+
+                if (coverageIdx.HasValue)
+                {
+                    nextIdx = coverageIdx.Value;
+                    strategy = "coverage";
                 }
                 else
                 {
-                    trialsSinceImprovement++;  // No improvement
+                    // Update GP model
+                    bayesian.UpdateModel();
+
+                    int phaseIndex = trial - initialRandomSamples;
+                    int selector = phaseIndex % 10;
+                    if (selector == 0)
+                    {
+                        strategy = "random";
+                        nextIdx = bayesian.SampleRandomIndex(allConfigs.Length, testedIndices);
+                    }
+                    else if (selector == 1)
+                    {
+                        strategy = "uncertainty";
+                        nextIdx = bayesian.SelectNextPointByUncertainty(allConfigs.Length, testedIndices);
+                    }
+                    else if (selector == 2)
+                    {
+                        strategy = "ucb";
+                        nextIdx = bayesian.SelectNextPointByUcb(allConfigs.Length, testedIndices, 1.5);
+                    }
+                    else
+                    {
+                        strategy = "ei";
+                        nextIdx = bayesian.SelectNextPoint(allConfigs.Length, testedIndices);
+                    }
                 }
-            }
-            else
-            {
-                failedTrials++;
-                trialsSinceImprovement++;  // Failed trial counts as no improvement
-                bayesian.AddObservation(nextIdx, 0);
+
+                testedIndices.Add(nextIdx);
+
+                var config = allConfigs[nextIdx];
+
+                // Show progress at intervals
+                if ((trial + 1) % ProgressInterval == 0 || trial == maxTrials - 1)
+                {
+                    double elapsed = tuningStopwatch.Elapsed.TotalSeconds;
+                    double trialsPerSec = (trial + 1) / elapsed;
+                    double eta = (maxTrials - trial - 1) / trialsPerSec;
+                    LogDiag($"Trial {trial + 1}/{maxTrials}: Best={bestGflops:F2} GFLOPS, Failed={failedTrials}, NoImprove={trialsSinceImprovement}/{earlyStopPatience}, ETA={eta:F1}s");
+                }
+
+                var result = BenchmarkConfig(config, benchmarkFunc, warmupRuns, benchmarkRuns, M, N, K, capabilities);
+                results.Add(result);
+                LogTrialCsv(trial + 1, "bayes", strategy, M, N, K, result, capabilities);
+
+                if (result.IsValid)
+                {
+                    bayesian.AddObservation(nextIdx, result.GFlops);
+                    if (result.GFlops > bestGflops)
+                    {
+                        bestGflops = result.GFlops;
+                        bestConfig = config.ToString();
+                        trialsSinceImprovement = 0;  // Reset counter on improvement
+                        LogDiag($"  NEW BEST at trial {trial + 1}: {bestGflops:F2} GFLOPS - {config.KernelName}");
+                    }
+                    else
+                    {
+                        trialsSinceImprovement++;  // No improvement
+                    }
+                }
+                else
+                {
+                    failedTrials++;
+                    trialsSinceImprovement++;  // Failed trial counts as no improvement
+                    bayesian.AddObservation(nextIdx, 0);
+                }
             }
         }
 
@@ -518,7 +1033,7 @@ public sealed class GemmAutoTuner
     }
 
     private TuningResult BenchmarkConfig(GemmConfig config, Func<GemmConfig, double> benchmarkFunc,
-        int warmupRuns, int benchmarkRuns, int M, int N, int K)
+        int warmupRuns, int benchmarkRuns, int M, int N, int K, GpuCapabilities capabilities)
     {
         // First validate the configuration
         var validationError = DynamicGemmKernel.ValidateConfig(config);
@@ -530,13 +1045,18 @@ public sealed class GemmAutoTuner
                 Config = config,
                 GFlops = 0,
                 TimeMs = double.MaxValue,
-                IsValid = false
+                IsValid = false,
+                Error = validationError
             };
         }
 
         var sw = Stopwatch.StartNew();
+        TrialHeartbeat? heartbeat = null;
         try
         {
+            if (EnableDiagnostics && TrialHeartbeatSeconds > 0)
+                heartbeat = new TrialHeartbeat($"{config.KernelName ?? "kernel"} {M}x{N}x{K}", TrialHeartbeatSeconds);
+
             // Warmup
             for (int i = 0; i < warmupRuns; i++)
             {
@@ -549,7 +1069,8 @@ public sealed class GemmAutoTuner
                         Config = config,
                         GFlops = 0,
                         TimeMs = double.MaxValue,
-                        IsValid = false
+                        IsValid = false,
+                        Error = $"Invalid warmup time: {time}"
                     };
                 }
             }
@@ -569,7 +1090,8 @@ public sealed class GemmAutoTuner
                         Config = config,
                         GFlops = 0,
                         TimeMs = double.MaxValue,
-                        IsValid = false
+                        IsValid = false,
+                        Error = $"Invalid benchmark time: {time}"
                     };
                 }
                 totalTimeMs += time;
@@ -586,20 +1108,23 @@ public sealed class GemmAutoTuner
                     Config = config,
                     GFlops = 0,
                     TimeMs = double.MaxValue,
-                    IsValid = false
+                    IsValid = false,
+                    Error = $"Invalid average time: {avgTimeMs}"
                 };
             }
             double gflops = (2.0 * M * N * K) / (avgTimeMs * 1e6);
             sw.Stop();
 
             LogDiag($"  {config.KernelName}: {gflops:F2} GFLOPS (avg: {avgTimeMs:F3} ms, min: {minTime:F3}, max: {maxTime:F3})");
+            LogBottleneckDiagnostics(config, capabilities, M, N, K);
 
             return new TuningResult
             {
                 Config = config,
                 GFlops = gflops,
                 TimeMs = avgTimeMs,
-                IsValid = true
+                IsValid = true,
+                Error = null
             };
         }
         catch (Exception ex)
@@ -611,8 +1136,13 @@ public sealed class GemmAutoTuner
                 Config = config,
                 GFlops = 0,
                 TimeMs = double.MaxValue,
-                IsValid = false
+                IsValid = false,
+                Error = ex.Message
             };
+        }
+        finally
+        {
+            heartbeat?.Dispose();
         }
     }
 
@@ -629,7 +1159,7 @@ public sealed class GemmAutoTuner
         // These use UseTrueVectorLDS=true for fully vectorized local memory
         // ============================================================
 
-        // CLBlast RX 5700 XT TRUE VECTORIZED: MWG=64, NWG=64, VWM=2, VWN=2
+        // CLBlast RX 5700 XT TRUE VECTORIZED: MWG=64, NWG=64, VWM=2, VWN=2     
         // Based on analysis: VWM=2 works best on RDNA1
         configs.Add(new GemmConfig
         {
@@ -642,7 +1172,43 @@ public sealed class GemmAutoTuner
             CacheA = true, CacheB = true,
             MdimaSize = 16, NdimbSize = 8,
             UseTrueVectorLDS = true,  // THE KEY!
+            UseColumnMajorA = true,
             KernelName = "clblast_true_vec_64x64"
+        });
+
+        // CLBlast BASELINE (exact XGEMM kernel 0 configuration for RDNA1)
+        // GEMMK=0, MWG=64, NWG=64, KWG=16, MDIMC=8, NDIMC=8, VWM=2, VWN=2
+        // STRM=0, STRN=1, SA=1, SB=1, MDIMA=16, NDIMB=8, KWI=2, KREG=1
+        configs.Add(new GemmConfig
+        {
+            TileM = 64, TileN = 64, TileK = 16,
+            ThreadTileM = 8, ThreadTileN = 8,
+            VectorWidthM = 2, VectorWidthN = 2,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 1, KUnroll = 2, UseSubgroupOps = false,
+            StrideM = false, StrideN = true,
+            CacheA = true, CacheB = true,
+            MdimaSize = 16, NdimbSize = 8,
+            UseTrueVectorLDS = true,
+            UseColumnMajorA = true,
+            KernelName = "clblast_baseline_k0"
+        });
+
+        // CLBlast BASELINE (kernel 1: 2D register tiling, row-major A/B/C)
+        // GEMMK=1 expects KWG=1 and uses KREG for K blocking, no LDS caching
+        configs.Add(new GemmConfig
+        {
+            TileM = 64, TileN = 64, TileK = 1,
+            ThreadTileM = 8, ThreadTileN = 8,
+            VectorWidthM = 2, VectorWidthN = 2,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 4, KUnroll = 1, UseSubgroupOps = false,
+            StrideM = false, StrideN = false,
+            CacheA = false, CacheB = false,
+            MdimaSize = 8, NdimbSize = 8,
+            UseTrueVectorLDS = false,
+            UseColumnMajorA = false,
+            KernelName = "clblast_baseline_k1"
         });
 
         // CLBlast RX 5700 TRUE VECTORIZED: MWG=128, NWG=64, VWM=4, VWN=1
@@ -657,6 +1223,7 @@ public sealed class GemmAutoTuner
             CacheA = true, CacheB = true,
             MdimaSize = 16, NdimbSize = 16,
             UseTrueVectorLDS = true,
+            UseColumnMajorA = true,
             KernelName = "clblast_true_vec_128x64"
         });
 
@@ -669,6 +1236,7 @@ public sealed class GemmAutoTuner
             UseDoubleBuffering = false, UseVectorizedLoads = true,
             KReg = 0, KUnroll = 2, UseSubgroupOps = false,
             UseTrueVectorLDS = true,
+            UseColumnMajorA = true,
             KernelName = "true_vec_64x128"
         });
 
@@ -681,6 +1249,7 @@ public sealed class GemmAutoTuner
             UseDoubleBuffering = false, UseVectorizedLoads = true,
             KReg = 0, KUnroll = 2, UseSubgroupOps = false,
             UseTrueVectorLDS = true,
+            UseColumnMajorA = true,
             KernelName = "true_vec_32x64"
         });
 
@@ -693,6 +1262,7 @@ public sealed class GemmAutoTuner
             UseDoubleBuffering = false, UseVectorizedLoads = true,
             KReg = 0, KUnroll = 2, UseSubgroupOps = false,
             UseTrueVectorLDS = true,
+            UseColumnMajorA = true,
             KernelName = "true_vec_64x64_v4"
         });
 
@@ -720,6 +1290,7 @@ public sealed class GemmAutoTuner
             CacheA = true, CacheB = true,     // SA=1, SB=1 local memory caching
             MdimaSize = 16, NdimbSize = 8,    // MDIMA=16, NDIMB=8
             UseTrueVectorLDS = true,
+            UseColumnMajorA = true,
             KernelName = "clblast_rx5700xt_exact"
         });
 
@@ -735,6 +1306,7 @@ public sealed class GemmAutoTuner
             CacheA = true, CacheB = true,     // SA=1, SB=1 local memory caching
             MdimaSize = 16, NdimbSize = 8,
             UseTrueVectorLDS = true,
+            UseColumnMajorA = true,
             KernelName = "clblast_rx5700xt_nostride"
         });
 
@@ -750,6 +1322,7 @@ public sealed class GemmAutoTuner
             CacheA = true, CacheB = true,
             MdimaSize = 16, NdimbSize = 16,
             UseTrueVectorLDS = true,
+            UseColumnMajorA = true,
             KernelName = "clblast_rx5700_exact"
         });
 
@@ -765,6 +1338,7 @@ public sealed class GemmAutoTuner
             CacheA = false, CacheB = false,
             MdimaSize = 16, NdimbSize = 16,
             UseTrueVectorLDS = true,
+            UseColumnMajorA = true,
             KernelName = "clblast_gfx10_default"
         });
 
@@ -1814,14 +2388,14 @@ public sealed class GemmAutoTuner
     }
 
     /// <summary>
-    /// Gets one sample config index from each kernel category for stratified sampling.
-    /// Ensures diverse exploration across TrueVectorized, CooperativeLoading, StridedAccess,
-    /// SimpleVectorized, and Basic kernel types.
+    /// Gets stratified samples across kernel categories and key tuning features.
     /// </summary>
-    private List<int> GetStratifiedSamples(GemmConfig[] configs)
+    private List<int> GetStratifiedSamples(GemmConfig[] configs, Random random)
     {
         var result = new List<int>();
-        var categorized = new Dictionary<string, List<int>>
+        var used = new HashSet<int>();
+
+        var baseCategories = new Dictionary<string, List<int>>
         {
             ["TrueVectorized"] = new List<int>(),
             ["CooperativeLoading"] = new List<int>(),
@@ -1830,35 +2404,169 @@ public sealed class GemmAutoTuner
             ["Basic"] = new List<int>()
         };
 
+        var featureCategories = new Dictionary<string, List<int>>
+        {
+            ["ColumnMajorA"] = new List<int>(),
+            ["RowMajorA"] = new List<int>(),
+            ["SubgroupOps"] = new List<int>(),
+            ["NoSubgroupOps"] = new List<int>(),
+            ["DoubleBuffering"] = new List<int>(),
+            ["SingleBuffer"] = new List<int>(),
+            ["KReg>1"] = new List<int>(),
+            ["KReg=1"] = new List<int>(),
+            ["KUnroll>1"] = new List<int>(),
+            ["KUnroll=1"] = new List<int>(),
+            ["VecWidthM>1"] = new List<int>(),
+            ["VecWidthM=1"] = new List<int>(),
+            ["VecWidthN>1"] = new List<int>(),
+            ["VecWidthN=1"] = new List<int>(),
+            ["StrideM"] = new List<int>(),
+            ["StrideN"] = new List<int>()
+        };
+
         for (int i = 0; i < configs.Length; i++)
         {
             var cfg = configs[i];
             if (cfg.UseTrueVectorLDS)
-                categorized["TrueVectorized"].Add(i);
+                baseCategories["TrueVectorized"].Add(i);
             else if (cfg.MdimaSize > 0 || cfg.NdimbSize > 0)
-                categorized["CooperativeLoading"].Add(i);
+                baseCategories["CooperativeLoading"].Add(i);
             else if (cfg.StrideM || cfg.StrideN)
-                categorized["StridedAccess"].Add(i);
+                baseCategories["StridedAccess"].Add(i);
             else if (cfg.VectorWidthM > 1 || cfg.VectorWidthN > 1)
-                categorized["SimpleVectorized"].Add(i);
+                baseCategories["SimpleVectorized"].Add(i);
             else
-                categorized["Basic"].Add(i);
+                baseCategories["Basic"].Add(i);
+
+            if (cfg.UseColumnMajorA)
+                featureCategories["ColumnMajorA"].Add(i);
+            else
+                featureCategories["RowMajorA"].Add(i);
+
+            if (cfg.UseSubgroupOps)
+                featureCategories["SubgroupOps"].Add(i);
+            else
+                featureCategories["NoSubgroupOps"].Add(i);
+
+            if (cfg.UseDoubleBuffering)
+                featureCategories["DoubleBuffering"].Add(i);
+            else
+                featureCategories["SingleBuffer"].Add(i);
+
+            if (cfg.KReg > 1)
+                featureCategories["KReg>1"].Add(i);
+            else
+                featureCategories["KReg=1"].Add(i);
+
+            if (cfg.KUnroll > 1)
+                featureCategories["KUnroll>1"].Add(i);
+            else
+                featureCategories["KUnroll=1"].Add(i);
+
+            if (cfg.VectorWidthM > 1)
+                featureCategories["VecWidthM>1"].Add(i);
+            else
+                featureCategories["VecWidthM=1"].Add(i);
+
+            if (cfg.VectorWidthN > 1)
+                featureCategories["VecWidthN>1"].Add(i);
+            else
+                featureCategories["VecWidthN=1"].Add(i);
+
+            if (cfg.StrideM)
+                featureCategories["StrideM"].Add(i);
+            if (cfg.StrideN)
+                featureCategories["StrideN"].Add(i);
         }
 
-        // Take first config from each non-empty category
-        foreach (var indices in categorized.Values)
+        void AddSample(List<int> indices)
         {
-            if (indices.Count > 0)
-                result.Add(indices[0]);
+            if (indices.Count == 0)
+                return;
+
+            int idx = indices[random.Next(indices.Count)];
+            if (used.Add(idx))
+                result.Add(idx);
         }
 
-        LogDiag($"  Category distribution: TrueVec={categorized["TrueVectorized"].Count}, " +
-               $"Coop={categorized["CooperativeLoading"].Count}, " +
-               $"Stride={categorized["StridedAccess"].Count}, " +
-               $"SimpleVec={categorized["SimpleVectorized"].Count}, " +
-               $"Basic={categorized["Basic"].Count}");
+        foreach (var indices in baseCategories.Values)
+            AddSample(indices);
+        foreach (var indices in featureCategories.Values)
+            AddSample(indices);
+
+        Shuffle(result, random);
+
+        LogDiag($"  Category distribution: TrueVec={baseCategories["TrueVectorized"].Count}, " +
+               $"Coop={baseCategories["CooperativeLoading"].Count}, " +
+               $"Stride={baseCategories["StridedAccess"].Count}, " +
+               $"SimpleVec={baseCategories["SimpleVectorized"].Count}, " +
+               $"Basic={baseCategories["Basic"].Count}");
+        LogDiag($"  Feature coverage: ACol={featureCategories["ColumnMajorA"].Count}, " +
+               $"Subgroup={featureCategories["SubgroupOps"].Count}, " +
+               $"DoubleBuf={featureCategories["DoubleBuffering"].Count}, " +
+               $"KReg>1={featureCategories["KReg>1"].Count}, " +
+               $"KUnroll>1={featureCategories["KUnroll>1"].Count}");
 
         return result;
+    }
+
+    private int? TrySelectCoverageCandidate(GemmConfig[] configs, HashSet<int> testedIndices, Random random)
+    {
+        var categories = new List<(string Name, Func<GemmConfig, bool> Predicate)>
+        {
+            ("TrueVectorized", cfg => cfg.UseTrueVectorLDS),
+            ("NonTrueVectorized", cfg => !cfg.UseTrueVectorLDS),
+            ("ColumnMajorA", cfg => cfg.UseColumnMajorA),
+            ("RowMajorA", cfg => !cfg.UseColumnMajorA),
+            ("SubgroupOps", cfg => cfg.UseSubgroupOps),
+            ("DoubleBuffering", cfg => cfg.UseDoubleBuffering),
+            ("KReg>1", cfg => cfg.KReg > 1),
+            ("KUnroll>1", cfg => cfg.KUnroll > 1),
+            ("StrideM", cfg => cfg.StrideM),
+            ("StrideN", cfg => cfg.StrideN),
+            ("CooperativeLoading", cfg => cfg.MdimaSize > 0 || cfg.NdimbSize > 0),
+            ("VecWidthM>1", cfg => cfg.VectorWidthM > 1),
+            ("VecWidthN>1", cfg => cfg.VectorWidthN > 1)
+        };
+
+        foreach (var category in categories)
+        {
+            bool covered = false;
+            foreach (var idx in testedIndices)
+            {
+                if (category.Predicate(configs[idx]))
+                {
+                    covered = true;
+                    break;
+                }
+            }
+
+            if (covered)
+                continue;
+
+            var candidates = new List<int>();
+            for (int i = 0; i < configs.Length; i++)
+            {
+                if (testedIndices.Contains(i))
+                    continue;
+                if (category.Predicate(configs[i]))
+                    candidates.Add(i);
+            }
+
+            if (candidates.Count > 0)
+                return candidates[random.Next(candidates.Count)];
+        }
+
+        return null;
+    }
+
+    private static void Shuffle<T>(IList<T> list, Random random)
+    {
+        for (int i = list.Count - 1; i > 0; i--)
+        {
+            int j = random.Next(i + 1);
+            (list[i], list[j]) = (list[j], list[i]);
+        }
     }
 
     /// <summary>
