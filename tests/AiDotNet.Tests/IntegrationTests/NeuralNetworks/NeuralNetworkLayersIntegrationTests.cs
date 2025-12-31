@@ -535,7 +535,7 @@ public class NeuralNetworkLayersIntegrationTests
         }
 
         // With 50% dropout, expect approximately 50 zeros (allow for variance)
-        Assert.True(zeroCount > 20 && zeroCount < 80,
+        Assert.True(zeroCount > 35 && zeroCount < 65,
             $"Expected roughly 50% zeros but got {zeroCount} zeros");
     }
 
