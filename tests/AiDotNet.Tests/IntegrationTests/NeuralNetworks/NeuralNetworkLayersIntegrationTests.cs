@@ -465,13 +465,14 @@ public class NeuralNetworkLayersIntegrationTests
     #region DropoutLayer Tests
 
     [Fact]
-    public void DropoutLayer_Construction_ValidDropoutRate()
+    public void DropoutLayer_Construction_WithValidDropoutRate_SupportsTraining()
     {
         // Arrange & Act
         var layer = new DropoutLayer<double>(0.5);
 
         // Assert
         Assert.NotNull(layer);
+        Assert.True(layer.SupportsTraining);
     }
 
     [Fact]
