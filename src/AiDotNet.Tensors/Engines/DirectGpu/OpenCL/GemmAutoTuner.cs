@@ -350,11 +350,27 @@ public sealed class GemmAutoTuner
         int trialsSinceImprovement = 0;
         int earlyStopPatience = Math.Max(15, maxTrials / 5);  // Stop after N trials without improvement
 
-        // Phase 1: Initial random sampling
-        LogDiag($"\n--- Phase 1: Random Exploration ({initialRandomSamples} trials) ---");
+        // Phase 1: Stratified sampling for kernel type diversity
+        LogDiag($"\n--- Phase 1: Stratified Exploration ({initialRandomSamples} trials) ---");
+
+        // Get one sample from each kernel category to ensure diversity
+        var stratifiedSamples = GetStratifiedSamples(allConfigs);
+
         for (int i = 0; i < initialRandomSamples && i < allConfigs.Length; i++)
         {
-            int idx = bayesian.SampleRandomIndex(allConfigs.Length, testedIndices);
+            int idx;
+            if (i < stratifiedSamples.Count)
+            {
+                // Use stratified sample for the first samples (one from each category)
+                idx = stratifiedSamples[i];
+                if (testedIndices.Contains(idx))
+                    idx = bayesian.SampleRandomIndex(allConfigs.Length, testedIndices);
+            }
+            else
+            {
+                // After covering all categories, use random sampling
+                idx = bayesian.SampleRandomIndex(allConfigs.Length, testedIndices);
+            }
             testedIndices.Add(idx);
 
             var config = allConfigs[idx];
@@ -1727,6 +1743,54 @@ public sealed class GemmAutoTuner
         }
 
         return configs.ToArray();
+    }
+
+    /// <summary>
+    /// Gets one sample config index from each kernel category for stratified sampling.
+    /// Ensures diverse exploration across TrueVectorized, CooperativeLoading, StridedAccess,
+    /// SimpleVectorized, and Basic kernel types.
+    /// </summary>
+    private List<int> GetStratifiedSamples(GemmConfig[] configs)
+    {
+        var result = new List<int>();
+        var categorized = new Dictionary<string, List<int>>
+        {
+            ["TrueVectorized"] = new List<int>(),
+            ["CooperativeLoading"] = new List<int>(),
+            ["StridedAccess"] = new List<int>(),
+            ["SimpleVectorized"] = new List<int>(),
+            ["Basic"] = new List<int>()
+        };
+
+        for (int i = 0; i < configs.Length; i++)
+        {
+            var cfg = configs[i];
+            if (cfg.UseTrueVectorLDS)
+                categorized["TrueVectorized"].Add(i);
+            else if (cfg.MdimaSize > 0 || cfg.NdimbSize > 0)
+                categorized["CooperativeLoading"].Add(i);
+            else if (cfg.StrideM || cfg.StrideN)
+                categorized["StridedAccess"].Add(i);
+            else if (cfg.VectorWidthM > 1 || cfg.VectorWidthN > 1)
+                categorized["SimpleVectorized"].Add(i);
+            else
+                categorized["Basic"].Add(i);
+        }
+
+        // Take first config from each non-empty category
+        foreach (var indices in categorized.Values)
+        {
+            if (indices.Count > 0)
+                result.Add(indices[0]);
+        }
+
+        LogDiag($"  Category distribution: TrueVec={categorized["TrueVectorized"].Count}, " +
+               $"Coop={categorized["CooperativeLoading"].Count}, " +
+               $"Stride={categorized["StridedAccess"].Count}, " +
+               $"SimpleVec={categorized["SimpleVectorized"].Count}, " +
+               $"Basic={categorized["Basic"].Count}");
+
+        return result;
     }
 
     /// <summary>
