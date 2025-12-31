@@ -38,12 +38,12 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// The left singular vector used for power iteration to compute the spectral norm.
     /// </summary>
-    private Tensor<T> _u;
+    private Tensor<T>? _u;
 
     /// <summary>
     /// The right singular vector used for power iteration.
     /// </summary>
-    private Tensor<T> _v;
+    private Tensor<T>? _v;
 
     /// <summary>
     /// The number of power iterations to perform when computing the spectral norm.
@@ -102,20 +102,7 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
         _powerIterations = powerIterations;
         _epsilon = NumOps.FromDouble(1e-12);
 
-        // Initialize u and v vectors for power iteration
-        // u has shape [outputSize], v has shape [inputSize]
-        var inputShape = innerLayer.GetInputShape();
-        var outputShape = innerLayer.GetOutputShape();
-        int inputSize = inputShape.Aggregate(1, (a, b) => a * b);
-        int outputSize = outputShape.Aggregate(1, (a, b) => a * b);
-
-        // === Vectorized: Initialize u and v using TensorRandomUniformRange (Phase C: New IEngine methods) ===
-        _u = Engine.TensorRandomUniformRange<T>([outputSize], NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
-        _v = Engine.TensorRandomUniformRange<T>([inputSize], NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
-
-        // Normalize u and v
-        NormalizeVector(ref _u);
-        NormalizeVector(ref _v);
+        // u and v are lazily initialized based on the actual weight matrix shape.
     }
 
     /// <summary>
@@ -134,6 +121,22 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Initializes or reinitializes the power iteration vectors when dimensions change.
+    /// </summary>
+    private void EnsurePowerIterationVectors(int rows, int cols)
+    {
+        if (_u is null || _v is null || _u.Shape[0] != rows || _v.Shape[0] != cols)
+        {
+            var u = Engine.TensorRandomUniformRange<T>([rows], NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
+            var v = Engine.TensorRandomUniformRange<T>([cols], NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
+            NormalizeVector(ref u);
+            NormalizeVector(ref v);
+            _u = u;
+            _v = v;
+        }
+    }
+
+    /// <summary>
     /// Computes the spectral norm using power iteration with vectorized operations.
     /// </summary>
     private T ComputeSpectralNorm(Tensor<T> weights)
@@ -142,8 +145,8 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
         int outputSize = weights.Shape[0];
         int inputSize = weights.Shape[1];
 
-        var u = _u;
-        var v = _v;
+        var u = _u ?? throw new InvalidOperationException("Power iteration vector u has not been initialized.");
+        var v = _v ?? throw new InvalidOperationException("Power iteration vector v has not been initialized.");
 
         // Power iteration using vectorized matrix operations
         for (int iter = 0; iter < _powerIterations; iter++)
@@ -227,14 +230,7 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
             }
         }
 
-        // Reinitialize u and v if dimensions changed
-        if (_u.Shape[0] != rows || _v.Shape[0] != cols)
-        {
-            _u = Engine.TensorRandomUniformRange<T>([rows], NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
-            _v = Engine.TensorRandomUniformRange<T>([cols], NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
-            NormalizeVector(ref _u);
-            NormalizeVector(ref _v);
-        }
+        EnsurePowerIterationVectors(rows, cols);
 
         // Compute spectral norm
         T spectralNorm = ComputeSpectralNorm(weights);
@@ -400,6 +396,8 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
                     weights[new int[] { i, j }] = originalParams[paramIdx++];
                 }
             }
+
+            EnsurePowerIterationVectors(outputSize, inputSize);
 
             // Compute spectral norm
             T spectralNorm = ComputeSpectralNorm(weights);
