@@ -1,4 +1,5 @@
 global using AiDotNet.Validation;
+using AiDotNet.Exceptions;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -133,16 +134,128 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
-            nameof(ConvolutionalNeuralNetwork<T>), "forward pass");
+        var expectedShape = Architecture.GetInputShape();
+        Tensor<T> processedInput;
+        bool hasBatchDims = false;
+        int[] batchDimSizes = [];
+        int batchSize = 1;
 
-        Tensor<T> output = input;
-        foreach (var layer in Layers)
+        // Handle any-rank tensors by supporting batch dimensions
+        if (input.Rank == expectedShape.Length && ShapesEqual(input.Shape, expectedShape))
         {
-            output = layer.Forward(output);
+            // Exact match - no batch dimensions
+            processedInput = input;
+        }
+        else if (input.Rank > expectedShape.Length)
+        {
+            // Input has extra dimensions (batch dimensions)
+            int extraDims = input.Rank - expectedShape.Length;
+            var actualSpatial = input.Shape.Skip(extraDims).ToArray();
+
+            if (!ShapesEqual(actualSpatial, expectedShape))
+            {
+                throw new TensorShapeMismatchException(
+                    $"Shape mismatch in ConvolutionalNeuralNetwork during forward pass: " +
+                    $"Expected spatial dimensions [{string.Join(", ", expectedShape)}], " +
+                    $"but got [{string.Join(", ", actualSpatial)}].");
+            }
+
+            hasBatchDims = true;
+            batchDimSizes = input.Shape.Take(extraDims).ToArray();
+            for (int i = 0; i < extraDims; i++)
+            {
+                batchSize *= batchDimSizes[i];
+            }
+
+            processedInput = input;
+        }
+        else
+        {
+            // Input has fewer dimensions than expected
+            throw new TensorShapeMismatchException(
+                $"Shape mismatch in ConvolutionalNeuralNetwork during forward pass: " +
+                $"Expected shape [{string.Join(", ", expectedShape)}], but got [{string.Join(", ", input.Shape)}].");
         }
 
-        return output;
+        // If we have batch dimensions, process each batch element
+        if (hasBatchDims && batchSize > 1)
+        {
+            int elementsPerBatch = expectedShape.Aggregate(1, (a, b) => a * b);
+            var outputs = new List<Tensor<T>>();
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                // Extract single element from batch
+                var elementData = new T[elementsPerBatch];
+                Array.Copy(processedInput.Data.ToArray(), b * elementsPerBatch, elementData, 0, elementsPerBatch);
+                var element = new Tensor<T>(expectedShape, new Vector<T>(elementData));
+
+                // Process through all layers
+                Tensor<T> output = element;
+                foreach (var layer in Layers)
+                {
+                    output = layer.Forward(output);
+                }
+                outputs.Add(output);
+            }
+
+            // Combine outputs back into batched tensor
+            if (outputs.Count > 0)
+            {
+                var outputShape = new int[batchDimSizes.Length + outputs[0].Rank];
+                Array.Copy(batchDimSizes, 0, outputShape, 0, batchDimSizes.Length);
+                Array.Copy(outputs[0].Shape, 0, outputShape, batchDimSizes.Length, outputs[0].Rank);
+
+                var combinedData = new T[batchSize * outputs[0].Length];
+                for (int b = 0; b < batchSize; b++)
+                {
+                    Array.Copy(outputs[b].Data.ToArray(), 0, combinedData, b * outputs[0].Length, outputs[0].Length);
+                }
+
+                return new Tensor<T>(outputShape, new Vector<T>(combinedData));
+            }
+        }
+
+        // Single element or batch size 1 - process directly through layers
+        Tensor<T> result = processedInput;
+
+        // For batch size 1, extract the single element
+        if (hasBatchDims && batchSize == 1)
+        {
+            int elementsPerBatch = expectedShape.Aggregate(1, (a, b) => a * b);
+            var elementData = new T[elementsPerBatch];
+            Array.Copy(processedInput.Data.ToArray(), 0, elementData, 0, elementsPerBatch);
+            result = new Tensor<T>(expectedShape, new Vector<T>(elementData));
+        }
+
+        foreach (var layer in Layers)
+        {
+            result = layer.Forward(result);
+        }
+
+        // Restore batch dimensions if needed
+        if (hasBatchDims)
+        {
+            var outputShape = new int[batchDimSizes.Length + result.Rank];
+            Array.Copy(batchDimSizes, 0, outputShape, 0, batchDimSizes.Length);
+            Array.Copy(result.Shape, 0, outputShape, batchDimSizes.Length, result.Rank);
+            return new Tensor<T>(outputShape, new Vector<T>(result.Data.ToArray()));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Checks if two shapes are equal.
+    /// </summary>
+    private static bool ShapesEqual(int[] shape1, int[] shape2)
+    {
+        if (shape1.Length != shape2.Length) return false;
+        for (int i = 0; i < shape1.Length; i++)
+        {
+            if (shape1[i] != shape2[i]) return false;
+        }
+        return true;
     }
 
     /// <summary>

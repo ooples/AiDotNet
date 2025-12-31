@@ -4465,4 +4465,363 @@ public static class LayerHelper<T>
             outputSize: projectionDim,
             activationFunction: null); // Linear projection (no activation)
     }
+
+    #region Video AI Layers
+
+    /// <summary>
+    /// Creates layers for a video super-resolution model (Real-ESRGAN/BasicVSR++ style).
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input video height.</param>
+    /// <param name="inputWidth">Input video width.</param>
+    /// <param name="numFeatures">Number of feature channels (default: 64).</param>
+    /// <param name="numResBlocks">Number of residual blocks (default: 16).</param>
+    /// <param name="scaleFactor">Upscaling factor (default: 2).</param>
+    /// <param name="useTemporalConsistency">Whether to add temporal aggregation layer (default: true).</param>
+    /// <returns>A collection of layers for video super-resolution.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Super-resolution models increase video resolution. This architecture
+    /// uses residual blocks (skip connections) to preserve details while learning to add new ones.
+    /// The upsampling at the end increases the spatial size by the scale factor.
+    ///
+    /// Architecture overview:
+    /// 1. Initial convolution to extract features
+    /// 2. Multiple residual blocks for deep feature learning
+    /// 3. Temporal aggregation for video consistency (optional)
+    /// 4. Pixel shuffle upsampling for resolution increase
+    /// 5. Final convolution for output reconstruction
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultVideoSuperResolutionLayers(
+        int inputChannels = 3,
+        int inputHeight = 128,
+        int inputWidth = 128,
+        int numFeatures = 64,
+        int numResBlocks = 16,
+        int scaleFactor = 2,
+        bool useTemporalConsistency = true)
+    {
+        // Track current spatial dimensions
+        int currentHeight = inputHeight;
+        int currentWidth = inputWidth;
+        int currentChannels = inputChannels;
+
+        // Initial feature extraction (no activation - will be followed by residual blocks)
+        yield return new ConvolutionalLayer<T>(
+            inputDepth: currentChannels,
+            inputHeight: currentHeight,
+            inputWidth: currentWidth,
+            outputDepth: numFeatures,
+            kernelSize: 3,
+            stride: 1,
+            padding: 1);
+        currentChannels = numFeatures;
+
+        // Residual blocks for deep feature extraction
+        for (int i = 0; i < numResBlocks; i++)
+        {
+            // Each residual block: Conv -> ReLU -> Conv + Skip
+            yield return new ConvolutionalLayer<T>(
+                inputDepth: currentChannels,
+                inputHeight: currentHeight,
+                inputWidth: currentWidth,
+                outputDepth: numFeatures,
+                kernelSize: 3,
+                stride: 1,
+                padding: 1,
+                activationFunction: new ReLUActivation<T>() as IActivationFunction<T>);
+
+            yield return new ConvolutionalLayer<T>(
+                inputDepth: numFeatures,
+                inputHeight: currentHeight,
+                inputWidth: currentWidth,
+                outputDepth: numFeatures,
+                kernelSize: 3,
+                stride: 1,
+                padding: 1);
+
+            // Note: Skip connection would be handled in the model's forward pass
+        }
+
+        // Temporal aggregation layer for video consistency
+        if (useTemporalConsistency)
+        {
+            yield return new ConvolutionalLayer<T>(
+                inputDepth: currentChannels,
+                inputHeight: currentHeight,
+                inputWidth: currentWidth,
+                outputDepth: numFeatures,
+                kernelSize: 3,
+                stride: 1,
+                padding: 1);
+        }
+
+        // Upsampling layers using pixel shuffle
+        int currentScale = 1;
+        while (currentScale < scaleFactor)
+        {
+            // Each pixel shuffle doubles the resolution
+            // Conv to expand channels for pixel shuffle (with ReLU activation)
+            yield return new ConvolutionalLayer<T>(
+                inputDepth: currentChannels,
+                inputHeight: currentHeight,
+                inputWidth: currentWidth,
+                outputDepth: numFeatures * 4,  // 4x channels for 2x spatial
+                kernelSize: 3,
+                stride: 1,
+                padding: 1,
+                activationFunction: new ReLUActivation<T>() as IActivationFunction<T>);
+
+            // Pixel shuffle: [C*4, H, W] -> [C, H*2, W*2]
+            yield return new PixelShuffleLayer<T>(
+                inputShape: [numFeatures * 4, currentHeight, currentWidth],
+                upscaleFactor: 2);
+
+            currentHeight *= 2;
+            currentWidth *= 2;
+            currentChannels = numFeatures;
+
+            currentScale *= 2;
+        }
+
+        // Final reconstruction convolution (no activation - output should be in original range)
+        yield return new ConvolutionalLayer<T>(
+            inputDepth: currentChannels,
+            inputHeight: currentHeight,
+            inputWidth: currentWidth,
+            outputDepth: inputChannels,
+            kernelSize: 3,
+            stride: 1,
+            padding: 1);
+    }
+
+    /// <summary>
+    /// Creates a simple super-resolution architecture for testing and lightweight use.
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input video height.</param>
+    /// <param name="inputWidth">Input video width.</param>
+    /// <param name="scaleFactor">Upscaling factor (default: 2).</param>
+    /// <returns>A collection of layers for simple super-resolution.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is a smaller, faster model that trades quality for speed.
+    /// Good for real-time applications or when GPU memory is limited.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSimpleVideoSuperResolutionLayers(
+        int inputChannels = 3,
+        int inputHeight = 128,
+        int inputWidth = 128,
+        int scaleFactor = 2)
+    {
+        int numFeatures = 32;  // Smaller feature dimension
+        int currentHeight = inputHeight;
+        int currentWidth = inputWidth;
+
+        // Initial feature extraction
+        yield return new ConvolutionalLayer<T>(inputChannels, currentHeight, currentWidth, numFeatures, 5, 1, 2,
+            new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // A few residual blocks
+        for (int i = 0; i < 4; i++)
+        {
+            yield return new ConvolutionalLayer<T>(numFeatures, currentHeight, currentWidth, numFeatures, 3, 1, 1,
+                new ReLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(numFeatures, currentHeight, currentWidth, numFeatures, 3, 1, 1);
+        }
+
+        // Upsampling
+        int scale = scaleFactor;
+        while (scale > 1)
+        {
+            // Conv with ReLU before pixel shuffle
+            yield return new ConvolutionalLayer<T>(numFeatures, currentHeight, currentWidth, numFeatures * 4, 3, 1, 1,
+                new ReLUActivation<T>() as IActivationFunction<T>);
+
+            yield return new PixelShuffleLayer<T>(
+                inputShape: [numFeatures * 4, currentHeight, currentWidth],
+                upscaleFactor: 2);
+
+            currentHeight *= 2;
+            currentWidth *= 2;
+
+            scale /= 2;
+        }
+
+        // Output (no activation)
+        yield return new ConvolutionalLayer<T>(numFeatures, currentHeight, currentWidth, inputChannels, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates layers for an optical flow estimation model (RAFT-style).
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input frame height.</param>
+    /// <param name="inputWidth">Input frame width.</param>
+    /// <param name="hiddenDim">Hidden dimension for flow estimation (default: 192).</param>
+    /// <returns>A collection of layers for optical flow estimation.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Optical flow tells you how each pixel moves between two frames.
+    /// This is useful for motion analysis, video editing, and as input to other models.
+    /// The output is a 2-channel tensor showing horizontal and vertical motion.
+    ///
+    /// Architecture:
+    /// 1. Feature encoder extracts features from both frames
+    /// 2. Correlation volume computes matching scores
+    /// 3. Iterative refinement improves the flow estimate
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultOpticalFlowLayers(
+        int inputChannels = 3,
+        int inputHeight = 128,
+        int inputWidth = 128,
+        int hiddenDim = 192)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
+
+        // Feature encoder (shared for both frames)
+        yield return new ConvolutionalLayer<T>(inputChannels, h, w, 64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        yield return new ConvolutionalLayer<T>(64, h, w, 128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        yield return new ConvolutionalLayer<T>(128, h, w, 256, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        // Context encoder (reset dimensions)
+        h = inputHeight; w = inputWidth;
+        yield return new ConvolutionalLayer<T>(inputChannels, h, w, 64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        yield return new ConvolutionalLayer<T>(64, h, w, 128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        yield return new ConvolutionalLayer<T>(128, h, w, hiddenDim, 3, 2, 1);
+        h /= 2; w /= 2;
+
+        // Flow head (produces 2-channel flow output)
+        yield return new ConvolutionalLayer<T>(hiddenDim, h, w, 128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(128, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, h, w, 2, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates layers for a frame interpolation model (FILM/RIFE-style).
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input frame height.</param>
+    /// <param name="inputWidth">Input frame width.</param>
+    /// <param name="numFeatures">Number of feature channels (default: 64).</param>
+    /// <returns>A collection of layers for frame interpolation.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Frame interpolation creates new frames between existing ones
+    /// to make video smoother (e.g., 30fps to 60fps). The model learns to "imagine"
+    /// what the in-between frames should look like based on the surrounding frames.
+    ///
+    /// Architecture:
+    /// 1. Feature pyramid extracts multi-scale features
+    /// 2. Flow estimation predicts motion
+    /// 3. Synthesis network generates interpolated frames
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultFrameInterpolationLayers(
+        int inputChannels = 3,
+        int inputHeight = 128,
+        int inputWidth = 128,
+        int numFeatures = 64)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
+
+        // Feature pyramid network (two frames concatenated = inputChannels * 2)
+        // Level 1
+        yield return new ConvolutionalLayer<T>(inputChannels * 2, h, w, 32, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(32, h, w, 32, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        // Level 2
+        yield return new ConvolutionalLayer<T>(32, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, h, w, 64, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        // Level 3
+        yield return new ConvolutionalLayer<T>(64, h, w, 96, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(96, h, w, 96, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        // Flow estimation head
+        yield return new ConvolutionalLayer<T>(96, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, h, w, 4, 3, 1, 1);  // 4 = 2 flows * 2 directions
+
+        // Synthesis network (back to original resolution)
+        h = inputHeight; w = inputWidth;
+        yield return new ConvolutionalLayer<T>(inputChannels * 2 + 4, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        for (int i = 0; i < 4; i++)
+        {
+            yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        }
+
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, inputChannels, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates layers for a video stabilization model (StabNet-style).
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input frame height.</param>
+    /// <param name="inputWidth">Input frame width.</param>
+    /// <returns>A collection of layers for video stabilization.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Video stabilization removes camera shake. The model predicts
+    /// how to warp each frame to align with a smooth camera path. This is similar to
+    /// what smartphone cameras do in real-time.
+    ///
+    /// Architecture:
+    /// 1. Feature encoder processes input frames
+    /// 2. Motion estimator predicts camera motion
+    /// 3. Smoother learns the smooth target path
+    /// 4. Warper transforms frames to match smooth path
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultVideoStabilizationLayers(
+        int inputChannels = 3,
+        int inputHeight = 128,
+        int inputWidth = 128)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
+
+        // Feature encoder
+        yield return new ConvolutionalLayer<T>(inputChannels, h, w, 64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        yield return new ConvolutionalLayer<T>(64, h, w, 128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        yield return new ConvolutionalLayer<T>(128, h, w, 256, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        // Motion estimation layers
+        yield return new ConvolutionalLayer<T>(256, h, w, 256, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(256, h, w, 128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Global average pooling to get fixed-size feature vector
+        yield return new GlobalPoolingLayer<T>(
+            inputShape: [128, h, w],
+            poolingType: Enums.PoolingType.Average);
+
+        // Output: 6 parameters for affine transformation
+        yield return new DenseLayer<T>(128, 64, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>(64, 6, new IdentityActivation<T>() as IActivationFunction<T>);  // 6 affine params
+    }
+
+    #endregion
 }
