@@ -168,6 +168,8 @@ public sealed class HipBackend : IDirectGpuBackend
         string source = HipMfmaKernel.GetSource();
         string compileFlags = HipMfmaKernel.GetCompileFlags(_architecture);
 
+        Console.WriteLine($"[HipBackend] Compiling kernels for {_architecture} with flags: {compileFlags}");
+
         try
         {
             // Compile using HIP RTC
@@ -182,6 +184,7 @@ public sealed class HipBackend : IDirectGpuBackend
 
             if (rtcResult != HipRtcResult.Success)
             {
+                Console.WriteLine($"[HipBackend] Failed to create HIP RTC program: {rtcResult}");
                 System.Diagnostics.Debug.WriteLine($"Failed to create HIP RTC program: {rtcResult}");
                 // Fall back to OpenCL backend via flag
                 return;
@@ -202,11 +205,19 @@ public sealed class HipBackend : IDirectGpuBackend
                     HipNativeBindings.hiprtcGetProgramLog(prog, logPtr);
                     string log = Marshal.PtrToStringAnsi(logPtr) ?? "";
                     Marshal.FreeHGlobal(logPtr);
+                    Console.WriteLine($"[HipBackend] HIP RTC compile FAILED: {rtcResult}");
+                    Console.WriteLine($"[HipBackend] Compile log: {log}");
                     System.Diagnostics.Debug.WriteLine($"HIP RTC compile log: {log}");
+                }
+                else
+                {
+                    Console.WriteLine($"[HipBackend] HIP RTC compile FAILED: {rtcResult} (no log)");
                 }
                 HipNativeBindings.hiprtcDestroyProgram(ref prog);
                 return;
             }
+
+            Console.WriteLine("[HipBackend] HIP RTC compile succeeded, getting code...");
 
             // Get compiled code
             UIntPtr codeSize = UIntPtr.Zero;
@@ -233,9 +244,12 @@ public sealed class HipBackend : IDirectGpuBackend
 
             if (hipResult != HipError.Success)
             {
+                Console.WriteLine($"[HipBackend] Failed to load HIP module: {hipResult}");
                 System.Diagnostics.Debug.WriteLine($"Failed to load HIP module: {hipResult}");
                 return;
             }
+
+            Console.WriteLine("[HipBackend] Module loaded, getting kernel functions...");
 
             // Get kernel functions - try to load all available kernels
             // MFMA kernels (CDNA only)
@@ -257,10 +271,12 @@ public sealed class HipBackend : IDirectGpuBackend
             if (hipResult == HipError.Success)
                 _kernelCache["rdna_gemm_wave32"] = _rdnaGemmWave32;
 
+            Console.WriteLine($"[HipBackend] Kernel compilation complete. Available kernels: {string.Join(", ", _kernelCache.Keys)}");
             System.Diagnostics.Debug.WriteLine($"HIP kernels compiled successfully for {_architecture}. Available kernels: {string.Join(", ", _kernelCache.Keys)}");
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"[HipBackend] Kernel compilation EXCEPTION: {ex.GetType().Name}: {ex.Message}");
             System.Diagnostics.Debug.WriteLine($"HIP kernel compilation failed: {ex.Message}");
         }
     }
