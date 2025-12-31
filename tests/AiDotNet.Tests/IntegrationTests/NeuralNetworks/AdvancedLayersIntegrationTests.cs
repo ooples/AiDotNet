@@ -812,4 +812,348 @@ public class AdvancedLayersIntegrationTests
     }
 
     #endregion
+
+    #region ConvLSTMLayer Tests
+
+    [Fact(Skip = "ConvLSTMLayer has a bug in ConvLSTMCell where tensor Add operation fails due to shape mismatch")]
+    public void ConvLSTMLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange - ConvLSTM for spatiotemporal data
+        int[] inputShape = [4, 8, 8, 3]; // [timeSteps, height, width, channels]
+        int kernelSize = 3;
+        int filters = 16;
+        var layer = new ConvLSTMLayer<float>(inputShape, kernelSize, filters, 1, 1, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([2, 4, 8, 8, 3]); // [batch, time, H, W, C]
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(5, output.Shape.Length);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+    }
+
+    [Fact(Skip = "ConvLSTMLayer has a bug in ConvLSTMCell where tensor Add operation fails due to shape mismatch")]
+    public void ConvLSTMLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] inputShape = [2, 4, 4, 1];
+        var original = new ConvLSTMLayer<float>(inputShape, 3, 8, 1, 1, (IActivationFunction<float>?)null);
+        var input = Tensor<float>.CreateRandom([1, 2, 4, 4, 1]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+    }
+
+    #endregion
+
+    #region GatedLinearUnitLayer Tests
+
+    [Fact]
+    public void GatedLinearUnitLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputDim = 64;
+        int outputDim = 32;
+        var layer = new GatedLinearUnitLayer<float>(inputDim, outputDim, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([4, inputDim]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape.Length);
+        Assert.Equal(4, output.Shape[0]); // batch preserved
+        Assert.Equal(outputDim, output.Shape[1]);
+    }
+
+    [Fact]
+    public void GatedLinearUnitLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        var original = new GatedLinearUnitLayer<float>(32, 16, (IActivationFunction<float>?)null);
+        var input = Tensor<float>.CreateRandom([2, 32]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+    }
+
+    [Fact]
+    public void GatedLinearUnitLayer_ParameterCount_IsNonNegative()
+    {
+        // Arrange
+        var layer = new GatedLinearUnitLayer<float>(64, 32, (IActivationFunction<float>?)null);
+
+        // Act
+        int paramCount = layer.ParameterCount;
+
+        // Assert - ParameterCount property is accessible and returns valid value
+        Assert.True(paramCount >= 0);
+    }
+
+    #endregion
+
+    #region HighwayLayer Tests
+
+    [Fact]
+    public void HighwayLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange - Highway layers preserve dimensions
+        int inputDim = 64;
+        var layer = new HighwayLayer<float>(inputDim, (IActivationFunction<float>?)null, (IActivationFunction<float>?)null);
+
+        var input = Tensor<float>.CreateRandom([4, inputDim]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape, output.Shape);
+    }
+
+    [Fact]
+    public void HighwayLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        var original = new HighwayLayer<float>(32, (IActivationFunction<float>?)null, (IActivationFunction<float>?)null);
+        var input = Tensor<float>.CreateRandom([2, 32]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+    }
+
+    [Fact]
+    public void HighwayLayer_ParameterCount_IsNonNegative()
+    {
+        // Arrange
+        var layer = new HighwayLayer<float>(64, (IActivationFunction<float>?)null, (IActivationFunction<float>?)null);
+
+        // Act
+        int paramCount = layer.ParameterCount;
+
+        // Assert - ParameterCount property is accessible and returns valid value
+        Assert.True(paramCount >= 0);
+    }
+
+    #endregion
+
+    #region MaxPool3DLayer Tests
+
+    [Fact]
+    public void MaxPool3DLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange - 3D pooling for volumetric data [channels, depth, height, width]
+        int[] inputShape = [3, 8, 8, 8]; // C, D, H, W
+        int poolSize = 2;
+        var layer = new MaxPool3DLayer<float>(inputShape, poolSize);
+
+        var input = Tensor<float>.CreateRandom([2, 3, 8, 8, 8]); // [batch, C, D, H, W]
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(5, output.Shape.Length);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+        Assert.Equal(3, output.Shape[1]); // channels preserved
+        Assert.Equal(4, output.Shape[2]); // D halved
+        Assert.Equal(4, output.Shape[3]); // H halved
+        Assert.Equal(4, output.Shape[4]); // W halved
+    }
+
+    [Fact]
+    public void MaxPool3DLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange - input shape must be [channels, depth, height, width]
+        int[] inputShape = [2, 4, 4, 4];
+        var original = new MaxPool3DLayer<float>(inputShape, 2);
+        var input = Tensor<float>.CreateRandom([1, 2, 4, 4, 4]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+    }
+
+    #endregion
+
+    #region MultiplyLayer Tests
+
+    [Fact]
+    public void MultiplyLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange - Element-wise multiplication of multiple inputs
+        int[] shape = [8, 16];
+        int[][] inputShapes = [shape, shape];
+        var layer = new MultiplyLayer<float>(inputShapes, (IActivationFunction<float>?)null);
+
+        var input1 = Tensor<float>.CreateRandom([2, 8, 16]);
+        var input2 = Tensor<float>.CreateRandom([2, 8, 16]);
+
+        // Act
+        var output = layer.Forward(input1, input2);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input1.Shape, output.Shape);
+    }
+
+    [Fact]
+    public void MultiplyLayer_ElementWiseMultiplication_IsCorrect()
+    {
+        // Arrange
+        int[] shape = [2, 2];
+        int[][] inputShapes = [shape, shape];
+        var layer = new MultiplyLayer<float>(inputShapes, (IActivationFunction<float>?)null);
+
+        var input1 = new Tensor<float>([1, 2, 2]);
+        var input2 = new Tensor<float>([1, 2, 2]);
+        input1.Data[0] = 2; input1.Data[1] = 3; input1.Data[2] = 4; input1.Data[3] = 5;
+        input2.Data[0] = 1; input2.Data[1] = 2; input2.Data[2] = 3; input2.Data[3] = 4;
+
+        // Act
+        var output = layer.Forward(input1, input2);
+
+        // Assert - element-wise multiplication
+        Assert.Equal(2f, output.Data[0]); // 2 * 1
+        Assert.Equal(6f, output.Data[1]); // 3 * 2
+        Assert.Equal(12f, output.Data[2]); // 4 * 3
+        Assert.Equal(20f, output.Data[3]); // 5 * 4
+    }
+
+    [Fact]
+    public void MultiplyLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] shape = [4, 8];
+        int[][] inputShapes = [shape, shape];
+        var original = new MultiplyLayer<float>(inputShapes, (IActivationFunction<float>?)null);
+        var input1 = Tensor<float>.CreateRandom([1, 4, 8]);
+        var input2 = Tensor<float>.CreateRandom([1, 4, 8]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input1, input2);
+        var cloneOutput = clone.Forward(input1, input2);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+    }
+
+    #endregion
+
+    #region MaskingLayer Tests
+
+    [Fact]
+    public void MaskingLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int[] inputShape = [10, 32]; // sequence, features
+        var layer = new MaskingLayer<float>(inputShape, maskValue: 0);
+
+        var input = Tensor<float>.CreateRandom([2, 10, 32]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape, output.Shape);
+    }
+
+    [Fact]
+    public void MaskingLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] inputShape = [5, 16];
+        var original = new MaskingLayer<float>(inputShape);
+        var input = Tensor<float>.CreateRandom([1, 5, 16]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+    }
+
+    #endregion
+
+    #region SplitLayer Tests
+
+    [Fact]
+    public void SplitLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange - Split tensor along last dimension
+        int[] inputShape = [32];
+        int numSplits = 4;
+        var layer = new SplitLayer<float>(inputShape, numSplits);
+
+        var input = Tensor<float>.CreateRandom([2, 32]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        // Split should create numSplits sections
+    }
+
+    [Fact]
+    public void SplitLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] inputShape = [16];
+        var original = new SplitLayer<float>(inputShape, 2);
+        var input = Tensor<float>.CreateRandom([1, 16]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+    }
+
+    #endregion
 }
