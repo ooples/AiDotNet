@@ -909,16 +909,36 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
     {
         return new Dictionary<string, string>
         {
-            ["en"] = "English", ["es"] = "Spanish", ["fr"] = "French",
-            ["de"] = "German", ["it"] = "Italian", ["pt"] = "Portuguese",
-            ["ru"] = "Russian", ["zh"] = "Chinese", ["ja"] = "Japanese",
-            ["ko"] = "Korean", ["ar"] = "Arabic", ["hi"] = "Hindi",
-            ["tr"] = "Turkish", ["pl"] = "Polish", ["nl"] = "Dutch",
-            ["sv"] = "Swedish", ["da"] = "Danish", ["no"] = "Norwegian",
-            ["fi"] = "Finnish", ["cs"] = "Czech", ["el"] = "Greek",
-            ["he"] = "Hebrew", ["th"] = "Thai", ["vi"] = "Vietnamese",
-            ["id"] = "Indonesian", ["ms"] = "Malay", ["uk"] = "Ukrainian",
-            ["ro"] = "Romanian", ["hu"] = "Hungarian", ["bg"] = "Bulgarian"
+            ["en"] = "English",
+            ["es"] = "Spanish",
+            ["fr"] = "French",
+            ["de"] = "German",
+            ["it"] = "Italian",
+            ["pt"] = "Portuguese",
+            ["ru"] = "Russian",
+            ["zh"] = "Chinese",
+            ["ja"] = "Japanese",
+            ["ko"] = "Korean",
+            ["ar"] = "Arabic",
+            ["hi"] = "Hindi",
+            ["tr"] = "Turkish",
+            ["pl"] = "Polish",
+            ["nl"] = "Dutch",
+            ["sv"] = "Swedish",
+            ["da"] = "Danish",
+            ["no"] = "Norwegian",
+            ["fi"] = "Finnish",
+            ["cs"] = "Czech",
+            ["el"] = "Greek",
+            ["he"] = "Hebrew",
+            ["th"] = "Thai",
+            ["vi"] = "Vietnamese",
+            ["id"] = "Indonesian",
+            ["ms"] = "Malay",
+            ["uk"] = "Ukrainian",
+            ["ro"] = "Romanian",
+            ["hu"] = "Hungarian",
+            ["bg"] = "Bulgarian"
         };
     }
 
