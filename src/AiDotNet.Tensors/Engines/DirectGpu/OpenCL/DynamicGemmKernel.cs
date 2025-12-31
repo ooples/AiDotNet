@@ -412,6 +412,11 @@ internal sealed class DynamicGemmKernel : IDisposable
         // This uses vectorized LDS arrays and SIMD accumulators - matches CLBlast exactly
         bool useTrueVectorLDS = config.UseTrueVectorLDS && VWM > 1 && (MWI % VWM == 0) && (NWI % VWN == 0 || VWN == 1);
 
+        if (EnableDiagnostics && config.UseTrueVectorLDS)
+        {
+            Console.WriteLine($"[DynamicGemm] UseTrueVectorLDS check: config.UseTrueVectorLDS={config.UseTrueVectorLDS}, VWM={VWM}>1={VWM > 1}, MWI%VWM={MWI % VWM}==0, NWI%VWN={NWI % VWN}==0, result={useTrueVectorLDS}");
+        }
+
         // COOPERATIVE LOADING KERNEL (CLBlast-style MDIMA/NDIMB)
         // Use when: MDIMA or NDIMB is explicitly set different from MDIMC/NDIMC
         // This uses different thread organization for loading vs computing
@@ -426,28 +431,38 @@ internal sealed class DynamicGemmKernel : IDisposable
         {
             // Use TRUE CLBlast-style vectorized LDS kernel
             // This achieves maximum performance by using vector types throughout
+            if (EnableDiagnostics)
+                Console.WriteLine($"[DynamicGemm] SELECTED TRUE VECTORIZED kernel: {config.KernelName} VWM={VWM} VWN={VWN} MWI={MWI} NWI={NWI}");
             GenerateCLBlastTrueVectorizedKernel(sb, MWI, NWI, VWM, VWN, KWI, KREG);
         }
         else if (useCooperativeLoading)
         {
             // Use cooperative loading kernel - MDIMA/NDIMB differ from MDIMC/NDIMC
             // This is how CLBlast achieves maximum memory bandwidth
+            if (EnableDiagnostics)
+                Console.WriteLine($"[DynamicGemm] SELECTED COOPERATIVE kernel: {config.KernelName} MDIMA={MDIMA} NDIMB={NDIMB}");
             GenerateCooperativeLoadingKernel(sb, MWI, NWI, VWM, VWN, KWI, KREG, MDIMA, NDIMB, MDIMC, NDIMC);
         }
         else if (isHighOccupancy)
         {
             // Use high-occupancy kernel with TRUE double-buffering (ping-pong)
             // This hides 100% of memory latency by overlapping load and compute
+            if (EnableDiagnostics)
+                Console.WriteLine($"[DynamicGemm] SELECTED HIGH-OCCUPANCY kernel: {config.KernelName}");
             GenerateHighOccupancyDoubleBufferedKernel(sb, MWI, NWI, VWN, KWG);
         }
         else if (KREG > 1 && (VWN > 1 || VWM > 1))
         {
             // Use vectorized kernel WITH KREG for CLBlast-style performance
+            if (EnableDiagnostics)
+                Console.WriteLine($"[DynamicGemm] SELECTED KREG kernel: {config.KernelName} KREG={KREG}");
             GenerateVectorizedKernelWithKreg(sb, MWI, NWI, VWM, VWN, KWI, KREG, useSubgroups);
         }
         else if (VWN > 1 || VWM > 1)
         {
             // Use vectorized kernel WITHOUT KREG (simpler, often faster!)
+            if (EnableDiagnostics)
+                Console.WriteLine($"[DynamicGemm] SELECTED VECTORIZED kernel: {config.KernelName} VWM={VWM} VWN={VWN}");
             GenerateVectorizedKernel(sb, MWI, NWI, VWM, VWN, KWI);
         }
         else
