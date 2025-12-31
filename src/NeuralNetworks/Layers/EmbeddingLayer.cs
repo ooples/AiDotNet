@@ -1,5 +1,7 @@
 
 
+using AiDotNet.Tensors.Helpers;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -346,7 +348,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 _projectionWeights = new Tensor<T>([inputFeatures, embeddingDim]);
                 // Xavier initialization
                 T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (inputFeatures + embeddingDim)));
-                var random = new Random(42);
+                var random = RandomHelper.CreateSecureRandom();
                 for (int i = 0; i < _projectionWeights.Length; i++)
                 {
                     _projectionWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));

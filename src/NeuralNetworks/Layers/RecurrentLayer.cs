@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Helpers;
 
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -339,7 +340,7 @@ public class RecurrentLayer<T> : LayerBase<T>
 
             // Initialize using Xavier/Glorot initialization
             T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (actualInputSize + hiddenSize)));
-            var random = new Random(42);
+            var random = RandomHelper.CreateSecureRandom();
             for (int i = 0; i < _inputWeights.Length; i++)
             {
                 _inputWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
