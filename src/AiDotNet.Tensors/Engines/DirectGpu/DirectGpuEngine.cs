@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines.DirectGpu.CUDA;
 using AiDotNet.Tensors.Engines.DirectGpu.HIP;
 using AiDotNet.Tensors.Engines.DirectGpu.OpenCL;
 using AiDotNet.Tensors.Helpers;
@@ -22,8 +23,6 @@ namespace AiDotNet.Tensors.Engines.DirectGpu;
 /// DirectGpuEngine (this) - custom optimized kernels
 ///     ↓ fallback
 /// CLBlast - tuned but missing optimizations
-///     ↓ fallback
-/// ILGPU - general purpose
 ///     ↓ fallback
 /// CPU - always available
 /// </code>
@@ -81,9 +80,9 @@ public sealed class DirectGpuEngine : IDisposable
     /// </summary>
     /// <remarks>
     /// Backend selection order:
-    /// 1. HIP (AMD GPUs with MFMA support - MI100/200/300, RDNA3)
+    /// 1. CUDA (NVIDIA GPUs with NVRTC available)
     /// 2. OpenCL (works on AMD, Intel, and NVIDIA)
-    /// 3. Future: CUDA (NVIDIA-specific optimizations)
+    /// 3. HIP (AMD GPUs with MFMA support - MI100/200/300, RDNA3)
     /// </remarks>
     public DirectGpuEngine()
     {
@@ -93,10 +92,45 @@ public sealed class DirectGpuEngine : IDisposable
         Console.WriteLine("[DirectGpuEngine] Initializing GPU backends...");
 
         // Try backends in order of preference for maximum performance
-        // NOTE: OpenCL is preferred for now as it has optimized GEMM kernels
-        // HIP support is experimental and may have stability issues on some AMD GPUs
+        // CUDA is preferred on NVIDIA, OpenCL is the default cross-vendor path.
 
-        // 1. Try OpenCL first (works on AMD, Intel, and NVIDIA)
+        // 1. Try CUDA first on NVIDIA GPUs (requires NVRTC)
+        try
+        {
+            Console.WriteLine("[DirectGpuEngine] Checking CUDA availability...");
+            if (CudaBackend.IsCudaAvailable)
+            {
+                Console.WriteLine("[DirectGpuEngine] Creating CUDA backend...");
+                var cudaBackend = new CudaBackend();
+                Console.WriteLine($"[DirectGpuEngine] CUDA backend created, IsAvailable = {cudaBackend.IsAvailable}");
+
+                if (cudaBackend.IsAvailable)
+                {
+                    _backend = cudaBackend;
+                    _isAvailable = true;
+                    Console.WriteLine($"[DirectGpuEngine] SUCCESS: Using CUDA backend on {cudaBackend.DeviceName}");
+                    System.Diagnostics.Debug.WriteLine($"DirectGpuEngine: Using CUDA backend on {cudaBackend.DeviceName}");
+                    return;
+                }
+                Console.WriteLine("[DirectGpuEngine] CUDA backend created but not available, disposing...");
+                cudaBackend.Dispose();
+            }
+            else
+            {
+                Console.WriteLine("[DirectGpuEngine] CUDA is not available on this system");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DirectGpuEngine] CUDA backend initialization failed: {ex.GetType().Name}: {ex.Message}");
+            if (ex.InnerException != null)
+            {
+                Console.WriteLine($"[DirectGpuEngine] Inner exception: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
+            }
+            System.Diagnostics.Debug.WriteLine($"CUDA backend initialization failed: {ex.Message}");
+        }
+
+        // 2. Try OpenCL (works on AMD, Intel, and NVIDIA)
         // Our optimized kernels with double buffering, KREG, and vectorized loads are in OpenCL
         try
         {
@@ -128,7 +162,7 @@ public sealed class DirectGpuEngine : IDisposable
             System.Diagnostics.Debug.WriteLine($"OpenCL backend initialization failed: {ex.Message}");
         }
 
-        // 2. Try HIP backend for AMD GPUs (experimental)
+        // 3. Try HIP backend for AMD GPUs (experimental)
         // HIP provides MFMA support on MI100/200/300 GPUs
         try
         {
@@ -158,20 +192,6 @@ public sealed class DirectGpuEngine : IDisposable
             Console.WriteLine($"[DirectGpuEngine] HIP backend initialization failed: {ex.GetType().Name}: {ex.Message}");
             System.Diagnostics.Debug.WriteLine($"HIP backend initialization failed: {ex.Message}");
         }
-
-        // Future: Try CUDA backend
-        // try
-        // {
-        //     var cudaBackend = new CudaBackend();
-        //     if (cudaBackend.IsAvailable)
-        //     {
-        //         _backend = cudaBackend;
-        //         _isAvailable = true;
-        //         return;
-        //     }
-        //     cudaBackend.Dispose();
-        // }
-        // catch { }
 
         Console.WriteLine("[DirectGpuEngine] No GPU backends available. Falling back to CPU.");
         _isAvailable = false;

@@ -11,15 +11,21 @@
 - Full coverage of every kernel outside GEMM unless explicitly requested.
 - Automatic driver/toolkit installation.
 
+## Decisions
+- NVIDIA API: CUDA Driver API (P/Invoke) + PTX (NVRTC for runtime codegen).
+- NVIDIA GEMM fallback: cuBLAS.
+- OpenCL GEMM fallback: CLBlast.
+- Kernel coverage: replace all ILGPU kernels with direct backends.
+- Removal: delete ILGPU packages/types after parity + tests are in place.
+
 ## Decisions (TBD)
-- NVIDIA API: CUDA Driver API (P/Invoke) with PTX or Runtime API?
-- NVIDIA fallback: cuBLAS, CLBlast-over-OpenCL, or direct-only?
+- NVIDIA non-GEMM primitives: cuDNN vs custom CUDA kernels?
 - CI strategy for CUDA (env-gated tests or no CUDA in CI)?
 
 ## Architecture Outline
 - Engine selection:
-  - NVIDIA GPU -> DirectCudaBackend (primary) -> fallback (TBD)
-  - Non-NVIDIA GPU -> DirectOpenClBackend (primary) -> CLBlast fallback
+  - NVIDIA GPU -> DirectCudaBackend (primary) -> cuBLAS fallback -> CPU
+  - Non-NVIDIA GPU -> DirectOpenClBackend (primary) -> CLBlast fallback -> CPU
 - Shared abstractions:
   - IGpuBackend, IGpuAllocator, IGpuKernel, IGpuStream, IGpuTuner
   - Unified diagnostics + CSV logging across backends
@@ -31,13 +37,14 @@
 2. NVIDIA backend
    - Device discovery, context, stream, memory, kernel launch.
    - GEMM baseline + tuned kernels; packing and layout parity with OpenCL.
+   - NVRTC-based kernel compile for tuned kernels and elementwise ops.
    - Hook Bayesian tuning pipeline + diagnostics.
 3. Remove ILGPU
    - Delete ILGPU package refs and types.
    - Replace all ILGPU-specific code paths in engines and layers.
 4. Fallbacks + tests
    - Wire CLBlast fallback for OpenCL path.
-   - Add CUDA fallback (decision above) or direct-only strategy.
+   - Add cuBLAS fallback for CUDA path.
    - Add integration tests for correctness and perf gating.
 5. Docs + benchmarks
    - Update GPU docs and benchmarks to include CUDA path.
