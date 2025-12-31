@@ -1899,7 +1899,182 @@ public enum ModelType
     /// - Document grouping
     /// </para>
     /// </remarks>
-    Clustering
+    Clustering,
+
+    // ==================== Video AI Models ====================
+
+    /// <summary>
+    /// Video Super-Resolution model for enhancing video resolution.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Video Super-Resolution models upscale low-resolution videos to higher resolution
+    /// while maintaining temporal consistency across frames. Unlike single-image super-resolution, video models
+    /// use information from multiple frames to produce sharper and more consistent results.
+    ///
+    /// Examples: BasicVSR++, VRT, VideoGigaGAN
+    /// </para>
+    /// </remarks>
+    VideoSuperResolution,
+
+    /// <summary>
+    /// Frame Interpolation model for generating intermediate frames.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Frame Interpolation models generate new frames between existing ones to increase
+    /// video frame rate (e.g., 30fps to 60fps) or create slow-motion effects. They estimate motion between
+    /// frames and synthesize intermediate frames.
+    ///
+    /// Examples: RIFE, FILM, VFIMamba
+    /// </para>
+    /// </remarks>
+    FrameInterpolation,
+
+    /// <summary>
+    /// Optical Flow model for estimating motion between frames.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Optical Flow models estimate the apparent motion of pixels between consecutive
+    /// video frames. This motion information is essential for many video processing tasks like frame
+    /// interpolation, video stabilization, and action recognition.
+    ///
+    /// Examples: RAFT, SEA-RAFT, GMFlow
+    /// </para>
+    /// </remarks>
+    OpticalFlow,
+
+    /// <summary>
+    /// Video Depth Estimation model for predicting depth from video.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Video Depth Estimation models predict how far each pixel is from the camera
+    /// using temporal information across frames. This enables 3D scene understanding, autonomous driving,
+    /// and AR/VR applications.
+    ///
+    /// Examples: Depth Anything V2, Video Depth Anything
+    /// </para>
+    /// </remarks>
+    VideoDepthEstimation,
+
+    /// <summary>
+    /// Video Object Segmentation model for tracking and segmenting objects.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Video Object Segmentation models identify and track specific objects across
+    /// video frames, creating pixel-accurate masks that follow the object through time.
+    ///
+    /// Examples: SAM2, Cutie, XMem
+    /// </para>
+    /// </remarks>
+    VideoObjectSegmentation,
+
+    /// <summary>
+    /// Video Inpainting model for removing and filling content.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Video Inpainting models remove unwanted objects from videos and fill in the
+    /// removed areas with realistic content that maintains temporal consistency.
+    ///
+    /// Examples: ProPainter, E2FGVI
+    /// </para>
+    /// </remarks>
+    VideoInpainting,
+
+    /// <summary>
+    /// Video Action Recognition model for understanding activities.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Video Action Recognition models identify what actions or activities are
+    /// happening in a video, such as "running", "cooking", or "playing basketball".
+    ///
+    /// Examples: VideoMAE, InternVideo2
+    /// </para>
+    /// </remarks>
+    VideoActionRecognition,
+
+    /// <summary>
+    /// Text-to-Video generation model for creating videos from text.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Text-to-Video models generate video content from text descriptions,
+    /// enabling creative content generation with natural language prompts.
+    ///
+    /// Examples: OpenSora, Stable Video Diffusion
+    /// </para>
+    /// </remarks>
+    TextToVideo,
+
+    /// <summary>
+    /// Object Tracking model for tracking objects across video frames.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Object Tracking models follow objects as they move through a video,
+    /// maintaining consistent identity even when objects are temporarily occluded.
+    ///
+    /// Examples: ByteTrack, SORT, DeepSORT
+    /// </para>
+    /// </remarks>
+    ObjectTracking,
+
+    /// <summary>
+    /// Video Matting model for extracting foreground with alpha matte.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Video Matting models separate foreground subjects from backgrounds
+    /// with soft alpha mattes that preserve fine details like hair and semi-transparent regions.
+    ///
+    /// Examples: RVM (Robust Video Matting), MODNet
+    /// </para>
+    /// </remarks>
+    VideoMatting,
+
+    /// <summary>
+    /// Video Stabilization model for removing camera shake.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Video Stabilization models smooth out shaky video by estimating
+    /// and compensating for camera motion, producing steady footage.
+    ///
+    /// Examples: DIFRINT, DUT
+    /// </para>
+    /// </remarks>
+    VideoStabilization,
+
+    /// <summary>
+    /// Monocular Depth Estimation model for predicting depth from single images.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Depth Estimation models predict how far each pixel is from the camera
+    /// using only a single image, enabling 3D understanding without stereo cameras.
+    ///
+    /// Examples: MiDaS, Depth Anything, ZoeDepth
+    /// </para>
+    /// </remarks>
+    DepthEstimation,
+
+    /// <summary>
+    /// Video Denoising model for removing noise from video.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Video Denoising models remove noise (graininess) from video while
+    /// preserving details and maintaining temporal consistency across frames.
+    ///
+    /// Examples: FastDVDNet, VRT
+    /// </para>
+    /// </remarks>
+    VideoDenoising
 }
 
 
