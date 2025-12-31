@@ -752,7 +752,7 @@ public class NeuralNetworkLayersIntegrationTests
         // Act
         var output = layer.Forward(input);
 
-        // Assert - Should handle gracefully (epsilon prevents division by zero)
+        // Assert - Should handle gracefully without NaN or Infinity (epsilon prevents division by zero)
         Assert.NotNull(output);
         for (int b = 0; b < 8; b++)
         {
