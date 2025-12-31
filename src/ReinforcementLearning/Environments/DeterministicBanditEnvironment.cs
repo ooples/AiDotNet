@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.ReinforcementLearning.Environments;
 
@@ -56,7 +57,7 @@ public class DeterministicBanditEnvironment<T> : IEnvironment<T>
         _actionSpaceSize = actionSpaceSize;
         _observationSpaceDimension = observationSpaceDimension;
         _maxSteps = maxSteps;
-        _random = new Random(seed);
+        _random = RandomHelper.CreateSeededRandom(seed);
         _currentStep = 0;
 
         // Initialize deterministic rewards for each arm
@@ -108,7 +109,7 @@ public class DeterministicBanditEnvironment<T> : IEnvironment<T>
     /// <inheritdoc/>
     public void Seed(int seed)
     {
-        _random = new Random(seed);
+        _random = RandomHelper.CreateSeededRandom(seed);
     }
 
     /// <inheritdoc/>

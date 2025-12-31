@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Interfaces;
@@ -55,9 +56,12 @@ public interface IFlamingoModel<T> : IMultimodalEmbedding<T>
     int MaxImagesInContext { get; }
 
     /// <summary>
-    /// Gets the language model type used as the backbone.
+    /// Gets the language model backbone used for generation.
     /// </summary>
-    string LanguageModelType { get; }
+    /// <remarks>
+    /// Flamingo typically uses <see cref="LanguageModelBackbone.Chinchilla"/> as the backbone.
+    /// </remarks>
+    LanguageModelBackbone LanguageModelBackbone { get; }
 
     /// <summary>
     /// Performs few-shot visual learning with interleaved image-text examples.

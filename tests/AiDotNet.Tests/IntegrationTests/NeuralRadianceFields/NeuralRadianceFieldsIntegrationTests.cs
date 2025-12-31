@@ -106,22 +106,20 @@ public class NeuralRadianceFieldsIntegrationTests
     [Fact]
     public void NeRF_Train_ProducesFiniteOutput()
     {
-        var options = new NeRFOptions
-        {
-            PositionEncodingLevels = 2,
-            DirectionEncodingLevels = 2,
-            HiddenDim = 16,
-            NumLayers = 2,
-            ColorHiddenDim = 8,
-            ColorNumLayers = 1,
-            UseHierarchicalSampling = false,
-            RenderSamples = 8,
-            HierarchicalSamples = 0,
-            RenderNearBound = 0.0,
-            RenderFarBound = 1.0,
-            LearningRate = 1e-3
-        };
-        var model = new NeRF<double>(options);
+        // Create NeRF with individual parameters (golden standard pattern)
+        var model = new NeRF<double>(
+            positionEncodingLevels: 2,
+            directionEncodingLevels: 2,
+            hiddenDim: 16,
+            numLayers: 2,
+            colorHiddenDim: 8,
+            colorNumLayers: 1,
+            useHierarchicalSampling: false,
+            renderSamples: 8,
+            hierarchicalSamples: 0,
+            renderNearBound: 0.0,
+            renderFarBound: 1.0,
+            learningRate: 1e-3);
 
         int numPoints = 16;
         var input = CreateInstantNgpInput(numPoints: numPoints, seed: 19);

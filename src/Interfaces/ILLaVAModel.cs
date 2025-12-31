@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Interfaces;
@@ -35,12 +36,13 @@ namespace AiDotNet.Interfaces;
 public interface ILLaVAModel<T> : IMultimodalEmbedding<T>
 {
     /// <summary>
-    /// Gets the type of language model backend.
+    /// Gets the language model backbone used for generation.
     /// </summary>
     /// <remarks>
-    /// Common backends include LLaMA-2, Vicuna, Mistral, etc.
+    /// Common backbones include <see cref="LanguageModelBackbone.LLaMA"/>,
+    /// <see cref="LanguageModelBackbone.Vicuna"/>, <see cref="LanguageModelBackbone.Mistral"/>, etc.
     /// </remarks>
-    string LanguageModelType { get; }
+    LanguageModelBackbone LanguageModelBackbone { get; }
 
     /// <summary>
     /// Gets the vision encoder type.

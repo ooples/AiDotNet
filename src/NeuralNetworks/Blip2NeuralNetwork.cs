@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -254,9 +255,9 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     private readonly int _lmHiddenDim;
 
     /// <summary>
-    /// Type of language model backend.
+    /// Type of language model backbone.
     /// </summary>
-    private readonly string _languageModelType;
+    private readonly LanguageModelBackbone _languageModelBackbone;
 
     #endregion
 
@@ -279,7 +280,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     public int NumQueryTokens => _numQueryTokens;
 
     /// <inheritdoc/>
-    public string LanguageModelType => _languageModelType;
+    public LanguageModelBackbone LanguageModelBackbone => _languageModelBackbone;
 
     #endregion
 
@@ -292,20 +293,28 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     /// <param name="visionEncoderPath">Path to the vision encoder ONNX model.</param>
     /// <param name="qformerPath">Path to the Q-Former ONNX model.</param>
     /// <param name="languageModelPath">Path to the language model ONNX model.</param>
-    /// <param name="tokenizer">The tokenizer for text processing.</param>
-    /// <param name="languageModelType">Type of LLM backend ("opt" or "flan-t5").</param>
+    /// <param name="languageModelBackbone">Type of LLM backbone (default: OPT).</param>
     /// <param name="embeddingDimension">Dimension of the shared embedding space.</param>
     /// <param name="maxSequenceLength">Maximum text sequence length.</param>
     /// <param name="imageSize">Expected image size.</param>
+    /// <param name="tokenizer">Tokenizer for text processing. REQUIRED - must match the language model backbone.</param>
     /// <param name="optimizer">Optional optimizer for fine-tuning.</param>
     /// <param name="lossFunction">Optional loss function.</param>
+    /// <remarks>
+    /// <para>
+    /// When loading pretrained ONNX models, you MUST provide a tokenizer that matches
+    /// the language model backbone. Use <see cref="Tokenization.HuggingFace.AutoTokenizer"/>
+    /// to load the correct tokenizer, or use <see cref="Tokenization.LanguageModelTokenizerFactory.GetHuggingFaceModelName"/>
+    /// to get the model name for your backbone.
+    /// </para>
+    /// </remarks>
     public Blip2NeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         string visionEncoderPath,
         string qformerPath,
         string languageModelPath,
         ITokenizer tokenizer,
-        string languageModelType = "opt",
+        LanguageModelBackbone languageModelBackbone = LanguageModelBackbone.OPT,
         int embeddingDimension = 256,
         int maxSequenceLength = 32,
         int imageSize = 224,
@@ -333,7 +342,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         _visionEncoderPath = visionEncoderPath;
         _qformerPath = qformerPath;
         _languageModelPath = languageModelPath;
-        _languageModelType = languageModelType.ToLowerInvariant();
+        _languageModelBackbone = languageModelBackbone;
         _embeddingDimension = embeddingDimension;
         _maxSequenceLength = maxSequenceLength;
         _imageSize = imageSize;
@@ -344,7 +353,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         _patchSize = 14; // ViT-G uses 14x14 patches
         _vocabularySize = 30522; // BERT vocabulary size
         _visionHiddenDim = 1408; // ViT-G hidden dimension
-        _lmHiddenDim = _languageModelType == "opt" ? 2560 : 2048; // OPT-2.7B or Flan-T5-XL
+        _lmHiddenDim = _languageModelBackbone == LanguageModelBackbone.OPT ? 2560 : 2048; // OPT-2.7B or Flan-T5-XL
 
         InferenceSession? visionEncoder = null;
         InferenceSession? qformer = null;
@@ -360,8 +369,9 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             _qformer = qformer;
             _languageModel = languageModel;
 
+            // Tokenizer is required for ONNX mode - must match the language model backbone
             _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer),
-                "Tokenizer is required. Use BertTokenizer or equivalent.");
+                $"Tokenizer is required for ONNX mode. Use AutoTokenizer.FromPretrained(\"{Tokenization.LanguageModelTokenizerFactory.GetHuggingFaceModelName(languageModelBackbone)}\") or equivalent.");
 
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new ContrastiveLoss<T>();
@@ -402,10 +412,17 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     /// <param name="numQueryTokens">Number of learnable query tokens.</param>
     /// <param name="numHeads">Number of attention heads.</param>
     /// <param name="numLmDecoderLayers">Number of language model decoder layers for text generation.</param>
-    /// <param name="languageModelType">Type of LLM backend.</param>
-    /// <param name="tokenizer">Optional tokenizer for text processing.</param>
+    /// <param name="languageModelBackbone">Type of LLM backbone (default: OPT).</param>
+    /// <param name="tokenizer">Optional tokenizer for text processing. If null, creates a default based on backbone.</param>
     /// <param name="optimizer">Optional optimizer for training.</param>
     /// <param name="lossFunction">Optional loss function.</param>
+    /// <remarks>
+    /// <para>
+    /// For training from scratch, the tokenizer defaults to a basic implementation
+    /// matching the language model backbone's special tokens. For production use,
+    /// load a pretrained tokenizer using <see cref="Tokenization.HuggingFace.AutoTokenizer"/>.
+    /// </para>
+    /// </remarks>
     public Blip2NeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         int imageSize = 224,
@@ -421,7 +438,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         int numQueryTokens = 32,
         int numHeads = 12,
         int numLmDecoderLayers = 6,
-        string languageModelType = "opt",
+        LanguageModelBackbone languageModelBackbone = LanguageModelBackbone.OPT,
         ITokenizer? tokenizer = null,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
@@ -442,9 +459,10 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         _patchSize = patchSize;
         _vocabularySize = vocabularySize;
         _numLmDecoderLayers = numLmDecoderLayers;
-        _languageModelType = languageModelType.ToLowerInvariant();
+        _languageModelBackbone = languageModelBackbone;
 
-        _tokenizer = tokenizer ?? Tokenization.ClipTokenizerFactory.CreateSimple();
+        // Use factory to create appropriate tokenizer for the backbone, or use provided tokenizer
+        _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(languageModelBackbone);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new ContrastiveLoss<T>();
 
@@ -758,8 +776,8 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
 
         ValidateImageShape(image);
 
-        // Format question as prompt
-        string prompt = _languageModelType == "flan-t5"
+        // Format question as prompt - Flan-T5 uses "Answer:" style, OPT uses "Short answer:"
+        string prompt = _languageModelBackbone == LanguageModelBackbone.FlanT5
             ? $"Question: {question} Answer:"
             : $"Question: {question} Short answer:";
 
@@ -2400,7 +2418,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
                 { "NumHeads", _numHeads },
                 { "NumLmDecoderLayers", _numLmDecoderLayers },
                 { "VocabularySize", _vocabularySize },
-                { "LanguageModelType", _languageModelType },
+                { "LanguageModelBackbone", _languageModelBackbone.ToString() },
                 { "UseNativeMode", _useNativeMode },
                 { "InputSize", _imageSize * _imageSize * 3 },
                 { "OutputSize", _embeddingDimension },
@@ -2426,7 +2444,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         writer.Write(_vocabularySize);
         writer.Write(_visionHiddenDim);
         writer.Write(_lmHiddenDim);
-        writer.Write(_languageModelType);
+        writer.Write((int)_languageModelBackbone);
         writer.Write(_useNativeMode);
     }
 
@@ -2444,7 +2462,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         int vocabularySize = reader.ReadInt32();
         int visionHiddenDim = reader.ReadInt32();
         int lmHiddenDim = reader.ReadInt32();
-        string languageModelType = reader.ReadString();
+        var languageModelBackbone = (LanguageModelBackbone)reader.ReadInt32();
         bool useNativeMode = reader.ReadBoolean();
 
         // Note: Since fields are readonly, this just validates consistency
@@ -2469,7 +2487,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             _numQueryTokens,
             _numHeads,
             _numLmDecoderLayers,
-            _languageModelType,
+            _languageModelBackbone,
             _tokenizer,
             null,
             LossFunction);
