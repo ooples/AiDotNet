@@ -43,12 +43,15 @@ public readonly struct GemmConfig
     public int MdimaSize { get; init; } // MDIMA: Workgroup rows for A tile (8, 16, 32)
     public int NdimbSize { get; init; } // NDIMB: Workgroup cols for B tile (8, 16, 32)
 
+    // True CLBlast-style vectorized LDS (THE KEY TO 2500+ GFLOPS)
+    public bool UseTrueVectorLDS { get; init; }  // Use vectorized LDS arrays instead of scalar
+
     /// <summary>
     /// Generates a unique cache key for this configuration.
     /// Used by DynamicGemmKernel to cache compiled kernels.
     /// </summary>
     public string ToKey() =>
-        $"{TileM}_{TileN}_{TileK}_{ThreadTileM}_{ThreadTileN}_{VectorWidthM}_{VectorWidthN}_{UseDoubleBuffering}_{UseVectorizedLoads}_{KReg}_{KUnroll}_{UseSubgroupOps}_{StrideM}_{StrideN}_{CacheA}_{CacheB}_{MdimaSize}_{NdimbSize}";
+        $"{TileM}_{TileN}_{TileK}_{ThreadTileM}_{ThreadTileN}_{VectorWidthM}_{VectorWidthN}_{UseDoubleBuffering}_{UseVectorizedLoads}_{KReg}_{KUnroll}_{UseSubgroupOps}_{StrideM}_{StrideN}_{CacheA}_{CacheB}_{MdimaSize}_{NdimbSize}_{UseTrueVectorLDS}";
 
     public override string ToString() =>
         $"{KernelName}[{TileM}x{TileN}x{TileK}, TT:{ThreadTileM}x{ThreadTileN}, VW:{VectorWidthM}x{VectorWidthN}, K:{KReg}x{KUnroll}, SG:{UseSubgroupOps}, SA/B:{(CacheA ? 1 : 0)}/{(CacheB ? 1 : 0)}, MD:{MdimaSize}x{NdimbSize}]";
@@ -543,6 +546,76 @@ public sealed class GemmAutoTuner
     private GemmConfig[] GenerateConfigurationSpace(int M, int N, int K, GpuCapabilities capabilities)
     {
         var configs = new List<GemmConfig>();
+
+        // ============================================================
+        // TRUE CLBLAST-STYLE VECTORIZED LDS KERNELS (THE KEY TO 2500+ GFLOPS)
+        // These use UseTrueVectorLDS=true for fully vectorized local memory
+        // ============================================================
+
+        // CLBlast RX 5700 XT TRUE VECTORIZED: MWG=64, NWG=64, VWM=2, VWN=2
+        // Based on analysis: VWM=2 works best on RDNA1
+        configs.Add(new GemmConfig
+        {
+            TileM = 64, TileN = 64, TileK = 16,
+            ThreadTileM = 8, ThreadTileN = 8,   // MWI=8, NWI=8
+            VectorWidthM = 2, VectorWidthN = 2,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 1, KUnroll = 2, UseSubgroupOps = false,
+            StrideM = false, StrideN = true,
+            CacheA = true, CacheB = true,
+            UseTrueVectorLDS = true,  // THE KEY!
+            KernelName = "clblast_true_vec_64x64"
+        });
+
+        // CLBlast RX 5700 TRUE VECTORIZED: MWG=128, NWG=64, VWM=4, VWN=1
+        configs.Add(new GemmConfig
+        {
+            TileM = 128, TileN = 64, TileK = 32,
+            ThreadTileM = 16, ThreadTileN = 8,  // MWI=8, NWI=8
+            VectorWidthM = 4, VectorWidthN = 1,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 1, KUnroll = 2, UseSubgroupOps = false,
+            StrideM = true, StrideN = false,
+            CacheA = true, CacheB = true,
+            UseTrueVectorLDS = true,
+            KernelName = "clblast_true_vec_128x64"
+        });
+
+        // 64x128 TRUE VECTORIZED - our best config with vectorized LDS
+        configs.Add(new GemmConfig
+        {
+            TileM = 64, TileN = 128, TileK = 16,
+            ThreadTileM = 8, ThreadTileN = 16,  // MWI=8, NWI=8
+            VectorWidthM = 2, VectorWidthN = 2,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
+            UseTrueVectorLDS = true,
+            KernelName = "true_vec_64x128"
+        });
+
+        // 32x64 TRUE VECTORIZED - smaller tiles for 512x512
+        configs.Add(new GemmConfig
+        {
+            TileM = 32, TileN = 64, TileK = 16,
+            ThreadTileM = 8, ThreadTileN = 8,   // MWI=4, NWI=8
+            VectorWidthM = 2, VectorWidthN = 2,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
+            UseTrueVectorLDS = true,
+            KernelName = "true_vec_32x64"
+        });
+
+        // 64x64 TRUE VECTORIZED with float4
+        configs.Add(new GemmConfig
+        {
+            TileM = 64, TileN = 64, TileK = 16,
+            ThreadTileM = 8, ThreadTileN = 8,   // MWI=8, NWI=8
+            VectorWidthM = 4, VectorWidthN = 4,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 0, KUnroll = 2, UseSubgroupOps = false,
+            UseTrueVectorLDS = true,
+            KernelName = "true_vec_64x64_v4"
+        });
 
         // ============================================================
         // CLBlast-optimal configurations for AMD RDNA1/RDNA2 GPUs

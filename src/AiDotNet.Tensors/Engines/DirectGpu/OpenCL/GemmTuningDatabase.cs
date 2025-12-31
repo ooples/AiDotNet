@@ -268,6 +268,7 @@ internal sealed class GemmTuningDatabase : IDisposable
                 sb.Append(FormattableString.Invariant($"\"MdimaSize\": {config.MdimaSize}, "));
                 sb.Append(FormattableString.Invariant($"\"NdimbSize\": {config.NdimbSize}, "));
                 sb.Append(FormattableString.Invariant($"\"KernelName\": \"{config.KernelName}\", "));
+                sb.Append(FormattableString.Invariant($"\"UseTrueVectorLDS\": {config.UseTrueVectorLDS.ToString().ToLower()}, "));
                 sb.Append(FormattableString.Invariant($"\"GFlops\": {gflops:F2}}}"));
             }
 
@@ -351,7 +352,8 @@ internal sealed class GemmTuningDatabase : IDisposable
                     CacheB = GetBoolValue("CacheB"),
                     MdimaSize = GetIntValue("MdimaSize"),
                     NdimbSize = GetIntValue("NdimbSize"),
-                    KernelName = GetStringValue("KernelName")
+                    KernelName = GetStringValue("KernelName"),
+                    UseTrueVectorLDS = GetBoolValue("UseTrueVectorLDS")
                 };
 
                 var gflops = GetDoubleValue("GFlops");
