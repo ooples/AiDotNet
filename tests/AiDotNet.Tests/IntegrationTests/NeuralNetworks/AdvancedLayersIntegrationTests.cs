@@ -3161,4 +3161,390 @@ public class AdvancedLayersIntegrationTests
     }
 
     #endregion
+
+    #region AdaptiveAveragePoolingLayer Tests
+
+    [Fact]
+    public void AdaptiveAveragePoolingLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputChannels = 3;
+        int inputHeight = 32;
+        int inputWidth = 32;
+        int outputHeight = 4;
+        int outputWidth = 4;
+        var layer = new AdaptiveAveragePoolingLayer<float>(
+            inputChannels, inputHeight, inputWidth, outputHeight, outputWidth);
+
+        // Input: [batch, channels, height, width]
+        var input = Tensor<float>.CreateRandom([2, inputChannels, inputHeight, inputWidth]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+        Assert.Equal(inputChannels, output.Shape[1]); // channels preserved
+    }
+
+    [Fact]
+    public void AdaptiveAveragePoolingLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputChannels = 3;
+        int inputHeight = 16;
+        int inputWidth = 16;
+        var original = new AdaptiveAveragePoolingLayer<float>(
+            inputChannels, inputHeight, inputWidth, 2, 2);
+        var input = Tensor<float>.CreateRandom([1, inputChannels, inputHeight, inputWidth]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+    }
+
+    #endregion
+
+    #region TimeEmbeddingLayer Tests
+
+    [Fact]
+    public void TimeEmbeddingLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int embeddingDim = 64;
+        int outputDim = 128;
+        var layer = new TimeEmbeddingLayer<float>(embeddingDim, outputDim);
+
+        // Input: timestep values
+        var input = Tensor<float>.CreateRandom([4, 1]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(4, output.Shape[0]); // batch preserved
+    }
+
+    [Fact]
+    public void TimeEmbeddingLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int embeddingDim = 32;
+        int outputDim = 64;
+        var original = new TimeEmbeddingLayer<float>(embeddingDim, outputDim);
+        var input = Tensor<float>.CreateRandom([2, 1]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+    }
+
+    #endregion
+
+    #region MeanLayer Tests
+
+    [Fact]
+    public void MeanLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int[] inputShape = [4, 8, 16];
+        int axis = 1; // Mean over axis 1
+        var layer = new MeanLayer<float>(inputShape, axis);
+
+        var input = Tensor<float>.CreateRandom([2, 4, 8, 16]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+    }
+
+    [Fact]
+    public void MeanLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] inputShape = [4, 8];
+        int axis = 0;
+        var original = new MeanLayer<float>(inputShape, axis);
+        var input = Tensor<float>.CreateRandom([2, 4, 8]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+    }
+
+    #endregion
+
+    #region LambdaLayer Tests
+
+    [Fact]
+    public void LambdaLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int[] inputShape = [10];
+        int[] outputShape = [10];
+        // Simple identity-like function for testing
+        Func<Tensor<float>, Tensor<float>> forwardFunction = input => input;
+        var layer = new LambdaLayer<float>(inputShape, outputShape, forwardFunction, null,
+            (IActivationFunction<float>)new IdentityActivation<float>());
+
+        var input = Tensor<float>.CreateRandom([4, 10]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(input.Shape, output.Shape);
+    }
+
+    [Fact]
+    public void LambdaLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int[] inputShape = [8];
+        int[] outputShape = [8];
+        Func<Tensor<float>, Tensor<float>> forwardFunction = input => input;
+        var original = new LambdaLayer<float>(inputShape, outputShape, forwardFunction, null,
+            (IActivationFunction<float>)new IdentityActivation<float>());
+        var input = Tensor<float>.CreateRandom([2, 8]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+    }
+
+    #endregion
+
+    #region LocallyConnectedLayer Tests
+
+    [Fact]
+    public void LocallyConnectedLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        int inputHeight = 16;
+        int inputWidth = 16;
+        int inputChannels = 3;
+        int outputChannels = 8;
+        int kernelSize = 3;
+        int stride = 1;
+        var layer = new LocallyConnectedLayer<float>(
+            inputHeight, inputWidth, inputChannels, outputChannels, kernelSize, stride,
+            (IActivationFunction<float>)new ReLUActivation<float>());
+
+        // LocallyConnectedLayer expects NHWC format: [batch, height, width, channels]
+        var input = Tensor<float>.CreateRandom([2, inputHeight, inputWidth, inputChannels]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+    }
+
+    [Fact]
+    public void LocallyConnectedLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputHeight = 8;
+        int inputWidth = 8;
+        int inputChannels = 2;
+        int outputChannels = 4;
+        int kernelSize = 3;
+        int stride = 1;
+        var original = new LocallyConnectedLayer<float>(
+            inputHeight, inputWidth, inputChannels, outputChannels, kernelSize, stride,
+            (IActivationFunction<float>)new ReLUActivation<float>());
+        // LocallyConnectedLayer expects NHWC format: [batch, height, width, channels]
+        var input = Tensor<float>.CreateRandom([1, inputHeight, inputWidth, inputChannels]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+    }
+
+    #endregion
+
+    #region SpectralNormalizationLayer Tests
+
+    [Fact]
+    public void SpectralNormalizationLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        var innerLayer = new DenseLayer<float>(64, 32);
+        var layer = new SpectralNormalizationLayer<float>(innerLayer, powerIterations: 1);
+
+        var input = Tensor<float>.CreateRandom([4, 64]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(4, output.Shape[0]); // batch preserved
+        Assert.Equal(32, output.Shape[1]); // output features
+    }
+
+    [Fact]
+    public void SpectralNormalizationLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        var innerLayer = new DenseLayer<float>(32, 16);
+        var original = new SpectralNormalizationLayer<float>(innerLayer, powerIterations: 2);
+        var input = Tensor<float>.CreateRandom([2, 32]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+    }
+
+    #endregion
+
+    #region CroppingLayer Tests
+
+    [Fact]
+    public void CroppingLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        // CroppingLayer constructor: (inputShape, cropTop[], cropBottom[], cropLeft[], cropRight[], activation)
+        // Each crop array must have the same length as inputShape
+        int[] inputShape = [32, 32, 3]; // height, width, channels
+        int[] cropTop = [2, 2, 0];      // crop 2 from top of height, 2 from left of width, 0 from channels
+        int[] cropBottom = [2, 2, 0];   // crop 2 from bottom of height, 2 from right of width, 0 from channels
+        int[] cropLeft = [0, 0, 0];     // additional left cropping per dimension
+        int[] cropRight = [0, 0, 0];    // additional right cropping per dimension
+        var layer = new CroppingLayer<float>(inputShape, cropTop, cropBottom, cropLeft, cropRight,
+            (IActivationFunction<float>)new IdentityActivation<float>());
+
+        // Input: matches inputShape
+        var input = Tensor<float>.CreateRandom([2, 32, 32, 3]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+    }
+
+    [Fact]
+    public void CroppingLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        // Each crop array must have the same length as inputShape
+        int[] inputShape = [16, 16, 3];
+        int[] cropTop = [1, 1, 0];
+        int[] cropBottom = [1, 1, 0];
+        int[] cropLeft = [0, 0, 0];
+        int[] cropRight = [0, 0, 0];
+        var original = new CroppingLayer<float>(inputShape, cropTop, cropBottom, cropLeft, cropRight,
+            (IActivationFunction<float>)new IdentityActivation<float>());
+        var input = Tensor<float>.CreateRandom([1, 16, 16, 3]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+    }
+
+    #endregion
+
+    #region SubpixelConvolutionalLayer Tests
+
+    [Fact]
+    public void SubpixelConvolutionalLayer_ForwardPass_ProducesValidOutput()
+    {
+        // Arrange
+        // Constructor: (inputDepth, outputDepth, upscaleFactor, kernelSize, inputHeight, inputWidth, activation)
+        int inputDepth = 12;
+        int outputDepth = 3;
+        int upscaleFactor = 2;
+        int kernelSize = 3;
+        int height = 8;
+        int width = 8;
+        var layer = new SubpixelConvolutionalLayer<float>(
+            inputDepth, outputDepth, upscaleFactor, kernelSize, height, width,
+            (IActivationFunction<float>)new ReLUActivation<float>());
+
+        // Input: [batch, channels, height, width]
+        var input = Tensor<float>.CreateRandom([2, inputDepth, height, width]);
+
+        // Act
+        var output = layer.Forward(input);
+
+        // Assert
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Shape[0]); // batch preserved
+    }
+
+    [Fact]
+    public void SubpixelConvolutionalLayer_Clone_CreatesIndependentCopy()
+    {
+        // Arrange
+        int inputDepth = 4;
+        int outputDepth = 1;
+        int upscaleFactor = 2;
+        int kernelSize = 3;
+        var original = new SubpixelConvolutionalLayer<float>(
+            inputDepth, outputDepth, upscaleFactor, kernelSize, 8, 8,
+            (IActivationFunction<float>)new ReLUActivation<float>());
+        var input = Tensor<float>.CreateRandom([1, inputDepth, 8, 8]);
+
+        // Act
+        var clone = original.Clone();
+        var originalOutput = original.Forward(input);
+        var cloneOutput = clone.Forward(input);
+
+        // Assert
+        Assert.NotNull(clone);
+        Assert.NotSame(original, clone);
+        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+    }
+
+    #endregion
 }
