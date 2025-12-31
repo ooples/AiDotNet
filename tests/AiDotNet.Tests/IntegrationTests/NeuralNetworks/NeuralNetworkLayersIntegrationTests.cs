@@ -812,7 +812,10 @@ public class NeuralNetworkLayersIntegrationTests
 
     private void InitializeRandomTensor(Tensor<double> tensor, double scale = 1.0)
     {
-        var random = new Random(42); // Fixed seed for reproducibility
+        // Fixed seed for reproducibility of test runs.
+        // Note: during development, occasionally run with different seeds (or add parameterized
+        // tests) to catch bugs that only appear under certain random initializations.
+        var random = new Random(42);
         int totalElements = 1;
         foreach (var dim in tensor.Shape)
         {
