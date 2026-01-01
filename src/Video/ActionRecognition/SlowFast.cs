@@ -50,6 +50,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
     #region Execution Mode
 
     private readonly bool _useNativeMode;
+    private bool _disposed;
 
     #endregion
 
@@ -287,6 +288,14 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
     private Tensor<T> Forward(Tensor<T> input)
     {
+        // Validate dual pathways are initialized
+        if (Layers.Count == 0)
+            throw new InvalidOperationException("Slow pathway not initialized. Layers collection is empty.");
+        if (_fastLayers.Count == 0)
+            throw new InvalidOperationException("Fast pathway not initialized. Fast layers collection is empty.");
+        if (_fusionLayers.Count == 0)
+            throw new InvalidOperationException("Fusion layers not initialized. Fusion layers collection is empty.");
+
         // SlowFast dual-pathway architecture:
         // Input is expected as [batch, channels, frames, height, width] or [batch, channels * frames, height, width]
         // Slow pathway: subsampled frames (every alpha-th frame)
@@ -397,8 +406,29 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
     private Tensor<T> PredictOnnx(Tensor<T> input)
     {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(SlowFast<T>));
         if (_onnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
+
+        // Validate input shape matches ONNX model expectations
+        var inputMeta = _onnxSession.InputMetadata;
+        string inputName = inputMeta.Keys.First();
+        var expectedShape = inputMeta[inputName].Dimensions;
+
+        if (expectedShape.Length != input.Rank)
+            throw new ArgumentException(
+                $"Input rank mismatch: ONNX model expects {expectedShape.Length}D tensor, got {input.Rank}D.",
+                nameof(input));
+
+        // Validate dimensions (skip dynamic dimensions marked as -1)
+        for (int i = 0; i < expectedShape.Length; i++)
+        {
+            if (expectedShape[i] > 0 && expectedShape[i] != input.Shape[i])
+                throw new ArgumentException(
+                    $"Input shape mismatch at dimension {i}: ONNX model expects {expectedShape[i]}, got {input.Shape[i]}.",
+                    nameof(input));
+        }
 
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++)
@@ -407,9 +437,6 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         }
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
-        var inputMeta = _onnxSession.InputMetadata;
-        string inputName = inputMeta.Keys.First();
-
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
 
         using var results = _onnxSession.Run(inputs);
@@ -766,6 +793,31 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
         new SlowFast<T>(Architecture, _numClasses, _optimizer, _lossFunction, _probabilityActivation, _customFastLayers, _customFusionLayers, _slowFrames, _slowChannels, _fastChannels, _alpha);
+
+    #endregion
+
+    #region IDisposable
+
+    /// <summary>
+    /// Releases the unmanaged resources and optionally releases the managed resources.
+    /// </summary>
+    /// <param name="disposing">True to release both managed and unmanaged resources; false to release only unmanaged.</param>
+    /// <remarks>
+    /// Disposes the ONNX inference session if one was created. This is important for
+    /// releasing native ONNX runtime handles and memory when using pretrained models.
+    /// </remarks>
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+
+        if (disposing)
+        {
+            _onnxSession?.Dispose();
+        }
+
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 
     #endregion
 }
