@@ -259,7 +259,16 @@ namespace AiDotNet.Tensors.Engines.DirectGpu
         /// <summary>
         /// Gets all registered fusion patterns.
         /// </summary>
-        public IReadOnlyList<FusionPattern> RegisteredPatterns => _allPatterns;
+        public IReadOnlyList<FusionPattern> RegisteredPatterns
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _allPatterns.ToArray();
+                }
+            }
+        }
 
         /// <summary>
         /// Gets the current pending operation sequence.

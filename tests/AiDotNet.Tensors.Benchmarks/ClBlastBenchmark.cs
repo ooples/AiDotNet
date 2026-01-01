@@ -135,29 +135,22 @@ public static class ClBlastBenchmark
         ref IntPtr queue,
         IntPtr eventPtr);
 
-    private static bool _clblastAvailable;
-    private static bool _checkedClblast;
+    private static readonly Lazy<bool> ClblastAvailable = new Lazy<bool>(CheckClblastAvailable);
 
-    public static bool IsClBlastAvailable
+    public static bool IsClBlastAvailable => ClblastAvailable.Value;
+
+    private static bool CheckClblastAvailable()
     {
-        get
+        try
         {
-            if (!_checkedClblast)
-            {
-                _checkedClblast = true;
-                try
-                {
-                    // Try to load the DLL
-                    var handle = NativeLibrary.Load(ClBlastDll);
-                    NativeLibrary.Free(handle);
-                    _clblastAvailable = true;
-                }
-                catch
-                {
-                    _clblastAvailable = false;
-                }
-            }
-            return _clblastAvailable;
+            // Try to load the DLL
+            var handle = NativeLibrary.Load(ClBlastDll);
+            NativeLibrary.Free(handle);
+            return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 

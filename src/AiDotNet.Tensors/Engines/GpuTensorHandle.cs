@@ -199,7 +199,11 @@ public sealed class GpuTensorHandle<T> : IDisposable where T : unmanaged
             {
                 _buffer.Dispose();
             }
-            catch (Exception)
+            catch (Exception ex) when (ex is ObjectDisposedException
+                or InvalidOperationException
+                or NotSupportedException
+                or DllNotFoundException
+                or PlatformNotSupportedException)
             {
                 // Swallow exceptions in finalizer - throwing from finalizers is dangerous
             }

@@ -548,7 +548,7 @@ extern ""C"" __global__ void rdna_gemm_wave32(
         {
             AmdGpuArchitecture.MI100 => "--offload-arch=gfx908",
             AmdGpuArchitecture.MI200 => "--offload-arch=gfx90a",
-            AmdGpuArchitecture.MI300 => "--offload-arch=gfx942",
+            AmdGpuArchitecture.MI300 => "--offload-arch=gfx940 --offload-arch=gfx941 --offload-arch=gfx942",
             AmdGpuArchitecture.RDNA3 => "--offload-arch=gfx1100",
             AmdGpuArchitecture.RDNA2 => "--offload-arch=gfx1030",  // No MFMA, uses scalar kernel
             AmdGpuArchitecture.RDNA => "--offload-arch=gfx1012",   // RX 5500 XT, no MFMA, uses scalar kernel

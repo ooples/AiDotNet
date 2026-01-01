@@ -191,7 +191,7 @@ internal static class TiledMatMulKernels
 
     /// <summary>
     /// Tiled matrix multiply kernel for float precision.
-    /// C = A × B^T where B is pre-transposed for coalesced access.
+    /// C = A Ã— B^T where B is pre-transposed for coalesced access.
     /// </summary>
     /// <param name="group">The thread group (for shared memory and barriers).</param>
     /// <param name="a">Matrix A [M, K].</param>
@@ -254,7 +254,7 @@ internal static class TiledMatMulKernels
 
     /// <summary>
     /// Tiled matrix multiply kernel for double precision.
-    /// C = A × B^T where B is pre-transposed for coalesced access.
+    /// C = A Ã— B^T where B is pre-transposed for coalesced access.
     /// </summary>
     public static void TiledMatMulDoubleImpl(
         ArrayView2D<double, Stride2D.DenseX> a,
@@ -18463,11 +18463,9 @@ public class GpuEngine : IEngine, IDisposable
         var gpuResult = memoryPool.Rent(m * n);
 
         // For optimized kernels (tiled and transpose-B), we need a buffer for B^T
-        MemoryBuffer1D<float, Stride1D.Dense>? gpuBT = null;
-        if (needsTranspose)
-        {
-            gpuBT = memoryPool.Rent(k * n);
-        }
+        MemoryBuffer1D<float, Stride1D.Dense>? gpuBT = needsTranspose
+            ? memoryPool.Rent(k * n)
+            : null;
 
         if (sw != null)
         {
@@ -18497,11 +18495,11 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
 
-                if (needsTranspose && gpuBT != null)
+                if (needsTranspose)
                 {
                     // Transpose B on GPU: B[k,n] -> B^T[n,k]
                     // This enables coalesced memory access in both tiled and transpose-B kernels
-                    var viewBT = gpuBT.View.As2DView<Stride2D.DenseX>(new Index2D(n, k), new Stride2D.DenseX(k));
+                    var viewBT = gpuBT!.View.As2DView<Stride2D.DenseX>(new Index2D(n, k), new Stride2D.DenseX(k));
 
                     // Execute transpose: output[row,col] = input[col,row]
                     (_matrixTransposeKernelFloat ?? throw new InvalidOperationException("Transpose kernel not initialized"))(
@@ -18519,13 +18517,13 @@ public class GpuEngine : IEngine, IDisposable
                             new Index2D(tileSize, tileSize));  // Group dimension (threads per tile)
 
                         var matMulParams = new TiledMatMulParams(m, n, k);
-                        (_tiledMatMulKernelFloat ?? throw new InvalidOperationException("Tiled kernel not initialized"))(
+                        _tiledMatMulKernelFloat!(
                             config, viewA, viewBT, viewResult, matMulParams);
                     }
                     else
                     {
                         // Use transpose-B kernel (coalesced access without shared memory)
-                        (_matrixMultiplyTransposedBKernelFloat ?? throw new InvalidOperationException("Optimized kernel not initialized"))(
+                        _matrixMultiplyTransposedBKernelFloat!(
                             accelerator.DefaultStream, new Index2D(m, n), viewA, viewBT, viewResult, k);
                     }
                 }
@@ -18604,11 +18602,9 @@ public class GpuEngine : IEngine, IDisposable
         var gpuResult = memoryPool.Rent(m * n);
 
         // For optimized kernels (tiled and transpose-B), we need a buffer for B^T
-        MemoryBuffer1D<double, Stride1D.Dense>? gpuBT = null;
-        if (needsTranspose)
-        {
-            gpuBT = memoryPool.Rent(k * n);
-        }
+        MemoryBuffer1D<double, Stride1D.Dense>? gpuBT = needsTranspose
+            ? memoryPool.Rent(k * n)
+            : null;
 
         if (sw != null)
         {
@@ -18637,11 +18633,11 @@ public class GpuEngine : IEngine, IDisposable
 
             lock (_gpuLock)
             {
-                if (needsTranspose && gpuBT != null)
+                if (needsTranspose)
                 {
                     // Transpose B on GPU: B[k,n] -> B^T[n,k]
                     // This enables coalesced memory access in both tiled and transpose-B kernels
-                    var viewBT = gpuBT.View.As2DView<Stride2D.DenseX>(new Index2D(n, k), new Stride2D.DenseX(k));
+                    var viewBT = gpuBT!.View.As2DView<Stride2D.DenseX>(new Index2D(n, k), new Stride2D.DenseX(k));
 
                     // Execute transpose: output[row,col] = input[col,row]
                     (_matrixTransposeKernelDouble ?? throw new InvalidOperationException("Transpose kernel not initialized"))(
@@ -18659,13 +18655,13 @@ public class GpuEngine : IEngine, IDisposable
                             new Index2D(tileSize, tileSize));  // Group dimension (threads per tile)
 
                         var matMulParams = new TiledMatMulParams(m, n, k);
-                        (_tiledMatMulKernelDouble ?? throw new InvalidOperationException("Tiled kernel not initialized"))(
+                        _tiledMatMulKernelDouble!(
                             config, viewA, viewBT, viewResult, matMulParams);
                     }
                     else
                     {
                         // Use transpose-B kernel (coalesced access without shared memory)
-                        (_matrixMultiplyTransposedBKernelDouble ?? throw new InvalidOperationException("Optimized kernel not initialized"))(
+                        _matrixMultiplyTransposedBKernelDouble!(
                             accelerator.DefaultStream, new Index2D(m, n), viewA, viewBT, viewResult, k);
                     }
                 }
@@ -18725,7 +18721,7 @@ public class GpuEngine : IEngine, IDisposable
     /// <para>
     /// Unlike pooled buffers, GpuTensorHandle provides persistent GPU storage for weights
     /// and biases that stay on GPU across multiple forward/backward passes. This eliminates
-    /// the catastrophic overhead of CPU→GPU transfers every operation.
+    /// the catastrophic overhead of CPUâ†’GPU transfers every operation.
     /// </para>
     /// <para><b>Performance Impact:</b>
     /// - Without persistent tensors: 864 transfers for 36 forward passes
@@ -18770,7 +18766,7 @@ public class GpuEngine : IEngine, IDisposable
                 return new GpuTensorHandle<float>(buffer, shape);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             RecordGpuFailure(ex);
             return null;
@@ -18815,7 +18811,7 @@ public class GpuEngine : IEngine, IDisposable
                 return new GpuTensorHandle<double>(buffer, shape);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             RecordGpuFailure(ex);
             return null;
@@ -18828,8 +18824,8 @@ public class GpuEngine : IEngine, IDisposable
     /// <remarks>
     /// <para><b>Phase B: Persistent GPU Tensors (US-GPU-030)</b></para>
     /// <para>
-    /// This method performs A × B^T where B (weights) is already on GPU via GpuTensorHandle.
-    /// Only the input tensor (activations) is transferred CPU→GPU per call, eliminating
+    /// This method performs A Ã— B^T where B (weights) is already on GPU via GpuTensorHandle.
+    /// Only the input tensor (activations) is transferred CPUâ†’GPU per call, eliminating
     /// the weight transfer overhead that causes catastrophic slowdowns.
     /// </para>
     /// <para><b>Expected Usage:</b>
@@ -18845,7 +18841,7 @@ public class GpuEngine : IEngine, IDisposable
     /// <param name="input">The input tensor (will be uploaded to GPU).</param>
     /// <param name="weights">The weights tensor (CPU fallback, should match gpuWeights).</param>
     /// <param name="gpuWeights">Pre-allocated GPU handle containing transposed weights.</param>
-    /// <returns>The result of input × weights^T, or null if GPU operation fails.</returns>
+    /// <returns>The result of input Ã— weights^T, or null if GPU operation fails.</returns>
     public Tensor<float>? TensorMatMulCachedWeights(Tensor<float> input, Tensor<float> weights, GpuTensorHandle<float> gpuWeights)
     {
         if (!SupportsGpu || !_gpuHealthy || _accelerator == null)
@@ -18878,9 +18874,11 @@ public class GpuEngine : IEngine, IDisposable
 
         var sw = _timingDiagnostics.IsEnabled ? System.Diagnostics.Stopwatch.StartNew() : null;
 
+        var memoryPool = _memoryPoolFloat!;
+
         // Only need to allocate input and result buffers (weights already on GPU)
-        var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * k);
-        var gpuResult = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * n);
+        var gpuInput = memoryPool.Rent(m * k);
+        var gpuResult = memoryPool.Rent(m * n);
 
         if (sw != null)
         {
@@ -18946,8 +18944,8 @@ public class GpuEngine : IEngine, IDisposable
         }
         finally
         {
-            _memoryPoolFloat.Return(gpuInput);
-            _memoryPoolFloat.Return(gpuResult);
+            memoryPool.Return(gpuInput);
+            memoryPool.Return(gpuResult);
             // Note: gpuWeights is NOT returned - caller owns it
         }
     }
@@ -18958,7 +18956,7 @@ public class GpuEngine : IEngine, IDisposable
     /// <param name="input">The input tensor (will be uploaded to GPU).</param>
     /// <param name="weights">The weights tensor (CPU fallback, should match gpuWeights).</param>
     /// <param name="gpuWeights">Pre-allocated GPU handle containing transposed weights.</param>
-    /// <returns>The result of input × weights^T, or null if GPU operation fails.</returns>
+    /// <returns>The result of input Ã— weights^T, or null if GPU operation fails.</returns>
     public Tensor<double>? TensorMatMulCachedWeights(Tensor<double> input, Tensor<double> weights, GpuTensorHandle<double> gpuWeights)
     {
         if (!SupportsGpu || !_gpuHealthy || _accelerator == null)
@@ -18991,9 +18989,11 @@ public class GpuEngine : IEngine, IDisposable
 
         var sw = _timingDiagnostics.IsEnabled ? System.Diagnostics.Stopwatch.StartNew() : null;
 
+        var memoryPool = _memoryPoolDouble!;
+
         // Only need to allocate input and result buffers (weights already on GPU)
-        var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * k);
-        var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * n);
+        var gpuInput = memoryPool.Rent(m * k);
+        var gpuResult = memoryPool.Rent(m * n);
 
         if (sw != null)
         {
@@ -19057,8 +19057,8 @@ public class GpuEngine : IEngine, IDisposable
         }
         finally
         {
-            _memoryPoolDouble.Return(gpuInput);
-            _memoryPoolDouble.Return(gpuResult);
+            memoryPool.Return(gpuInput);
+            memoryPool.Return(gpuResult);
             // Note: gpuWeights is NOT returned - caller owns it
         }
     }
@@ -31387,7 +31387,7 @@ public class GpuEngine : IEngine, IDisposable
                     (Tensor<double>)(object)positions, numFrequencies, numPoints, inputDim, outputDim);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU PositionalEncoding failed: {ex.Message}. Falling back to CPU.");
         }
@@ -31491,7 +31491,7 @@ public class GpuEngine : IEngine, IDisposable
                     (Tensor<double>)(object)positions, (Tensor<double>)(object)encodedGradient, numFrequencies, numPoints, inputDim);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU PositionalEncodingBackward failed: {ex.Message}. Falling back to CPU.");
         }
@@ -31610,7 +31610,7 @@ public class GpuEngine : IEngine, IDisposable
                     numRays, numSamples, numChannels);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU VolumeRendering failed: {ex.Message}. Falling back to CPU.");
         }

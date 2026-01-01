@@ -175,6 +175,13 @@ internal static class HipNativeBindings
 
     private static bool _isAvailable;
     private static bool _availabilityChecked;
+    public static bool EnableDiagnostics { get; set; }
+
+    private static void LogDiagnostic(string message)
+    {
+        if (EnableDiagnostics)
+            Console.WriteLine(message);
+    }
 
     /// <summary>
     /// Gets whether HIP runtime is available on this system.
@@ -191,24 +198,24 @@ internal static class HipNativeBindings
                     int count = 0;
                     var result = hipGetDeviceCount(ref count);
                     _isAvailable = result == HipError.Success && count > 0;
-                    Console.WriteLine($"[HIP Diagnostics] hipGetDeviceCount returned: {result}, device count: {count}, available: {_isAvailable}");
+                    LogDiagnostic($"[HIP Diagnostics] hipGetDeviceCount returned: {result}, device count: {count}, available: {_isAvailable}");
                 }
                 catch (DllNotFoundException ex)
                 {
-                    Console.WriteLine($"[HIP Diagnostics] DllNotFoundException: {ex.Message}");
-                    Console.WriteLine($"[HIP Diagnostics] amdhip64.dll not found. AMD HIP SDK is not installed.");
-                    Console.WriteLine($"[HIP Diagnostics] To use HIP, install AMD ROCm/HIP SDK from https://rocm.docs.amd.com/");
+                    LogDiagnostic($"[HIP Diagnostics] DllNotFoundException: {ex.Message}");
+                    LogDiagnostic("[HIP Diagnostics] amdhip64.dll not found. AMD HIP SDK is not installed.");
+                    LogDiagnostic("[HIP Diagnostics] To use HIP, install AMD ROCm/HIP SDK from https://rocm.docs.amd.com/");
                     _isAvailable = false;
                 }
                 catch (EntryPointNotFoundException ex)
                 {
-                    Console.WriteLine($"[HIP Diagnostics] EntryPointNotFoundException: {ex.Message}");
-                    Console.WriteLine($"[HIP Diagnostics] HIP DLL found but missing expected function. SDK version mismatch?");
+                    LogDiagnostic($"[HIP Diagnostics] EntryPointNotFoundException: {ex.Message}");
+                    LogDiagnostic("[HIP Diagnostics] HIP DLL found but missing expected function. SDK version mismatch?");
                     _isAvailable = false;
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[HIP Diagnostics] Exception during availability check: {ex.GetType().Name}: {ex.Message}");
+                    LogDiagnostic($"[HIP Diagnostics] Exception during availability check: {ex.GetType().Name}: {ex.Message}");
                     _isAvailable = false;
                 }
             }
@@ -463,6 +470,25 @@ public enum HipRtcResult
 }
 
 /// <summary>
+/// HIP device arch feature flags.
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct HipDeviceArch
+{
+    public uint Flags;
+}
+
+/// <summary>
+/// HIP device UUID.
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct HipUuid
+{
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
+    public byte[] Bytes;
+}
+
+/// <summary>
 /// HIP device properties structure.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
@@ -471,10 +497,17 @@ public struct HipDeviceProperties
     [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
     public string Name;
 
+    public HipUuid Uuid;
+
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
+    public byte[] Luid;
+
+    public uint LuidDeviceNodeMask;
     public UIntPtr TotalGlobalMem;
     public UIntPtr SharedMemPerBlock;
     public int RegsPerBlock;
     public int WarpSize;
+    public UIntPtr MemPitch;
     public int MaxThreadsPerBlock;
 
     [MarshalAs(UnmanagedType.ByValArray, SizeConst = 3)]
@@ -484,26 +517,139 @@ public struct HipDeviceProperties
     public int[] MaxGridSize;
 
     public int ClockRate;
-    public int MemoryClockRate;
-    public int MemoryBusWidth;
     public UIntPtr TotalConstMem;
     public int Major;
     public int Minor;
+    public UIntPtr TextureAlignment;
+    public UIntPtr TexturePitchAlignment;
+    public int DeviceOverlap;
     public int MultiProcessorCount;
-    public int L2CacheSize;
-    public int MaxThreadsPerMultiProcessor;
+    public int KernelExecTimeoutEnabled;
+    public int Integrated;
+    public int CanMapHostMemory;
     public int ComputeMode;
-    public int ClockInstructionRate;
+    public int MaxTexture1D;
+    public int MaxTexture1DMipmap;
+    public int MaxTexture1DLinear;
+
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 2)]
+    public int[] MaxTexture2D;
+
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 2)]
+    public int[] MaxTexture2DMipmap;
+
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 3)]
+    public int[] MaxTexture2DLinear;
+
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 2)]
+    public int[] MaxTexture2DGather;
+
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 3)]
+    public int[] MaxTexture3D;
+
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 3)]
+    public int[] MaxTexture3DAlt;
+
+    public int MaxTextureCubemap;
+
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 2)]
+    public int[] MaxTexture1DLayered;
+
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 3)]
+    public int[] MaxTexture2DLayered;
+
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 2)]
+    public int[] MaxTextureCubemapLayered;
+
+    public int MaxSurface1D;
+
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 2)]
+    public int[] MaxSurface2D;
+
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 3)]
+    public int[] MaxSurface3D;
+
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 2)]
+    public int[] MaxSurface1DLayered;
+
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 3)]
+    public int[] MaxSurface2DLayered;
+
+    public int MaxSurfaceCubemap;
+
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 2)]
+    public int[] MaxSurfaceCubemapLayered;
+
+    public UIntPtr SurfaceAlignment;
+    public int ConcurrentKernels;
+    public int EccEnabled;
+    public int PciBusID;
+    public int PciDeviceID;
+    public int PciDomainID;
+    public int TccDriver;
+    public int AsyncEngineCount;
+    public int UnifiedAddressing;
+    public int MemoryClockRate;
+    public int MemoryBusWidth;
+    public int L2CacheSize;
+    public int PersistingL2CacheMaxSize;
+    public int MaxThreadsPerMultiProcessor;
+    public int StreamPrioritiesSupported;
+    public int GlobalL1CacheSupported;
+    public int LocalL1CacheSupported;
+    public UIntPtr SharedMemPerMultiprocessor;
+    public int RegsPerMultiprocessor;
+    public int ManagedMemory;
+    public int IsMultiGpuBoard;
+    public int MultiGpuBoardGroupID;
+    public int HostNativeAtomicSupported;
+    public int SingleToDoublePrecisionPerfRatio;
+    public int PageableMemoryAccess;
+    public int ConcurrentManagedAccess;
+    public int ComputePreemptionSupported;
+    public int CanUseHostPointerForRegisteredMem;
+    public int CooperativeLaunch;
+    public int CooperativeMultiDeviceLaunch;
+    public UIntPtr SharedMemPerBlockOptin;
+    public int PageableMemoryAccessUsesHostPageTables;
+    public int DirectManagedMemAccessFromHost;
+    public int MaxBlocksPerMultiProcessor;
+    public int AccessPolicyMaxWindowSize;
+    public UIntPtr ReservedSharedMemPerBlock;
+    public int HostRegisterSupported;
+    public int SparseHipArraySupported;
+    public int HostRegisterReadOnlySupported;
+    public int TimelineSemaphoreInteropSupported;
+    public int MemoryPoolsSupported;
+    public int GpuDirectRDMASupported;
+    public uint GpuDirectRDMAFlushWritesOptions;
+    public int GpuDirectRDMAWritesOrdering;
+    public uint MemoryPoolSupportedHandleTypes;
+    public int DeferredMappingHipArraySupported;
+    public int IpcEventSupported;
+    public int ClusterLaunch;
+    public int UnifiedFunctionPointers;
+
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 63)]
+    public int[] Reserved;
+
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
+    public int[] HipReserved;
 
     [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
     public string GcnArchName;
 
-    public int GcnArch;
-    public int CooperativeLaunch;
-    public int CooperativeMultiDeviceLaunch;
-
-    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 128)]
-    public int[] Reserved;
+    public UIntPtr MaxSharedMemoryPerMultiProcessor;
+    public int ClockInstructionRate;
+    public HipDeviceArch Arch;
+    public IntPtr HdpMemFlushCntl;
+    public IntPtr HdpRegFlushCntl;
+    public int CooperativeMultiDeviceUnmatchedFunc;
+    public int CooperativeMultiDeviceUnmatchedGridDim;
+    public int CooperativeMultiDeviceUnmatchedBlockDim;
+    public int CooperativeMultiDeviceUnmatchedSharedMem;
+    public int IsLargeBar;
+    public int AsicRevision;
 }
 
 /// <summary>

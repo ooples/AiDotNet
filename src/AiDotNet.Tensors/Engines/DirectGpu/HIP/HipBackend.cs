@@ -106,7 +106,7 @@ public sealed class HipBackend : IDirectGpuBackend
             LocalMemoryBytes = (long)(ulong)_deviceProps.SharedMemPerBlock;
 
             // Detect architecture from GCN arch name
-            _architecture = DetectArchitecture(_deviceProps.GcnArchName, _deviceProps.GcnArch);
+            _architecture = DetectArchitecture(_deviceProps.GcnArchName, 0);
 
             // Create compute stream
             result = HipNativeBindings.hipStreamCreate(ref _stream);
@@ -191,8 +191,12 @@ public sealed class HipBackend : IDirectGpuBackend
             }
 
             // Compile with architecture-specific flags
-            string[] options = new[] { compileFlags, "-O3", "-ffast-math" };
-            rtcResult = HipNativeBindings.hiprtcCompileProgram(prog, options.Length, options);
+            var options = new List<string>(compileFlags.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            {
+                "-O3",
+                "-ffast-math"
+            };
+            rtcResult = HipNativeBindings.hiprtcCompileProgram(prog, options.Count, options.ToArray());
 
             if (rtcResult != HipRtcResult.Success)
             {
@@ -518,6 +522,8 @@ public sealed class HipBackend : IDirectGpuBackend
     {
         if (batchCount <= 0)
             throw new ArgumentException("Batch count must be positive", nameof(batchCount));
+
+        System.Diagnostics.Debug.WriteLine("HipBackend BatchedGemm is executing on CPU fallback; TODO: implement GPU batched GEMM.");
 
         // Download all data
         var aData = DownloadBuffer(A);

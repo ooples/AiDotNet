@@ -161,28 +161,31 @@ public static class OpenClGemmBenchmark
 
             Console.WriteLine($"OpenCL: {gflops:F1} GFLOPS");
 
-            // Performance analysis
-            Console.WriteLine();
-            Console.WriteLine("Performance Analysis vs Competitors:");
-            Console.WriteLine($"  PyTorch/TorchSharp baseline: ~10,000 GFLOPS");
-            Console.WriteLine($"  cuBLAS peak: ~30,000 GFLOPS");
-            Console.WriteLine($"  Our target: EXCEED 30,000 GFLOPS");
+            if (ShowCompetitorBaselines())
+            {
+                // Performance analysis
+                Console.WriteLine();
+                Console.WriteLine("Performance Analysis vs Competitors:");
+                Console.WriteLine($"  PyTorch/TorchSharp baseline: ~10,000 GFLOPS");
+                Console.WriteLine($"  cuBLAS peak: ~30,000 GFLOPS");
+                Console.WriteLine($"  Our target: EXCEED 30,000 GFLOPS");
 
-            if (gflops > 30000)
-            {
-                Console.WriteLine($"  ★★★ EXCEEDING cuBLAS at {gflops:F0} GFLOPS - MISSION ACCOMPLISHED! ★★★");
-            }
-            else if (gflops > 10000)
-            {
-                Console.WriteLine($"  ★★ EXCEEDING PyTorch at {gflops:F0} GFLOPS - Good progress!");
-            }
-            else if (gflops > 1000)
-            {
-                Console.WriteLine($"  ★ {gflops:F0} GFLOPS - Room for improvement, but beating ILGPU");
-            }
-            else
-            {
-                Console.WriteLine($"  {gflops:F0} GFLOPS - Needs optimization work");
+                if (gflops > 30000)
+                {
+                    Console.WriteLine($"  ★★★ EXCEEDING cuBLAS at {gflops:F0} GFLOPS - MISSION ACCOMPLISHED! ★★★");
+                }
+                else if (gflops > 10000)
+                {
+                    Console.WriteLine($"  ★★ EXCEEDING PyTorch at {gflops:F0} GFLOPS - Good progress!");
+                }
+                else if (gflops > 1000)
+                {
+                    Console.WriteLine($"  ★ {gflops:F0} GFLOPS - Room for improvement, but beating ILGPU");
+                }
+                else
+                {
+                    Console.WriteLine($"  {gflops:F0} GFLOPS - Needs optimization work");
+                }
             }
         }
         catch (Exception ex)
@@ -234,6 +237,14 @@ public static class OpenClGemmBenchmark
         {
             Console.WriteLine($"OpenCL error: {ex.Message}");
         }
+    }
+
+    private static bool ShowCompetitorBaselines()
+    {
+        var value = Environment.GetEnvironmentVariable("AIDOTNET_SHOW_BASELINES");
+        return string.Equals(value, "1", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GetPerformanceStatus(double gflops, int size)

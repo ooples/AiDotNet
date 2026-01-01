@@ -289,7 +289,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL.Kernels
 // =================================================================================================
 
 // End of the C++11 raw string literal
-        """;
+""";
 
         private const string Level3OpenCl = """
 
@@ -370,7 +370,7 @@ void FillMatrix(const int m, const int n, const int ld, const int offset,
 // =================================================================================================
 
 // End of the C++11 raw string literal
-        """;
+""";
 
         private const string XgemmPart1 = """
 
@@ -729,7 +729,7 @@ INLINE_FUNC realN LocalToPrivateB(LOCAL_PTR realN* blm, const int _ni, const int
 }
 #endif
 
-        """;
+""";
 
         private const string XgemmPart2 = """
 
@@ -887,7 +887,7 @@ INLINE_FUNC void StoreResults(__global realM* cgm, realM c_value, const int _mi,
   cgm[index] = result;
 }
 
-        """;
+""";
 
         private const string XgemmPart3 = """
 
@@ -1184,7 +1184,7 @@ INLINE_FUNC void XgemmBody(const int kSizeM, const int kSizeN, const int kSizeK,
   }
 }
 
-        """;
+""";
 
         private const string XgemmPart4 = """
 
@@ -1317,7 +1317,7 @@ void Xgemm(const int kSizeM, const int kSizeN, const int kSizeK,
 
 #endif
 
-        """;
+""";
 
         public static string BuildSource(GemmConfig config, int gemmK)
         {
@@ -1370,4 +1370,5 @@ void Xgemm(const int kSizeM, const int kSizeN, const int kSizeK,
         }
     }
 }
+
 

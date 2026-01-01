@@ -534,14 +534,83 @@ public sealed class DirectGpuEngine : IDisposable
             return ExecuteOperationsSequentially(operations, input, additionalBuffers, dimensions);
         }
 
-        // For now, return null for complex fusion sequences that aren't directly supported
-        // The caller should use DenseForwardFused for GEMM+Bias+Activation patterns
+        if (fusionResult.Pattern != null && fusionResult.RemainingOperations.Count == 0)
+        {
+            if (TryExecuteFusedGemmBiasActivation(
+                fusionResult.Pattern.Operations,
+                input,
+                additionalBuffers,
+                dimensions,
+                out var fusedResult))
+            {
+                return fusedResult;
+            }
+        }
+
         System.Diagnostics.Debug.WriteLine(
-            $"Fusion available: {fusionResult.FusedKernelName} " +
+            $"Fusion available but falling back to sequential execution: {fusionResult.FusedKernelName} " +
             $"(fused {fusionResult.FusedOperationCount} ops, {fusionResult.RemainingOperations.Count} remaining)");
 
-        // TODO: Implement generic fused execution based on kernel name
-        return null;
+        return ExecuteOperationsSequentially(operations, input, additionalBuffers, dimensions);
+    }
+
+    private bool TryExecuteFusedGemmBiasActivation<T>(
+        IReadOnlyList<FusableOperation> operations,
+        T[] input,
+        IReadOnlyDictionary<string, T[]>? additionalBuffers,
+        IReadOnlyDictionary<string, int>? dimensions,
+        out T[]? result)
+    {
+        result = null;
+        if (operations == null || operations.Count < 2 || operations.Count > 3)
+            return false;
+        if (operations[0].OperationType != GpuOperationType.Gemm ||
+            operations[1].OperationType != GpuOperationType.BiasAdd)
+            return false;
+        if (!string.IsNullOrEmpty(operations[0].Metadata) ||
+            !string.IsNullOrEmpty(operations[1].Metadata))
+            return false;
+
+        ActivationType activation = ActivationType.None;
+        if (operations.Count == 3)
+        {
+            if (!string.IsNullOrEmpty(operations[2].Metadata))
+                return false;
+            activation = operations[2].OperationType switch
+            {
+                GpuOperationType.ReLU => ActivationType.ReLU,
+                GpuOperationType.GELU => ActivationType.GELU,
+                GpuOperationType.Sigmoid => ActivationType.Sigmoid,
+                GpuOperationType.Tanh => ActivationType.Tanh,
+                _ => ActivationType.None
+            };
+
+            if (activation == ActivationType.None)
+                return false;
+        }
+
+        if (!TryGetDenseInputs(
+            input,
+            additionalBuffers,
+            dimensions,
+            out var weights,
+            out var bias,
+            out var batchSize,
+            out var inputFeatures,
+            out var outputFeatures))
+        {
+            return false;
+        }
+
+        result = DenseForwardFused(
+            input,
+            weights,
+            bias,
+            batchSize,
+            inputFeatures,
+            outputFeatures,
+            activation);
+        return result != null;
     }
 
     /// <summary>
@@ -554,12 +623,62 @@ public sealed class DirectGpuEngine : IDisposable
         IReadOnlyDictionary<string, int>? dimensions)
     {
         // Simplified sequential execution - can be extended
+        if (_backend == null)
+            return null;
+
         float[] current = ToFloatArray(input);
 
         foreach (var op in operations)
         {
+            if (!string.IsNullOrEmpty(op.Metadata))
+            {
+                System.Diagnostics.Debug.WriteLine($"Unsupported operation metadata for sequential execution: {op}");
+                return null;
+            }
+
             switch (op.OperationType)
             {
+                case GpuOperationType.Gemm:
+                    if (!TryGetBuffer(additionalBuffers, out var weights, "weights", "weight", "w", "matrixB"))
+                    {
+                        System.Diagnostics.Debug.WriteLine("Missing weights for GEMM execution.");
+                        return null;
+                    }
+                    if (!TryGetGemmDimensions(dimensions, out var m, out var k, out var n))
+                    {
+                        System.Diagnostics.Debug.WriteLine("Missing GEMM dimensions for sequential execution.");
+                        return null;
+                    }
+
+                    float[] weightsFloat = ToFloatArray(weights);
+                    using (var bufferA = _backend.AllocateBuffer(current))
+                    using (var bufferB = _backend.AllocateBuffer(weightsFloat))
+                    using (var bufferC = _backend.MatMul(bufferA, bufferB, m, n, k))
+                    {
+                        current = _backend.DownloadBuffer(bufferC);
+                    }
+                    break;
+
+                case GpuOperationType.BiasAdd:
+                    if (!TryGetBuffer(additionalBuffers, out var bias, "bias", "b"))
+                    {
+                        System.Diagnostics.Debug.WriteLine("Missing bias for BiasAdd execution.");
+                        return null;
+                    }
+
+                    float[] biasFloat = ToFloatArray(bias);
+                    if (!TryGetOutputFeatureCount(dimensions, biasFloat, current.Length, out var featureCount))
+                    {
+                        System.Diagnostics.Debug.WriteLine("Missing output feature count for BiasAdd execution.");
+                        return null;
+                    }
+
+                    for (int i = 0; i < current.Length; i++)
+                    {
+                        current[i] += biasFloat[i % featureCount];
+                    }
+                    break;
+
                 case GpuOperationType.ReLU:
                     using (var bufferA = _backend!.AllocateBuffer(current))
                     using (var bufferB = _backend.AllocateBuffer(current.Length))
@@ -604,6 +723,159 @@ public sealed class DirectGpuEngine : IDisposable
         }
 
         return FromFloatArray<T>(current);
+    }
+
+    private static bool TryGetDenseInputs<T>(
+        T[] input,
+        IReadOnlyDictionary<string, T[]>? additionalBuffers,
+        IReadOnlyDictionary<string, int>? dimensions,
+        out T[] weights,
+        out T[] bias,
+        out int batchSize,
+        out int inputFeatures,
+        out int outputFeatures)
+    {
+        weights = Array.Empty<T>();
+        bias = Array.Empty<T>();
+        batchSize = 0;
+        inputFeatures = 0;
+        outputFeatures = 0;
+
+        if (!TryGetBuffer(additionalBuffers, out weights, "weights", "weight", "w", "matrixB"))
+            return false;
+        if (!TryGetBuffer(additionalBuffers, out bias, "bias", "b"))
+            return false;
+
+        if (TryGetDimension(dimensions, out batchSize, "batchSize", "batch", "m") &&
+            TryGetDimension(dimensions, out inputFeatures, "inputFeatures", "input", "k") &&
+            TryGetDimension(dimensions, out outputFeatures, "outputFeatures", "output", "n"))
+        {
+            return ValidateDenseDimensions(input.Length, weights.Length, bias.Length, batchSize, inputFeatures, outputFeatures);
+        }
+
+        if (bias.Length == 0)
+            return false;
+
+        outputFeatures = bias.Length;
+        if (weights.Length % outputFeatures != 0)
+            return false;
+
+        inputFeatures = weights.Length / outputFeatures;
+        if (inputFeatures <= 0 || input.Length % inputFeatures != 0)
+            return false;
+
+        batchSize = input.Length / inputFeatures;
+        return ValidateDenseDimensions(input.Length, weights.Length, bias.Length, batchSize, inputFeatures, outputFeatures);
+    }
+
+    private static bool ValidateDenseDimensions(int inputLength, int weightsLength, int biasLength, int batchSize, int inputFeatures, int outputFeatures)
+    {
+        if (batchSize <= 0 || inputFeatures <= 0 || outputFeatures <= 0)
+            return false;
+        if (inputLength != batchSize * inputFeatures)
+            return false;
+        if (weightsLength != inputFeatures * outputFeatures)
+            return false;
+        return biasLength == outputFeatures;
+    }
+
+    private static bool TryGetGemmDimensions(
+        IReadOnlyDictionary<string, int>? dimensions,
+        out int m,
+        out int k,
+        out int n)
+    {
+        m = 0;
+        k = 0;
+        n = 0;
+
+        return TryGetDimension(dimensions, out m, "m", "batchSize", "batch") &&
+               TryGetDimension(dimensions, out k, "k", "inputFeatures", "input") &&
+               TryGetDimension(dimensions, out n, "n", "outputFeatures", "output");
+    }
+
+    private static bool TryGetOutputFeatureCount(
+        IReadOnlyDictionary<string, int>? dimensions,
+        float[] bias,
+        int currentLength,
+        out int outputFeatures)
+    {
+        outputFeatures = 0;
+        if (TryGetDimension(dimensions, out outputFeatures, "outputFeatures", "output", "n", "features", "cols", "columns"))
+        {
+            return outputFeatures > 0;
+        }
+
+        if (bias.Length > 0 && currentLength % bias.Length == 0)
+        {
+            outputFeatures = bias.Length;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetDimension(
+        IReadOnlyDictionary<string, int>? dimensions,
+        out int value,
+        params string[] keys)
+    {
+        value = 0;
+        if (dimensions == null || keys == null || keys.Length == 0)
+            return false;
+
+        foreach (var key in keys)
+        {
+            if (dimensions.TryGetValue(key, out value))
+                return true;
+        }
+
+        foreach (var pair in dimensions)
+        {
+            foreach (var key in keys)
+            {
+                if (string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = pair.Value;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryGetBuffer<T>(
+        IReadOnlyDictionary<string, T[]>? buffers,
+        out T[] buffer,
+        params string[] keys)
+    {
+        buffer = Array.Empty<T>();
+        if (buffers == null || keys == null || keys.Length == 0)
+            return false;
+
+        foreach (var key in keys)
+        {
+            if (buffers.TryGetValue(key, out var candidate) && candidate != null)
+            {
+                buffer = candidate;
+                return true;
+            }
+        }
+
+        foreach (var pair in buffers)
+        {
+            foreach (var key in keys)
+            {
+                if (string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase) && pair.Value != null)
+                {
+                    buffer = pair.Value;
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     #endregion

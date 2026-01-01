@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 
 namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL;
 
@@ -22,6 +23,7 @@ internal sealed class GemmTuningDatabase : IDisposable
     private readonly Dictionary<string, (GemmConfig Config, double GFlops)> _cache;
     private readonly HashSet<string> _testedConfigs;  // ConfigKey -> already tested
     private readonly Dictionary<string, double> _testedGflops;
+    private readonly Dictionary<string, int> _matrixKeyCounts;
     private readonly object _lock = new();
     private bool _isDirty;
     private bool _disposed;
@@ -31,6 +33,7 @@ internal sealed class GemmTuningDatabase : IDisposable
         _cache = new Dictionary<string, (GemmConfig, double)>();
         _testedConfigs = new HashSet<string>();
         _testedGflops = new Dictionary<string, double>();
+        _matrixKeyCounts = new Dictionary<string, int>();
         _signature = NormalizeSignature(deviceSignature);
 
         // Use app data folder for persistence
@@ -39,8 +42,26 @@ internal sealed class GemmTuningDatabase : IDisposable
         Directory.CreateDirectory(aiDotNetPath);
 
         string suffix = string.IsNullOrEmpty(_signature) ? string.Empty : $"_{_signature}";
-        _databasePath = customPath ?? Path.Combine(aiDotNetPath, $"gemm_tuning{suffix}.json");
-        _historyPath = Path.Combine(aiDotNetPath, $"gemm_history{suffix}.txt");
+        string databaseFileName = $"gemm_tuning{suffix}.json";
+        string historyFileName = $"gemm_history{suffix}.txt";
+        string? normalizedCustomPath = NormalizeCustomPath(customPath, databaseFileName);
+
+        if (string.IsNullOrEmpty(normalizedCustomPath))
+        {
+            _databasePath = Path.Combine(aiDotNetPath, databaseFileName);
+            _historyPath = Path.Combine(aiDotNetPath, historyFileName);
+        }
+        else
+        {
+            _databasePath = normalizedCustomPath;
+            var historyDir = Path.GetDirectoryName(_databasePath);
+            if (string.IsNullOrWhiteSpace(historyDir))
+                historyDir = aiDotNetPath;
+            _historyPath = Path.Combine(historyDir, historyFileName);
+        }
+
+        EnsureDirectoryExists(_databasePath);
+        EnsureDirectoryExists(_historyPath);
 
         LoadFromDisk();
         LoadHistoryFromDisk();
@@ -83,8 +104,10 @@ internal sealed class GemmTuningDatabase : IDisposable
         lock (_lock)
         {
             var historyKey = BuildHistoryKey(M, N, K, config);
-            _testedConfigs.Add(historyKey);
-            _testedGflops[historyKey] = gflops;
+            if (_testedConfigs.Add(historyKey))
+                IncrementMatrixCount(BuildMatrixKey(M, N, K));
+
+            _testedGflops[historyKey] = NormalizeGflops(gflops);
             _isDirty = true;
         }
     }
@@ -96,14 +119,8 @@ internal sealed class GemmTuningDatabase : IDisposable
     {
         lock (_lock)
         {
-            var prefix = BuildMatrixKey(M, N, K) + "|";
-            int count = 0;
-            foreach (var key in _testedConfigs)
-            {
-                if (key.StartsWith(prefix, StringComparison.Ordinal))
-                    count++;
-            }
-            return count;
+            var key = BuildMatrixKey(M, N, K);
+            return _matrixKeyCounts.TryGetValue(key, out var count) ? count : 0;
         }
     }
 
@@ -143,6 +160,9 @@ internal sealed class GemmTuningDatabase : IDisposable
     {
         lock (_lock)
         {
+            if (!IsFiniteGflops(gflops) || gflops < 0)
+                return;
+
             var key = BuildMatrixKey(M, N, K);
             if (!_cache.TryGetValue(key, out var existing) || gflops > existing.GFlops)
             {
@@ -181,7 +201,8 @@ internal sealed class GemmTuningDatabase : IDisposable
     {
         try
         {
-            if (!File.Exists(_databasePath)) return;
+            if (string.IsNullOrWhiteSpace(_databasePath) || !File.Exists(_databasePath))
+                return;
 
             var json = File.ReadAllText(_databasePath);
             var entries = ParseJsonDatabase(json);
@@ -200,7 +221,8 @@ internal sealed class GemmTuningDatabase : IDisposable
     {
         try
         {
-            if (!File.Exists(_historyPath)) return;
+            if (string.IsNullOrWhiteSpace(_historyPath) || !File.Exists(_historyPath))
+                return;
 
             foreach (var line in File.ReadLines(_historyPath))
             {
@@ -211,8 +233,14 @@ internal sealed class GemmTuningDatabase : IDisposable
                 if (parsed == null)
                     continue;
 
-                _testedConfigs.Add(parsed.Value.Key);
-                _testedGflops[parsed.Value.Key] = parsed.Value.Gflops;
+                if (_testedConfigs.Add(parsed.Value.Key))
+                {
+                    var matrixKey = ExtractMatrixKey(parsed.Value.Key);
+                    if (!string.IsNullOrEmpty(matrixKey))
+                        IncrementMatrixCount(matrixKey);
+                }
+
+                _testedGflops[parsed.Value.Key] = NormalizeGflops(parsed.Value.Gflops);
             }
         }
         catch (Exception)
@@ -231,6 +259,7 @@ internal sealed class GemmTuningDatabase : IDisposable
             _cache.Clear();
             _testedConfigs.Clear();
             _testedGflops.Clear();
+            _matrixKeyCounts.Clear();
             _isDirty = true;
         }
 
@@ -259,6 +288,10 @@ internal sealed class GemmTuningDatabase : IDisposable
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(_historyPath))
+                return;
+
+            EnsureDirectoryExists(_historyPath);
             var lines = new List<string>(_testedConfigs.Count);
             foreach (var key in _testedConfigs)
             {
@@ -309,6 +342,68 @@ internal sealed class GemmTuningDatabase : IDisposable
         return normalized.Length > 80 ? normalized[..80] : normalized;
     }
 
+    private static string? NormalizeCustomPath(string? customPath, string defaultFileName)
+    {
+        if (string.IsNullOrWhiteSpace(customPath))
+            return null;
+
+        try
+        {
+            var fullPath = Path.GetFullPath(customPath);
+            if (!Path.HasExtension(fullPath))
+                fullPath = Path.Combine(fullPath, defaultFileName);
+            return fullPath;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void EnsureDirectoryExists(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        var directory = Path.GetDirectoryName(path);
+        if (string.IsNullOrWhiteSpace(directory))
+            return;
+
+        Directory.CreateDirectory(directory);
+    }
+
+    private static bool IsFiniteGflops(double gflops)
+    {
+        return !double.IsNaN(gflops) && !double.IsInfinity(gflops);
+    }
+
+    private static double NormalizeGflops(double gflops)
+    {
+        if (!IsFiniteGflops(gflops) || gflops < 0)
+            return 0.0;
+        return gflops;
+    }
+
+    private void IncrementMatrixCount(string matrixKey)
+    {
+        if (_matrixKeyCounts.TryGetValue(matrixKey, out var count))
+            _matrixKeyCounts[matrixKey] = count + 1;
+        else
+            _matrixKeyCounts[matrixKey] = 1;
+    }
+
+    private static string? ExtractMatrixKey(string historyKey)
+    {
+        if (string.IsNullOrWhiteSpace(historyKey))
+            return null;
+
+        int lastSeparator = historyKey.LastIndexOf('|');
+        if (lastSeparator <= 0)
+            return null;
+
+        return historyKey[..lastSeparator];
+    }
+
     private static (string Key, double Gflops)? ParseHistoryLine(string line)
     {
         var trimmed = line.Trim();
@@ -333,6 +428,10 @@ internal sealed class GemmTuningDatabase : IDisposable
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(_databasePath))
+                return;
+
+            EnsureDirectoryExists(_databasePath);
             var sb = new System.Text.StringBuilder();
             sb.AppendLine("{");
 
@@ -386,49 +485,57 @@ internal sealed class GemmTuningDatabase : IDisposable
     private static IEnumerable<(string Key, GemmConfig Config, double GFlops)> ParseJsonDatabase(string json)
     {
         var results = new List<(string, GemmConfig, double)>();
+        if (string.IsNullOrWhiteSpace(json))
+            return results;
 
-        // Simple regex-based JSON parsing for our specific format
-        var entryPattern = @"""([^""]+)""\s*:\s*\{([^}]+)\}";
-        var matches = System.Text.RegularExpressions.Regex.Matches(json, entryPattern,
-            System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(5));
-
-        foreach (System.Text.RegularExpressions.Match match in matches)
+        try
         {
-            try
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+                return results;
+
+            foreach (var entry in document.RootElement.EnumerateObject())
             {
-                var key = match.Groups[1].Value;
-                var content = match.Groups[2].Value;
+                if (entry.Value.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                var obj = entry.Value;
 
                 int GetIntValue(string name)
                 {
-                    var pattern = string.Concat("\"", name, "\"\\s*:\\s*(\\d+)");
-                    var m = System.Text.RegularExpressions.Regex.Match(content, pattern,
-                        System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1));
-                    return m.Success ? int.Parse(m.Groups[1].Value) : 0;
+                    if (!obj.TryGetProperty(name, out var value))
+                        return 0;
+                    if (value.TryGetInt32(out var intValue))
+                        return intValue;
+                    return value.TryGetDouble(out var doubleValue) ? (int)doubleValue : 0;
                 }
 
                 bool GetBoolValue(string name)
                 {
-                    var pattern = string.Concat("\"", name, "\"\\s*:\\s*(true|false)");
-                    var m = System.Text.RegularExpressions.Regex.Match(content, pattern,
-                        System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
-                    return m.Success && m.Groups[1].Value.Equals("true", StringComparison.OrdinalIgnoreCase);
+                    if (!obj.TryGetProperty(name, out var value))
+                        return false;
+                    return value.ValueKind switch
+                    {
+                        JsonValueKind.True => true,
+                        JsonValueKind.False => false,
+                        JsonValueKind.Number => value.TryGetInt32(out var intValue) && intValue != 0,
+                        JsonValueKind.String => bool.TryParse(value.GetString(), out var result) && result,
+                        _ => false
+                    };
                 }
 
                 string GetStringValue(string name)
                 {
-                    var pattern = string.Concat("\"", name, "\"\\s*:\\s*\"([^\"]*)\"");
-                    var m = System.Text.RegularExpressions.Regex.Match(content, pattern,
-                        System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1));
-                    return m.Success ? m.Groups[1].Value : "";
+                    if (!obj.TryGetProperty(name, out var value))
+                        return string.Empty;
+                    return value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : string.Empty;
                 }
 
                 double GetDoubleValue(string name)
                 {
-                    var pattern = string.Concat("\"", name, "\"\\s*:\\s*([\\d.]+)");
-                    var m = System.Text.RegularExpressions.Regex.Match(content, pattern,
-                        System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1));
-                    return m.Success ? double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) : 0;
+                    if (!obj.TryGetProperty(name, out var value))
+                        return 0.0;
+                    return value.TryGetDouble(out var doubleValue) ? doubleValue : 0.0;
                 }
 
                 var config = new GemmConfig
@@ -457,17 +564,21 @@ internal sealed class GemmTuningDatabase : IDisposable
                     UseColumnMajorA = GetBoolValue("UseColumnMajorA")
                 };
 
-                var gflops = GetDoubleValue("GFlops");
+                var gflops = NormalizeGflops(GetDoubleValue("GFlops"));
 
                 if (config.TileM > 0 && config.TileN > 0)
                 {
-                    results.Add((key, config, gflops));
+                    results.Add((entry.Name, config, gflops));
                 }
             }
-            catch
-            {
-                // Skip malformed entries
-            }
+        }
+        catch (JsonException)
+        {
+            // Skip malformed entries
+        }
+        catch
+        {
+            // Skip malformed entries
         }
 
         return results;

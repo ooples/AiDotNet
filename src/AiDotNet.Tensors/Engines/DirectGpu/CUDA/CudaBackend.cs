@@ -243,6 +243,22 @@ public sealed class CudaBackend : IDirectGpuBackend
         return new CudaGpuBuffer(_cudaContext, devicePtr, size);
     }
 
+    public IGpuBuffer AllocateByteBuffer(int size)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("CUDA backend is not available.");
+
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Buffer size must be positive.");
+
+        using var _ = PushContext();
+        CuBlasNative.CheckCudaResult(
+            CuBlasNative.cuMemAlloc(out IntPtr devicePtr, (ulong)size),
+            "cuMemAlloc(byte)");
+
+        return new CudaGpuByteBuffer(_cudaContext, devicePtr, size);
+    }
+
     public float[] DownloadBuffer(IGpuBuffer buffer)
     {
         var result = new float[buffer.Size];
@@ -335,6 +351,7 @@ public sealed class CudaBackend : IDirectGpuBackend
 
     public IGpuBuffer GemmBiasRelu(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, int M, int N, int K)
     {
+        ValidateBiasBuffer(bias, N);
         var output = MatMul(A, B, M, N, K);
         ApplyBiasInPlace(output, bias, M, N);
         Relu(output, output, M * N);
@@ -343,6 +360,7 @@ public sealed class CudaBackend : IDirectGpuBackend
 
     public IGpuBuffer GemmBiasGelu(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, int M, int N, int K)
     {
+        ValidateBiasBuffer(bias, N);
         var output = MatMul(A, B, M, N, K);
         ApplyBiasInPlace(output, bias, M, N);
         Gelu(output, output, M * N);
@@ -351,6 +369,7 @@ public sealed class CudaBackend : IDirectGpuBackend
 
     public IGpuBuffer GemmBiasSigmoid(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, int M, int N, int K)
     {
+        ValidateBiasBuffer(bias, N);
         var output = MatMul(A, B, M, N, K);
         ApplyBiasInPlace(output, bias, M, N);
         Sigmoid(output, output, M * N);
@@ -359,6 +378,7 @@ public sealed class CudaBackend : IDirectGpuBackend
 
     public IGpuBuffer GemmBiasTanh(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, int M, int N, int K)
     {
+        ValidateBiasBuffer(bias, N);
         var output = MatMul(A, B, M, N, K);
         ApplyBiasInPlace(output, bias, M, N);
         Tanh(output, output, M * N);
@@ -760,6 +780,16 @@ public sealed class CudaBackend : IDirectGpuBackend
             throw new ArgumentException("Buffer C is too small for the specified dimensions.");
     }
 
+    private static void ValidateBiasBuffer(IGpuBuffer bias, int n)
+    {
+        if (bias == null)
+            throw new ArgumentNullException(nameof(bias));
+        if (n <= 0)
+            throw new ArgumentOutOfRangeException(nameof(n), "N must be positive.");
+        if (bias.Size < n)
+            throw new ArgumentException("Bias buffer size must be at least N.", nameof(bias));
+    }
+
     private static void ValidateBatchedGemmArgs(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, int batchCount)
     {
         if (batchCount <= 0)
@@ -863,6 +893,53 @@ public sealed class CudaBackend : IDirectGpuBackend
         }
 
         ~CudaGpuBuffer()
+        {
+            Dispose();
+        }
+    }
+
+    internal sealed class CudaGpuByteBuffer : IGpuBuffer
+    {
+        private IntPtr _context;
+        private IntPtr _devicePtr;
+
+        public int Size { get; }
+        public long SizeInBytes { get; }
+        public IntPtr Handle => _devicePtr;
+
+        public CudaGpuByteBuffer(IntPtr context, IntPtr devicePtr, int size)
+        {
+            _context = context;
+            _devicePtr = devicePtr;
+            Size = size;
+            SizeInBytes = size;
+        }
+
+        public void Dispose()
+        {
+            if (_devicePtr == IntPtr.Zero)
+                return;
+
+            try
+            {
+                if (_context != IntPtr.Zero)
+                {
+                    CuBlasNative.cuCtxPushCurrent(_context);
+                    CuBlasNative.cuMemFree(_devicePtr);
+                    CuBlasNative.cuCtxPopCurrent(out _);
+                }
+            }
+            catch
+            {
+                // Suppress disposal errors to avoid crashing finalizers.
+            }
+
+            _devicePtr = IntPtr.Zero;
+            _context = IntPtr.Zero;
+            GC.SuppressFinalize(this);
+        }
+
+        ~CudaGpuByteBuffer()
         {
             Dispose();
         }
