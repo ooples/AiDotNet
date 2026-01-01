@@ -1,5 +1,15 @@
 namespace AiDotNet.NeuralNetworks.Layers;
 
+public enum SpatialTransformerDataFormat
+{
+    /// <summary>Infer layout from shape when possible.</summary>
+    Auto,
+    /// <summary>Channels-last layout: [..., H, W, C].</summary>
+    ChannelsLast,
+    /// <summary>Channels-first layout: [..., C, H, W].</summary>
+    ChannelsFirst
+}
+
 /// <summary>
 /// Represents a spatial transformer layer that enables spatial manipulations of data via a learnable transformation.
 /// </summary>
@@ -135,6 +145,12 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
+
+    /// <summary>
+    /// Stores whether the original input included a channel dimension.
+    /// </summary>
+    private bool _inputHadChannel;
+    private bool _inputChannelFirst;
 
     /// <summary>
     /// Stores the output tensor from the most recent forward pass.
@@ -274,6 +290,8 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private readonly int _inputWidth;
 
+    private readonly SpatialTransformerDataFormat _dataFormat;
+
     /// <summary>
     /// The height of the output feature map.
     /// </summary>
@@ -335,6 +353,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <param name="outputHeight">The height of the output feature map.</param>
     /// <param name="outputWidth">The width of the output feature map.</param>
     /// <param name="activationFunction">The activation function to apply in the localization network. Defaults to Tanh if not specified.</param>
+    /// <param name="dataFormat">Specifies channel layout for rank >= 3 inputs. Auto infers from the last dimensions.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a spatial transformer layer with the specified input and output dimensions and a scalar activation
@@ -352,7 +371,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// which works well for predicting transformation parameters.
     /// </para>
     /// </remarks>
-    public SpatialTransformerLayer(int inputHeight, int inputWidth, int outputHeight, int outputWidth, IActivationFunction<T>? activationFunction = null)
+    public SpatialTransformerLayer(int inputHeight, int inputWidth, int outputHeight, int outputWidth, IActivationFunction<T>? activationFunction = null, SpatialTransformerDataFormat dataFormat = SpatialTransformerDataFormat.Auto)
         : base([inputHeight, inputWidth], [outputHeight, outputWidth], activationFunction ?? new TanhActivation<T>())
     {
         // Initialize auxiliary loss fields first so compiler knows they're set
@@ -363,6 +382,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _inputWidth = inputWidth;
         _outputHeight = outputHeight;
         _outputWidth = outputWidth;
+        _dataFormat = dataFormat;
 
         // Initialize localization network weights and biases as Tensor<T>
         _localizationWeights1 = new Tensor<T>([inputHeight * inputWidth, 32]);
@@ -381,6 +401,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <param name="outputHeight">The height of the output feature map.</param>
     /// <param name="outputWidth">The width of the output feature map.</param>
     /// <param name="vectorActivationFunction">The vector activation function to apply in the localization network. Defaults to Tanh if not specified.</param>
+    /// <param name="dataFormat">Specifies channel layout for rank >= 3 inputs. Auto infers from the last dimensions.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a spatial transformer layer with the specified input and output dimensions and a vector activation
@@ -396,7 +417,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// for their neural networks. For most cases, the basic constructor is sufficient.
     /// </para>
     /// </remarks>
-    public SpatialTransformerLayer(int inputHeight, int inputWidth, int outputHeight, int outputWidth, IVectorActivationFunction<T>? vectorActivationFunction = null)
+    public SpatialTransformerLayer(int inputHeight, int inputWidth, int outputHeight, int outputWidth, IVectorActivationFunction<T>? vectorActivationFunction = null, SpatialTransformerDataFormat dataFormat = SpatialTransformerDataFormat.Auto)
         : base([inputHeight, inputWidth], [outputHeight, outputWidth], vectorActivationFunction ?? new TanhActivation<T>())
     {
         // Initialize auxiliary loss fields first so compiler knows they're set
@@ -407,6 +428,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _inputWidth = inputWidth;
         _outputHeight = outputHeight;
         _outputWidth = outputWidth;
+        _dataFormat = dataFormat;
 
         // Initialize localization network weights and biases as Tensor<T>
         _localizationWeights1 = new Tensor<T>([inputHeight * inputWidth, 32]);
@@ -513,89 +535,171 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Store original shape for any-rank tensor support
         _originalInputShape = input.Shape;
         int rank = input.Shape.Length;
+        if (rank < 2)
+            throw new ArgumentException("SpatialTransformerLayer expects at least 2D input [height, width].", nameof(input));
 
-        // Handle any-rank tensor: collapse to 2D for processing
-        Tensor<T> processInput;
-        int batchSize;
+        _inputHadChannel = false;
+        int channelCount = 1;
+        int heightIndex = rank - 2;
+        int widthIndex = rank - 1;
+        int channelIndex = -1;
+        bool channelFirst = false;
 
-        if (rank == 1)
+        if (rank >= 3)
         {
-            // 1D: add batch dim
-            batchSize = 1;
-            processInput = input.Reshape([1, input.Shape[0]]);
+            switch (_dataFormat)
+            {
+                case SpatialTransformerDataFormat.ChannelsFirst:
+                    channelFirst = true;
+                    _inputHadChannel = true;
+                    channelIndex = rank - 3;
+                    heightIndex = rank - 2;
+                    widthIndex = rank - 1;
+                    channelCount = input.Shape[channelIndex];
+                    break;
+                case SpatialTransformerDataFormat.ChannelsLast:
+                    channelFirst = false;
+                    _inputHadChannel = true;
+                    channelIndex = rank - 1;
+                    heightIndex = rank - 3;
+                    widthIndex = rank - 2;
+                    channelCount = input.Shape[channelIndex];
+                    break;
+                default:
+                    bool matchesChannelsLast = input.Shape[rank - 2] == _inputWidth && input.Shape[rank - 3] == _inputHeight;
+                    bool matchesChannelsFirst = input.Shape[rank - 1] == _inputWidth && input.Shape[rank - 2] == _inputHeight;
+
+                    if (matchesChannelsLast && matchesChannelsFirst)
+                    {
+                        // Ambiguous layout; prefer channels-last to match common defaults.
+                        _inputHadChannel = true;
+                        channelFirst = false;
+                        channelIndex = rank - 1;
+                        heightIndex = rank - 3;
+                        widthIndex = rank - 2;
+                        channelCount = input.Shape[channelIndex];
+                    }
+                    else if (matchesChannelsLast)
+                    {
+                        _inputHadChannel = true;
+                        channelFirst = false;
+                        channelIndex = rank - 1;
+                        heightIndex = rank - 3;
+                        widthIndex = rank - 2;
+                        channelCount = input.Shape[channelIndex];
+                    }
+                    else if (matchesChannelsFirst)
+                    {
+                        _inputHadChannel = true;
+                        channelFirst = true;
+                        channelIndex = rank - 3;
+                        heightIndex = rank - 2;
+                        widthIndex = rank - 1;
+                        channelCount = input.Shape[channelIndex];
+                    }
+                    break;
+            }
         }
-        else if (rank == 2)
+
+        _inputChannelFirst = channelFirst;
+
+        int inputHeight = input.Shape[heightIndex];
+        int inputWidth = input.Shape[widthIndex];
+        if (inputHeight != _inputHeight || inputWidth != _inputWidth)
+            throw new ArgumentException($"Expected input spatial dims [{_inputHeight}, {_inputWidth}] but got [{inputHeight}, {inputWidth}].", nameof(input));
+
+        int batchDims = rank - (_inputHadChannel ? 3 : 2);
+        int flatBatch = 1;
+        for (int d = 0; d < batchDims; d++)
+            flatBatch *= input.Shape[d];
+
+        Tensor<T> inputNHWC;
+        if (_inputHadChannel)
         {
-            // Standard 2D
-            batchSize = input.Shape[0];
-            processInput = input;
+            if (channelFirst)
+            {
+                var inputNCHW = input.Reshape([flatBatch, channelCount, _inputHeight, _inputWidth]);
+                inputNHWC = inputNCHW.Transpose([0, 2, 3, 1]);
+            }
+            else
+            {
+                inputNHWC = input.Reshape([flatBatch, _inputHeight, _inputWidth, channelCount]);
+            }
         }
         else
         {
-            // Higher-rank: collapse leading dims into batch
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 1; d++)
-                flatBatch *= input.Shape[d];
-            batchSize = flatBatch;
-            processInput = input.Reshape([flatBatch, input.Shape[rank - 1]]);
+            inputNHWC = input.Reshape([flatBatch, _inputHeight, _inputWidth, 1]);
         }
 
-        _lastInput = processInput;
+        _lastInput = inputNHWC;
 
-        // Localization network using Engine operations
-        var flattenedInput = processInput.Reshape([batchSize, _inputHeight * _inputWidth]);
+        var channelSum = Engine.ReduceSum(inputNHWC, new[] { 3 }, keepDims: false);
+        var channelMean = Engine.TensorDivideScalar(channelSum, NumOps.FromDouble(channelCount));
+        var flattenedInput = channelMean.Reshape([flatBatch, _inputHeight * _inputWidth]);
         _lastFlattenedInput = flattenedInput;
 
         // First layer: localization1 = flattenedInput @ _localizationWeights1 + _localizationBias1
         var localization1 = Engine.TensorMatMul(flattenedInput, _localizationWeights1);
-        // Add bias (broadcast across batch dimension)
         var bias1Expanded = _localizationBias1.Reshape([1, _localizationBias1.Shape[0]]);
-        localization1 = Engine.TensorAdd(localization1, bias1Expanded);
+        localization1 = Engine.TensorBroadcastAdd(localization1, bias1Expanded);
         localization1 = ApplyActivation(localization1);
         _lastLocalization1 = localization1;
 
         // Second layer: transformationParams = localization1 @ _localizationWeights2 + _localizationBias2
         var transformationParams = Engine.TensorMatMul(localization1, _localizationWeights2);
         var bias2Expanded = _localizationBias2.Reshape([1, _localizationBias2.Shape[0]]);
-        transformationParams = Engine.TensorAdd(transformationParams, bias2Expanded);
+        transformationParams = Engine.TensorBroadcastAdd(transformationParams, bias2Expanded);
 
-        // Convert transformation parameters to 2x3 transformation tensor
         _lastTransformationMatrix = ConvertToTransformationMatrix(transformationParams);
 
-        // Build theta tensor [batch, 2, 3] from computed matrix using Engine ops
-        // Expand [2,3] to [1, 2, 3] then tile along batch dimension
-        var thetaExpanded = Engine.TensorExpandDims(_lastTransformationMatrix, 0); // [1, 2, 3]
-        var theta = Engine.TensorTile(thetaExpanded, [batchSize, 1, 1]); // [batch, 2, 3]
-
-        // Grid generator + sampler via engine ops
+        var theta = _lastTransformationMatrix;
         var grid = Engine.AffineGrid(theta, _outputHeight, _outputWidth);
-        var output = Engine.GridSample(processInput, grid);
+        var output = Engine.GridSample(inputNHWC, grid);
 
         _lastOutput = output;
 
-        // Restore output shape to match original input rank
-        if (_originalInputShape != null && _originalInputShape.Length != 2)
+        if (_inputHadChannel)
         {
-            if (_originalInputShape.Length == 1)
+            Tensor<T> outputForReshape = _inputChannelFirst
+                ? output.Transpose([0, 3, 1, 2])
+                : output;
+
+            var outShape = new int[batchDims + 3];
+            for (int d = 0; d < batchDims; d++)
+                outShape[d] = _originalInputShape[d];
+            if (_inputChannelFirst)
             {
-                return _lastOutput.Reshape([_lastOutput.Shape[1]]);
+                outShape[batchDims] = channelCount;
+                outShape[batchDims + 1] = _outputHeight;
+                outShape[batchDims + 2] = _outputWidth;
             }
             else
             {
-                // Restore higher-rank: reconstruct leading dims
-                var outShape = new int[_originalInputShape.Length];
-                for (int d = 0; d < _originalInputShape.Length - 1; d++)
-                    outShape[d] = _originalInputShape[d];
-                outShape[_originalInputShape.Length - 1] = _lastOutput.Shape[1];
-                return _lastOutput.Reshape(outShape);
+                outShape[batchDims] = _outputHeight;
+                outShape[batchDims + 1] = _outputWidth;
+                outShape[batchDims + 2] = channelCount;
             }
+
+            return outputForReshape.Reshape(outShape);
         }
 
-        return _lastOutput;
+        var outputNoChannel = output.Reshape([flatBatch, _outputHeight, _outputWidth]);
+        if (batchDims == 0)
+        {
+            return outputNoChannel.Reshape([_outputHeight, _outputWidth]);
+        }
+
+        var outputShape = new int[batchDims + 2];
+        for (int d = 0; d < batchDims; d++)
+            outputShape[d] = _originalInputShape[d];
+        outputShape[batchDims] = _outputHeight;
+        outputShape[batchDims + 1] = _outputWidth;
+
+        return outputNoChannel.Reshape(outputShape);
     }
+
 
     /// <summary>
     /// Converts the transformation parameters to a 2x3 transformation matrix.
@@ -624,48 +728,46 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private Tensor<T> ConvertToTransformationMatrix(Tensor<T> transformationParams)
     {
-        if (transformationParams.Shape[0] != 1 || transformationParams.Shape[1] != 6)
+        if (transformationParams.Shape.Length != 2 || transformationParams.Shape[1] != 6)
         {
-            throw new ArgumentException("Transformation parameters should be a 1x6 tensor.");
+            throw new ArgumentException("Transformation parameters should be a [batch, 6] tensor.");
         }
 
-        var tensor = new Tensor<T>([2, 3]);
+        int batchSize = transformationParams.Shape[0];
+        var tensor = new Tensor<T>([batchSize, 2, 3]);
 
-        // Extract the parameters
-        T theta11 = transformationParams[0, 0];
-        T theta12 = transformationParams[0, 1];
-        T theta13 = transformationParams[0, 2];
-        T theta21 = transformationParams[0, 3];
-        T theta22 = transformationParams[0, 4];
-        T theta23 = transformationParams[0, 5];
+        T scale = NumOps.FromDouble(0.1);
+        for (int b = 0; b < batchSize; b++)
+        {
+            T theta11 = transformationParams[b, 0];
+            T theta12 = transformationParams[b, 1];
+            T theta13 = transformationParams[b, 2];
+            T theta21 = transformationParams[b, 3];
+            T theta22 = transformationParams[b, 4];
+            T theta23 = transformationParams[b, 5];
 
-        // Apply constraints to prevent extreme transformations
-        T scale = NumOps.FromDouble(0.1); // Adjust this value to control the scale of transformations
+            theta11 = MathHelper.Tanh(NumOps.Multiply(theta11, scale));
+            theta12 = MathHelper.Tanh(NumOps.Multiply(theta12, scale));
+            theta21 = MathHelper.Tanh(NumOps.Multiply(theta21, scale));
+            theta22 = MathHelper.Tanh(NumOps.Multiply(theta22, scale));
 
-        // Limit scaling and shearing
-        theta11 = MathHelper.Tanh(NumOps.Multiply(theta11, scale));
-        theta12 = MathHelper.Tanh(NumOps.Multiply(theta12, scale));
-        theta21 = MathHelper.Tanh(NumOps.Multiply(theta21, scale));
-        theta22 = MathHelper.Tanh(NumOps.Multiply(theta22, scale));
+            theta13 = MathHelper.Tanh(NumOps.Multiply(theta13, scale));
+            theta23 = MathHelper.Tanh(NumOps.Multiply(theta23, scale));
 
-        // Limit translation
-        theta13 = MathHelper.Tanh(NumOps.Multiply(theta13, scale));
-        theta23 = MathHelper.Tanh(NumOps.Multiply(theta23, scale));
+            theta11 = NumOps.Add(theta11, NumOps.One);
+            theta22 = NumOps.Add(theta22, NumOps.One);
 
-        // Ensure the transformation is close to identity if parameters are small
-        theta11 = NumOps.Add(theta11, NumOps.One);
-        theta22 = NumOps.Add(theta22, NumOps.One);
-
-        // Construct the transformation tensor
-        tensor[0, 0] = theta11;
-        tensor[0, 1] = theta12;
-        tensor[0, 2] = theta13;
-        tensor[1, 0] = theta21;
-        tensor[1, 1] = theta22;
-        tensor[1, 2] = theta23;
+            tensor[b, 0, 0] = theta11;
+            tensor[b, 0, 1] = theta12;
+            tensor[b, 0, 2] = theta13;
+            tensor[b, 1, 0] = theta21;
+            tensor[b, 1, 1] = theta22;
+            tensor[b, 1, 2] = theta23;
+        }
 
         return tensor;
     }
+
 
     // Removed GenerateOutputGrid (unused)
 
@@ -781,11 +883,16 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             }
         }
 
-        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Spatial transformer backward failed.");
+        Tensor<T> inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Spatial transformer backward failed.");
 
         // Restore gradient to original input shape
         if (_originalInputShape != null && _originalInputShape.Length != 2)
         {
+            if (_inputHadChannel && _inputChannelFirst)
+            {
+                inputGradient = inputGradient.Transpose([0, 3, 1, 2]);
+            }
+
             return inputGradient.Reshape(_originalInputShape);
         }
 
@@ -908,7 +1015,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             var flattenedInput = _lastInput.Reshape([batchSize, _inputHeight * _inputWidth]);
             var localization1 = Engine.TensorMatMul(flattenedInput, _localizationWeights1);
             var bias1Expanded = _localizationBias1.Reshape([1, _localizationBias1.Shape[0]]);
-            localization1 = Engine.TensorAdd(localization1, bias1Expanded);
+            localization1 = Engine.TensorBroadcastAdd(localization1, bias1Expanded);
 
             // Gradient for localization bias2: copy from thetaGrad
             Engine.TensorCopy(thetaGrad.Reshape([6]), _localizationBias2Gradient);
@@ -921,11 +1028,16 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Return input gradient
-        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        Tensor<T> inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
 
         // Restore gradient to original input shape
         if (_originalInputShape != null && _originalInputShape.Length != 2)
         {
+            if (_inputHadChannel && _inputChannelFirst)
+            {
+                inputGradient = inputGradient.Transpose([0, 3, 1, 2]);
+            }
+
             return inputGradient.Reshape(_originalInputShape);
         }
 

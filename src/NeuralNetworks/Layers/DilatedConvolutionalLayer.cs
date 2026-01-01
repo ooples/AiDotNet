@@ -250,6 +250,16 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _lastOutput;
 
     /// <summary>
+    /// Stores the original input shape before any reshaping.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
+    /// Indicates whether a batch dimension was added during forward pass.
+    /// </summary>
+    private bool _addedBatchDimension;
+
+    /// <summary>
     /// The gradients for the kernels, computed during backpropagation.
     /// </summary>
     /// <remarks>
@@ -506,26 +516,69 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
 
-        // Convert input from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W]
-        var inputNCHW = input.Transpose([0, 3, 1, 2]);
+        // Support any rank >= 3: last 3 dims are interpreted as [C, H, W]
+        // Convert to NCHW for Engine.Conv2D
+        Tensor<T> input4D;
+        if (rank == 3)
+        {
+            // 3D [C, H, W] -> 4D [1, C, H, W]
+            _addedBatchDimension = true;
+            input4D = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2]);
+        }
+        else if (rank == 4)
+        {
+            // 4D can be NCHW [B, C, H, W] or NHWC [B, H, W, C]
+            // Assume NCHW format (industry standard for most frameworks)
+            _addedBatchDimension = false;
+            input4D = input;
+        }
+        else
+        {
+            // Higher rank: flatten leading dimensions into batch
+            _addedBatchDimension = false;
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 3; d++)
+                flatBatch *= input.Shape[d];
+            input4D = input.Reshape(flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]);
+        }
 
-        // Use Engine.Conv2D with dilation parameter
+        _lastInput = input4D;
+
+        // Use Engine.Conv2D with dilation parameter (input already in NCHW format)
         var strideArr = new int[] { _stride, _stride };
         var paddingArr = new int[] { _padding, _padding };
         var dilationArr = new int[] { _dilation, _dilation };
 
-        var outputNCHW = Engine.Conv2D(inputNCHW, _kernels, strideArr, paddingArr, dilationArr);
+        var outputNCHW = Engine.Conv2D(input4D, _kernels, strideArr, paddingArr, dilationArr);
 
         // Add bias using broadcast: reshape [outputDepth] to [1, outputDepth, 1, 1]
         var biasReshaped = _biases.Reshape([1, _outputDepth, 1, 1]);
         outputNCHW = Engine.TensorBroadcastAdd(outputNCHW, biasReshaped);
 
-        // Convert output from NCHW back to NHWC
-        var output = outputNCHW.Transpose([0, 2, 3, 1]);
+        _lastOutput = ApplyActivation(outputNCHW);
 
-        _lastOutput = ApplyActivation(output);
+        // Return with matching dimensions to preserve original tensor rank
+        if (_originalInputShape != null && _originalInputShape.Length > 4)
+        {
+            // Restore original batch dimensions for higher-rank input
+            var outputShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 3; d++)
+                outputShape[d] = _originalInputShape[d];
+            outputShape[_originalInputShape.Length - 3] = _outputDepth;
+            outputShape[_originalInputShape.Length - 2] = _lastOutput.Shape[2];
+            outputShape[_originalInputShape.Length - 1] = _lastOutput.Shape[3];
+            return _lastOutput.Reshape(outputShape);
+        }
+
+        if (_addedBatchDimension)
+        {
+            // 3D input [C, H, W] should produce 3D output [OutputDepth, outH, outW]
+            return _lastOutput.Reshape(_outputDepth, _lastOutput.Shape[2], _lastOutput.Shape[3]);
+        }
+
         return _lastOutput;
     }
 
@@ -575,28 +628,57 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        // Apply activation derivative
-        var delta = ApplyActivationDerivative(_lastOutput, outputGradient);
+        // Handle any-rank gradient input by reshaping to 4D to match _lastOutput
+        Tensor<T> gradient4D;
+        int gradRank = outputGradient.Shape.Length;
+        if (gradRank == 3)
+        {
+            // 3D gradient [C, H, W] -> 4D [1, C, H, W]
+            gradient4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
+        }
+        else if (gradRank == 4)
+        {
+            gradient4D = outputGradient;
+        }
+        else
+        {
+            // Higher-rank: flatten leading dimensions
+            int flatBatch = 1;
+            for (int d = 0; d < gradRank - 3; d++)
+                flatBatch *= outputGradient.Shape[d];
+            gradient4D = outputGradient.Reshape(flatBatch, outputGradient.Shape[gradRank - 3],
+                outputGradient.Shape[gradRank - 2], outputGradient.Shape[gradRank - 1]);
+        }
 
-        // Convert gradients from NHWC to NCHW for Engine operations
-        var deltaNCHW = delta.Transpose([0, 3, 1, 2]);
-        var inputNCHW = _lastInput.Transpose([0, 3, 1, 2]);
+        // Apply activation derivative (both _lastOutput and gradient4D are in NCHW format)
+        var delta = ApplyActivationDerivative(_lastOutput, gradient4D);
 
         var strideArr = new int[] { _stride, _stride };
         var paddingArr = new int[] { _padding, _padding };
         var dilationArr = new int[] { _dilation, _dilation };
 
         // Calculate bias gradient: sum over batch, height, width (axes 0, 2, 3 in NCHW)
-        _biasGradients = Engine.ReduceSum(deltaNCHW, new[] { 0, 2, 3 }, keepDims: false);
+        _biasGradients = Engine.ReduceSum(delta, new[] { 0, 2, 3 }, keepDims: false);
 
-        // Calculate input gradient using Engine
-        var inputGradientNCHW = Engine.Conv2DBackwardInput(deltaNCHW, _kernels, inputNCHW.Shape, strideArr, paddingArr, dilationArr);
+        // Calculate input gradient using Engine (NCHW format)
+        var inputGradient = Engine.Conv2DBackwardInput(delta, _kernels, _lastInput.Shape, strideArr, paddingArr, dilationArr);
 
         // Calculate kernel gradient using Engine
-        _kernelGradients = Engine.Conv2DBackwardKernel(deltaNCHW, inputNCHW, _kernels.Shape, strideArr, paddingArr, dilationArr);
+        _kernelGradients = Engine.Conv2DBackwardKernel(delta, _lastInput, _kernels.Shape, strideArr, paddingArr, dilationArr);
 
-        // Convert input gradient from NCHW back to NHWC
-        return inputGradientNCHW.Transpose([0, 2, 3, 1]);
+        // Restore original input shape for higher-rank tensors
+        if (_originalInputShape != null && _originalInputShape.Length > 4)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        if (_addedBatchDimension && _originalInputShape != null)
+        {
+            // 3D input [C, H, W] should produce 3D gradient [C, H, W]
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     /// <summary>

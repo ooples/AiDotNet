@@ -1706,6 +1706,42 @@ public interface IEngine
     Tensor<T> TensorBroadcastAdd<T>(Tensor<T> a, Tensor<T> b);
 
     /// <summary>
+    /// Subtracts two tensors element-wise with NumPy-style broadcasting.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor.</param>
+    /// <param name="b">The second tensor to subtract (will be broadcast to match a if needed).</param>
+    /// <returns>A new tensor containing the element-wise difference with broadcasting.</returns>
+    /// <remarks>
+    /// <para>
+    /// Broadcasting allows tensors of different shapes to be subtracted by automatically
+    /// expanding the smaller tensor. This is commonly used in operations like normalizing
+    /// by subtracting a mean: [batch, features] - [1, features] broadcasts the mean across the batch.
+    /// </para>
+    /// <para>
+    /// For example, subtracting shapes [batch, channels, H, W] - [1, channels, 1, 1] broadcasts
+    /// the bias subtraction across batch and spatial dimensions.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorBroadcastSubtract<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Divides two tensors element-wise with NumPy-style broadcasting.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The dividend tensor.</param>
+    /// <param name="b">The divisor tensor (will be broadcast to match a if needed).</param>
+    /// <returns>A new tensor containing the element-wise quotient with broadcasting.</returns>
+    /// <remarks>
+    /// <para>
+    /// Broadcasting allows tensors of different shapes to be divided by automatically
+    /// expanding the smaller tensor. This is commonly used in normalization operations
+    /// like dividing by a sum: [batch, features] / [batch, 1] broadcasts the divisor across features.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorBroadcastDivide<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
     /// Multiplies two tensors element-wise with NumPy-style broadcasting.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>

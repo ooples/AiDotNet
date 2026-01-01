@@ -693,6 +693,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private static int CalculateOutputDimension(int inputDim, int kernelSize, int stride, int padding)
     {
+        if (inputDim + 2 * padding < kernelSize)
+            throw new ArgumentException("Input dimensions with padding must be at least kernel size.");
+
         return (inputDim - kernelSize + 2 * padding) / stride + 1;
     }
 
@@ -799,12 +802,20 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             input4D = input.Reshape(flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]);
         }
 
+        // Validate input channels
+        int actualInputChannels = input4D.Shape[1];
+        if (actualInputChannels != InputDepth)
+        {
+            throw new ArgumentException(
+                $"Expected input depth {InputDepth}, but got {actualInputChannels}.");
+        }
+
         _lastInput = input4D;
 
         // === GPU-Accelerated Convolution ===
         // Phase B: US-GPU-016 - Replace 6 nested loops with IEngine.Conv2D
         // Achieves 50-500x speedup on GPU for large feature maps
-        Tensor<T> output = (Tensor<T>)Engine.Conv2D(_lastInput, _kernels, Stride, Padding, dilation: 1);
+        Tensor<T> output = Engine.Conv2D(_lastInput, _kernels, Stride, Padding, dilation: 1);
 
         // === GPU-Accelerated Bias Addition with Broadcasting ===
         // Reshape bias from [OutputDepth] to [1, OutputDepth, 1, 1] for broadcasting
@@ -826,7 +837,14 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 1] = _lastOutput.Shape[3];
             return _lastOutput.Reshape(outputShape);
         }
-        return _addedBatchDimension ? _lastOutput.Reshape(OutputShape) : _lastOutput;
+        if (_addedBatchDimension)
+        {
+            // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
+            // Remove the batch dimension we added
+            return _lastOutput.Reshape([OutputDepth, _lastOutput.Shape[2], _lastOutput.Shape[3]]);
+        }
+
+        return _lastOutput;
     }
 
     /// <summary>
@@ -868,9 +886,17 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
+        // If we added a batch dimension in Forward, add it to outputGradient too
+        var gradForBackward = outputGradient;
+        if (_addedBatchDimension && outputGradient.Shape.Length == 3)
+        {
+            // outputGradient is 3D [OutC, OutH, OutW], reshape to 4D [1, OutC, OutH, OutW]
+            gradForBackward = outputGradient.Reshape([1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]]);
+        }
+
         // Apply activation derivative to get delta
         // ApplyActivationDerivative already multiplies by outputGradient (chain rule)
-        var delta = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var delta = ApplyActivationDerivative(_lastOutput, gradForBackward);
 
         // === GPU-Accelerated Backward Pass ===
         // Phase B: US-GPU-016 - Replace 7 nested loops with Engine.Conv2DBackward operations
@@ -899,7 +925,13 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         {
             return inputGradient.Reshape(_originalInputShape);
         }
-        return _addedBatchDimension ? inputGradient.Reshape(InputShape) : inputGradient;
+        if (_addedBatchDimension && _originalInputShape != null && _originalInputShape.Length == 3)
+        {
+            // Restore original 3D input shape [C, H, W]
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     /// <summary>
@@ -1124,15 +1156,18 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// The parameters include:
     /// - All values from all pattern detectors (kernels)
     /// - All bias values
-    /// 
+    ///
     /// These are combined into a single long list (vector), which can be used for:
     /// - Saving the model
     /// - Sharing parameters between layers
     /// - Advanced optimization techniques
-    /// 
+    ///
     /// This provides access to all the "knowledge" the layer has learned.
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _kernels.Length + _biases.Shape[0];
+
+    /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
         // Calculate total number of parameters
@@ -1163,6 +1198,47 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         }
 
         return parameters;
+    }
+
+    /// <summary>
+    /// Gets all parameter gradients of the layer as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all parameter gradients (kernel gradients followed by bias gradients).</returns>
+    public override Vector<T> GetParameterGradients()
+    {
+        int totalParams = _kernels.Length + _biases.Shape[0];
+        var gradients = new Vector<T>(totalParams);
+
+        // If gradients haven't been computed yet, return zero gradients
+        if (_kernelsGradient == null || _biasesGradient == null)
+        {
+            return gradients;
+        }
+
+        int index = 0;
+
+        // Copy kernel gradients in the same order as GetParameters
+        for (int o = 0; o < OutputDepth; o++)
+        {
+            for (int i = 0; i < InputDepth; i++)
+            {
+                for (int ky = 0; ky < KernelSize; ky++)
+                {
+                    for (int kx = 0; kx < KernelSize; kx++)
+                    {
+                        gradients[index++] = _kernelsGradient[o, i, ky, kx];
+                    }
+                }
+            }
+        }
+
+        // Copy bias gradients
+        for (int o = 0; o < OutputDepth; o++)
+        {
+            gradients[index++] = _biasesGradient[o];
+        }
+
+        return gradients;
     }
 
     /// <summary>

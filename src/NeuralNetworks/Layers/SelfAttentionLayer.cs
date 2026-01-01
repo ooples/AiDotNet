@@ -282,6 +282,17 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets the total number of trainable parameters in this layer.
+    /// </summary>
+    /// <value>
+    /// The total number of parameters: 3 weight matrices (Q, K, V) each of size [embeddingDimension × embeddingDimension],
+    /// plus an output bias of size [embeddingDimension].
+    /// Total = 3 × E² + E = E × (3E + 1) where E is the embedding dimension.
+    /// </value>
+    public override int ParameterCount =>
+        3 * (_embeddingDimension * _embeddingDimension) + _embeddingDimension;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="SelfAttentionLayer{T}"/> class with a scalar activation function.
     /// </summary>
     /// <param name="sequenceLength">The length of the input sequence.</param>
@@ -604,58 +615,87 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_lastInput == null || _lastOutput == null || _lastAttentionScores == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        Tensor<T> outputGrad3D = outputGradient;
+        Tensor<T> lastOutput3D = _lastOutput;
+        if (outputGradient.Shape.Length != 3)
+        {
+            outputGrad3D = outputGradient.Reshape(_lastInput.Shape);
+        }
+        if (_lastOutput.Shape.Length != 3)
+        {
+            lastOutput3D = _lastOutput.Reshape(_lastInput.Shape);
+        }
+
+        var activationGradient = ApplyActivationDerivative(lastOutput3D, outputGrad3D);
 
         int batchSize = _lastInput.Shape[0];
         int sequenceLength = _lastInput.Shape[1];
         int embeddingDimension = _lastInput.Shape[2];
 
-        var attentionOutputGradient = activationGradient;
+        // Bias gradient: sum over batch and sequence
+        _outputBiasGradient = Engine.ReduceSum(activationGradient, new[] { 0, 1 }, keepDims: false);
 
-        // Sum over batch and sequence dimensions to get bias gradient
-        _outputBiasGradient = attentionOutputGradient.Sum([0, 1]);
+        // Recompute Q, K, V from input
+        var input2D = _lastInput.Reshape(batchSize * sequenceLength, embeddingDimension);
+        var Q_flat = Engine.TensorMatMul(input2D, _queryWeights);
+        var K_flat = Engine.TensorMatMul(input2D, _keyWeights);
+        var V_flat = Engine.TensorMatMul(input2D, _valueWeights);
 
-        // Reshape attentionOutputGradient for multi-head attention
-        attentionOutputGradient = attentionOutputGradient.Reshape([batchSize, sequenceLength, _headCount, _headDimension]);
+        var Q = Q_flat.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose(new[] { 0, 2, 1, 3 });
+        var K = K_flat.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose(new[] { 0, 2, 1, 3 });
+        var V = V_flat.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose(new[] { 0, 2, 1, 3 });
 
-        // Transpose to align dimensions for matrix multiplication
-        attentionOutputGradient = attentionOutputGradient.Transpose([0, 2, 1, 3]);
+        // Output gradient to [B*H, S, D]
+        var dOutput4D = activationGradient.Reshape(batchSize, sequenceLength, _headCount, _headDimension)
+            .Transpose(new[] { 0, 2, 1, 3 });
+        var dAttentionOutput3D = dOutput4D.Reshape(batchSize * _headCount, sequenceLength, _headDimension);
 
-        // Calculate gradients for values
-        var valuesGradient = _lastAttentionScores.Transpose([0, 1, 3, 2]).Multiply(attentionOutputGradient);
+        var attentionWeights3D = _lastAttentionScores.Reshape(batchSize * _headCount, sequenceLength, sequenceLength);
+        var V_3D = V.Reshape(batchSize * _headCount, sequenceLength, _headDimension);
 
-        // Reshape and transpose input for further calculations
-        var reshapedLastInput = _lastInput.Reshape([batchSize, sequenceLength, _headCount, _headDimension]);
-        var transposedLastInput = reshapedLastInput.Transpose([0, 2, 1, 3]);
-        var attentionScoresGradient = attentionOutputGradient.Multiply(transposedLastInput);
+        // Gradients for attention weights and values
+        var dAttentionWeights3D = Engine.BatchMatMul(dAttentionOutput3D, V_3D.Transpose(new[] { 0, 2, 1 }));
+        var dV_3D = Engine.BatchMatMul(attentionWeights3D.Transpose(new[] { 0, 2, 1 }), dAttentionOutput3D);
 
-        var softmaxActivation = new SoftmaxActivation<T>();
-        var softmaxDerivative = softmaxActivation.Derivative(_lastAttentionScores);
-        var attentionWeightsGradient = softmaxDerivative.ElementwiseMultiply(attentionScoresGradient);
+        // Softmax backward on attention scores
+        var dAttentionScores3D = Engine.SoftmaxBackward(dAttentionWeights3D, attentionWeights3D);
+        T scaleFactor = NumOps.Sqrt(NumOps.FromDouble(_headDimension));
+        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor);
+        dAttentionScores3D = Engine.TensorMultiplyScalar(dAttentionScores3D, scaleValue);
 
-        var queriesGradient = attentionWeightsGradient.Multiply(reshapedLastInput.Transpose([0, 2, 3, 1]));
-        var keysGradient = attentionWeightsGradient.Transpose([0, 1, 3, 2]).Multiply(transposedLastInput);
+        // Gradients for Q and K
+        var Q_3D = Q.Reshape(batchSize * _headCount, sequenceLength, _headDimension);
+        var K_3D = K.Reshape(batchSize * _headCount, sequenceLength, _headDimension);
+        var dQ_3D = Engine.BatchMatMul(dAttentionScores3D, K_3D);
+        var dK_3D = Engine.BatchMatMul(dAttentionScores3D.Transpose(new[] { 0, 2, 1 }), Q_3D);
 
-        queriesGradient = queriesGradient.Transpose([0, 2, 1, 3]).Reshape([batchSize, sequenceLength, embeddingDimension]);
-        keysGradient = keysGradient.Transpose([0, 2, 1, 3]).Reshape([batchSize, sequenceLength, embeddingDimension]);
-        valuesGradient = valuesGradient.Transpose([0, 2, 1, 3]).Reshape([batchSize, sequenceLength, embeddingDimension]);
+        var dQ = dQ_3D.Reshape(batchSize, _headCount, sequenceLength, _headDimension)
+            .Transpose(new[] { 0, 2, 1, 3 })
+            .Reshape(batchSize * sequenceLength, embeddingDimension);
+        var dK = dK_3D.Reshape(batchSize, _headCount, sequenceLength, _headDimension)
+            .Transpose(new[] { 0, 2, 1, 3 })
+            .Reshape(batchSize * sequenceLength, embeddingDimension);
+        var dV = dV_3D.Reshape(batchSize, _headCount, sequenceLength, _headDimension)
+            .Transpose(new[] { 0, 2, 1, 3 })
+            .Reshape(batchSize * sequenceLength, embeddingDimension);
 
-        // Calculate gradients for the weight matrices
-        var batchGradientQ = _lastInput.Transpose([0, 2, 1]).Multiply(queriesGradient);
-        var batchGradientK = _lastInput.Transpose([0, 2, 1]).Multiply(keysGradient);
-        var batchGradientV = _lastInput.Transpose([0, 2, 1]).Multiply(valuesGradient);
+        // Weight gradients
+        var input2D_T = Engine.TensorTranspose(input2D);
+        _queryWeightsGradient = Engine.TensorMatMul(input2D_T, dQ);
+        _keyWeightsGradient = Engine.TensorMatMul(input2D_T, dK);
+        _valueWeightsGradient = Engine.TensorMatMul(input2D_T, dV);
 
-        // Sum over the batch dimension to get the final weight gradients (keep as Tensor<T>)
-        _queryWeightsGradient = batchGradientQ.Sum([0]).Reshape([embeddingDimension, embeddingDimension]);
-        _keyWeightsGradient = batchGradientK.Sum([0]).Reshape([embeddingDimension, embeddingDimension]);
-        _valueWeightsGradient = batchGradientV.Sum([0]).Reshape([embeddingDimension, embeddingDimension]);
+        // Input gradient
+        var dInputFromQ = Engine.TensorMatMul(dQ, Engine.TensorTranspose(_queryWeights));
+        var dInputFromK = Engine.TensorMatMul(dK, Engine.TensorTranspose(_keyWeights));
+        var dInputFromV = Engine.TensorMatMul(dV, Engine.TensorTranspose(_valueWeights));
+        var dInput2D = Engine.TensorAdd(Engine.TensorAdd(dInputFromQ, dInputFromK), dInputFromV);
 
-        // Compute input gradient using tensor transpose
-        var inputGradient = queriesGradient.Multiply(_queryWeights.Transpose([1, 0]))
-                            .Add(keysGradient.Multiply(_keyWeights.Transpose([1, 0])))
-                            .Add(valuesGradient.Multiply(_valueWeights.Transpose([1, 0])));
+        var inputGradient = dInput2D.Reshape(batchSize, sequenceLength, embeddingDimension);
+        return _originalInputShape != null && _originalInputShape.Length != 3
+            ? inputGradient.Reshape(_originalInputShape)
+            : inputGradient;
 
-        return inputGradient;
     }
 
     /// <summary>
@@ -1120,29 +1160,38 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int numHeads = _headCount;
         int seqLen = _sequenceLength;
 
-        for (int h = 0; h < numHeads; h++)
+        // _lastAttentionScores has shape [batchSize, headCount, seqLen, seqLen]
+        int batchSize = _lastAttentionScores.Shape[0];
+
+        for (int b = 0; b < batchSize; b++)
         {
-            for (int i = 0; i < seqLen; i++)
+            for (int h = 0; h < numHeads; h++)
             {
-                T entropy = NumOps.Zero;
-                for (int j = 0; j < seqLen; j++)
+                for (int i = 0; i < seqLen; i++)
                 {
-                    // Get attention weight for this head and position
-                    T attnWeight = _lastAttentionScores[h, i, j];
+                    T entropy = NumOps.Zero;
+                    for (int j = 0; j < seqLen; j++)
+                    {
+                        // Get attention weight for this batch, head, and position
+                        T attnWeight = _lastAttentionScores[new int[] { b, h, i, j }];
 
-                    // Skip zero or very small values to avoid log(0)
-                    if (NumOps.LessThan(attnWeight, NumOps.FromDouble(1e-10)))
-                        continue;
+                        // Skip zero or very small values to avoid log(0)
+                        if (NumOps.LessThan(attnWeight, NumOps.FromDouble(1e-10)))
+                            continue;
 
-                    // H = -Σ(p * log(p))
-                    T logWeight = NumOps.Log(attnWeight);
-                    T term = NumOps.Multiply(attnWeight, logWeight);
-                    entropy = NumOps.Subtract(entropy, term);
+                        // H = -Σ(p * log(p))
+                        T logWeight = NumOps.Log(attnWeight);
+                        T term = NumOps.Multiply(attnWeight, logWeight);
+                        entropy = NumOps.Subtract(entropy, term);
+                    }
+                    // We want low entropy (focused attention), so we minimize -H
+                    totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);
                 }
-                // We want low entropy (focused attention), so we minimize -H
-                totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);
             }
         }
+
+        // Average over batch size
+        totalNegativeEntropy = NumOps.Divide(totalNegativeEntropy, NumOps.FromDouble(batchSize));
 
         // Store unweighted loss for diagnostics
         _lastEntropyLoss = totalNegativeEntropy;

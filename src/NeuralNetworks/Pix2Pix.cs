@@ -94,6 +94,11 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     /// </remarks>
     public ConvolutionalNeuralNetwork<T> Discriminator { get; private set; }
 
+    /// <summary>
+    /// Gets the total number of trainable parameters in the Pix2Pix model.
+    /// </summary>
+    public override int ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount();
+
     private readonly ILossFunction<T> _lossFunction;
 
     /// <summary>

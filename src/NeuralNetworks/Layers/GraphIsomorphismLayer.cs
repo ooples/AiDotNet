@@ -120,6 +120,10 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
+    public override int ParameterCount =>
+        _mlpWeights1.Length + _mlpWeights2.Length + _mlpBias1.Length + _mlpBias2.Length + (_learnEpsilon ? 1 : 0);
+
+    /// <inheritdoc/>
     public int InputFeatures => _inputFeatures;
 
     /// <inheritdoc/>
@@ -206,38 +210,70 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _originalInputShape = input.Shape;
         int rank = input.Shape.Length;
 
-        // Handle any-rank tensor: collapse to 2D for processing
+        // Handle tensor shapes for graph processing:
+        // - 2D input [N, F] = single graph with N nodes and F features -> reshape to [1, N, F]
+        // - 3D input [B, N, F] = batch of B graphs with N nodes and F features
         Tensor<T> processInput;
         int batchSize;
+        int numNodes;
 
         if (rank == 1)
         {
+            // 1D: treat as single node with F features -> [1, 1, F]
             batchSize = 1;
-            processInput = input.Reshape([1, input.Shape[0]]);
+            numNodes = 1;
+            processInput = input.Reshape([1, 1, input.Shape[0]]);
         }
         else if (rank == 2)
         {
-            batchSize = input.Shape[0];
-            processInput = input;
+            // 2D: [numNodes, features] -> reshape to [1, numNodes, features]
+            batchSize = 1;
+            numNodes = input.Shape[0];
+            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
         }
         else
         {
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 1; d++)
-                flatBatch *= input.Shape[d];
-            batchSize = flatBatch;
-            processInput = input.Reshape([flatBatch, input.Shape[rank - 1]]);
+            // 3D: [batch, numNodes, features]
+            batchSize = input.Shape[0];
+            numNodes = input.Shape[1];
+            processInput = input;
         }
 
         _lastInput = processInput;
-        int numNodes = input.Shape[1];
+
+        // Reshape adjacency matrix to match batch dimension if needed
+        Tensor<T> adjForBatch;
+        if (_adjacencyMatrix.Shape.Length == 2 && batchSize == 1)
+        {
+            adjForBatch = _adjacencyMatrix.Reshape([1, _adjacencyMatrix.Shape[0], _adjacencyMatrix.Shape[1]]);
+        }
+        else if (_adjacencyMatrix.Shape.Length == 2 && batchSize > 1)
+        {
+            // Tile adjacency matrix for batch
+            int adjN = _adjacencyMatrix.Shape[0];
+            adjForBatch = new Tensor<T>([batchSize, adjN, adjN]);
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int i = 0; i < adjN; i++)
+                {
+                    for (int j = 0; j < adjN; j++)
+                    {
+                        adjForBatch[new int[] { b, i, j }] = _adjacencyMatrix[new int[] { i, j }];
+                    }
+                }
+            }
+        }
+        else
+        {
+            adjForBatch = _adjacencyMatrix;
+        }
 
         // Step 1: Aggregate neighbor features using sum (batched matmul: [batch, nodes, nodes] @ [batch, nodes, features])
-        _lastNeighborSum = Engine.BatchMatMul(_adjacencyMatrix, input);
+        _lastNeighborSum = Engine.BatchMatMul(adjForBatch, processInput);
 
         // Step 2: Combine with self features: (1 + epsilon) * h_v + sum(h_u)
         T onePlusEpsilon = NumOps.Add(NumOps.One, _epsilon);
-        var scaledSelf = Engine.TensorMultiplyScalar(input, onePlusEpsilon);
+        var scaledSelf = Engine.TensorMultiplyScalar(processInput, onePlusEpsilon);
         _lastAggregated = Engine.TensorAdd(scaledSelf, _lastNeighborSum);
 
         // Step 3: Apply MLP - First layer (3D @ 2D requires reshape pattern)
@@ -256,6 +292,19 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var mlpOutput = Engine.TensorAdd(hidden2, bias2Broadcast);
 
         _lastOutput = ApplyActivation(mlpOutput);
+
+        // Reshape output to match original input shape (except for feature dimension)
+        if (_originalInputShape != null && _originalInputShape.Length == 2)
+        {
+            // Original was 2D [N, F] -> return [N, outputFeatures]
+            return _lastOutput.Reshape([numNodes, _outputFeatures]);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 1)
+        {
+            // Original was 1D [F] -> return [outputFeatures]
+            return _lastOutput.Reshape([_outputFeatures]);
+        }
+
         return _lastOutput;
     }
 

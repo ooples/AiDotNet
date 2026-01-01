@@ -427,9 +427,11 @@ public class ConvLSTMLayer<T> : LayerBase<T>
 
         for (int t = 0; t < timeSteps; t++)
         {
-            var xt = input5D.GetSlice(t);
+            // Slice along dimension 1 (time) to get [batchSize, height, width, channels]
+            var xt = input5D.GetSliceAlongDimension(t, 1);
             (_lastHiddenState, _lastCellState) = ConvLSTMCell(xt, _lastHiddenState, _lastCellState);
-            output.SetSlice(t, _lastHiddenState);
+            // Set slice along dimension 1 (time) in output
+            output.SetSlice(1, t, _lastHiddenState);
         }
 
         // Restore original batch dimensions for any-rank support
@@ -492,14 +494,32 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// </remarks>
     private (Tensor<T> hiddenState, Tensor<T> cellState) ConvLSTMCell(Tensor<T> input, Tensor<T> prevHiddenState, Tensor<T> prevCellState)
     {
-        // Use Engine.Sigmoid for vectorized/GPU-accelerated sigmoid activations
-        var forgetGate = Engine.Sigmoid(Convolve(input, _weightsFi).Add(Convolve(prevHiddenState, _weightsFh)).Add(_biasF));
-        var inputGate = Engine.Sigmoid(Convolve(input, _weightsIi).Add(Convolve(prevHiddenState, _weightsIh)).Add(_biasI));
-        var candidateCell = ApplyActivation(Convolve(input, _weightsCi).Add(Convolve(prevHiddenState, _weightsCh)).Add(_biasC));
-        var outputGate = Engine.Sigmoid(Convolve(input, _weightsOi).Add(Convolve(prevHiddenState, _weightsOh)).Add(_biasO));
+        // Compute gate pre-activations by convolving input and hidden state, then adding bias
+        // Use Engine.TensorBroadcastAdd for biases since they have shape [1,1,1,filters] and need to broadcast
+        // to the convolution output shape [batchSize, height, width, filters]
+        var forgetPreact = Engine.TensorAdd(Convolve(input, _weightsFi), Convolve(prevHiddenState, _weightsFh));
+        forgetPreact = Engine.TensorBroadcastAdd(forgetPreact, _biasF);
+        var forgetGate = Engine.Sigmoid(forgetPreact);
 
-        var newCellState = forgetGate.Multiply(prevCellState).Add(inputGate.Multiply(candidateCell));
-        var newHiddenState = outputGate.Multiply(ApplyActivation(newCellState));
+        var inputPreact = Engine.TensorAdd(Convolve(input, _weightsIi), Convolve(prevHiddenState, _weightsIh));
+        inputPreact = Engine.TensorBroadcastAdd(inputPreact, _biasI);
+        var inputGate = Engine.Sigmoid(inputPreact);
+
+        var candidatePreact = Engine.TensorAdd(Convolve(input, _weightsCi), Convolve(prevHiddenState, _weightsCh));
+        candidatePreact = Engine.TensorBroadcastAdd(candidatePreact, _biasC);
+        var candidateCell = ApplyActivation(candidatePreact);
+
+        var outputPreact = Engine.TensorAdd(Convolve(input, _weightsOi), Convolve(prevHiddenState, _weightsOh));
+        outputPreact = Engine.TensorBroadcastAdd(outputPreact, _biasO);
+        var outputGate = Engine.Sigmoid(outputPreact);
+
+        // Compute new cell state: c_t = f_t * c_{t-1} + i_t * candidate
+        var newCellState = Engine.TensorAdd(
+            Engine.TensorMultiply(forgetGate, prevCellState),
+            Engine.TensorMultiply(inputGate, candidateCell));
+
+        // Compute new hidden state: h_t = o_t * activation(c_t)
+        var newHiddenState = Engine.TensorMultiply(outputGate, ApplyActivation(newCellState));
 
         return (newHiddenState, newCellState);
     }

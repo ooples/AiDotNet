@@ -63,6 +63,8 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
     /// Edge features tensor.
     /// </summary>
     private Tensor<T>? _edgeFeatures;
+    private Tensor<T>? _normalizedAdjacencyMatrix;
+    private Tensor<T>? _normalizedEdgeFeatures;
 
     /// <summary>
     /// Cached values for backward pass.
@@ -267,11 +269,13 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
 
         _lastInput = processInput;
         int numNodes = processInput.Shape[1];
-        int numEdges = _edgeFeatures.Shape[1];
+        _normalizedAdjacencyMatrix = NormalizeAdjacency(_adjacencyMatrix, batchSize, numNodes);
+        _normalizedEdgeFeatures = NormalizeEdgeFeatures(_edgeFeatures, batchSize);
+        int numEdges = _normalizedEdgeFeatures.Shape[1];
 
         // Step 1: Compute edge-specific weights using edge network
         // Edge network layer 1: [batch, numEdges, edgeFeatures] @ [edgeFeatures, hiddenDim] = [batch, numEdges, hiddenDim]
-        var hidden = BatchedMatMul3Dx2D(_edgeFeatures, _edgeNetworkWeights1, batchSize, numEdges, _edgeFeaturesCount, _edgeNetworkHiddenDim);
+        var hidden = BatchedMatMul3Dx2D(_normalizedEdgeFeatures, _edgeNetworkWeights1, batchSize, numEdges, _edgeFeaturesCount, _edgeNetworkHiddenDim);
 
         // Add bias: broadcast [hiddenDim] to [batch, numEdges, hiddenDim]
         var bias1Broadcast = BroadcastBias(_edgeNetworkBias1, batchSize, numEdges);
@@ -300,7 +304,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
             {
                 for (int j = 0; j < numNodes; j++)
                 {
-                    if (!NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero))
+                    if (!NumOps.Equals(_normalizedAdjacencyMatrix[b, i, j], NumOps.Zero))
                     {
                         for (int inF = 0; inF < _inputFeatures; inF++)
                         {
@@ -331,7 +335,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
 
                     for (int j = 0; j < numNodes; j++)
                     {
-                        if (NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero))
+                        if (NumOps.Equals(_normalizedAdjacencyMatrix[b, i, j], NumOps.Zero))
                             continue;
 
                         // Apply edge-specific transformation to neighbor features
@@ -340,7 +344,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
                             sum = NumOps.Add(sum,
                                 NumOps.Multiply(
                                     _lastEdgeWeights[b, i, j, inF, outF],
-                                    input[b, j, inF]));
+                                    processInput[b, j, inF]));
                         }
                     }
 
@@ -350,7 +354,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         }
 
         // Step 3: Add self-loop transformation
-        var selfTransform = BatchedMatMul3Dx2D(input, _selfWeights, batchSize, numNodes, _inputFeatures, _outputFeatures);
+        var selfTransform = BatchedMatMul3Dx2D(processInput, _selfWeights, batchSize, numNodes, _inputFeatures, _outputFeatures);
         output = Engine.TensorAdd(output, selfTransform);
 
         // Step 4: Add bias
@@ -358,7 +362,151 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         output = Engine.TensorAdd(output, biasBroadcast);
 
         _lastOutput = ApplyActivation(output);
+
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            if (_originalInputShape.Length == 2)
+            {
+                return _lastOutput.Reshape([numNodes, _outputFeatures]);
+            }
+
+            if (_originalInputShape.Length == 1)
+            {
+                return _lastOutput.Reshape([_outputFeatures]);
+            }
+
+            var newShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 1; d++)
+            {
+                newShape[d] = _originalInputShape[d];
+            }
+            newShape[_originalInputShape.Length - 1] = _outputFeatures;
+            return _lastOutput.Reshape(newShape);
+        }
+
         return _lastOutput;
+    }
+
+    /// <summary>
+    /// Normalizes adjacency matrix by degree (row normalization) and ensures batch dimension.
+    /// </summary>
+    private Tensor<T> NormalizeAdjacency(Tensor<T> adjacency, int batchSize, int numNodes)
+    {
+        bool is2D = adjacency.Shape.Length == 2;
+        Tensor<T> adj3D;
+        if (is2D)
+        {
+            adj3D = adjacency.Reshape([1, adjacency.Shape[0], adjacency.Shape[1]]);
+            if (batchSize > 1)
+            {
+                var tiled = new Tensor<T>([batchSize, adjacency.Shape[0], adjacency.Shape[1]]);
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int i = 0; i < adjacency.Shape[0]; i++)
+                    {
+                        for (int j = 0; j < adjacency.Shape[1]; j++)
+                        {
+                            tiled[b, i, j] = adjacency[i, j];
+                        }
+                    }
+                }
+                adj3D = tiled;
+            }
+        }
+        else
+        {
+            adj3D = adjacency;
+        }
+
+        var normalized = new Tensor<T>(adj3D.Shape);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < numNodes; i++)
+            {
+                int degree = 0;
+                for (int j = 0; j < numNodes; j++)
+                {
+                    if (!NumOps.Equals(adj3D[b, i, j], NumOps.Zero))
+                    {
+                        degree++;
+                    }
+                }
+
+                if (degree == 0)
+                {
+                    for (int j = 0; j < numNodes; j++)
+                    {
+                        normalized[b, i, j] = NumOps.Zero;
+                    }
+                }
+                else
+                {
+                    T scale = NumOps.Divide(NumOps.One, NumOps.FromDouble(degree));
+                    for (int j = 0; j < numNodes; j++)
+                    {
+                        normalized[b, i, j] = NumOps.Multiply(adj3D[b, i, j], scale);
+                    }
+                }
+            }
+        }
+
+        return normalized;
+    }
+
+    /// <summary>
+    /// Normalizes edge features to include batch dimension.
+    /// </summary>
+    private Tensor<T> NormalizeEdgeFeatures(Tensor<T> edgeFeatures, int batchSize)
+    {
+        if (edgeFeatures.Shape.Length == 3)
+        {
+            if (edgeFeatures.Shape[0] == batchSize)
+            {
+                return edgeFeatures;
+            }
+
+            if (edgeFeatures.Shape[0] == 1 && batchSize > 1)
+            {
+                var tiled = new Tensor<T>([batchSize, edgeFeatures.Shape[1], edgeFeatures.Shape[2]]);
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int i = 0; i < edgeFeatures.Shape[1]; i++)
+                    {
+                        for (int j = 0; j < edgeFeatures.Shape[2]; j++)
+                        {
+                            tiled[b, i, j] = edgeFeatures[0, i, j];
+                        }
+                    }
+                }
+                return tiled;
+            }
+
+            return edgeFeatures;
+        }
+
+        if (edgeFeatures.Shape.Length == 2)
+        {
+            var reshaped = edgeFeatures.Reshape([1, edgeFeatures.Shape[0], edgeFeatures.Shape[1]]);
+            if (batchSize == 1)
+            {
+                return reshaped;
+            }
+
+            var tiled = new Tensor<T>([batchSize, edgeFeatures.Shape[0], edgeFeatures.Shape[1]]);
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int i = 0; i < edgeFeatures.Shape[0]; i++)
+                {
+                    for (int j = 0; j < edgeFeatures.Shape[1]; j++)
+                    {
+                        tiled[b, i, j] = edgeFeatures[i, j];
+                    }
+                }
+            }
+            return tiled;
+        }
+
+        throw new ArgumentException("Edge features must be rank 2 or 3.");
     }
 
     /// <summary>
@@ -418,15 +566,16 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null || _edgeFeatures == null || _lastEdgeWeights == null || _lastHidden == null)
+        if (_lastInput == null || _lastOutput == null || _normalizedAdjacencyMatrix == null || _normalizedEdgeFeatures == null || _lastEdgeWeights == null || _lastHidden == null)  
         {
             throw new InvalidOperationException("Forward pass must be called before Backward.");
         }
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var outputGradient3D = NormalizeOutputGradient(outputGradient);
+        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient3D);
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
-        int numEdges = _edgeFeatures.Shape[1];
+        int numEdges = _normalizedEdgeFeatures.Shape[1];
 
         // Initialize gradients
         _edgeNetworkWeights1Gradient = new Tensor<T>([_edgeFeaturesCount, _edgeNetworkHiddenDim]);
@@ -486,7 +635,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
 
                     for (int j = 0; j < numNodes; j++)
                     {
-                        if (NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero))
+                        if (NumOps.Equals(_normalizedAdjacencyMatrix[b, i, j], NumOps.Zero))
                             continue;
 
                         for (int inF = 0; inF < _inputFeatures; inF++)
@@ -517,7 +666,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
             {
                 for (int j = 0; j < numNodes; j++)
                 {
-                    if (!NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero))
+                    if (!NumOps.Equals(_normalizedAdjacencyMatrix[b, i, j], NumOps.Zero))
                     {
                         for (int inF = 0; inF < _inputFeatures; inF++)
                         {
@@ -538,7 +687,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
 
         // Gradient w.r.t. edge network weights 2
         // dL/dW2 = hidden^T @ flatWeightsGrad
-        var hiddenT = Engine.TensorTranspose(_lastHidden);
+        var hiddenT = _lastHidden.Transpose([0, 2, 1]);
         for (int b = 0; b < batchSize; b++)
         {
             var hiddenBatchT = Engine.TensorSlice(hiddenT, [b, 0, 0], [1, _edgeNetworkHiddenDim, numEdges]).Reshape([_edgeNetworkHiddenDim, numEdges]);
@@ -565,7 +714,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
 
         // Gradient w.r.t. edge network weights 1
         // dL/dW1 = edgeFeatures^T @ reluGrad
-        var edgeFeaturesT = Engine.TensorTranspose(_edgeFeatures);
+        var edgeFeaturesT = _normalizedEdgeFeatures.Transpose([0, 2, 1]);
         for (int b = 0; b < batchSize; b++)
         {
             var edgesBatchT = Engine.TensorSlice(edgeFeaturesT, [b, 0, 0], [1, _edgeFeaturesCount, numEdges]).Reshape([_edgeFeaturesCount, numEdges]);
@@ -574,7 +723,51 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
             _edgeNetworkWeights1Gradient = Engine.TensorAdd(_edgeNetworkWeights1Gradient, w1Grad);
         }
 
+        if (_originalInputShape != null && _originalInputShape.Length != inputGradient.Shape.Length)
+        {
+            if (_originalInputShape.Length == 2)
+            {
+                return inputGradient.Reshape([numNodes, _inputFeatures]);
+            }
+
+            if (_originalInputShape.Length == 1)
+            {
+                return inputGradient.Reshape([_inputFeatures]);
+            }
+
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
         return inputGradient;
+    }
+
+    private Tensor<T> NormalizeOutputGradient(Tensor<T> outputGradient)
+    {
+        int rank = outputGradient.Shape.Length;
+        if (rank == 3)
+        {
+            return outputGradient;
+        }
+
+        if (rank == 2)
+        {
+            return outputGradient.Reshape([1, outputGradient.Shape[0], outputGradient.Shape[1]]);
+        }
+
+        if (rank == 1)
+        {
+            return outputGradient.Reshape([1, 1, outputGradient.Shape[0]]);
+        }
+
+        int flatBatch = 1;
+        for (int d = 0; d < rank - 2; d++)
+        {
+            flatBatch *= outputGradient.Shape[d];
+        }
+
+        int numNodes = outputGradient.Shape[rank - 2];
+        int features = outputGradient.Shape[rank - 1];
+        return outputGradient.Reshape([flatBatch, numNodes, features]);
     }
 
     /// <inheritdoc/>

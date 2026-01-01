@@ -295,29 +295,30 @@ public class DenseBlock<T> : LayerBase<T>
     #region Helper Methods
 
     /// <summary>
-    /// Concatenates two tensors along the channel dimension (dim=1 for NCHW).
+    /// Concatenates two tensors along the channel dimension (dim=0 for CHW, dim=1 for NCHW).
     /// </summary>
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
-        int batch = a.Shape[0];
-        int channelsA = a.Shape[1];
-        int channelsB = b.Shape[1];
-        int height = a.Shape[2];
-        int width = a.Shape[3];
-
-        int totalChannels = channelsA + channelsB;
-        var result = new Tensor<T>([batch, totalChannels, height, width]);
-
-        // Copy first tensor
-        int spatialSize = height * width;
-        for (int n = 0; n < batch; n++)
+        // Handle 3D tensors (CHW format)
+        if (a.Shape.Length == 3)
         {
+            int channelsA = a.Shape[0];
+            int channelsB = b.Shape[0];
+            int height = a.Shape[1];
+            int width = a.Shape[2];
+
+            int totalChannels = channelsA + channelsB;
+            var result = new Tensor<T>([totalChannels, height, width]);
+
+            int spatialSize = height * width;
+
+            // Copy first tensor
             for (int c = 0; c < channelsA; c++)
             {
                 for (int hw = 0; hw < spatialSize; hw++)
                 {
-                    int srcIdx = n * (channelsA * spatialSize) + c * spatialSize + hw;
-                    int dstIdx = n * (totalChannels * spatialSize) + c * spatialSize + hw;
+                    int srcIdx = c * spatialSize + hw;
+                    int dstIdx = c * spatialSize + hw;
                     result.Data[dstIdx] = a.Data[srcIdx];
                 }
             }
@@ -327,39 +328,76 @@ public class DenseBlock<T> : LayerBase<T>
             {
                 for (int hw = 0; hw < spatialSize; hw++)
                 {
-                    int srcIdx = n * (channelsB * spatialSize) + c * spatialSize + hw;
-                    int dstIdx = n * (totalChannels * spatialSize) + (channelsA + c) * spatialSize + hw;
+                    int srcIdx = c * spatialSize + hw;
+                    int dstIdx = (channelsA + c) * spatialSize + hw;
                     result.Data[dstIdx] = b.Data[srcIdx];
+                }
+            }
+
+            return result;
+        }
+
+        // Handle 4D tensors (NCHW format)
+        int batch = a.Shape[0];
+        int channelsA4D = a.Shape[1];
+        int channelsB4D = b.Shape[1];
+        int height4D = a.Shape[2];
+        int width4D = a.Shape[3];
+
+        int totalChannels4D = channelsA4D + channelsB4D;
+        var result4D = new Tensor<T>([batch, totalChannels4D, height4D, width4D]);
+
+        // Copy first tensor
+        int spatialSize4D = height4D * width4D;
+        for (int n = 0; n < batch; n++)
+        {
+            for (int c = 0; c < channelsA4D; c++)
+            {
+                for (int hw = 0; hw < spatialSize4D; hw++)
+                {
+                    int srcIdx = n * (channelsA4D * spatialSize4D) + c * spatialSize4D + hw;
+                    int dstIdx = n * (totalChannels4D * spatialSize4D) + c * spatialSize4D + hw;
+                    result4D.Data[dstIdx] = a.Data[srcIdx];
+                }
+            }
+
+            // Copy second tensor
+            for (int c = 0; c < channelsB4D; c++)
+            {
+                for (int hw = 0; hw < spatialSize4D; hw++)
+                {
+                    int srcIdx = n * (channelsB4D * spatialSize4D) + c * spatialSize4D + hw;
+                    int dstIdx = n * (totalChannels4D * spatialSize4D) + (channelsA4D + c) * spatialSize4D + hw;
+                    result4D.Data[dstIdx] = b.Data[srcIdx];
                 }
             }
         }
 
-        return result;
+        return result4D;
     }
 
     /// <summary>
-    /// Splits a gradient tensor along the channel dimension.
+    /// Splits a gradient tensor along the channel dimension (dim=0 for CHW, dim=1 for NCHW).
     /// </summary>
     private (Tensor<T> first, Tensor<T> second) SplitGradient(Tensor<T> grad, int firstChannels, int secondChannels)
     {
-        int batch = grad.Shape[0];
-        int height = grad.Shape[2];
-        int width = grad.Shape[3];
-
-        var first = new Tensor<T>([batch, firstChannels, height, width]);
-        var second = new Tensor<T>([batch, secondChannels, height, width]);
-
-        int totalChannels = firstChannels + secondChannels;
-        int spatialSize = height * width;
-
-        for (int n = 0; n < batch; n++)
+        // Handle 3D tensors (CHW format)
+        if (grad.Shape.Length == 3)
         {
+            int height = grad.Shape[1];
+            int width = grad.Shape[2];
+
+            var first = new Tensor<T>([firstChannels, height, width]);
+            var second = new Tensor<T>([secondChannels, height, width]);
+
+            int spatialSize = height * width;
+
             for (int c = 0; c < firstChannels; c++)
             {
                 for (int hw = 0; hw < spatialSize; hw++)
                 {
-                    int srcIdx = n * (totalChannels * spatialSize) + c * spatialSize + hw;
-                    int dstIdx = n * (firstChannels * spatialSize) + c * spatialSize + hw;
+                    int srcIdx = c * spatialSize + hw;
+                    int dstIdx = c * spatialSize + hw;
                     first.Data[dstIdx] = grad.Data[srcIdx];
                 }
             }
@@ -368,14 +406,50 @@ public class DenseBlock<T> : LayerBase<T>
             {
                 for (int hw = 0; hw < spatialSize; hw++)
                 {
-                    int srcIdx = n * (totalChannels * spatialSize) + (firstChannels + c) * spatialSize + hw;
-                    int dstIdx = n * (secondChannels * spatialSize) + c * spatialSize + hw;
+                    int srcIdx = (firstChannels + c) * spatialSize + hw;
+                    int dstIdx = c * spatialSize + hw;
                     second.Data[dstIdx] = grad.Data[srcIdx];
+                }
+            }
+
+            return (first, second);
+        }
+
+        // Handle 4D tensors (NCHW format)
+        int batch = grad.Shape[0];
+        int height4D = grad.Shape[2];
+        int width4D = grad.Shape[3];
+
+        var first4D = new Tensor<T>([batch, firstChannels, height4D, width4D]);
+        var second4D = new Tensor<T>([batch, secondChannels, height4D, width4D]);
+
+        int totalChannels4D = firstChannels + secondChannels;
+        int spatialSize4D = height4D * width4D;
+
+        for (int n = 0; n < batch; n++)
+        {
+            for (int c = 0; c < firstChannels; c++)
+            {
+                for (int hw = 0; hw < spatialSize4D; hw++)
+                {
+                    int srcIdx = n * (totalChannels4D * spatialSize4D) + c * spatialSize4D + hw;
+                    int dstIdx = n * (firstChannels * spatialSize4D) + c * spatialSize4D + hw;
+                    first4D.Data[dstIdx] = grad.Data[srcIdx];
+                }
+            }
+
+            for (int c = 0; c < secondChannels; c++)
+            {
+                for (int hw = 0; hw < spatialSize4D; hw++)
+                {
+                    int srcIdx = n * (totalChannels4D * spatialSize4D) + (firstChannels + c) * spatialSize4D + hw;
+                    int dstIdx = n * (secondChannels * spatialSize4D) + c * spatialSize4D + hw;
+                    second4D.Data[dstIdx] = grad.Data[srcIdx];
                 }
             }
         }
 
-        return (first, second);
+        return (first4D, second4D);
     }
 
     /// <summary>

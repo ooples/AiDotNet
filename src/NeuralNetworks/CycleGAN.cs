@@ -121,22 +121,22 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Generator A→B.
     /// </summary>
-    public ConvolutionalNeuralNetwork<T> GeneratorAtoB { get; private set; }
+    public NeuralNetworkBase<T> GeneratorAtoB { get; private set; }
 
     /// <summary>
     /// Generator B→A.
     /// </summary>
-    public ConvolutionalNeuralNetwork<T> GeneratorBtoA { get; private set; }
+    public NeuralNetworkBase<T> GeneratorBtoA { get; private set; }
 
     /// <summary>
     /// Discriminator for domain A.
     /// </summary>
-    public ConvolutionalNeuralNetwork<T> DiscriminatorA { get; private set; }
+    public NeuralNetworkBase<T> DiscriminatorA { get; private set; }
 
     /// <summary>
     /// Discriminator for domain B.
     /// </summary>
-    public ConvolutionalNeuralNetwork<T> DiscriminatorB { get; private set; }
+    public NeuralNetworkBase<T> DiscriminatorB { get; private set; }
 
     private ILossFunction<T> _lossFunction;
 
@@ -263,10 +263,10 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         _cycleConsistencyLambda = cycleConsistencyLambda;
         _identityLambda = identityLambda;
 
-        GeneratorAtoB = new ConvolutionalNeuralNetwork<T>(generatorAtoB);
-        GeneratorBtoA = new ConvolutionalNeuralNetwork<T>(generatorBtoA);
-        DiscriminatorA = new ConvolutionalNeuralNetwork<T>(discriminatorA);
-        DiscriminatorB = new ConvolutionalNeuralNetwork<T>(discriminatorB);
+        GeneratorAtoB = CreateNetworkForInputType(generatorAtoB, inputType);
+        GeneratorBtoA = CreateNetworkForInputType(generatorBtoA, inputType);
+        DiscriminatorA = CreateNetworkForInputType(discriminatorA, inputType);
+        DiscriminatorB = CreateNetworkForInputType(discriminatorB, inputType);
 
         // Initialize optimizers - use provided optimizers or create default Adam optimizers
         _generatorAtoBOptimizer = generatorAtoBOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(GeneratorAtoB);
@@ -277,6 +277,20 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative);
 
         InitializeLayers();
+    }
+
+    /// <summary>
+    /// Creates the appropriate neural network type based on the input type.
+    /// </summary>
+    private static NeuralNetworkBase<T> CreateNetworkForInputType(NeuralNetworkArchitecture<T> architecture, InputType inputType)
+    {
+        return inputType switch
+        {
+            InputType.OneDimensional => new FeedForwardNeuralNetwork<T>(architecture),
+            InputType.TwoDimensional => new FeedForwardNeuralNetwork<T>(architecture),
+            InputType.ThreeDimensional => new ConvolutionalNeuralNetwork<T>(architecture),
+            _ => new FeedForwardNeuralNetwork<T>(architecture)
+        };
     }
 
     /// <summary>
@@ -328,13 +342,13 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         var realAPred = DiscriminatorA.Predict(realA);
         var realALabels = CreateLabelTensor(batchSize, NumOps.One);
         var realAGrad = CalculateBinaryGradients(realAPred, realALabels, batchSize);
-        DiscriminatorA.Backward(realAGrad);
+        DiscriminatorA.Backpropagate(realAGrad);
 
         // Process fake second: predict, compute grad, backward (uses correct forward cache)
         var fakeAPred = DiscriminatorA.Predict(fakeA);
         var fakeALabels = CreateLabelTensor(batchSize, NumOps.Zero);
         var fakeAGrad = CalculateBinaryGradients(fakeAPred, fakeALabels, batchSize);
-        DiscriminatorA.Backward(fakeAGrad);
+        DiscriminatorA.Backpropagate(fakeAGrad);
 
         T discALoss = CalculateDiscriminatorLoss(realAPred, fakeAPred, batchSize);
         UpdateDiscriminatorAParameters();
@@ -344,13 +358,13 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         var realBPred = DiscriminatorB.Predict(realB);
         var realBLabels = CreateLabelTensor(batchSize, NumOps.One);
         var realBGrad = CalculateBinaryGradients(realBPred, realBLabels, batchSize);
-        DiscriminatorB.Backward(realBGrad);
+        DiscriminatorB.Backpropagate(realBGrad);
 
         // Process fake second: predict, compute grad, backward (uses correct forward cache)
         var fakeBPred = DiscriminatorB.Predict(fakeB);
         var fakeBLabels = CreateLabelTensor(batchSize, NumOps.Zero);
         var fakeBGrad = CalculateBinaryGradients(fakeBPred, fakeBLabels, batchSize);
-        DiscriminatorB.Backward(fakeBGrad);
+        DiscriminatorB.Backpropagate(fakeBGrad);
 
         T discBLoss = CalculateDiscriminatorLoss(realBPred, fakeBPred, batchSize);
         UpdateDiscriminatorBParameters();
@@ -421,7 +435,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         for (int i = 0; i < genAtoBGrad.Length; i++)
             combinedGenAtoBGrad.SetFlat(i, NumOps.Add(genAtoBGrad.GetFlat(i), identityBGrad.GetFlat(i)));
 
-        GeneratorAtoB.Backward(combinedGenAtoBGrad);
+        GeneratorAtoB.Backpropagate(combinedGenAtoBGrad);
         UpdateGeneratorAtoBParameters();
 
         // GeneratorBtoA receives: adversarial + cycle + identity gradients
@@ -429,7 +443,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         for (int i = 0; i < genBtoAGrad.Length; i++)
             combinedGenBtoAGrad.SetFlat(i, NumOps.Add(genBtoAGrad.GetFlat(i), identityAGrad.GetFlat(i)));
 
-        GeneratorBtoA.Backward(combinedGenBtoAGrad);
+        GeneratorBtoA.Backpropagate(combinedGenBtoAGrad);
         UpdateGeneratorBtoAParameters();
 
         // Total generator loss

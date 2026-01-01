@@ -166,6 +166,11 @@ public class PoolingLayer<T> : LayerBase<T>
     private int[,,,,]? _maxIndices;
 
     /// <summary>
+    /// Tracks whether a batch dimension was added during forward pass.
+    /// </summary>
+    private bool _addedBatchDimension;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="PoolingLayer{T}"/> class with the specified dimensions and pooling parameters.
     /// </summary>
     /// <param name="inputDepth">The depth (number of channels) of the input tensor.</param>
@@ -272,6 +277,25 @@ public class PoolingLayer<T> : LayerBase<T>
         // Phase B: US-GPU-016 - Replace 4 nested loops with IEngine pooling operations
         // Achieves 20-100x speedup on GPU for large feature maps
 
+        // Handle any-rank input: convert to 4D [batch, channels, height, width]
+        Tensor<T> input4D;
+        if (input.Shape.Length == 3)
+        {
+            // 3D [C, H, W] -> 4D [1, C, H, W]
+            _addedBatchDimension = true;
+            input4D = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2]);
+        }
+        else if (input.Shape.Length == 4)
+        {
+            // Already 4D [B, C, H, W]
+            _addedBatchDimension = false;
+            input4D = input;
+        }
+        else
+        {
+            throw new ArgumentException($"PoolingLayer requires 3D [C,H,W] or 4D [B,C,H,W] input, got {input.Shape.Length}D");
+        }
+
         Tensor<T> output;
         var poolSizeArr = new[] { PoolSize, PoolSize };
         var strideArr = new[] { Stride, Stride };
@@ -281,17 +305,23 @@ public class PoolingLayer<T> : LayerBase<T>
             // Use GPU-accelerated MaxPool2DWithIndices
             // This provides both the pooled output and the indices for backpropagation
             // in a single optimized kernel call
-            output = Engine.MaxPool2DWithIndices(input, poolSizeArr, strideArr, out _maxIndices);
+            output = Engine.MaxPool2DWithIndices(input4D, poolSizeArr, strideArr, out _maxIndices);
         }
         else if (Type == PoolingType.Average)
         {
             // Use GPU-accelerated AvgPool2D
-            output = Engine.AvgPool2D(input, poolSizeArr, strideArr);
+            output = Engine.AvgPool2D(input4D, poolSizeArr, strideArr);
             _maxIndices = null;
         }
         else
         {
             throw new InvalidOperationException($"Unsupported pooling type: {Type}");
+        }
+
+        // Return with matching dimensions (3D if batch was added)
+        if (_addedBatchDimension)
+        {
+            return output.Reshape(output.Shape[1], output.Shape[2], output.Shape[3]);
         }
 
         return output;
@@ -347,24 +377,30 @@ public class PoolingLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Handle any-rank gradient: convert to 4D for Engine operations
+        Tensor<T> outGrad4D = (outputGradient.Shape.Length == 3 && _addedBatchDimension)
+            ? outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2])
+            : outputGradient;
+
+        // Determine input shape for backward (needs to be 4D)
+        int[] inputShape4D = _lastInput.Shape.Length == 3
+            ? new[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2] }
+            : _lastInput.Shape;
+
         var poolSizeArr = new[] { PoolSize, PoolSize };
         var strideArr = new[] { Stride, Stride };
 
-        if (Type == PoolingType.Max)
+        Tensor<T> inputGrad = Type switch
         {
-            if (_maxIndices == null)
-                throw new InvalidOperationException("Max indices not available for backward pass.");
+            PoolingType.Max => _maxIndices == null
+                ? throw new InvalidOperationException("Max indices not available for backward pass.")
+                : Engine.MaxPool2DBackward(outGrad4D, _maxIndices, inputShape4D, poolSizeArr, strideArr),
+            PoolingType.Average => Engine.AvgPool2DBackward(outGrad4D, inputShape4D, poolSizeArr, strideArr),
+            _ => throw new InvalidOperationException($"Unsupported pooling type: {Type}")
+        };
 
-            // Use GPU-accelerated MaxPool2DBackward
-            return Engine.MaxPool2DBackward(outputGradient, _maxIndices, _lastInput.Shape, poolSizeArr, strideArr);
-        }
-        else if (Type == PoolingType.Average)
-        {
-            // Use GPU-accelerated AvgPool2DBackward
-            return Engine.AvgPool2DBackward(outputGradient, _lastInput.Shape, poolSizeArr, strideArr);
-        }
-
-        throw new InvalidOperationException($"Unsupported pooling type: {Type}");
+        // Return with matching dimensions (3D if batch was added)
+        return _addedBatchDimension ? inputGrad.Reshape(_lastInput.Shape) : inputGrad;
     }
 
     /// <summary>

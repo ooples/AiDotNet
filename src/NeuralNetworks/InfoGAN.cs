@@ -167,6 +167,11 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// </remarks>
     public ConvolutionalNeuralNetwork<T> QNetwork { get; private set; }
 
+    /// <summary>
+    /// Gets the total number of trainable parameters in the InfoGAN.
+    /// </summary>
+    public override int ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount() + QNetwork.GetParameterCount();
+
     private ILossFunction<T> _lossFunction;
 
     /// <summary>

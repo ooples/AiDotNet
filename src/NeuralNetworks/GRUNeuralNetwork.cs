@@ -54,6 +54,7 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     public GRUNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        InitializeGRULayers();
     }
 
     /// <summary>
@@ -79,11 +80,16 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override void InitializeLayers()
     {
+        InitializeGRULayers();
+    }
+
+    private void InitializeGRULayers()
+    {
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
             // Use the layers provided by the user
             Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
+            ValidateCustomLayersInternal(Layers);
         }
         else
         {

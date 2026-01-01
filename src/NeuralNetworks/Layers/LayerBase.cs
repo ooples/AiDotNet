@@ -219,6 +219,17 @@ public abstract class LayerBase<T> : ILayer<T>
     /// </remarks>
     protected int[][] InputShapes { get; private set; }
 
+    protected void UpdateInputShape(int[] inputShape)
+    {
+        if (inputShape == null || inputShape.Length == 0)
+        {
+            throw new ArgumentException("Input shape must be non-empty.", nameof(inputShape));
+        }
+
+        InputShape = inputShape;
+        InputShapes = [inputShape];
+    }
+
     /// <summary>
     /// Gets the output shape for this layer.
     /// </summary>
@@ -509,10 +520,10 @@ public abstract class LayerBase<T> : ILayer<T>
     /// </remarks>
     public virtual void SetTrainingMode(bool isTraining)
     {
-        if (SupportsTraining)
-        {
-            IsTrainingMode = isTraining;
-        }
+        // Always set training mode, regardless of SupportsTraining.
+        // Layers like GaussianNoiseLayer and DropoutLayer need training mode
+        // to control their behavior even though they have no trainable parameters.
+        IsTrainingMode = isTraining;
     }
 
     /// <summary>
@@ -1162,14 +1173,18 @@ public abstract class LayerBase<T> : ILayer<T>
         copy.InputShape = (int[])InputShape.Clone();
         copy.OutputShape = (int[])OutputShape.Clone();
 
-        // Copy activation functions
+        // Copy activation functions (use same instance if not cloneable since they're typically stateless)
         if (ScalarActivation != null)
         {
-            copy.ScalarActivation = (IActivationFunction<T>)((ICloneable)ScalarActivation).Clone();
+            copy.ScalarActivation = ScalarActivation is ICloneable cloneable
+                ? (IActivationFunction<T>)cloneable.Clone()
+                : ScalarActivation;
         }
         if (VectorActivation != null)
         {
-            copy.VectorActivation = (IVectorActivationFunction<T>)((ICloneable)VectorActivation).Clone();
+            copy.VectorActivation = VectorActivation is ICloneable vectorCloneable
+                ? (IVectorActivationFunction<T>)vectorCloneable.Clone()
+                : VectorActivation;
         }
 
         return copy;
@@ -1274,8 +1289,38 @@ public abstract class LayerBase<T> : ILayer<T>
 
         if (VectorActivation != null)
         {
-            // Use the vector activation function's derivative method
-            return VectorActivation.Derivative(input).Multiply(outputGradient);
+            var derivative = VectorActivation.Derivative(input);
+
+            if (derivative.Rank == input.Rank)
+            {
+                return derivative.ElementwiseMultiply(outputGradient);
+            }
+
+            if (derivative.Rank != input.Rank + 1)
+            {
+                throw new ArgumentException("Vector activation derivative tensor has an unexpected rank.");
+            }
+
+            int vectorLength = input.Shape[input.Shape.Length - 1];
+            int batchElements = input.Length / vectorLength;
+            var flatDerivative = derivative.Reshape(new[] { batchElements, vectorLength, vectorLength });
+            var flatOutputGrad = outputGradient.Reshape(new[] { batchElements, vectorLength });
+            var flatInputGrad = new Tensor<T>(new[] { batchElements, vectorLength });
+
+            for (int i = 0; i < batchElements; i++)
+            {
+                for (int j = 0; j < vectorLength; j++)
+                {
+                    T sum = NumOps.Zero;
+                    for (int k = 0; k < vectorLength; k++)
+                    {
+                        sum = NumOps.Add(sum, NumOps.Multiply(flatDerivative[i, j, k], flatOutputGrad[i, k]));
+                    }
+                    flatInputGrad[i, j] = sum;
+                }
+            }
+
+            return flatInputGrad.Reshape(input.Shape);
         }
         else if (ScalarActivation != null)
         {
