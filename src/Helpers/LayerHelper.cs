@@ -7202,41 +7202,109 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates the mask decoder layers for SAM2.
+    /// Creates the shared mask decoder refinement layers for SAM2.
     /// </summary>
     /// <param name="numFeatures">Number of feature channels (default: 256).</param>
     /// <param name="featureHeight">Height of feature maps (default: 64).</param>
     /// <param name="featureWidth">Width of feature maps (default: 64).</param>
-    /// <param name="numMaskCandidates">Number of mask candidates to output (default: 4).</param>
-    /// <returns>Mask decoder layers that produce segmentation outputs.</returns>
+    /// <returns>Shared refinement layers that process fused features.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> The mask decoder takes image features and prompt embeddings
-    /// to produce the final segmentation masks. It outputs multiple candidate masks
-    /// along with confidence scores.
+    /// <b>For Beginners:</b> These layers refine the combined image and prompt features
+    /// before branching into separate prediction heads. Output shape: [numFeatures, h, w]
+    /// </para>
+    /// <para>
+    /// <b>Usage:</b> Apply these layers first, then branch to the three separate heads:
+    /// - CreateSAM2MaskHead: Produces mask candidates
+    /// - CreateSAM2IoUHead: Predicts mask quality scores
+    /// - CreateSAM2OcclusionHead: Predicts occlusion
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateSAM2MaskDecoderLayers(
         int numFeatures = 256,
         int featureHeight = 64,
-        int featureWidth = 64,
-        int numMaskCandidates = 4)
+        int featureWidth = 64)
     {
         int h = featureHeight;
         int w = featureWidth;
 
-        // Mask decoder refinement
+        // Mask decoder refinement - shared feature processing
         yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+    }
 
-        // Output: mask candidates at feature resolution
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numMaskCandidates, 1, 1, 0, new SigmoidActivation<T>() as IActivationFunction<T>);
+    /// <summary>
+    /// Creates the mask prediction head for SAM2.
+    /// </summary>
+    /// <param name="numFeatures">Number of input feature channels (default: 256).</param>
+    /// <param name="featureHeight">Height of feature maps (default: 64).</param>
+    /// <param name="featureWidth">Width of feature maps (default: 64).</param>
+    /// <param name="numMaskCandidates">Number of mask candidates to output (default: 4).</param>
+    /// <returns>Mask prediction layers. Output shape: [numMaskCandidates, h, w]</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This head produces multiple candidate segmentation masks.
+    /// Each candidate is a probability map indicating object presence at each pixel.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSAM2MaskHead(
+        int numFeatures = 256,
+        int featureHeight = 64,
+        int featureWidth = 64,
+        int numMaskCandidates = 4)
+    {
+        // Input: [numFeatures, h, w] from CreateSAM2MaskDecoderLayers
+        // Output: [numMaskCandidates, h, w] mask probability maps
+        yield return new ConvolutionalLayer<T>(numFeatures, featureHeight, featureWidth, numMaskCandidates, 1, 1, 0, new SigmoidActivation<T>() as IActivationFunction<T>);
+    }
 
-        // IoU prediction head (uses global pooled features)
-        yield return new GlobalPoolingLayer<T>([numFeatures, h, w], PoolingType.Average);
+    /// <summary>
+    /// Creates the IoU (Intersection over Union) prediction head for SAM2.
+    /// </summary>
+    /// <param name="numFeatures">Number of input feature channels (default: 256).</param>
+    /// <param name="featureHeight">Height of feature maps (default: 64).</param>
+    /// <param name="featureWidth">Width of feature maps (default: 64).</param>
+    /// <param name="numMaskCandidates">Number of mask candidates (default: 4).</param>
+    /// <returns>IoU prediction layers. Output shape: [numMaskCandidates]</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This head predicts the quality (IoU score) for each mask candidate.
+    /// Higher scores indicate better masks. Used to select the best mask from candidates.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSAM2IoUHead(
+        int numFeatures = 256,
+        int featureHeight = 64,
+        int featureWidth = 64,
+        int numMaskCandidates = 4)
+    {
+        // Input: [numFeatures, h, w] from CreateSAM2MaskDecoderLayers
+        // Global pool then predict IoU for each mask candidate
+        yield return new GlobalPoolingLayer<T>([numFeatures, featureHeight, featureWidth], PoolingType.Average);
         yield return new DenseLayer<T>(numFeatures, numMaskCandidates, new SigmoidActivation<T>() as IActivationFunction<T>);
+    }
 
-        // Occlusion prediction head
+    /// <summary>
+    /// Creates the occlusion prediction head for SAM2.
+    /// </summary>
+    /// <param name="numFeatures">Number of input feature channels (default: 256).</param>
+    /// <param name="featureHeight">Height of feature maps (default: 64).</param>
+    /// <param name="featureWidth">Width of feature maps (default: 64).</param>
+    /// <returns>Occlusion prediction layers. Output shape: [1]</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This head predicts whether the tracked object is occluded
+    /// (hidden by other objects). A high score indicates the object may be temporarily invisible.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSAM2OcclusionHead(
+        int numFeatures = 256,
+        int featureHeight = 64,
+        int featureWidth = 64)
+    {
+        // Input: [numFeatures, h, w] from CreateSAM2MaskDecoderLayers
+        // Global pool then predict occlusion probability
+        yield return new GlobalPoolingLayer<T>([numFeatures, featureHeight, featureWidth], PoolingType.Average);
         yield return new DenseLayer<T>(numFeatures, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
     }
 

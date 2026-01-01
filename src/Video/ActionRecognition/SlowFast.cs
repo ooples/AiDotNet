@@ -63,13 +63,25 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ILossFunction<T> _lossFunction;
-    private readonly int _numClasses;
-    private readonly int _slowFrames;
-    private readonly int _fastFrames;
-    private readonly int _slowChannels;
-    private readonly int _fastChannels;
-    private readonly int _alpha;
-    private readonly int _imageSize;
+
+    // Configuration fields - mutable to support deserialization
+    private int _numClasses;
+    private int _slowFrames;
+    private int _fastFrames;
+    private int _slowChannels;
+    private int _fastChannels;
+    private int _alpha;
+    private int _imageSize;
+
+    /// <summary>
+    /// Fast pathway layers (high temporal resolution, low channel capacity).
+    /// </summary>
+    private readonly List<ILayer<T>> _fastLayers = [];
+
+    /// <summary>
+    /// Fusion layers that combine slow and fast pathway outputs for classification.
+    /// </summary>
+    private readonly List<ILayer<T>> _fusionLayers = [];
 
     #endregion
 
@@ -121,25 +133,42 @@ public class SlowFast<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Creates a SlowFast model using a pretrained ONNX model for inference.
     /// </summary>
+    /// <param name="architecture">The network architecture configuration.</param>
+    /// <param name="onnxModelPath">Path to the pretrained ONNX model file.</param>
+    /// <param name="numClasses">Number of action classes (default: 400 for Kinetics-400).</param>
+    /// <param name="slowFrames">Number of frames for slow pathway (default: 4).</param>
+    /// <param name="slowChannels">Base channels for slow pathway (default: 64).</param>
+    /// <param name="fastChannels">Base channels for fast pathway (default: 8).</param>
+    /// <param name="alpha">Frame rate ratio between fast and slow pathways (default: 8).</param>
     public SlowFast(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses = 400)
+        int numClasses = 400,
+        int slowFrames = 4,
+        int slowChannels = 64,
+        int fastChannels = 8,
+        int alpha = 8)
         : base(architecture, new CrossEntropyLoss<T>())
     {
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
             throw new FileNotFoundException($"SlowFast ONNX model not found: {onnxModelPath}");
+        if (numClasses < 1)
+            throw new ArgumentOutOfRangeException(nameof(numClasses), "Number of classes must be at least 1.");
+        if (slowFrames < 1)
+            throw new ArgumentOutOfRangeException(nameof(slowFrames), "Slow frames must be at least 1.");
+        if (alpha < 1)
+            throw new ArgumentOutOfRangeException(nameof(alpha), "Alpha must be at least 1.");
 
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
         _numClasses = numClasses;
-        _slowFrames = 4;
-        _fastFrames = 32;
-        _slowChannels = 64;
-        _fastChannels = 8;
-        _alpha = 8;
+        _slowFrames = slowFrames;
+        _fastFrames = slowFrames * alpha;
+        _slowChannels = slowChannels;
+        _fastChannels = fastChannels;
+        _alpha = alpha;
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
         _lossFunction = new CrossEntropyLoss<T>();
 
@@ -193,11 +222,105 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
     private Tensor<T> Forward(Tensor<T> input)
     {
-        var result = input;
+        // SlowFast dual-pathway architecture:
+        // Input is expected as [batch, channels, frames, height, width] or [batch, channels * frames, height, width]
+        // Slow pathway: subsampled frames (every alpha-th frame)
+        // Fast pathway: all frames
+
+        // Run slow pathway (Layers contains slow pathway layers)
+        var slowInput = SubsampleFrames(input, _alpha);
+        var slowResult = slowInput;
         foreach (var layer in Layers)
         {
-            result = layer.Forward(result);
+            slowResult = layer.Forward(slowResult);
         }
+
+        // Run fast pathway
+        var fastResult = input;
+        foreach (var layer in _fastLayers)
+        {
+            fastResult = layer.Forward(fastResult);
+        }
+
+        // Concatenate slow and fast pathway outputs along channel dimension
+        var fused = ConcatenateTensors(slowResult, fastResult);
+
+        // Apply fusion layers for classification
+        foreach (var layer in _fusionLayers)
+        {
+            fused = layer.Forward(fused);
+        }
+
+        return fused;
+    }
+
+    /// <summary>
+    /// Subsamples frames by taking every n-th frame.
+    /// </summary>
+    private Tensor<T> SubsampleFrames(Tensor<T> input, int subsampleRate)
+    {
+        if (input.Rank < 4)
+            return input;
+
+        // Assume input is [batch, channels * frames, height, width] or [batch, channels, frames, height, width]
+        // For simplicity, if channels are flattened with frames, subsample along channel dimension
+        int batch = input.Shape[0];
+        int totalChannels = input.Shape[1];
+        int h = input.Shape[2];
+        int w = input.Shape[3];
+
+        // Calculate subsampled channels (every subsampleRate-th set of RGB channels)
+        int framesInInput = totalChannels / 3;
+        int subsampledFrames = (framesInInput + subsampleRate - 1) / subsampleRate;
+        int subsampledChannels = subsampledFrames * 3;
+
+        if (subsampledFrames == framesInInput || subsampleRate == 1)
+            return input;
+
+        var result = new Tensor<T>([batch, subsampledChannels, h, w]);
+        int srcFrameSize = 3 * h * w;
+        int dstFrameSize = 3 * h * w;
+
+        for (int b = 0; b < batch; b++)
+        {
+            int dstFrame = 0;
+            for (int srcFrame = 0; srcFrame < framesInInput && dstFrame < subsampledFrames; srcFrame += subsampleRate)
+            {
+                int srcOffset = b * totalChannels * h * w + srcFrame * 3 * h * w;
+                int dstOffset = b * subsampledChannels * h * w + dstFrame * 3 * h * w;
+                Array.Copy(input.Data, srcOffset, result.Data, dstOffset, Math.Min(srcFrameSize, dstFrameSize));
+                dstFrame++;
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Concatenates two tensors along the channel dimension.
+    /// </summary>
+    private Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
+    {
+        if (a.Rank != 4 || b.Rank != 4)
+            throw new ArgumentException("Both tensors must be 4D [batch, channels, height, width].");
+
+        int batch = a.Shape[0];
+        int aChannels = a.Shape[1];
+        int bChannels = b.Shape[1];
+        int h = a.Shape[2];
+        int w = a.Shape[3];
+
+        var result = new Tensor<T>([batch, aChannels + bChannels, h, w]);
+        int aSliceSize = aChannels * h * w;
+        int bSliceSize = bChannels * h * w;
+        int resultSliceSize = (aChannels + bChannels) * h * w;
+
+        for (int bi = 0; bi < batch; bi++)
+        {
+            Array.Copy(a.Data, bi * aSliceSize, result.Data, bi * resultSliceSize, aSliceSize);
+            Array.Copy(b.Data, bi * bSliceSize, result.Data, bi * resultSliceSize + aSliceSize, bSliceSize);
+        }
+
         return result;
     }
 
@@ -271,13 +394,78 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
         var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
 
-        var currentGradient = outputGradientTensor;
-        for (int i = Layers.Count - 1; i >= 0; i--)
+        // Backward through fusion layers
+        var fusionGradient = outputGradientTensor;
+        for (int i = _fusionLayers.Count - 1; i >= 0; i--)
         {
-            currentGradient = Layers[i].Backward(currentGradient);
+            fusionGradient = _fusionLayers[i].Backward(fusionGradient);
         }
 
-        _optimizer?.UpdateParameters(Layers);
+        // Split gradient for slow and fast pathways
+        var (slowGradient, fastGradient) = SplitGradient(fusionGradient);
+
+        // Backward through slow pathway
+        var slowCurrentGradient = slowGradient;
+        for (int i = Layers.Count - 1; i >= 0; i--)
+        {
+            slowCurrentGradient = Layers[i].Backward(slowCurrentGradient);
+        }
+
+        // Backward through fast pathway
+        var fastCurrentGradient = fastGradient;
+        for (int i = _fastLayers.Count - 1; i >= 0; i--)
+        {
+            fastCurrentGradient = _fastLayers[i].Backward(fastCurrentGradient);
+        }
+
+        // Update all parameters
+        var allLayers = new List<ILayer<T>>();
+        allLayers.AddRange(Layers);
+        allLayers.AddRange(_fastLayers);
+        allLayers.AddRange(_fusionLayers);
+        _optimizer?.UpdateParameters(allLayers);
+    }
+
+    /// <summary>
+    /// Splits the gradient tensor for slow and fast pathways.
+    /// </summary>
+    private (Tensor<T> slowGradient, Tensor<T> fastGradient) SplitGradient(Tensor<T> fusedGradient)
+    {
+        if (fusedGradient.Rank != 4)
+            throw new ArgumentException("Gradient must be 4D [batch, channels, height, width].");
+
+        int batch = fusedGradient.Shape[0];
+        int totalChannels = fusedGradient.Shape[1];
+        int h = fusedGradient.Shape[2];
+        int w = fusedGradient.Shape[3];
+
+        // Slow pathway outputs _slowChannels * 8 (after 3 downsampling stages in ResNet-like arch)
+        // Fast pathway outputs _fastChannels * 8
+        int slowOutputChannels = _slowChannels * 8;
+        int fastOutputChannels = _fastChannels * 8;
+
+        // Validate channel count
+        if (totalChannels != slowOutputChannels + fastOutputChannels)
+        {
+            // Fall back to proportional split based on slow/fast channel ratio
+            slowOutputChannels = totalChannels * _slowChannels / (_slowChannels + _fastChannels);
+            fastOutputChannels = totalChannels - slowOutputChannels;
+        }
+
+        var slowGrad = new Tensor<T>([batch, slowOutputChannels, h, w]);
+        var fastGrad = new Tensor<T>([batch, fastOutputChannels, h, w]);
+
+        int slowSliceSize = slowOutputChannels * h * w;
+        int fastSliceSize = fastOutputChannels * h * w;
+        int totalSliceSize = totalChannels * h * w;
+
+        for (int bi = 0; bi < batch; bi++)
+        {
+            Array.Copy(fusedGradient.Data, bi * totalSliceSize, slowGrad.Data, bi * slowSliceSize, slowSliceSize);
+            Array.Copy(fusedGradient.Data, bi * totalSliceSize + slowSliceSize, fastGrad.Data, bi * fastSliceSize, fastSliceSize);
+        }
+
+        return (slowGrad, fastGrad);
     }
 
     #endregion
@@ -286,7 +474,13 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) { ClearLayers(); return; }
+        if (!_useNativeMode)
+        {
+            ClearLayers();
+            _fastLayers.Clear();
+            _fusionLayers.Clear();
+            return;
+        }
 
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
@@ -298,10 +492,21 @@ public class SlowFast<T> : NeuralNetworkBase<T>
             int inputHeight = Architecture.InputHeight > 0 ? Architecture.InputHeight : 224;
             int inputWidth = Architecture.InputWidth > 0 ? Architecture.InputWidth : 224;
 
-            // SlowFast uses a dual-pathway architecture. The Layers list contains the slow pathway.
-            // Fast pathway is created and executed separately in the Forward method, then fused.
+            // SlowFast dual-pathway architecture:
+            // 1. Slow pathway: low temporal resolution (subsampled frames), high channel capacity
             Layers.AddRange(LayerHelper<T>.CreateSlowFastSlowPathwayLayers(
                 inputChannels, inputHeight, inputWidth, _slowChannels));
+
+            // 2. Fast pathway: high temporal resolution (all frames), low channel capacity
+            _fastLayers.AddRange(LayerHelper<T>.CreateSlowFastFastPathwayLayers(
+                inputChannels, inputHeight, inputWidth, _fastChannels));
+
+            // 3. Fusion layers: combine slow and fast pathway outputs for classification
+            // Feature map size after pathways (typically 14x14 for 224x224 input after 4 downsampling stages)
+            int featureHeight = inputHeight / 16;
+            int featureWidth = inputWidth / 16;
+            _fusionLayers.AddRange(LayerHelper<T>.CreateSlowFastFusionLayers(
+                _slowChannels, _fastChannels, featureHeight, featureWidth, _numClasses));
         }
     }
 
@@ -315,7 +520,37 @@ public class SlowFast<T> : NeuralNetworkBase<T>
             throw new InvalidOperationException("Parameter updates are not supported in ONNX mode.");
 
         int offset = 0;
+
+        // Update slow pathway layers
         foreach (var layer in Layers)
+        {
+            var layerParams = layer.GetParameters();
+            int paramCount = layerParams.Length;
+            if (paramCount > 0 && offset + paramCount <= parameters.Length)
+            {
+                var slice = new Vector<T>(paramCount);
+                for (int i = 0; i < paramCount; i++) slice[i] = parameters[offset + i];
+                layer.SetParameters(slice);
+                offset += paramCount;
+            }
+        }
+
+        // Update fast pathway layers
+        foreach (var layer in _fastLayers)
+        {
+            var layerParams = layer.GetParameters();
+            int paramCount = layerParams.Length;
+            if (paramCount > 0 && offset + paramCount <= parameters.Length)
+            {
+                var slice = new Vector<T>(paramCount);
+                for (int i = 0; i < paramCount; i++) slice[i] = parameters[offset + i];
+                layer.SetParameters(slice);
+                offset += paramCount;
+            }
+        }
+
+        // Update fusion layers
+        foreach (var layer in _fusionLayers)
         {
             var layerParams = layer.GetParameters();
             int paramCount = layerParams.Length;
@@ -358,7 +593,20 @@ public class SlowFast<T> : NeuralNetworkBase<T>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
-        for (int i = 0; i < 6; i++) _ = reader.ReadInt32();
+
+        // Restore serialized configuration values
+        _numClasses = reader.ReadInt32();
+        _slowFrames = reader.ReadInt32();
+        _fastFrames = reader.ReadInt32();
+        _slowChannels = reader.ReadInt32();
+        _fastChannels = reader.ReadInt32();
+        _alpha = reader.ReadInt32();
+
+        // Reinitialize layers with restored configuration
+        ClearLayers();
+        _fastLayers.Clear();
+        _fusionLayers.Clear();
+        InitializeLayers();
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
