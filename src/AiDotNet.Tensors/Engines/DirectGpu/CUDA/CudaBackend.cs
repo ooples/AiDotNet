@@ -538,7 +538,30 @@ public sealed class CudaBackend : IDirectGpuBackend
 
     public void SumAxis(IGpuBuffer A, IGpuBuffer B, int outerSize, int reduceSize)
     {
-        throw new NotSupportedException("CUDA reduction kernels are not implemented yet.");
+        if (!IsAvailable)
+            throw new InvalidOperationException("CUDA backend is not available.");
+
+        if (outerSize <= 0)
+            return;
+
+        if (!_kernelCache.TryGetValue("sum_axis", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: sum_axis");
+
+        using var _ = PushContext();
+        uint grid = (uint)((outerSize + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr inputPtr = A.Handle;
+        IntPtr outputPtr = B.Handle;
+        int outer = outerSize;
+        int reduce = reduceSize;
+        unsafe
+        {
+            void** args = stackalloc void*[4];
+            args[0] = &inputPtr;
+            args[1] = &outputPtr;
+            args[2] = &outer;
+            args[3] = &reduce;
+            LaunchKernel(kernel, grid, DefaultBlockSize, args);
+        }
     }
 
     public void Synchronize()

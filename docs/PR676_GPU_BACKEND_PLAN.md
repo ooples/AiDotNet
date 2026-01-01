@@ -12,6 +12,7 @@
 - Elementwise/unary kernel coverage expanded for CUDA + OpenCL (HIP uses CPU fallback).
 - OpenCL/CUDA sum/max reductions now use GPU partial reduction kernels.
 - DirectGpu backend order is configurable via `AIDOTNET_DIRECTGPU_BACKENDS`.
+- CUDA sum-axis reduction now uses a direct kernel.
 
 ## Non-goals
 - Multi-node/distributed GPU execution.

@@ -255,6 +255,18 @@ extern "C" __global__ void reduce_max(const float* input, float* output, int siz
         output[blockIdx.x] = scratch[0];
 }
 
+extern "C" __global__ void sum_axis(const float* input, float* output, int outerSize, int reduceSize)
+{
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= (unsigned int)outerSize) return;
+
+    float sum = 0.0f;
+    unsigned int baseOffset = idx * (unsigned int)reduceSize;
+    for (int i = 0; i < reduceSize; ++i)
+        sum += input[baseOffset + (unsigned int)i];
+    output[idx] = sum;
+}
+
 extern "C" __global__ void bias_add(float* data, const float* bias, int rows, int cols)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -296,6 +308,7 @@ extern "C" __global__ void bias_add(float* data, const float* bias, int rows, in
                 "power_scalar",
                 "reduce_sum",
                 "reduce_max",
+                "sum_axis",
                 "bias_add"
             };
         }
