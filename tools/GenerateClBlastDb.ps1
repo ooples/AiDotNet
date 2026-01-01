@@ -128,6 +128,9 @@ function Write-ClBlastDb([string]$className, [object[]]$vendors, [string]$output
 
 $dbs = @(
     @{ Path = Join-Path $ClBlastRoot "src/database/kernels/xgemm/xgemm_32.hpp"; Class = "ClBlastXgemmDatabaseData"; Output = "ClBlastXgemmDatabase.Generated.cs" },
+    @{ Path = Join-Path $ClBlastRoot "src/database/kernels/xgemm_direct/xgemm_direct_32.hpp"; Class = "ClBlastXgemmDirectDatabaseData"; Output = "ClBlastXgemmDirectDatabase.Generated.cs" },
+    @{ Path = Join-Path $ClBlastRoot "src/database/kernels/copy/copy_32.hpp"; Class = "ClBlastCopyDatabaseData"; Output = "ClBlastCopyDatabase.Generated.cs" },
+    @{ Path = Join-Path $ClBlastRoot "src/database/kernels/transpose/transpose_32.hpp"; Class = "ClBlastTransposeDatabaseData"; Output = "ClBlastTransposeDatabase.Generated.cs" },
     @{ Path = Join-Path $ClBlastRoot "src/database/kernels/pad/pad_32.hpp"; Class = "ClBlastPadDatabaseData"; Output = "ClBlastPadDatabase.Generated.cs" },
     @{ Path = Join-Path $ClBlastRoot "src/database/kernels/padtranspose/padtranspose_32.hpp"; Class = "ClBlastPadTransposeDatabaseData"; Output = "ClBlastPadTransposeDatabase.Generated.cs" },
     @{ Path = Join-Path $ClBlastRoot "src/database/kernels/gemm_routine/gemm_routine_32.hpp"; Class = "ClBlastGemmRoutineDatabaseData"; Output = "ClBlastGemmRoutineDatabase.Generated.cs" }

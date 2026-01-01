@@ -20,6 +20,9 @@
 - Tuning/benchmark output now shows progress indicators + bottleneck color-coding.
 - CLBlast OpenCL databases (xgemm/pad/padtranspose/gemm_routine) ported via generator script.
 - CLBlast baseline selection + packing path wired in OpenClBackend (pad/transpose kernels + correct padding rules).
+- CLBlast copy/transpose databases ported + fast copy/transpose kernels wired.
+- CLBlast XgemmDirect kernel ported; small-size routing now uses direct kernel.
+- Bayesian tuning diagnostics + CSV/log output verified (artifacts captured in `artifacts/gpu_tuning`); long-running trials suggest adding a per-trial timeout/skip policy.
 
 ## Non-goals
 - Multi-node/distributed GPU execution.
@@ -46,6 +49,22 @@
 - CI strategy for CUDA (env-gated tests or no CUDA in CI)?
 
 ## Latest Benchmarks (RX 5500 XT, gfx1012:xnack-)
+Run: 2026-01-01, sizes=1024/2048/4096 (AIDOTNET_CLBLAST_SIZES)
+OpenCL vs CLBlast (end-to-end, untuned):
+- 1024^2: CLBlast 2113.2 GFLOPS, AiDotNet 630.6 GFLOPS (CLBlast 3.35x)
+- 2048^2: CLBlast 2347.8 GFLOPS, AiDotNet 981.0 GFLOPS (CLBlast 2.39x)
+- 4096^2: CLBlast 435.3 GFLOPS, AiDotNet 400.0 GFLOPS (CLBlast 1.09x)
+- DenseLayer (64x768x3072): CLBlast 1165.9 GFLOPS, AiDotNet 121.1 GFLOPS (CLBlast 9.63x)
+- Large (128x4096x4096): CLBlast 2495.2 GFLOPS, AiDotNet 388.1 GFLOPS (CLBlast 6.43x)
+
+DirectGpu TUNED (OpenClBackend) vs CLBlast:
+- 1024^2: CLBlast 2020.3 GFLOPS, AiDotNet 1070.6 GFLOPS (CLBlast 1.89x)
+- 2048^2: CLBlast 2336.6 GFLOPS, AiDotNet 1016.5 GFLOPS (CLBlast 2.30x)
+- 4096^2: CLBlast 434.4 GFLOPS, AiDotNet 414.5 GFLOPS (CLBlast 1.05x)
+- DenseLayer (64x768x3072): CLBlast 1122.1 GFLOPS, AiDotNet 1692.2 GFLOPS (AiDotNet 1.51x)
+- Large (128x4096x4096): CLBlast 2518.8 GFLOPS, AiDotNet 2656.8 GFLOPS (AiDotNet 1.05x)
+
+Previous sweep (sizes 256..4096):
 OpenCL vs CLBlast (end-to-end, untuned):
 - 256^2: CLBlast 236.3 GFLOPS, AiDotNet 44.2 GFLOPS (CLBlast 5.35x)
 - 512^2: CLBlast 1110.9 GFLOPS, AiDotNet 266.9 GFLOPS (CLBlast 4.16x)
@@ -98,7 +117,21 @@ DirectGpu TUNED (OpenClBackend) vs CLBlast:
    - Port CLBlast kernels + packing + selectors into C# and validate bitwise/close parity.
    - Keep the current DirectOpenClBackend path archived as an alternate for comparison only.
    - Switch primary OpenCL engine to the CLBlast-equivalent path once parity holds.
-   - Remaining: port XgemmDirect + fast copy/transpose kernels and match CLBlast small-size routing.
+   - Remaining: validate direct kernel parity/perf and lock in the baseline selection thresholds.
+
+## ILGPU Replacement Checklist
+- [ ] Complete ILGPU usage inventory and keep it current (see `docs/PR676_ILGPU_KERNEL_AUDIT.md`).
+- [ ] Build a parity matrix mapping each ILGPU kernel family to DirectOpenCl/DirectCuda/cuBLAS/cuDNN/CPU.
+- [ ] Implement missing OpenCL kernels (elementwise, reductions, indexing, softmax, conv/pool/norm, resampling, misc).
+- [ ] Implement missing CUDA kernels (NVRTC for elementwise/reduction/indexing; custom GEMM; cuDNN/cuBLAS fallbacks).
+- [ ] Wire fallback chain and logging: DirectOpenCL -> CLBlast -> CPU; DirectCUDA -> cuBLAS/cuDNN -> CPU.
+- [ ] Replace ILGPU-specific data structures (GpuTensorHandle/GpuMemoryPool) or retire them after backend parity.
+- [ ] Update Engine selection to remove ILGPU from the runtime path once parity is verified.
+- [ ] Remove ILGPU package references in `src/AiDotNet.csproj` and `src/AiDotNet.Tensors/AiDotNet.Tensors.csproj`.
+- [ ] Delete ILGPU engine + helpers (`GpuEngine`, ILGPU kernels) after tests/perf baselines pass.
+- [ ] Update docs/benchmarks/tests that reference ILGPU baselines or behaviors.
+- [ ] Add/expand integration tests to cover every replacement kernel family with CPU comparison.
+- [ ] Validate performance vs CLBlast/cuBLAS for target sizes and store tuning DB + CSV diagnostics.
 
 ## 100% Confidence Checklist
 - Build a kernel parity matrix mapping ILGPU ops to DirectOpenCL/DirectCUDA/cuDNN/CLBlast/CPU and track per-op test coverage.
@@ -116,3 +149,10 @@ DirectGpu TUNED (OpenClBackend) vs CLBlast:
 - Scope of kernels beyond GEMM (convs, activations, etc.)?
 - Required OS/driver baseline for CUDA on target machines?
 - Expected behavior when both OpenCL and CUDA are available?
+
+## CI/Build TODO
+- Add env-gated GPU test job(s) for OpenCL + CUDA benchmarks.
+- Document required driver/toolkit versions for GPU runners.
+- Define CI switches for tuning runs vs correctness-only runs.
+- Add artifact capture for tuning CSVs and benchmark outputs.
+- Add smoke tests for backend selection/fallback chain on CPU-only runners.
