@@ -571,22 +571,14 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                     bool matchesChannelsLast = input.Shape[rank - 2] == _inputWidth && input.Shape[rank - 3] == _inputHeight;
                     bool matchesChannelsFirst = input.Shape[rank - 1] == _inputWidth && input.Shape[rank - 2] == _inputHeight;
 
-                    if (matchesChannelsLast && !matchesChannelsFirst)
+                    if (matchesChannelsLast && matchesChannelsFirst)
                     {
+                        // Ambiguous layout; prefer channels-last to match common defaults.
                         _inputHadChannel = true;
                         channelFirst = false;
                         channelIndex = rank - 1;
                         heightIndex = rank - 3;
                         widthIndex = rank - 2;
-                        channelCount = input.Shape[channelIndex];
-                    }
-                    else if (matchesChannelsFirst && !matchesChannelsLast)
-                    {
-                        _inputHadChannel = true;
-                        channelFirst = true;
-                        channelIndex = rank - 3;
-                        heightIndex = rank - 2;
-                        widthIndex = rank - 1;
                         channelCount = input.Shape[channelIndex];
                     }
                     else if (matchesChannelsLast)

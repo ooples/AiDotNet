@@ -598,14 +598,19 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new ArgumentNullException(nameof(weights));
         }
 
-        // Validate dimensions
-        if (weights.Shape[0] != OutputShape[0] || weights.Shape[1] != InputShape[0])
+        // Validate dimensions against current weights
+        if (weights.Shape[0] != _weights.Shape[0] || weights.Shape[1] != _weights.Shape[1])
         {
-            throw new ArgumentException($"Weight tensor dimensions must be {OutputShape[0]}x{InputShape[0]}, but got {weights.Shape[0]}x{weights.Shape[1]}");
+            throw new ArgumentException(
+                $"Weight tensor dimensions must be {_weights.Shape[0]}x{_weights.Shape[1]}, but got {weights.Shape[0]}x{weights.Shape[1]}");
         }
 
         // Set the weights directly
         _weights = weights;
+        if (InputShape.Length == 0 || InputShape[0] != weights.Shape[1])
+        {
+            UpdateInputShape([weights.Shape[1]]);
+        }
     }
 
     /// <summary>
@@ -779,6 +784,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         _weights = resizedWeights;
         _weightsGradient = null;
+        UpdateInputShape([actualInputSize]);
     }
 
     /// <summary>
@@ -1325,7 +1331,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Input shape: [batchSize, inputSize]
-        int inputSize = InputShape[0];
+        int inputSize = _weights.Shape[1];
 
         // Create placeholder for input data
         // Note: Using batch size 1 for placeholder; actual batch size is determined at runtime

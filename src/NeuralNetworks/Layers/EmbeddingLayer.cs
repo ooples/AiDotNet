@@ -453,6 +453,10 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         for (int i = 0; i < input.Length; i++)
         {
             double val = NumOps.ToDouble(input.Data[i]);
+            if (double.IsNaN(val) || double.IsInfinity(val))
+            {
+                return true;
+            }
             int intVal = (int)val;
             if (Math.Abs(val - intVal) > 1e-6 || intVal < 0 || intVal >= vocabularySize)
             {
