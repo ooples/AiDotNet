@@ -1220,6 +1220,18 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
+        if (!_useNativeMode)
+        {
+            if (parameters.Length != 0)
+            {
+                throw new ArgumentException(
+                    $"Expected 0 parameters, but got {parameters.Length}.",
+                    nameof(parameters));
+            }
+
+            return;
+        }
+
         int expectedCount = ParameterCount;
         if (parameters.Length != expectedCount)
         {
@@ -1230,49 +1242,108 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
 
         int offset = 0;
 
-        foreach (var layer in _visionEncoderLayers)
+        void UpdateLayerParameters(ILayer<T> layer)
         {
             int layerParamCount = layer.ParameterCount;
-            if (layerParamCount > 0)
+            if (layerParamCount <= 0)
             {
-                var layerParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    layerParams[i] = parameters[offset + i];
-                }
-                layer.UpdateParameters(layerParams);
-                offset += layerParamCount;
+                return;
             }
+
+            var layerParams = new Vector<T>(layerParamCount);
+            for (int i = 0; i < layerParamCount; i++)
+            {
+                layerParams[i] = parameters[offset + i];
+            }
+
+            layer.UpdateParameters(layerParams);
+            offset += layerParamCount;
+        }
+
+        foreach (var layer in _visionEncoderLayers)
+        {
+            UpdateLayerParameters(layer);
         }
 
         foreach (var layer in _projectionLayers)
         {
-            int layerParamCount = layer.ParameterCount;
-            if (layerParamCount > 0)
-            {
-                var layerParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    layerParams[i] = parameters[offset + i];
-                }
-                layer.UpdateParameters(layerParams);
-                offset += layerParamCount;
-            }
+            UpdateLayerParameters(layer);
         }
 
         foreach (var layer in _languageModelLayers)
         {
-            int layerParamCount = layer.ParameterCount;
-            if (layerParamCount > 0)
+            UpdateLayerParameters(layer);
+        }
+
+        if (_patchEmbedding is not null)
+        {
+            UpdateLayerParameters(_patchEmbedding);
+        }
+
+        if (_textTokenEmbedding is not null)
+        {
+            UpdateLayerParameters(_textTokenEmbedding);
+        }
+
+        if (_outputProjection is not null)
+        {
+            UpdateLayerParameters(_outputProjection);
+        }
+
+        if (_groundingHead is not null)
+        {
+            UpdateLayerParameters(_groundingHead);
+        }
+
+        if (_visionClsToken is not null)
+        {
+            int rows = _visionClsToken.Rows;
+            int columns = _visionClsToken.Columns;
+            for (int i = 0; i < rows; i++)
             {
-                var layerParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
+                int rowOffset = i * columns;
+                for (int j = 0; j < columns; j++)
                 {
-                    layerParams[i] = parameters[offset + i];
+                    _visionClsToken[i, j] = parameters[offset + rowOffset + j];
                 }
-                layer.UpdateParameters(layerParams);
-                offset += layerParamCount;
             }
+            offset += rows * columns;
+        }
+
+        if (_visionPositionalEmbeddings is not null)
+        {
+            int rows = _visionPositionalEmbeddings.Rows;
+            int columns = _visionPositionalEmbeddings.Columns;
+            for (int i = 0; i < rows; i++)
+            {
+                int rowOffset = i * columns;
+                for (int j = 0; j < columns; j++)
+                {
+                    _visionPositionalEmbeddings[i, j] = parameters[offset + rowOffset + j];
+                }
+            }
+            offset += rows * columns;
+        }
+
+        if (_textPositionalEmbeddings is not null)
+        {
+            int rows = _textPositionalEmbeddings.Rows;
+            int columns = _textPositionalEmbeddings.Columns;
+            for (int i = 0; i < rows; i++)
+            {
+                int rowOffset = i * columns;
+                for (int j = 0; j < columns; j++)
+                {
+                    _textPositionalEmbeddings[i, j] = parameters[offset + rowOffset + j];
+                }
+            }
+            offset += rows * columns;
+        }
+
+        if (offset != expectedCount)
+        {
+            throw new InvalidOperationException(
+                $"Parameter update consumed {offset} parameters, but expected {expectedCount}.");
         }
     }
 
