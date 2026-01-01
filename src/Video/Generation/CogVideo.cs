@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -310,7 +311,7 @@ public class CogVideo<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> GenerateRandomNoise()
     {
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         int totalSize = _numFrames * _latentChannels * _latentHeight * _latentWidth;
         var noiseData = new T[totalSize];
 

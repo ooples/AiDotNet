@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Video.Generation;
 
@@ -254,7 +255,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         int fps = 7,
         int? seed = null)
     {
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
 
         bool hasBatch = inputImage.Rank == 4;
         if (!hasBatch)
@@ -307,7 +308,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         int fps = 7,
         int? seed = null)
     {
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
 
         // Process text embedding
         var textCondition = ProcessTextEmbedding(textEmbedding);
@@ -357,7 +358,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         int numNewFrames = 14,
         int? seed = null)
     {
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
 
         // Use last frame as conditioning image
         var lastFrame = existingFrames[existingFrames.Count - 1];
@@ -401,7 +402,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         int? seed = null)
     {
         var result = new List<Tensor<T>>();
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
 
         for (int i = 0; i < keyframes.Count - 1; i++)
         {
@@ -451,7 +452,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
     {
         // Training involves predicting noise added to latents
         var latent = EncodeToLatent(input);
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
 
         // Add noise
         double noiseLevel = random.NextDouble();

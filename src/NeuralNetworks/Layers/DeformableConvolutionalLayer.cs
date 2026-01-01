@@ -1,6 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -505,7 +506,7 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         double fan_in = inC * kH * kW;
         double std = Math.Sqrt(2.0 / fan_in); // He initialization
 
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < weights.Length; i++)
         {
             weights.Data[i] = NumOps.FromDouble(random.NextDouble() * 2 * std - std);

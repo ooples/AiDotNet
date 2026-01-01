@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -192,7 +193,7 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
     /// </summary>
     public Tensor<T> AddGaussianNoise(Tensor<T> frame, double sigma)
     {
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         var noisy = new Tensor<T>(frame.Shape);
 
         for (int i = 0; i < frame.Length; i++)

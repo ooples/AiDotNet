@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Video.Generation;
 
@@ -183,7 +184,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
     /// <returns>Generated video frames.</returns>
     public List<Tensor<T>> GenerateFromText(Tensor<T> textEmbedding, int? seed = null)
     {
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
 
         // Process text embedding
         var textCondition = ProcessTextEmbedding(textEmbedding);
@@ -221,7 +222,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
     /// </summary>
     public List<Tensor<T>> GenerateFromImage(Tensor<T> image, Tensor<T>? textEmbedding = null, int? seed = null)
     {
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
 
         if (image.Rank == 3) image = AddBatchDimension(image);
 
@@ -316,7 +317,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // Sample a random timestep
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         int timestep = random.Next(_numInferenceSteps);
         double t = 1.0 - (double)timestep / _numInferenceSteps;
 
