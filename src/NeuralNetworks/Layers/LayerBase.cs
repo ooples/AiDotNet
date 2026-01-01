@@ -219,6 +219,17 @@ public abstract class LayerBase<T> : ILayer<T>
     /// </remarks>
     protected int[][] InputShapes { get; private set; }
 
+    protected void UpdateInputShape(int[] inputShape)
+    {
+        if (inputShape == null || inputShape.Length == 0)
+        {
+            throw new ArgumentException("Input shape must be non-empty.", nameof(inputShape));
+        }
+
+        InputShape = inputShape;
+        InputShapes = [inputShape];
+    }
+
     /// <summary>
     /// Gets the output shape for this layer.
     /// </summary>

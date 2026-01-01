@@ -867,7 +867,7 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         Tensor<T> reshapedLatent;
         if (latentCodes.Shape.Length == 1)
         {
-            // 1D [latent_size] -> 3D [1, height, width]
+            // 1D [latent_size] -> 4D [1, 1, height, width]
             int latentLen = latentCodes.Shape[0];
             int h = (int)Math.Ceiling(Math.Sqrt(latentLen));
             int w = h;
@@ -876,14 +876,14 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
             {
                 var padded = new Tensor<T>([h * w]);
                 for (int i = 0; i < latentLen; i++)
-                    padded.Data[i] = latentCodes.Data[i];
+                    padded.SetFlat(i, latentCodes.GetFlat(i));
                 for (int i = latentLen; i < h * w; i++)
-                    padded.Data[i] = NumOps.Zero;
-                reshapedLatent = padded.Reshape(1, h, w);
+                    padded.SetFlat(i, NumOps.Zero);
+                reshapedLatent = padded.Reshape(1, 1, h, w);
             }
             else
             {
-                reshapedLatent = latentCodes.Reshape(1, h, w);
+                reshapedLatent = latentCodes.Reshape(1, 1, h, w);
             }
         }
         else if (latentCodes.Shape.Length == 2)

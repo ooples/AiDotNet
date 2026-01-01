@@ -1163,23 +1163,11 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         var squeezedGradient = Engine.TensorMatMul(fc1Gradient, Engine.TensorTranspose(_weights1));
 
-        Tensor<T> squeezeBackprop;
-        if (spatialAxes.Length > 0)
-        {
-            squeezeBackprop = Engine.ReduceMeanBackward(squeezedGradient, _lastInput.Shape, spatialAxes);
-        }
-        else
-        {
-            // For 1D and 2D, no spatial reduction was done
-            if (rank == 1)
-            {
-                squeezeBackprop = squeezedGradient.Reshape([_channels]);
-            }
-            else
-            {
-                squeezeBackprop = squeezedGradient;
-            }
-        }
+        Tensor<T> squeezeBackprop = spatialAxes.Length > 0
+            ? Engine.ReduceMeanBackward(squeezedGradient, _lastInput.Shape, spatialAxes)
+            : (rank == 1
+                ? squeezedGradient.Reshape([_channels])
+                : squeezedGradient);
 
         var inputGradient = Engine.TensorAdd(inputGradientDirect, squeezeBackprop);
         return inputGradient;

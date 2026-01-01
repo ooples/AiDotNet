@@ -390,7 +390,6 @@ public class DenseBlock<T> : LayerBase<T>
             var first = new Tensor<T>([firstChannels, height, width]);
             var second = new Tensor<T>([secondChannels, height, width]);
 
-            int totalChannels = firstChannels + secondChannels;
             int spatialSize = height * width;
 
             for (int c = 0; c < firstChannels; c++)

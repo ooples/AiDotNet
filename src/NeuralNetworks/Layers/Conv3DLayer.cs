@@ -499,34 +499,21 @@ public class Conv3DLayer<T> : LayerBase<T>
 
         // Handle any-rank gradient: reshape to match _lastOutput rank before ApplyActivationDerivative
         bool hasBatch = _lastInput.Rank == 5;
-        Tensor<T> outGrad5D;
-        if (outputGradient.Rank == 4 && _lastOutput.Rank == 5)
-        {
-            // 4D gradient [C, D, H, W] -> 5D [1, C, D, H, W]
-            outGrad5D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2], outputGradient.Shape[3]);
-        }
-        else
-        {
-            outGrad5D = outputGradient;
-        }
+        Tensor<T> outGrad5D = (outputGradient.Rank == 4 && _lastOutput.Rank == 5)
+            ? outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2], outputGradient.Shape[3])
+            : outputGradient;
 
         var delta = ApplyActivationDerivative(_lastOutput, outGrad5D);
 
-        Tensor<T> batchedDelta;
-        Tensor<T> batchedInput;
-
-        if (hasBatch)
-        {
-            batchedDelta = delta;
-            batchedInput = _lastInput;
-        }
-        else
-        {
-            batchedDelta = delta.Rank == 4
+        Tensor<T> batchedDelta = hasBatch
+            ? delta
+            : (delta.Rank == 4
                 ? delta.Reshape(1, delta.Shape[0], delta.Shape[1], delta.Shape[2], delta.Shape[3])
-                : delta;
-            batchedInput = _lastInput.Reshape(1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2], _lastInput.Shape[3]);
-        }
+                : delta);
+
+        Tensor<T> batchedInput = hasBatch
+            ? _lastInput
+            : _lastInput.Reshape(1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2], _lastInput.Shape[3]);
 
         var inputGrad = Engine.Conv3DBackwardInput(
             batchedDelta,

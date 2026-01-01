@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.RadialBasisFunctions;
@@ -1139,7 +1140,13 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        // Split should create numSplits sections
+        Assert.Equal(new[] { 2, numSplits, 8 }, output.Shape);
+
+        var reconstructed = output.Reshape([2, 32]);
+        for (int i = 0; i < input.Length; i++)
+        {
+            Assert.Equal(input.Data[i], reconstructed.Data[i]);
+        }
     }
 
     [Fact]
@@ -2617,7 +2624,7 @@ public class AdvancedLayersIntegrationTests
 
         // Create input with token indices (values 0 to vocabSize-1)
         var input = new Tensor<float>([4, 10]); // batch=4, sequence_length=10
-        var rand = new Random(42);
+        var rand = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < input.Length; i++)
         {
             input.Data[i] = rand.Next(0, vocabSize);
@@ -2641,7 +2648,7 @@ public class AdvancedLayersIntegrationTests
         int embeddingDim = 32;
         var original = new EmbeddingLayer<float>(vocabSize, embeddingDim);
         var input = new Tensor<float>([2, 5]);
-        var rand = new Random(123);
+        var rand = RandomHelper.CreateSeededRandom(123);
         for (int i = 0; i < input.Length; i++)
         {
             input.Data[i] = rand.Next(0, vocabSize);

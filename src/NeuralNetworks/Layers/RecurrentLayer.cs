@@ -332,19 +332,11 @@ public class RecurrentLayer<T> : LayerBase<T>
         int actualInputSize = input3D.Shape[2]; // [seqLen, batch, inputSize]
         int expectedInputSize = _inputWeights.Shape[1];
 
-        // Dynamic input size adaptation: resize weights if input size doesn't match
         if (actualInputSize != expectedInputSize)
         {
-            // Reinitialize weights with correct input size
-            _inputWeights = new Tensor<T>([hiddenSize, actualInputSize]);
-
-            // Initialize using Xavier/Glorot initialization
-            T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (actualInputSize + hiddenSize)));
-            var random = RandomHelper.CreateSecureRandom();
-            for (int i = 0; i < _inputWeights.Length; i++)
-            {
-                _inputWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
-            }
+            throw new ArgumentException(
+                $"Input size mismatch: expected {expectedInputSize} but got {actualInputSize}.",
+                nameof(input));
         }
 
         var output = new Tensor<T>([sequenceLength, batchSize, hiddenSize]);

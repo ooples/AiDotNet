@@ -265,7 +265,9 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
         _smoothedAnomalyScore = (_smoothingFactor * meanScore) + ((1 - _smoothingFactor) * _smoothedAnomalyScore);
         UpdateAnomalyHistory(meanScore);
 
-        return anomalyScores;
+        var output = new Tensor<T>([1]);
+        output[0] = NumOps.FromDouble(meanScore);
+        return output;
     }
 
 
@@ -513,8 +515,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
         // Since this layer doesn't have trainable parameters, we just propagate the gradient
         // back to the input. For anomaly detection, this is primarily a pass-through operation.
 
-        // Zero gradient matching output gradient shape (no params to learn)
-        return Engine.TensorMultiplyScalar(outputGradient, NumOps.Zero);
+        return CreateZeroInputGradient();
     }
 
     /// <summary>
@@ -529,9 +530,19 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// This matches the manual implementation behavior.
     /// </para>
     /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)        
     {
-        return Engine.TensorMultiplyScalar(outputGradient, NumOps.Zero);
+        return CreateZeroInputGradient();
+    }
+
+    private Tensor<T> CreateZeroInputGradient()
+    {
+        if (_lastInputShape == null)
+            throw new InvalidOperationException("Cannot run backward before forward.");
+
+        var zeroGradient = new Tensor<T>(_lastInputShape);
+        zeroGradient.Fill(NumOps.Zero);
+        return zeroGradient;
     }
 
     /// <summary>
@@ -608,6 +619,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
 
         // Reset smoothed anomaly score
         _smoothedAnomalyScore = 0.0;
+        _lastInputShape = null;
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

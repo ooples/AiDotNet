@@ -332,14 +332,9 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         for (int i = startLayerIndex; i < endLayerIndex; i++)
         {
             // MemoryReadLayer requires both input and memory tensors
-            if (Layers[i] is MemoryReadLayer<T> memoryReadLayer)
-            {
-                current = memoryReadLayer.Forward(current, memoryTensor);
-            }
-            else
-            {
-                current = Layers[i].Forward(current);
-            }
+            current = Layers[i] is MemoryReadLayer<T> memoryReadLayer
+                ? memoryReadLayer.Forward(current, memoryTensor)
+                : Layers[i].Forward(current);
         }
 
         // Apply softmax to get normalized attention weights

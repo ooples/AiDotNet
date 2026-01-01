@@ -451,7 +451,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             {
                 // Need to transpose from [batchSize, visibleSize] to [visibleSize, batchSize]
                 var temp = visibleLayer.ToMatrix();
-                visibleMatrix = (Matrix<T>)temp.Transpose();
+                visibleMatrix = temp.Transpose();
             }
             else
             {
@@ -705,7 +705,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             {
                 // Need to transpose from [batchSize, hiddenSize] to [hiddenSize, batchSize]
                 var temp = hiddenLayer.ToMatrix();
-                hiddenMatrix = (Matrix<T>)temp.Transpose();
+                hiddenMatrix = temp.Transpose();
             }
             else
             {

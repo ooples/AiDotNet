@@ -421,7 +421,13 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
 
         // Extract layer sizes starting with input size, then output sizes of RBM layers only
         // (skip BatchNorm and other non-RBM layers to get the DBM structure)
-        var inputSize = Architecture.GetInputShape()[0];
+        var inputShape = Architecture.GetInputShape();
+        if (inputShape == null || inputShape.Length == 0)
+        {
+            throw new InvalidOperationException("DeepBoltzmannMachine requires a non-empty input shape.");
+        }
+
+        var inputSize = inputShape[0];
         var rbmOutputSizes = Layers
             .Where(l => l is RBMLayer<T>)
             .Select(l => l.GetOutputShape()[0])

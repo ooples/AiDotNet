@@ -81,7 +81,7 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _learningRate = NumOps.FromDouble(learningRate);
-        InitializeLayers();
+        InitializeRecurrentLayers();
     }
 
     /// <summary>
@@ -111,11 +111,16 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override void InitializeLayers()
     {
+        InitializeRecurrentLayers();
+    }
+
+    private void InitializeRecurrentLayers()
+    {
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
             // Use the layers provided by the user
             Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
+            base.ValidateCustomLayers(Layers);
         }
         else
         {

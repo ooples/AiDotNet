@@ -141,12 +141,9 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         _lastVariance = variance;
 
         // Remove batch dimension if we added it
-        if (_addedBatchDimension)
-        {
-            return output.Reshape(output.Shape[1], output.Shape[2], output.Shape[3]);
-        }
-
-        return output;
+        return _addedBatchDimension
+            ? output.Reshape(output.Shape[1], output.Shape[2], output.Shape[3])
+            : output;
     }
 
     public override Tensor<T> Backward(Tensor<T> outputGradient)
@@ -155,26 +152,14 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         // Handle 3D gradients by adding batch dimension if needed
-        Tensor<T> grad4D;
-        if (_addedBatchDimension && outputGradient.Shape.Length == 3)
-        {
-            grad4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
-        }
-        else
-        {
-            grad4D = outputGradient;
-        }
+        Tensor<T> grad4D = (_addedBatchDimension && outputGradient.Shape.Length == 3)
+            ? outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2])
+            : outputGradient;
 
         // Get input with batch dimension for backward pass
-        Tensor<T> input4D;
-        if (_addedBatchDimension && _lastInput.Shape.Length == 3)
-        {
-            input4D = _lastInput.Reshape(1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2]);
-        }
-        else
-        {
-            input4D = _lastInput;
-        }
+        Tensor<T> input4D = (_addedBatchDimension && _lastInput.Shape.Length == 3)
+            ? _lastInput.Reshape(1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2])
+            : _lastInput;
 
         // Use Engine for GPU/CPU accelerated backward pass
         var inputGradient = Engine.GroupNormBackward(
@@ -192,12 +177,9 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         _betaGradient = gradBeta;
 
         // Remove batch dimension if we added it
-        if (_addedBatchDimension)
-        {
-            return inputGradient.Reshape(inputGradient.Shape[1], inputGradient.Shape[2], inputGradient.Shape[3]);
-        }
-
-        return inputGradient;
+        return _addedBatchDimension
+            ? inputGradient.Reshape(inputGradient.Shape[1], inputGradient.Shape[2], inputGradient.Shape[3])
+            : inputGradient;
     }
 
     public override void UpdateParameters(T learningRate)

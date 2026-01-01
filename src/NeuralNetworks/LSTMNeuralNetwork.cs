@@ -2025,10 +2025,13 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
             {
                 lstmLayerCount++;
                 var outputShape = layer.GetOutputShape();
+                if (outputShape.Length == 0)
+                {
+                    throw new InvalidOperationException("LSTM layer output shape is empty.");
+                }
+
                 // Hidden size is the last dimension of output shape
-                // For 2D output [seqLen, hiddenSize], use index 1
-                // For 1D output [hiddenSize], use index 0
-                int hiddenSize = outputShape.Length > 1 ? outputShape[1] : outputShape[0];
+                int hiddenSize = outputShape[^1];
                 lstmSizes.Add(hiddenSize);
             }
         }

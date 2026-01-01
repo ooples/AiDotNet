@@ -416,17 +416,9 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         var kernelNCHW = _convWeights.Reshape([outputChannels, _inputChannels, _kernelSize, _kernelSize]);
 
         // Convert input to NCHW for Conv2D if needed
-        Tensor<T> inputNCHW;
-        if (inputIsNCHW)
-        {
-            // Already NCHW, no transpose needed
-            inputNCHW = processInput;
-        }
-        else
-        {
-            // Convert from NHWC to NCHW
-            inputNCHW = processInput.Transpose([0, 3, 1, 2]);
-        }
+        Tensor<T> inputNCHW = inputIsNCHW
+            ? processInput
+            : processInput.Transpose([0, 3, 1, 2]);
 
         // Convolution
         var convNCHW = Engine.Conv2D(inputNCHW, kernelNCHW, new[] { _stride, _stride }, new[] { 0, 0 }, new[] { 1, 1 });

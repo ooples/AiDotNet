@@ -671,22 +671,12 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Output shape: [..., outputSize]
 
         int actualInputSize = input.Shape[^1]; // Last dimension
-        int expectedInputSize = InputShape[0];
+        int expectedInputSize = _weights.Shape[1];
 
         // Dynamic input size adaptation: resize weights if input size doesn't match
         if (actualInputSize != expectedInputSize)
         {
-            int outputSize = _weights.Shape[0];
-            // Reinitialize weights with correct input size
-            _weights = new Tensor<T>([outputSize, actualInputSize]);
-
-            // Xavier initialization
-            T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (actualInputSize + outputSize)));
-            var random = RandomHelper.CreateSecureRandom();
-            for (int i = 0; i < _weights.Length; i++)
-            {
-                _weights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
-            }
+            EnsureWeightShapeForInput(actualInputSize);
         }
 
         int inputSize = actualInputSize;
@@ -752,6 +742,43 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // 2D input: result is already [batch, outputSize]
 
         return result;
+    }
+
+    private void EnsureWeightShapeForInput(int actualInputSize)
+    {
+        if (_weights.Shape[1] == actualInputSize)
+        {
+            return;
+        }
+
+        int outputSize = _weights.Shape[0];
+        int existingInputSize = _weights.Shape[1];
+        var resizedWeights = new Tensor<T>([outputSize, actualInputSize]);
+
+        int sharedInputSize = Math.Min(existingInputSize, actualInputSize);
+        for (int o = 0; o < outputSize; o++)
+        {
+            for (int i = 0; i < sharedInputSize; i++)
+            {
+                resizedWeights[o, i] = _weights[o, i];
+            }
+        }
+
+        if (actualInputSize > sharedInputSize)
+        {
+            T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (actualInputSize + outputSize)));
+            var random = RandomHelper.CreateSecureRandom();
+            for (int o = 0; o < outputSize; o++)
+            {
+                for (int i = sharedInputSize; i < actualInputSize; i++)
+                {
+                    resizedWeights[o, i] = NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1));
+                }
+            }
+        }
+
+        _weights = resizedWeights;
+        _weightsGradient = null;
     }
 
     /// <summary>

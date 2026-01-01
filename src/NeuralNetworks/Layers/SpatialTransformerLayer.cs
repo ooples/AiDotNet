@@ -1,5 +1,15 @@
 namespace AiDotNet.NeuralNetworks.Layers;
 
+public enum SpatialTransformerDataFormat
+{
+    /// <summary>Infer layout from shape when possible.</summary>
+    Auto,
+    /// <summary>Channels-last layout: [..., H, W, C].</summary>
+    ChannelsLast,
+    /// <summary>Channels-first layout: [..., C, H, W].</summary>
+    ChannelsFirst
+}
+
 /// <summary>
 /// Represents a spatial transformer layer that enables spatial manipulations of data via a learnable transformation.
 /// </summary>
@@ -140,6 +150,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Stores whether the original input included a channel dimension.
     /// </summary>
     private bool _inputHadChannel;
+    private bool _inputChannelFirst;
 
     /// <summary>
     /// Stores the output tensor from the most recent forward pass.
@@ -279,6 +290,8 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private readonly int _inputWidth;
 
+    private readonly SpatialTransformerDataFormat _dataFormat;
+
     /// <summary>
     /// The height of the output feature map.
     /// </summary>
@@ -340,6 +353,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <param name="outputHeight">The height of the output feature map.</param>
     /// <param name="outputWidth">The width of the output feature map.</param>
     /// <param name="activationFunction">The activation function to apply in the localization network. Defaults to Tanh if not specified.</param>
+    /// <param name="dataFormat">Specifies channel layout for rank >= 3 inputs. Auto infers from the last dimensions.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a spatial transformer layer with the specified input and output dimensions and a scalar activation
@@ -357,7 +371,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// which works well for predicting transformation parameters.
     /// </para>
     /// </remarks>
-    public SpatialTransformerLayer(int inputHeight, int inputWidth, int outputHeight, int outputWidth, IActivationFunction<T>? activationFunction = null)
+    public SpatialTransformerLayer(int inputHeight, int inputWidth, int outputHeight, int outputWidth, IActivationFunction<T>? activationFunction = null, SpatialTransformerDataFormat dataFormat = SpatialTransformerDataFormat.Auto)
         : base([inputHeight, inputWidth], [outputHeight, outputWidth], activationFunction ?? new TanhActivation<T>())
     {
         // Initialize auxiliary loss fields first so compiler knows they're set
@@ -368,6 +382,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _inputWidth = inputWidth;
         _outputHeight = outputHeight;
         _outputWidth = outputWidth;
+        _dataFormat = dataFormat;
 
         // Initialize localization network weights and biases as Tensor<T>
         _localizationWeights1 = new Tensor<T>([inputHeight * inputWidth, 32]);
@@ -386,6 +401,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <param name="outputHeight">The height of the output feature map.</param>
     /// <param name="outputWidth">The width of the output feature map.</param>
     /// <param name="vectorActivationFunction">The vector activation function to apply in the localization network. Defaults to Tanh if not specified.</param>
+    /// <param name="dataFormat">Specifies channel layout for rank >= 3 inputs. Auto infers from the last dimensions.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a spatial transformer layer with the specified input and output dimensions and a vector activation
@@ -401,7 +417,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// for their neural networks. For most cases, the basic constructor is sufficient.
     /// </para>
     /// </remarks>
-    public SpatialTransformerLayer(int inputHeight, int inputWidth, int outputHeight, int outputWidth, IVectorActivationFunction<T>? vectorActivationFunction = null)
+    public SpatialTransformerLayer(int inputHeight, int inputWidth, int outputHeight, int outputWidth, IVectorActivationFunction<T>? vectorActivationFunction = null, SpatialTransformerDataFormat dataFormat = SpatialTransformerDataFormat.Auto)
         : base([inputHeight, inputWidth], [outputHeight, outputWidth], vectorActivationFunction ?? new TanhActivation<T>())
     {
         // Initialize auxiliary loss fields first so compiler knows they're set
@@ -412,6 +428,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _inputWidth = inputWidth;
         _outputHeight = outputHeight;
         _outputWidth = outputWidth;
+        _dataFormat = dataFormat;
 
         // Initialize localization network weights and biases as Tensor<T>
         _localizationWeights1 = new Tensor<T>([inputHeight * inputWidth, 32]);
@@ -527,41 +544,108 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int channelCount = 1;
         int heightIndex = rank - 2;
         int widthIndex = rank - 1;
+        int channelIndex = -1;
+        bool channelFirst = false;
 
-        if (rank >= 4 && input.Shape[^1] == 1 && input.Shape[^2] == _inputWidth && input.Shape[^3] == _inputHeight)
+        if (rank >= 3)
         {
-            _inputHadChannel = true;
-            heightIndex = rank - 3;
-            widthIndex = rank - 2;
-            channelCount = input.Shape[^1];
+            switch (_dataFormat)
+            {
+                case SpatialTransformerDataFormat.ChannelsFirst:
+                    channelFirst = true;
+                    _inputHadChannel = true;
+                    channelIndex = rank - 3;
+                    heightIndex = rank - 2;
+                    widthIndex = rank - 1;
+                    channelCount = input.Shape[channelIndex];
+                    break;
+                case SpatialTransformerDataFormat.ChannelsLast:
+                    channelFirst = false;
+                    _inputHadChannel = true;
+                    channelIndex = rank - 1;
+                    heightIndex = rank - 3;
+                    widthIndex = rank - 2;
+                    channelCount = input.Shape[channelIndex];
+                    break;
+                default:
+                    bool matchesChannelsLast = input.Shape[rank - 2] == _inputWidth && input.Shape[rank - 3] == _inputHeight;
+                    bool matchesChannelsFirst = input.Shape[rank - 1] == _inputWidth && input.Shape[rank - 2] == _inputHeight;
+
+                    if (matchesChannelsLast && !matchesChannelsFirst)
+                    {
+                        _inputHadChannel = true;
+                        channelFirst = false;
+                        channelIndex = rank - 1;
+                        heightIndex = rank - 3;
+                        widthIndex = rank - 2;
+                        channelCount = input.Shape[channelIndex];
+                    }
+                    else if (matchesChannelsFirst && !matchesChannelsLast)
+                    {
+                        _inputHadChannel = true;
+                        channelFirst = true;
+                        channelIndex = rank - 3;
+                        heightIndex = rank - 2;
+                        widthIndex = rank - 1;
+                        channelCount = input.Shape[channelIndex];
+                    }
+                    else if (matchesChannelsLast)
+                    {
+                        _inputHadChannel = true;
+                        channelFirst = false;
+                        channelIndex = rank - 1;
+                        heightIndex = rank - 3;
+                        widthIndex = rank - 2;
+                        channelCount = input.Shape[channelIndex];
+                    }
+                    else if (matchesChannelsFirst)
+                    {
+                        _inputHadChannel = true;
+                        channelFirst = true;
+                        channelIndex = rank - 3;
+                        heightIndex = rank - 2;
+                        widthIndex = rank - 1;
+                        channelCount = input.Shape[channelIndex];
+                    }
+                    break;
+            }
         }
+
+        _inputChannelFirst = channelFirst;
 
         int inputHeight = input.Shape[heightIndex];
         int inputWidth = input.Shape[widthIndex];
         if (inputHeight != _inputHeight || inputWidth != _inputWidth)
             throw new ArgumentException($"Expected input spatial dims [{_inputHeight}, {_inputWidth}] but got [{inputHeight}, {inputWidth}].", nameof(input));
 
-        if (channelCount != 1)
-            throw new ArgumentException("SpatialTransformerLayer currently supports single-channel inputs.", nameof(input));
-
         int batchDims = rank - (_inputHadChannel ? 3 : 2);
         int flatBatch = 1;
         for (int d = 0; d < batchDims; d++)
             flatBatch *= input.Shape[d];
 
-        Tensor<T> inputSpatial = _inputHadChannel
-            ? input.Reshape([flatBatch, _inputHeight, _inputWidth, channelCount])
-            : input.Reshape([flatBatch, _inputHeight, _inputWidth]);
-
-        Tensor<T> inputNHWC = _inputHadChannel
-            ? inputSpatial
-            : inputSpatial.Reshape([flatBatch, _inputHeight, _inputWidth, 1]);
+        Tensor<T> inputNHWC;
+        if (_inputHadChannel)
+        {
+            if (channelFirst)
+            {
+                var inputNCHW = input.Reshape([flatBatch, channelCount, _inputHeight, _inputWidth]);
+                inputNHWC = inputNCHW.Transpose([0, 2, 3, 1]);
+            }
+            else
+            {
+                inputNHWC = input.Reshape([flatBatch, _inputHeight, _inputWidth, channelCount]);
+            }
+        }
+        else
+        {
+            inputNHWC = input.Reshape([flatBatch, _inputHeight, _inputWidth, 1]);
+        }
 
         _lastInput = inputNHWC;
 
-        var flattenedInput = _inputHadChannel
-            ? inputNHWC.Reshape([flatBatch, _inputHeight * _inputWidth * channelCount])
-            : inputSpatial.Reshape([flatBatch, _inputHeight * _inputWidth]);
+        var channelSum = Engine.ReduceSum(inputNHWC, new[] { 3 }, keepDims: false);
+        var channelMean = Engine.TensorDivideScalar(channelSum, NumOps.FromDouble(channelCount));
+        var flattenedInput = channelMean.Reshape([flatBatch, _inputHeight * _inputWidth]);
         _lastFlattenedInput = flattenedInput;
 
         // First layer: localization1 = flattenedInput @ _localizationWeights1 + _localizationBias1
@@ -586,13 +670,27 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         if (_inputHadChannel)
         {
+            Tensor<T> outputForReshape = _inputChannelFirst
+                ? output.Transpose([0, 3, 1, 2])
+                : output;
+
             var outShape = new int[batchDims + 3];
             for (int d = 0; d < batchDims; d++)
                 outShape[d] = _originalInputShape[d];
-            outShape[batchDims] = _outputHeight;
-            outShape[batchDims + 1] = _outputWidth;
-            outShape[batchDims + 2] = channelCount;
-            return output.Reshape(outShape);
+            if (_inputChannelFirst)
+            {
+                outShape[batchDims] = channelCount;
+                outShape[batchDims + 1] = _outputHeight;
+                outShape[batchDims + 2] = _outputWidth;
+            }
+            else
+            {
+                outShape[batchDims] = _outputHeight;
+                outShape[batchDims + 1] = _outputWidth;
+                outShape[batchDims + 2] = channelCount;
+            }
+
+            return outputForReshape.Reshape(outShape);
         }
 
         var outputNoChannel = output.Reshape([flatBatch, _outputHeight, _outputWidth]);
@@ -793,11 +891,16 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             }
         }
 
-        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Spatial transformer backward failed.");
+        Tensor<T> inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Spatial transformer backward failed.");
 
         // Restore gradient to original input shape
         if (_originalInputShape != null && _originalInputShape.Length != 2)
         {
+            if (_inputHadChannel && _inputChannelFirst)
+            {
+                inputGradient = inputGradient.Transpose([0, 3, 1, 2]);
+            }
+
             return inputGradient.Reshape(_originalInputShape);
         }
 
@@ -933,11 +1036,16 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Return input gradient
-        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        Tensor<T> inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
 
         // Restore gradient to original input shape
         if (_originalInputShape != null && _originalInputShape.Length != 2)
         {
+            if (_inputHadChannel && _inputChannelFirst)
+            {
+                inputGradient = inputGradient.Transpose([0, 3, 1, 2]);
+            }
+
             return inputGradient.Reshape(_originalInputShape);
         }
 

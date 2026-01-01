@@ -211,6 +211,7 @@ public class FlattenLayer<T> : LayerBase<T>
         if (input.Rank <= 3)
         {
             // Unbatched input: flatten to 1D vector
+            _outputSize = input.Length;
             return Engine.Reshape(input, [input.Length]);
         }
 
@@ -222,6 +223,7 @@ public class FlattenLayer<T> : LayerBase<T>
         {
             actualOutputSize *= input.Shape[i];
         }
+        _outputSize = actualOutputSize;
         return Engine.Reshape(input, [batchSize, actualOutputSize]);
     }
 

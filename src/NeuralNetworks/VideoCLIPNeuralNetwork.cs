@@ -1542,6 +1542,46 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     }
 
     /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var parameters = new Vector<T>(ParameterCount);
+        if (!_useNativeMode)
+        {
+            return parameters;
+        }
+
+        int offset = 0;
+        offset = AppendLayerListParameters(_frameEncoderLayers, parameters, offset);
+        offset = AppendLayerListParameters(_temporalEncoderLayers, parameters, offset);
+        offset = AppendLayerListParameters(_textEncoderLayers, parameters, offset);
+        offset = AppendLayerListParameters(_projectionLayers, parameters, offset);
+
+        offset = AppendSingleLayerParameters(_patchEmbedding, parameters, offset);
+        offset = AppendSingleLayerParameters(_textTokenEmbedding, parameters, offset);
+        offset = AppendSingleLayerParameters(_videoProjection, parameters, offset);
+        offset = AppendSingleLayerParameters(_textProjection, parameters, offset);
+        offset = AppendSingleLayerParameters(_captionHead, parameters, offset);
+
+        offset = AppendMatrixParameters(_visionClsToken, parameters, offset);
+        offset = AppendMatrixParameters(_visionPositionalEmbeddings, parameters, offset);
+        offset = AppendMatrixParameters(_temporalPositionalEmbeddings, parameters, offset);
+        offset = AppendMatrixParameters(_textPositionalEmbeddings, parameters, offset);
+
+        return parameters;
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters == null)
+        {
+            throw new ArgumentNullException(nameof(parameters));
+        }
+
+        UpdateParameters(parameters);
+    }
+
+    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int expectedCount = ParameterCount;
@@ -1552,12 +1592,27 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
                 nameof(parameters));
         }
 
-        int offset = 0;
+        if (!_useNativeMode)
+        {
+            return;
+        }
 
+        int offset = 0;
         offset = UpdateLayerListParameters(_frameEncoderLayers, parameters, offset);
         offset = UpdateLayerListParameters(_temporalEncoderLayers, parameters, offset);
         offset = UpdateLayerListParameters(_textEncoderLayers, parameters, offset);
         offset = UpdateLayerListParameters(_projectionLayers, parameters, offset);
+
+        offset = UpdateSingleLayerParameters(_patchEmbedding, parameters, offset);
+        offset = UpdateSingleLayerParameters(_textTokenEmbedding, parameters, offset);
+        offset = UpdateSingleLayerParameters(_videoProjection, parameters, offset);
+        offset = UpdateSingleLayerParameters(_textProjection, parameters, offset);
+        offset = UpdateSingleLayerParameters(_captionHead, parameters, offset);
+
+        offset = UpdateMatrixParameters(_visionClsToken, parameters, offset);
+        offset = UpdateMatrixParameters(_visionPositionalEmbeddings, parameters, offset);
+        offset = UpdateMatrixParameters(_temporalPositionalEmbeddings, parameters, offset);
+        offset = UpdateMatrixParameters(_textPositionalEmbeddings, parameters, offset);
     }
 
     private int UpdateLayerListParameters(List<ILayer<T>> layers, Vector<T> parameters, int offset)
@@ -1576,6 +1631,93 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
                 offset += layerParamCount;
             }
         }
+        return offset;
+    }
+
+    private int AppendLayerListParameters(List<ILayer<T>> layers, Vector<T> parameters, int offset)
+    {
+        foreach (var layer in layers)
+        {
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
+            {
+                parameters[offset + i] = layerParams[i];
+            }
+            offset += layerParams.Length;
+        }
+        return offset;
+    }
+
+    private int AppendSingleLayerParameters(ILayer<T>? layer, Vector<T> parameters, int offset)
+    {
+        if (layer is null)
+        {
+            return offset;
+        }
+
+        var layerParams = layer.GetParameters();
+        for (int i = 0; i < layerParams.Length; i++)
+        {
+            parameters[offset + i] = layerParams[i];
+        }
+
+        return offset + layerParams.Length;
+    }
+
+    private int AppendMatrixParameters(Matrix<T>? matrix, Vector<T> parameters, int offset)
+    {
+        if (matrix is null)
+        {
+            return offset;
+        }
+
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                parameters[offset++] = matrix[i, j];
+            }
+        }
+
+        return offset;
+    }
+
+    private int UpdateSingleLayerParameters(ILayer<T>? layer, Vector<T> parameters, int offset)
+    {
+        if (layer is null)
+        {
+            return offset;
+        }
+
+        int layerParamCount = layer.ParameterCount;
+        if (layerParamCount > 0)
+        {
+            var layerParams = new Vector<T>(layerParamCount);
+            for (int i = 0; i < layerParamCount; i++)
+            {
+                layerParams[i] = parameters[offset + i];
+            }
+            layer.UpdateParameters(layerParams);
+        }
+
+        return offset + layerParamCount;
+    }
+
+    private int UpdateMatrixParameters(Matrix<T>? matrix, Vector<T> parameters, int offset)
+    {
+        if (matrix is null)
+        {
+            return offset;
+        }
+
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                matrix[i, j] = parameters[offset++];
+            }
+        }
+
         return offset;
     }
 
@@ -1821,3 +1963,8 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     #endregion
 
 }
+
+
+
+
+

@@ -287,7 +287,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This is the standard FFN architecture in transformers: expand → activate → project back.
     /// </para>
     /// </remarks>
-    private FeedForwardLayer<T> _feedForwardProjection;
+    private readonly FeedForwardLayer<T> _feedForwardProjection;
 
     /// <summary>
     /// The layer normalization applied after the feed-forward network.

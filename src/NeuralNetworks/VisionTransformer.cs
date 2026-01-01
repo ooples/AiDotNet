@@ -271,14 +271,12 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         Tensor<T> input4D;
-        bool addedBatchDim = false;
 
         // Support both 3D [C, H, W] and 4D [B, C, H, W] input
         if (input.Shape.Length == 3)
         {
             // Add batch dimension: [C, H, W] -> [1, C, H, W]
             input4D = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2]);
-            addedBatchDim = true;
         }
         else if (input.Shape.Length == 4)
         {
@@ -300,9 +298,6 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
         }
 
         int batchSize = input4D.Shape[0];
-
-        // Store for potential use in backward pass
-        _ = addedBatchDim;
 
         // Use input4D for the forward pass
         input = input4D;
@@ -650,3 +645,4 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
         }
     }
 }
+

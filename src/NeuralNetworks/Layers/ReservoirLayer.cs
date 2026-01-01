@@ -219,8 +219,8 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// <summary>
     /// Performs the forward pass of the reservoir layer.
     /// </summary>
-    /// <param name="input">The input tensor to process, with shape [1, inputSize].</param>
-    /// <returns>The output tensor containing the updated reservoir state, with shape [1, reservoirSize].</returns>
+    /// <param name="input">The input tensor to process. The last dimension must be inputSize; all leading dimensions are treated as sequential steps.</param>
+    /// <returns>The output tensor with the same rank as input and last dimension reservoirSize.</returns>
     /// <exception cref="ArgumentException">Thrown when the input tensor has incorrect shape.</exception>
     /// <remarks>
     /// <para>

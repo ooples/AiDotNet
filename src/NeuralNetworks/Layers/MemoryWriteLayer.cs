@@ -451,7 +451,7 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             int memoryDim = _queryWeights.Shape[1];
             T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (actualInputDim + memoryDim)));
-            var random = RandomHelper.CreateSeededRandom(42);
+            var random = RandomHelper.CreateSecureRandom();
 
             _queryWeights = new Tensor<T>([actualInputDim, memoryDim]);
             _keyWeights = new Tensor<T>([actualInputDim, memoryDim]);
@@ -463,6 +463,8 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 _keyWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
             for (int i = 0; i < _valueWeights.Length; i++)
                 _valueWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
+
+            UpdateInputShape([actualInputDim]);
         }
 
         // Use Engine operations for matrix multiplications

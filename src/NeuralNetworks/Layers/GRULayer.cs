@@ -868,22 +868,11 @@ public class GRULayer<T> : LayerBase<T>
             // Initialize hidden state gradient for the next timestep
             var dhNext = new Tensor<T>([batchSize, _hiddenSize]);
 
-            // We need to store activations for each time step during forward pass
-            // If we haven't stored them, we'll recompute them now
+            // Recompute hidden states and activations for each time step (needed for backward pass)
             List<Tensor<T>> timeStepHidden = new List<Tensor<T>>(sequenceLength);
             List<Tensor<T>> timeStepZ = new List<Tensor<T>>(sequenceLength);
             List<Tensor<T>> timeStepR = new List<Tensor<T>>(sequenceLength);
             List<Tensor<T>> timeStepHCandidate = new List<Tensor<T>>(sequenceLength);
-
-            // If we have _allHiddenStates, use those states
-            bool useCachedHiddenStates = _allHiddenStates != null && _allHiddenStates.Count == sequenceLength;
-            if (useCachedHiddenStates)
-            {
-                timeStepHidden = _allHiddenStates;
-                // Still need to recompute z, r, h_candidate for backward pass
-            }
-
-            // Recompute all activations for each time step (needed for backward pass)
             var currentH = new Tensor<T>([batchSize, _hiddenSize]);
 
             for (int t = 0; t < sequenceLength; t++)
@@ -906,10 +895,7 @@ public class GRULayer<T> : LayerBase<T>
                 currentH = newH;
 
                 // Add to lists (not assign by index)
-                if (!useCachedHiddenStates)
-                {
-                    timeStepHidden.Add(currentH.Clone());
-                }
+                timeStepHidden.Add(currentH.Clone());
                 timeStepZ.Add(z.Clone());
                 timeStepR.Add(r.Clone());
                 timeStepHCandidate.Add(h_candidate.Clone());

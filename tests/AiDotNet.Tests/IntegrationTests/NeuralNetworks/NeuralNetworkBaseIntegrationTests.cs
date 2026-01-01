@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -16,7 +17,7 @@ public class NeuralNetworkBaseIntegrationTests
 {
     private static Tensor<float> CreateRandomTensor(int[] shape, int seed = 42)
     {
-        var random = new Random(seed);
+        var random = RandomHelper.CreateSeededRandom(seed);
         var length = 1;
         foreach (var dim in shape)
         {

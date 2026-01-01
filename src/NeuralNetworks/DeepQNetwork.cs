@@ -97,7 +97,7 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// chasing a constantly moving target, which would make learning very difficult.
     /// </para>
     /// </remarks>
-    private readonly DeepQNetwork<T>? _targetNetwork;
+    private DeepQNetwork<T>? _targetNetwork;
 
     /// <summary>
     /// Gets the exploration rate, which controls how often the agent takes random actions versus exploiting learned knowledge.
@@ -810,14 +810,19 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
 
         // Load replay buffer size (but can't restore actual experiences)
         int replayBufferSize = reader.ReadInt32();
+        _ = replayBufferSize;
 
         // Deserialize target network (if it was serialized)
         bool hasTargetNetwork = reader.ReadBoolean();
-        if (hasTargetNetwork && _targetNetwork is not null)
+        if (hasTargetNetwork)
         {
-            for (int i = 0; i < _targetNetwork.Layers.Count; i++)
+            var targetNetwork = _targetNetwork ??
+                new DeepQNetwork<T>(Architecture, _lossFunction, Convert.ToDouble(epsilon), isTargetNetwork: true);
+            _targetNetwork = targetNetwork;
+
+            for (int i = 0; i < targetNetwork.Layers.Count; i++)
             {
-                _targetNetwork.Layers[i].Deserialize(reader);
+                targetNetwork.Layers[i].Deserialize(reader);
             }
         }
     }
@@ -848,3 +853,10 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
         return new DeepQNetwork<T>(this.Architecture, _lossFunction, Convert.ToDouble(this._epsilon));
     }
 }
+
+
+
+
+
+
+

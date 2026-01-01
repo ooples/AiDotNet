@@ -171,8 +171,9 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         var contextShape = context.Shape;
         int queryRank = queryShape.Length;
 
-        // Handle any-rank query input
+                // Handle any-rank query input
         int batch, queryLen, height = 0, width = 0;
+        int queryDimActual;
         bool is4D = queryRank == 4;
         bool isHigherRank = queryRank > 4;
 
@@ -181,17 +182,20 @@ public class CrossAttentionLayer<T> : LayerBase<T>
             // 2D: [seqLen, queryDim] -> add batch dim
             batch = 1;
             queryLen = queryShape[0];
-            query = query.Reshape(new[] { 1, queryLen, _queryDim });
+            queryDimActual = queryShape[1];
+            query = query.Reshape(new[] { 1, queryLen, queryDimActual });
         }
         else if (queryRank == 3)
         {
             // Standard 3D: [batch, seqLen, queryDim]
             batch = queryShape[0];
             queryLen = queryShape[1];
+            queryDimActual = queryShape[2];
         }
         else if (is4D)
         {
             batch = queryShape[0];
+            queryDimActual = queryShape[1];
             height = queryShape[2];
             width = queryShape[3];
             queryLen = height * width;
@@ -207,38 +211,76 @@ public class CrossAttentionLayer<T> : LayerBase<T>
                 flatBatch *= queryShape[d];
             batch = flatBatch;
             queryLen = queryShape[queryRank - 2];
-            query = query.Reshape(new[] { flatBatch, queryLen, _queryDim });
+            queryDimActual = queryShape[queryRank - 1];
+            query = query.Reshape(new[] { flatBatch, queryLen, queryDimActual });
+        }
+
+        if (queryDimActual != _queryDim)
+        {
+            throw new ArgumentException(
+                $"Query feature dimension ({queryDimActual}) must match expected {_queryDim}.");
         }
 
         // Handle context shape - for 2D [seqLen, dim], for 3D [batch, seqLen, dim]
+        int contextRank = contextShape.Length;
+        int contextBatch;
         int contextLen;
         int contextDimActual;
 
-        if (contextShape.Length == 2)
+        if (contextRank == 1)
         {
-            // 2D: [seqLen, dim]
-            contextLen = contextShape[0];
-            contextDimActual = contextShape[1];
-            // Add batch dimension of 1, not 'batch' from query (they may differ)
-            context = context.Reshape(new[] { 1, contextLen, contextDimActual });
-        }
-        else if (contextShape.Length >= 3)
-        {
-            // 3D: [batch, seqLen, dim]
-            contextLen = contextShape[1];
-            contextDimActual = contextShape[2];
-        }
-        else
-        {
-            // Fallback for 1D
+            // 1D: [dim]
+            contextBatch = 1;
             contextLen = 1;
             contextDimActual = contextShape[0];
             context = context.Reshape(new[] { 1, 1, contextDimActual });
         }
+        else if (contextRank == 2)
+        {
+            // 2D: [seqLen, dim]
+            contextBatch = 1;
+            contextLen = contextShape[0];
+            contextDimActual = contextShape[1];
+            // Add batch dimension of 1, broadcast later if needed
+            context = context.Reshape(new[] { 1, contextLen, contextDimActual });
+        }
+        else
+        {
+            // Rank >= 3: [batch..., seqLen, dim]
+            contextDimActual = contextShape[contextRank - 1];
+            contextLen = contextShape[contextRank - 2];
+            int flatBatch = 1;
+            for (int d = 0; d < contextRank - 2; d++)
+                flatBatch *= contextShape[d];
+            contextBatch = flatBatch;
+            if (contextRank != 3)
+            {
+                context = context.Reshape(new[] { flatBatch, contextLen, contextDimActual });
+            }
+        }
+
+        if (contextDimActual != _contextDim)
+        {
+            throw new ArgumentException(
+                $"Context feature dimension ({contextDimActual}) must match expected {_contextDim}.");
+        }
+
+        if (contextBatch != batch)
+        {
+            if (contextBatch == 1 && batch > 1)
+            {
+                context = BroadcastContext(context, batch, contextLen, contextDimActual);
+                contextBatch = batch;
+            }
+            else
+            {
+                throw new ArgumentException(
+                    $"Context batch dimension ({contextBatch}) must match query batch ({batch}) or be 1.");
+            }
+        }
 
         _lastQuery = query;
         _lastContext = context;
-
         // Project Q, K, V
         // query: [B, queryLen, queryDim]
         // context: [B, contextLen, contextDim]
@@ -355,6 +397,29 @@ public class CrossAttentionLayer<T> : LayerBase<T>
                         outSpan[dstIdx] = inSpan[srcIdx];
                     }
                 }
+            }
+        }
+
+        return output;
+    }
+    private Tensor<T> BroadcastContext(Tensor<T> context, int batch, int contextLen, int contextDim)
+    {
+        if (context.Shape.Length != 3 || context.Shape[0] != 1)
+        {
+            throw new ArgumentException("Context tensor must have batch dimension 1 for broadcasting.");
+        }
+
+        var output = new Tensor<T>(new[] { batch, contextLen, contextDim });
+        var inSpan = context.AsSpan();
+        var outSpan = output.AsWritableSpan();
+        int sliceSize = contextLen * contextDim;
+
+        for (int b = 0; b < batch; b++)
+        {
+            int dstOffset = b * sliceSize;
+            for (int i = 0; i < sliceSize; i++)
+            {
+                outSpan[dstOffset + i] = inSpan[i];
             }
         }
 
@@ -821,3 +886,6 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         return output;
     }
 }
+
+
+

@@ -779,33 +779,26 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
-    /// This method is not supported for MemoryReadLayer as it requires both input and memory tensors.
+    /// Performs a forward pass using a default identity-like memory tensor.
     /// </summary>
     /// <param name="input">The input tensor.</param>
-    /// <returns>Not applicable as this method throws an exception.</returns>
-    /// <exception cref="InvalidOperationException">Always thrown when this method is called.</exception>
+    /// <returns>The output tensor produced using the default memory tensor.</returns>
     /// <remarks>
     /// <para>
-    /// This method overrides the base Forward method but is not supported for MemoryReadLayer because
-    /// memory reading requires both an input tensor and a memory tensor. Calling this method will always
-    /// result in an InvalidOperationException.
+    /// This overload provides a default identity-like memory tensor so the layer can be used in
+    /// generic pipelines that only pass a single input tensor. For custom memory contents, use
+    /// Forward(input, memory) instead.
     /// </para>
-    /// <para><b>For Beginners:</b> This method exists to satisfy the base class requirements but should not be used.
-    /// 
-    /// Since the MemoryReadLayer needs both an input tensor and a memory tensor to work properly,
-    /// this simplified version that only takes an input tensor cannot function correctly.
-    /// 
-    /// If you call this method, you'll get an error message directing you to use the
-    /// correct Forward method that accepts both input and memory tensors.
-    /// 
-    /// Always use Forward(input, memory) instead of Forward(input) with this layer.
+    /// <para><b>For Beginners:</b> This lets you use the layer without manually supplying a memory tensor.
+    ///
+    /// The layer creates a simple "identity" memory that passes values through, which is useful for
+    /// quick tests or when a pipeline only supports a single input.
     /// </para>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Support single-argument Forward by using an identity-like memory matrix
         // This allows MemoryReadLayer to work in generic layer pipelines
-        int batchSize = input.Shape[0];
         int memoryDimension = _keyWeights.Shape[1]; // Get memory dimension from key weights
 
         // Create a default identity memory that passes through values
