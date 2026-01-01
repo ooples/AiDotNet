@@ -30,13 +30,15 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class NeuralNetwork<T> : NeuralNetworkBase<T>
 {
-    public override bool SupportsTraining
-    {
-        get
-        {
-            return Layers.Any(layer => layer.SupportsTraining);
-        }
-    }
+    /// <summary>
+    /// Indicates whether this network supports training (learning from data).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A neural network is considered trainable when at least one layer supports training.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => Layers.Any(layer => layer.SupportsTraining);
     /// <summary>
     /// Creates a new neural network with the specified architecture.
     /// </summary>
@@ -73,16 +75,6 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     {
         InitializeLayers();
     }
-
-    /// <summary>
-    /// Indicates whether this network supports training (learning from data).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// NeuralNetwork is intended to be trainable using backpropagation.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsTraining => true;
 
     /// <summary>
     /// Initializes the layers of the neural network based on the architecture.
