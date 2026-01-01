@@ -6979,12 +6979,16 @@ public static class LayerHelper<T>
 
         // Mask decoder with upsampling
         yield return new ConvolutionalLayer<T>(numFeatures, h, w, 128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([128, h, w], 2);
         h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(128, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([64, h, w], 2);
         h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(64, h, w, 32, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([32, h, w], 2);
         h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(32, h, w, 16, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([16, h, w], 2);
         h *= 2; w *= 2;
 
         // Final mask head (outputs 1 channel for binary segmentation)
@@ -7053,12 +7057,16 @@ public static class LayerHelper<T>
 
         // Decoder with upsampling
         yield return new ConvolutionalLayer<T>(numFeatures, h, w, 128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([128, h, w], 2);
         h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(128, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([64, h, w], 2);
         h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(64, h, w, 32, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([32, h, w], 2);
         h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(32, h, w, 16, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([16, h, w], 2);
         h *= 2; w *= 2;
 
         // Final mask head
@@ -7200,17 +7208,24 @@ public static class LayerHelper<T>
             yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         }
 
-        // Classification head
+        // Classification head with global average pooling
+        // First reduce features, then pool to 1x1, then classify
         yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, numClasses, 1, 1, 0, new SoftmaxActivation<T>() as IActivationFunction<T>);
+        yield return new GlobalPoolingLayer<T>([numFeatures, featH, featW], PoolingType.Average);
+        // After global pooling, shape is [numFeatures, 1, 1] - use DenseLayer for final classification
+        yield return new DenseLayer<T>(numFeatures, numClasses, new SoftmaxActivation<T>() as IActivationFunction<T>);
 
-        // Decoder blocks for reconstruction (4 blocks)
+        // Decoder blocks for reconstruction (4 blocks) - these operate at featH x featW resolution
+        // Note: In a real VideoMAE implementation, the decoder would receive encoder features
+        // and upsample back to original resolution. This factory provides encoder + classifier;
+        // full reconstruction with unpatching is handled by the VideoMAE model class.
         for (int i = 0; i < 4; i++)
         {
             yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         }
 
-        // Reconstruction head
+        // Reconstruction head - outputs patch-sized predictions at feature resolution
+        // The VideoMAE model handles reassembly back to video tubelet space
         yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, inputChannels * tubeletSize * patchSize * patchSize, 1, 1, 0);
     }
 
@@ -7264,25 +7279,29 @@ public static class LayerHelper<T>
         int w = featW;
         int currentFeatures = numFeatures;
 
-        // Stage 1
+        // Stage 1 - no upsampling yet
         yield return new ConvolutionalLayer<T>(currentFeatures, h, w, numFeatures / 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         currentFeatures = numFeatures / 2;
 
-        // Stage 2
+        // Stage 2 - 2x upsample
+        yield return new UpsamplingLayer<T>([currentFeatures, h, w], 2);
         h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(currentFeatures, h, w, numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         currentFeatures = numFeatures / 4;
 
-        // Stage 3
+        // Stage 3 - 2x upsample
+        yield return new UpsamplingLayer<T>([currentFeatures, h, w], 2);
         h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(currentFeatures, h, w, numFeatures / 8, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         currentFeatures = numFeatures / 8;
 
-        // Stage 4
+        // Stage 4 - 2x upsample
+        yield return new UpsamplingLayer<T>([currentFeatures, h, w], 2);
         h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(currentFeatures, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
-        // Depth head
+        // Depth head - 2x upsample to original resolution
+        yield return new UpsamplingLayer<T>([64, h, w], 2);
         h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(64, h, w, 1, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
     }
@@ -7440,10 +7459,13 @@ public static class LayerHelper<T>
             yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1);
         }
 
-        // Upsampling
+        // Upsampling with PixelShuffle (sub-pixel convolution)
+        // Conv produces numFeatures*4 channels, PixelShuffle rearranges to numFeatures channels at 2x resolution
         yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures * 4, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new PixelShuffleLayer<T>([numFeatures * 4, h, w], 2);
         h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures * 4, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new PixelShuffleLayer<T>([numFeatures * 4, h, w], 2);
         h *= 2; w *= 2;
 
         // Output
@@ -7475,12 +7497,15 @@ public static class LayerHelper<T>
         // Bottleneck
         yield return new ConvolutionalLayer<T>(numFeatures * 8, h, w, numFeatures * 8, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
 
-        // Decoder (flow-agnostic reconstruction)
+        // Decoder (flow-agnostic reconstruction) with upsampling
         yield return new ConvolutionalLayer<T>(numFeatures * 8, h, w, numFeatures * 4, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([numFeatures * 4, h, w], 2);
         h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 2, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([numFeatures * 2, h, w], 2);
         h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([numFeatures, h, w], 2);
         h *= 2; w *= 2;
 
         // Output (single interpolated frame)
@@ -7588,12 +7613,15 @@ public static class LayerHelper<T>
             yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 4, 3, 1, 1);
         }
 
-        // Decoder for stabilized frame
+        // Decoder for stabilized frame with upsampling
         yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 2, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([numFeatures * 2, h, w], 2);
         h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([numFeatures, h, w], 2);
         h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([numFeatures, h, w], 2);
         h *= 2; w *= 2;
 
         // Output frame
@@ -7626,14 +7654,18 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(numFeatures * 8, h, w, numFeatures * 8, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new ConvolutionalLayer<T>(numFeatures * 8, h, w, numFeatures * 8, 3, 1, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
 
-        // Decoder
+        // Decoder with upsampling
         yield return new ConvolutionalLayer<T>(numFeatures * 8, h, w, numFeatures * 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([numFeatures * 4, h, w], 2);
         h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([numFeatures * 2, h, w], 2);
         h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([numFeatures, h, w], 2);
         h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([numFeatures, h, w], 2);
         h *= 2; w *= 2;
 
         // Output heads: alpha matte (1 channel) + foreground (3 channels)

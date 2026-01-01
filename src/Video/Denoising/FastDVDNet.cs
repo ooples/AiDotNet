@@ -269,8 +269,26 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
 
     private Tensor<T> CreateNoiseMap(Tensor<T> frame, double noiseLevel)
     {
-        int h = frame.Rank == 4 ? frame.Shape[2] : frame.Shape[1];
-        int w = frame.Rank == 4 ? frame.Shape[3] : frame.Shape[2];
+        // Handle all tensor ranks correctly to avoid IndexOutOfRangeException
+        int h, w;
+        if (frame.Rank == 4)
+        {
+            // 4D tensor: [batch, channels, height, width]
+            h = frame.Shape[2];
+            w = frame.Shape[3];
+        }
+        else if (frame.Rank == 3)
+        {
+            // 3D tensor: [channels, height, width]
+            h = frame.Shape[1];
+            w = frame.Shape[2];
+        }
+        else
+        {
+            // 2D tensor: [height, width]
+            h = frame.Shape[0];
+            w = frame.Shape[1];
+        }
 
         var noiseMap = new Tensor<T>([1, 1, h, w]);
         double normalizedNoise = noiseLevel / 255.0;
@@ -286,9 +304,38 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
     private Tensor<T> StackFramesWithNoiseMap(List<Tensor<T>> frames, Tensor<T> noiseMap)
     {
         var first = frames[0];
-        int c = first.Rank == 4 ? first.Shape[1] : first.Shape[0];
-        int h = first.Rank == 4 ? first.Shape[2] : first.Shape[1];
-        int w = first.Rank == 4 ? first.Shape[3] : first.Shape[2];
+
+        // Validate that 4D inputs have batch size == 1
+        if (first.Rank == 4 && first.Shape[0] != 1)
+        {
+            throw new ArgumentException(
+                $"Input frames must have batch size 1, but got {first.Shape[0]}. " +
+                "Process each batch element separately.", nameof(frames));
+        }
+
+        // Handle all tensor ranks correctly to avoid IndexOutOfRangeException
+        int c, h, w;
+        if (first.Rank == 4)
+        {
+            // 4D tensor: [batch, channels, height, width]
+            c = first.Shape[1];
+            h = first.Shape[2];
+            w = first.Shape[3];
+        }
+        else if (first.Rank == 3)
+        {
+            // 3D tensor: [channels, height, width]
+            c = first.Shape[0];
+            h = first.Shape[1];
+            w = first.Shape[2];
+        }
+        else
+        {
+            // 2D tensor: [height, width] - treat as single channel
+            c = 1;
+            h = first.Shape[0];
+            w = first.Shape[1];
+        }
 
         int totalChannels = c * frames.Count + 1; // frames + noise map
         var stacked = new Tensor<T>([1, totalChannels, h, w]);
@@ -299,7 +346,7 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
         foreach (var frame in frames)
         {
             // Only copy single-frame data (first batch if batched input)
-            // This handles both 3D [C,H,W] and 4D [N,C,H,W] inputs correctly
+            // This handles 2D [H,W], 3D [C,H,W] and 4D [N,C,H,W] inputs correctly
             Array.Copy(frame.Data, 0, stacked.Data, offset, frameSize);
             offset += frameSize;
         }

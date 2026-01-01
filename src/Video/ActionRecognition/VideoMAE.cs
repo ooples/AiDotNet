@@ -57,6 +57,7 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     private readonly Random _random = RandomHelper.CreateSecureRandom();
+    private bool _disposed;
 
     #endregion
 
@@ -408,6 +409,8 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
 
     private Tensor<T> RunOnnxInference(Tensor<T> input)
     {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(VideoMAE<T>));
         if (_onnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
@@ -835,6 +838,28 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         {
             return new VideoMAE<T>(Architecture, _onnxModelPath!, _numClasses, _numFrames);
         }
+    }
+
+    #endregion
+
+    #region IDisposable
+
+    /// <summary>
+    /// Releases the unmanaged resources and optionally releases managed resources.
+    /// </summary>
+    /// <param name="disposing">True to release both managed and unmanaged resources; false to release only unmanaged resources.</param>
+    protected override void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (disposing)
+            {
+                _onnxSession?.Dispose();
+                _onnxSession = null;
+            }
+            _disposed = true;
+        }
+        base.Dispose(disposing);
     }
 
     #endregion
