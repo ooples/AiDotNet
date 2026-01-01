@@ -112,7 +112,7 @@ public static class AiDotNetEngine
     {
         try
         {
-            var gpuEngine = new GpuEngine();
+            var gpuEngine = new DirectGpuTensorEngine();
 
             if (gpuEngine.SupportsGpu)
             {
@@ -120,11 +120,10 @@ public static class AiDotNetEngine
                 Console.WriteLine($"[AiDotNet] GPU acceleration enabled: {gpuEngine.Name}");
                 return true;
             }
-            else
-            {
-                Console.WriteLine("[AiDotNet] GPU not available, using CPU");
-                return false;
-            }
+
+            gpuEngine.Dispose();
+            Console.WriteLine("[AiDotNet] GPU not available, using CPU");
+            return false;
         }
         catch (Exception ex)
         {

@@ -23,6 +23,7 @@
 - CLBlast copy/transpose databases ported + fast copy/transpose kernels wired.
 - CLBlast XgemmDirect kernel ported; small-size routing now uses direct kernel.
 - Bayesian tuning diagnostics + CSV/log output verified (artifacts captured in `artifacts/gpu_tuning`); long-running trials suggest adding a per-trial timeout/skip policy.
+- DirectGpuTensorEngine (IEngine adapter) added; Engine/AiDotNetEngine now prefer DirectGpu over ILGPU when available.
 
 ## Non-goals
 - Multi-node/distributed GPU execution.

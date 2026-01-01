@@ -248,11 +248,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private static bool _directGpuAvailable;
 
 #if !NET462
-    private GpuTensorHandle<float>? _gpuWeightsTransposedFloat;
-    private GpuTensorHandle<double>? _gpuWeightsTransposedDouble;
-
-    // === cuBLAS GPU Acceleration (Phase B: Direct NVIDIA Library Access) ===
-    // cuBLAS provides ~30,000 GFLOPS vs ILGPU's ~52-86 GFLOPS ceiling
+    // === cuBLAS GPU Acceleration (Phase B: Direct NVIDIA Library Access) ===  
     private static CuBlasMatMul? _cuBlasInstance;
     private static readonly object _cuBlasLock = new object();
     private CudaDeviceMemory<float>? _cuBlasWeightsFloat;
@@ -633,13 +629,6 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _directGpuWeightsBuffer = null;
 
 #if !NET462
-        // Dispose and clear ILGPU GPU handles
-        _gpuWeightsTransposedFloat?.Dispose();
-        _gpuWeightsTransposedFloat = null;
-
-        _gpuWeightsTransposedDouble?.Dispose();
-        _gpuWeightsTransposedDouble = null;
-
         // Dispose and clear cuBLAS GPU handles
         _cuBlasWeightsFloat?.Dispose();
         _cuBlasWeightsFloat = null;
@@ -755,14 +744,13 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <remarks>
     /// <para><b>Phase B: Direct NVIDIA Library Access</b></para>
     /// <para>
-    /// cuBLAS provides ~30,000 GFLOPS for SGEMM vs ILGPU's ~52-86 GFLOPS ceiling.
+    /// cuBLAS provides ~30,000 GFLOPS for SGEMM vs DirectGpu baseline.
     /// This is because cuBLAS uses hand-tuned PTX/SASS kernels with:
     /// - Tensor core acceleration (Volta+)
     /// - Multi-level tiling (register, shared memory, L2 cache)
     /// - Software pipelining and double-buffering
     /// </para>
     /// <para><b>Performance Impact:</b>
-    /// - ILGPU: ~52-86 GFLOPS (100-500x slower than competitors)
     /// - cuBLAS: ~15,000-30,000 GFLOPS (matches PyTorch/TensorFlow)
     /// </para>
     /// </remarks>
@@ -835,15 +823,15 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             }
 
             // Perform cuBLAS GEMM with cached weights (need to implement double version)
-            // For now, fall back to ILGPU for double
             return null;
         }
 
         return null;
     }
+#endif
 
     /// <summary>
-    /// Attempts to perform matrix multiplication using GPU-cached weights (ILGPU).
+    /// Attempts to perform matrix multiplication using cached DirectGpu weights.
     /// Returns null if GPU is not available or operation fails.
     /// </summary>
     /// <param name="input">The input tensor (uploaded to GPU per call).</param>
@@ -864,57 +852,29 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private Tensor<T>? TryTensorMatMulWithCachedWeights(Tensor<T> input, Tensor<T> weightsTransposed)
     {
-        // Check if engine is GpuEngine
-        if (Engine is not GpuEngine gpuEngine || !gpuEngine.SupportsGpu)
+        var directGpu = Engine.DirectGpu;
+        if (directGpu == null || !directGpu.IsAvailable)
             return null;
 
-        // Handle float type
-        if (typeof(T) == typeof(float))
+        if (_directGpuWeightsBuffer == null)
         {
-            // Allocate GPU handle if needed (one-time upload)
-            if (_gpuWeightsTransposedFloat == null)
-            {
-                var floatWeights = weightsTransposed as Tensor<float>;
-                if (floatWeights == null) return null;
-
-                _gpuWeightsTransposedFloat = gpuEngine.AllocateGpuTensor(floatWeights.ToArray(), floatWeights.Shape);
-                if (_gpuWeightsTransposedFloat == null) return null;
-            }
-
-            // Perform GPU mat mul with cached weights
-            var inputTensor = input as Tensor<float>;
-            var weightsTensor = weightsTransposed as Tensor<float>;
-            if (inputTensor == null || weightsTensor == null) return null;
-
-            var result = gpuEngine.TensorMatMulCachedWeights(inputTensor, weightsTensor, _gpuWeightsTransposedFloat);
-            return result as Tensor<T>;
+            _directGpuWeightsBuffer = directGpu.AllocatePersistentBuffer(weightsTransposed.ToArray());
+            if (_directGpuWeightsBuffer == null)
+                return null;
         }
 
-        // Handle double type
-        if (typeof(T) == typeof(double))
-        {
-            // Allocate GPU handle if needed (one-time upload)
-            if (_gpuWeightsTransposedDouble == null)
-            {
-                var doubleWeights = weightsTransposed as Tensor<double>;
-                if (doubleWeights == null) return null;
+        var resultData = directGpu.MatMulWithCachedWeights(
+            input.ToArray(),
+            _directGpuWeightsBuffer,
+            input.Shape[0],
+            input.Shape[1],
+            weightsTransposed.Shape[1]);
 
-                _gpuWeightsTransposedDouble = gpuEngine.AllocateGpuTensor(doubleWeights.ToArray(), doubleWeights.Shape);
-                if (_gpuWeightsTransposedDouble == null) return null;
-            }
+        if (resultData == null)
+            return null;
 
-            // Perform GPU mat mul with cached weights
-            var inputTensor = input as Tensor<double>;
-            var weightsTensor = weightsTransposed as Tensor<double>;
-            if (inputTensor == null || weightsTensor == null) return null;
-
-            var result = gpuEngine.TensorMatMulCachedWeights(inputTensor, weightsTensor, _gpuWeightsTransposedDouble);
-            return result as Tensor<T>;
-        }
-
-        return null; // Unsupported type
+        return new Tensor<T>(new[] { input.Shape[0], weightsTransposed.Shape[1] }, new Vector<T>(resultData));
     }
-#endif
 
     /// <summary>
     /// Gets the weights tensor of the layer.

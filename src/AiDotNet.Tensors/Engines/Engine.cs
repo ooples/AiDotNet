@@ -175,13 +175,13 @@ namespace AiDotNet.Tensors.Engines
                 var directGpu = DirectGpu;
                 if (directGpu != null && directGpu.IsAvailable)
                 {
+                    var directEngine = new DirectGpuTensorEngine(directGpu);
                     Console.WriteLine($"[Engine] DirectGpu available: {directGpu.BackendName} ({directGpu.DeviceName})");
                     Console.WriteLine($"[Engine] DirectGpu: {directGpu.ComputeUnits} CUs, {directGpu.GlobalMemoryGB:F1}GB VRAM");
+                    return directEngine;
                 }
-                else
-                {
-                    Console.WriteLine("[Engine] DirectGpu: Not available (OpenCL not found or no compatible GPU)");
-                }
+
+                Console.WriteLine("[Engine] DirectGpu: Not available (OpenCL not found or no compatible GPU)");
             }
             catch (Exception ex)
             {
