@@ -54,8 +54,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Numerics.Tensors" Version="10.0.1" />     
+    <PackageReference Include="System.Numerics.Tensors" Version="10.0.1" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
+  </ItemGroup>
+
+  <!-- System.Text.Json is needed for net471 as it's not built-in like net8.0 -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net471'">
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
   </ItemGroup>
 
   <!-- CLBlast native library for optimized OpenCL BLAS operations -->

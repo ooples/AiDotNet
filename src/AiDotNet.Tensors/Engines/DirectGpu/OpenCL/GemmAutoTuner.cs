@@ -1094,9 +1094,10 @@ public sealed class GemmAutoTuner
         {
             if (TrialHeartbeatSeconds > 0 && (EnableDiagnostics || EnableProgress))
             {
+                // Ensure label is non-null for TrialHeartbeat constructor
                 string label = string.IsNullOrWhiteSpace(progressLabel)
                     ? $"{config.KernelName ?? "kernel"} {M}x{N}x{K}"
-                    : progressLabel;
+                    : progressLabel ?? string.Empty;
                 heartbeat = new TrialHeartbeat(label, TrialHeartbeatSeconds);
             }
 

@@ -1269,6 +1269,163 @@ public class DirectGpuTests
         _output.WriteLine("- If we beat CLBlast, our implementation is competitive");
         _output.WriteLine("- Bayesian optimization can find even better configurations");
     }
+
+    [Fact]
+    [Trait("Category", "GPU")]
+    public void DirectGpuEngine_ABTestKernelVariants_OptimizationComparison()
+    {
+        // Compare GEMM kernel variants:
+        // - Variant 0: CLBlast Baseline (original implementation)
+        // - Variant 1: XOR Swizzle (eliminates LDS bank conflicts)
+        // - Variant 2: RDNA1 Optimized (XOR swizzle + Wave32 hints)
+        // This test measures the performance improvement from each optimization.
+
+        using var engine = new DirectGpuEngine();
+        if (!engine.IsAvailable)
+        {
+            _output.WriteLine("DirectGpu not available - skipping test");
+            return;
+        }
+
+        var backend = engine.Backend as AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend;
+        if (backend == null)
+        {
+            _output.WriteLine("OpenCL backend not available - skipping test");
+            return;
+        }
+
+        _output.WriteLine("=============================================================");
+        _output.WriteLine("A/B KERNEL VARIANT COMPARISON");
+        _output.WriteLine("Comparing: CLBlast Baseline vs XOR Swizzle vs RDNA1 Optimized");
+        _output.WriteLine("=============================================================");
+        _output.WriteLine("");
+        _output.WriteLine($"Device: {engine.DeviceName}");
+        _output.WriteLine($"Vendor: {engine.DeviceVendor}");
+        _output.WriteLine($"Compute Units: {engine.ComputeUnits}");
+        _output.WriteLine("");
+
+        // Test multiple sizes to see how optimizations scale
+        var sizes = new[] { 1024, 2048, 4096 };
+
+        foreach (var size in sizes)
+        {
+            _output.WriteLine($"--- Matrix Size: {size}x{size}x{size} ---");
+
+            // Run A/B test for this size
+            var result = backend.ABTestKernelVariants(size, size, size, warmupRuns: 3, benchmarkRuns: 10);
+            _output.WriteLine(result);
+            _output.WriteLine("");
+        }
+
+        _output.WriteLine("=============================================================");
+        _output.WriteLine("OPTIMIZATION NOTES:");
+        _output.WriteLine("- XOR Swizzle: Uses col^(row&mask) pattern to eliminate LDS bank conflicts");
+        _output.WriteLine("- RDNA1 Optimized: Adds __attribute__((amdgpu_waves_per_eu)) hints for Wave32 mode");
+        _output.WriteLine("- Expected improvement: 10-25% from swizzling, 5-10% from Wave32 on RDNA1");
+        _output.WriteLine("=============================================================");
+    }
+
+    [Fact]
+    [Trait("Category", "GPU")]
+    public void DirectGpuEngine_ComprehensiveAbTest_AllSizes()
+    {
+        // Runs comprehensive A/B testing across ALL sizes to identify:
+        // 1. Which kernel variant wins at each size
+        // 2. Bottleneck analysis (memory vs compute bound)
+        // 3. Efficiency percentages and recommendations
+
+        using var engine = new DirectGpuEngine();
+        if (!engine.IsAvailable)
+        {
+            _output.WriteLine("DirectGpu not available - skipping test");
+            return;
+        }
+
+        var backend = engine.Backend as AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend;
+        if (backend == null)
+        {
+            _output.WriteLine("OpenCL backend not available - skipping test");
+            return;
+        }
+
+        _output.WriteLine("Running Comprehensive A/B Test across all sizes...");
+        _output.WriteLine("This will test CLBlast, XOR Swizzle, and RDNA1 Optimized variants.");
+        _output.WriteLine("");
+
+        // Run the comprehensive test with all sizes from 128 to 4096
+        var result = backend.ComprehensiveAbTest(
+            sizes: new[] { 128, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096 },
+            warmupRuns: 2,
+            benchmarkRuns: 5);
+
+        _output.WriteLine(result);
+
+        // Ensure we got valid results
+        Assert.Contains("SUMMARY", result);
+        Assert.Contains("RECOMMENDATIONS", result);
+    }
+
+    [Fact]
+    [Trait("Category", "GPU")]
+    public void DirectGpuEngine_GemmProfiler_RooflineAnalysis()
+    {
+        // Uses the GemmProfiler to run full profiling with roofline analysis
+
+        using var engine = new DirectGpuEngine();
+        if (!engine.IsAvailable)
+        {
+            _output.WriteLine("DirectGpu not available - skipping test");
+            return;
+        }
+
+        var backend = engine.Backend as AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend;
+        if (backend == null)
+        {
+            _output.WriteLine("OpenCL backend not available - skipping test");
+            return;
+        }
+
+        _output.WriteLine("Running GemmProfiler with roofline analysis...");
+        _output.WriteLine("");
+
+        // Create profiler with quick config for testing
+        var config = new AiDotNet.Tensors.Engines.DirectGpu.Profiling.ProfilerConfig
+        {
+            Sizes = new[] { 512, 1024, 2048 },  // Fewer sizes for faster testing
+            WarmupRuns = 2,
+            BenchmarkRuns = 3,
+            IncludeOccupancy = true,
+            Verbose = false  // We'll output ourselves
+        };
+
+        var profiler = new AiDotNet.Tensors.Engines.DirectGpu.Profiling.GemmProfiler(backend, config);
+
+        // Run full profile
+        var result = profiler.RunFullProfile();
+
+        // Output the report
+        _output.WriteLine($"Device: {result.DeviceName}");
+        _output.WriteLine($"Architecture: {result.Architecture?.Name ?? "Unknown"}");
+        _output.WriteLine($"Peak: {result.PeakGflops:F0} GFLOPS, {result.PeakBandwidthGBs:F0} GB/s");
+        _output.WriteLine($"Ridge Point: {result.RidgePoint:F1} FLOPS/byte");
+        _output.WriteLine("");
+
+        _output.WriteLine("Results:");
+        foreach (var entry in result.Entries)
+        {
+            _output.WriteLine($"  {entry.M}x{entry.N}x{entry.K}:");
+            _output.WriteLine($"    GFLOPS: {entry.Gflops:F0} ({entry.EfficiencyPercent:F1}%)");
+            _output.WriteLine($"    Bottleneck: {entry.Bottleneck}");
+            _output.WriteLine($"    Action: {entry.RecommendedAction}");
+        }
+
+        _output.WriteLine("");
+        _output.WriteLine($"Best: {result.BestGflops:F0} GFLOPS ({result.BestEfficiencyPercent:F1}% efficiency)");
+
+        // Validate results
+        Assert.True(result.Entries.Count > 0, "Should have profiling entries");
+        Assert.True(result.BestGflops > 0, "Should have measured GFLOPS");
+    }
 #else
     [Fact]
     public void DirectGpu_NotAvailableOnNet462()

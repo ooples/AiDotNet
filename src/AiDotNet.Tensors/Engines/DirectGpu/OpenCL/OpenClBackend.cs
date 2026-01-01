@@ -633,6 +633,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 _clblastTransposeParams = ClBlastTransposeDatabase.GetParameters(deviceInfo);
                 _clblastDirectParams = ClBlastXgemmDirectDatabase.GetParameters(deviceInfo);
                 _clblastMinIndirectSize = ClBlastGemmRoutineDatabase.GetXgemmMinIndirectSize(deviceInfo);
+                Console.WriteLine($"[OpenClBackend] CLBlast MinIndirectSize threshold: {_clblastMinIndirectSize} (use INDIRECT for M/N >= {_clblastMinIndirectSize})");
 
                 if (ClBlastXgemmDatabase.TryGetConfig(deviceInfo, out var baseline))
                 {
@@ -970,21 +971,33 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             float beta,
             GemmConfig config)
         {
-            // HYBRID APPROACH: Choose between direct and indirect path based on matrix shape.
-            // - Direct path (XgemmDirectTN): Best for small/medium matrices, non-square (DenseLayer-style),
-            //   and very large matrices (4096+). Avoids transpose overhead for row-major data.
-            // - Indirect path: Best for medium-large square matrices (~2048x2048) where the additional
-            //   LDS tiling and register blocking optimizations outweigh the transpose overhead.
-            int minDim = Math.Min(M, Math.Min(N, K));
-            int maxMN = Math.Max(M, N);
-            // Use indirect path only for the "sweet spot" of 2048x2048 class matrices
-            // (large enough to benefit from tiling, small enough that packing overhead is acceptable)
-            bool usesIndirectPath = minDim >= 512 && maxMN >= 2048 && maxMN < 4096;
+            // CLBlast uses MinIndirectSize threshold to decide between XgemmDirect and Xgemm kernels.
+            // XgemmDirect is faster for small matrices (no packing overhead).
+            // Xgemm (indirect) is faster for large matrices (better cache utilization despite packing).
+            // For gfx1012 (RX 5500 XT), threshold is 448 - use indirect for M >= 448 or N >= 448.
+            bool traceEnabled = Environment.GetEnvironmentVariable("AIDOTNET_GEMM_TRACE") == "1";
+            bool forceDirect = Environment.GetEnvironmentVariable("AIDOTNET_FORCE_DIRECT") == "1";
 
-            // For non-square, small, medium, or very large matrices: use direct path (no transpose overhead)
-            if (!usesIndirectPath && TryExecuteClBlastDirectGemm(A, B, C, M, N, K, alpha, beta))
+            // Use indirect path for matrices at or above the MinIndirectSize threshold (CLBlast behavior)
+            bool useIndirectPath = _clblastMinIndirectSize > 0 && (M >= _clblastMinIndirectSize || N >= _clblastMinIndirectSize);
+
+            // Try direct path only for small matrices (below MinIndirectSize threshold)
+            if (!useIndirectPath || forceDirect)
             {
-                return true;
+                if (traceEnabled)
+                    Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] Trying DIRECT path (M/N < {_clblastMinIndirectSize} or forceDirect={forceDirect})");
+                if (TryExecuteClBlastDirectGemm(A, B, C, M, N, K, alpha, beta))
+                {
+                    if (traceEnabled)
+                        Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] SUCCESS: DIRECT path executed");
+                    return true;
+                }
+                if (traceEnabled)
+                    Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] DIRECT path failed, trying INDIRECT");
+            }
+            else if (traceEnabled)
+            {
+                Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] Skipping DIRECT path (M/N >= {_clblastMinIndirectSize}), using INDIRECT");
             }
 
             if (_dynamicGemm == null)
@@ -1003,98 +1016,241 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 return false;
 
             bool kernel1 = IsClBlastBaselineKernel1(config);
-            int mCeiled = CeilDiv(M, kernel1 ? config.TileN : config.TileM) * (kernel1 ? config.TileN : config.TileM);
-            int nCeiled = CeilDiv(N, kernel1 ? config.TileM : config.TileN) * (kernel1 ? config.TileM : config.TileN);
-            int kCeiled = CeilDiv(K, kUnit) * kUnit;
 
-            int aOne = K;
-            int aTwo = M;
-            int bOne = N;
-            int bTwo = K;
-            int cOne = N;
-            int cTwo = M;
+            // ROW-MAJOR SWAP TRICK (Zero-Copy Optimization):
+            // For row-major GEMM C = A × B where A(M×K), B(K×N), C(M×N):
+            //   C^T = (A × B)^T = B^T × A^T
+            // Row-major data reinterpreted as column-major is already transposed!
+            // So: column-major computation with swapped args gives row-major result.
+            //
+            // For GEMMK=0 (kernel1=false):
+            // - OLD: Physical transpose A and C (48% overhead!)
+            // - NEW: Swap A↔B, M↔N, pass to kernel. Zero data movement!
+            //
+            // The kernel computes C' = B' × A' in column-major where:
+            // - B' = B(K×N row-major) reinterpreted as N×K column-major
+            // - A' = A(M×K row-major) reinterpreted as K×M column-major
+            // - C' = C(M×N row-major) reinterpreted as N×M column-major
+            // Result: C' (column-major N×M) = C (row-major M×N) ✓
+            bool useRowMajorSwap = !kernel1;
 
-            int aOneI = kernel1 ? kCeiled : mCeiled;
-            int aTwoI = kernel1 ? mCeiled : kCeiled;
-            int bOneI = nCeiled;
-            int bTwoI = kCeiled;
-            int cOneI = kernel1 ? nCeiled : mCeiled;
-            int cTwoI = kernel1 ? mCeiled : nCeiled;
+            // Timing diagnostics (enable with AIDOTNET_GEMM_TIMING=1)
+            var timingEnabled = Environment.GetEnvironmentVariable("AIDOTNET_GEMM_TIMING") == "1";
+            var sw = timingEnabled ? System.Diagnostics.Stopwatch.StartNew() : null;
+            long allocTime = 0, packATime = 0, packBTime = 0, packCTime = 0, gemmTime = 0, unpackCTime = 0;
 
-            bool aDoTranspose = !kernel1;
-            bool bDoTranspose = false;
-            bool cDoTranspose = !kernel1;
-
-            bool aNoTemp = aOne == aOneI && aTwo == aTwoI && !aDoTranspose;
-            bool bNoTemp = bOne == bOneI && bTwo == bTwoI && !bDoTranspose;
-            bool cNoTemp = cOne == cOneI && cTwo == cTwoI && !cDoTranspose;
-
-            long aSize = (long)aOneI * aTwoI;
-            long bSize = (long)bOneI * bTwoI;
-            long cSize = (long)cOneI * cTwoI;
-            if (aSize > int.MaxValue || bSize > int.MaxValue || cSize > int.MaxValue)
-                return false;
-
-            IGpuBuffer? aTemp = null;
-            IGpuBuffer? bTemp = null;
-            IGpuBuffer? cTemp = null;
-            IGpuBuffer aBuf = A;
-            IGpuBuffer bBuf = B;
-            IGpuBuffer cBuf = C;
-
-            try
+            if (useRowMajorSwap)
             {
-                if (!aNoTemp)
-                {
-                    aTemp = AllocateBuffer((int)aSize);
-                    aBuf = aTemp;
-                    if (aDoTranspose)
-                        ClBlastTransposeMatrix(A, aBuf, aOne, aTwo, aOne, 0, aOneI, aTwoI, aOneI, 0, true);
-                    else
-                        ClBlastCopyMatrix(A, aBuf, aOne, aTwo, aOne, 0, aOneI, aTwoI, aOneI, 0, true);
-                }
+                // Row-major swap trick: Swap A↔B and M↔N for zero-copy operation.
+                // After swap: new_M = old_N, new_N = old_M
+                // The kernel sees: "A"=B (N×K col-major), "B"=A (K×M col-major), "C"=C (N×M col-major)
+                int swappedM = N;
+                int swappedN = M;
+                int mCeiled = CeilDiv(swappedM, config.TileM) * config.TileM;
+                int nCeiled = CeilDiv(swappedN, config.TileN) * config.TileN;
+                int kCeiled = CeilDiv(K, kUnit) * kUnit;
 
-                if (!bNoTemp)
-                {
-                    bTemp = AllocateBuffer((int)bSize);
-                    bBuf = bTemp;
-                    if (bDoTranspose)
-                        ClBlastTransposeMatrix(B, bBuf, bOne, bTwo, bOne, 0, bOneI, bTwoI, bOneI, 0, true);
-                    else
-                        ClBlastCopyMatrix(B, bBuf, bOne, bTwo, bOne, 0, bOneI, bTwoI, bOneI, 0, true);
-                }
+                // For the swapped computation, check if padding is needed
+                // A (originally B): K×N row-major → N×K column-major, needs to be mCeiled×kCeiled
+                // B (originally A): M×K row-major → K×M column-major, needs to be nCeiled×kCeiled
+                // C: M×N row-major → N×M column-major, needs to be mCeiled×nCeiled
+                bool aNeedsPad = N != mCeiled || K != kCeiled;
+                bool bNeedsPad = M != nCeiled || K != kCeiled;
+                bool cNeedsPad = N != mCeiled || M != nCeiled;
 
-                if (!cNoTemp)
-                {
-                    cTemp = AllocateBuffer((int)cSize);
-                    cBuf = cTemp;
-                    if (beta != 0.0f)
-                    {
-                        if (cDoTranspose)
-                            ClBlastTransposeMatrix(C, cBuf, cOne, cTwo, cOne, 0, cOneI, cTwoI, cOneI, 0, true);
-                        else
-                            ClBlastCopyMatrix(C, cBuf, cOne, cTwo, cOne, 0, cOneI, cTwoI, cOneI, 0, true);
-                    }
-                }
-
-                if (!TryExecuteDynamicGemm(aBuf, bBuf, cBuf, mCeiled, nCeiled, kCeiled, alpha, beta, config))
+                long aSize = (long)mCeiled * kCeiled;
+                long bSize = (long)nCeiled * kCeiled;
+                long cSize = (long)mCeiled * nCeiled;
+                if (aSize > int.MaxValue || bSize > int.MaxValue || cSize > int.MaxValue)
                     return false;
 
-                if (!cNoTemp)
-                {
-                    if (cDoTranspose)
-                        ClBlastTransposeMatrix(cBuf, C, cOneI, cTwoI, cOneI, 0, cOne, cTwo, cOne, 0, false);
-                    else
-                        ClBlastCopyMatrix(cBuf, C, cOneI, cTwoI, cOneI, 0, cOne, cTwo, cOne, 0, false);
-                }
+                IGpuBuffer? aTemp = null;
+                IGpuBuffer? bTemp = null;
+                IGpuBuffer? cTemp = null;
+                IGpuBuffer aBuf = B;  // Swapped! Original B becomes kernel's A
+                IGpuBuffer bBuf = A;  // Swapped! Original A becomes kernel's B
+                IGpuBuffer cBuf = C;
 
-                return true;
+                try
+                {
+                    // Pad "A" (originally B) if needed - NO TRANSPOSE, just copy with padding
+                    if (aNeedsPad)
+                    {
+                        if (timingEnabled) { Synchronize(); sw!.Restart(); }
+                        aTemp = AllocateBuffer((int)aSize);
+                        if (timingEnabled) { allocTime += sw!.ElapsedTicks; sw.Restart(); }
+                        // B is K×N row-major. Reinterpreted as column-major, it's N×K.
+                        // We need mCeiled×kCeiled = swappedM_ceiled × K_ceiled.
+                        // Copy K rows of N elements, with output stride mCeiled.
+                        ClBlastCopyMatrix(B, aTemp, N, K, N, 0, mCeiled, kCeiled, mCeiled, 0, true);
+                        aBuf = aTemp;
+                        if (timingEnabled) { Synchronize(); packATime = sw!.ElapsedTicks; }
+                    }
+
+                    // Pad "B" (originally A) if needed - NO TRANSPOSE, just copy with padding
+                    if (bNeedsPad)
+                    {
+                        if (timingEnabled) { sw!.Restart(); }
+                        bTemp = AllocateBuffer((int)bSize);
+                        if (timingEnabled) { allocTime += sw!.ElapsedTicks; sw.Restart(); }
+                        // A is M×K row-major. Reinterpreted as column-major, it's K×M.
+                        // We need nCeiled×kCeiled = swappedN_ceiled × K_ceiled.
+                        // Copy M rows of K elements, with output stride nCeiled.
+                        ClBlastCopyMatrix(A, bTemp, K, M, K, 0, nCeiled, kCeiled, nCeiled, 0, true);
+                        bBuf = bTemp;
+                        if (timingEnabled) { Synchronize(); packBTime = sw!.ElapsedTicks; }
+                    }
+
+                    // Pad C if needed (for beta != 0) - NO TRANSPOSE
+                    if (cNeedsPad)
+                    {
+                        if (timingEnabled) { sw!.Restart(); }
+                        cTemp = AllocateBuffer((int)cSize);
+                        if (timingEnabled) { allocTime += sw!.ElapsedTicks; sw.Restart(); }
+                        if (beta != 0.0f)
+                        {
+                            // C is M×N row-major. Reinterpreted as column-major, it's N×M.
+                            // We need mCeiled×nCeiled.
+                            ClBlastCopyMatrix(C, cTemp, N, M, N, 0, mCeiled, nCeiled, mCeiled, 0, true);
+                            if (timingEnabled) { Synchronize(); packCTime = sw!.ElapsedTicks; }
+                        }
+                        cBuf = cTemp;
+                    }
+
+                    // Execute GEMM with swapped dimensions
+                    if (timingEnabled) { sw!.Restart(); }
+                    if (!TryExecuteDynamicGemm(aBuf, bBuf, cBuf, mCeiled, nCeiled, kCeiled, alpha, beta, config))
+                        return false;
+                    if (timingEnabled) { Synchronize(); gemmTime = sw!.ElapsedTicks; }
+
+                    // Copy result back if we used temp buffer - NO TRANSPOSE
+                    if (cNeedsPad)
+                    {
+                        if (timingEnabled) { sw!.Restart(); }
+                        // Result is mCeiled×nCeiled column-major = nCeiled×mCeiled row-major.
+                        // But we want M×N row-major. Copy with original dimensions.
+                        ClBlastCopyMatrix(cBuf, C, mCeiled, nCeiled, mCeiled, 0, N, M, N, 0, false);
+                        if (timingEnabled) { Synchronize(); unpackCTime = sw!.ElapsedTicks; }
+                    }
+
+                    if (timingEnabled)
+                    {
+                        double ticksPerMs = System.Diagnostics.Stopwatch.Frequency / 1000.0;
+                        var total = allocTime + packATime + packBTime + packCTime + gemmTime + unpackCTime;
+                        double flops = 2.0 * M * N * K;
+                        double gflops = flops / (total / ticksPerMs) / 1e6;
+                        Console.WriteLine($"[TIMING-SWAP {M}x{N}x{K}] Alloc={allocTime/ticksPerMs:F2}ms PackA={packATime/ticksPerMs:F2}ms PackB={packBTime/ticksPerMs:F2}ms GEMM={gemmTime/ticksPerMs:F2}ms UnpackC={unpackCTime/ticksPerMs:F2}ms Total={total/ticksPerMs:F2}ms ({gflops:F0} GFLOPS)");
+                    }
+
+                    return true;
+                }
+                finally
+                {
+                    cTemp?.Dispose();
+                    bTemp?.Dispose();
+                    aTemp?.Dispose();
+                }
             }
-            finally
+            else
             {
-                cTemp?.Dispose();
-                bTemp?.Dispose();
-                aTemp?.Dispose();
+                // GEMMK=1 path (kernel1=true): Original logic without row-major swap
+                int mCeiled = CeilDiv(M, config.TileN) * config.TileN;
+                int nCeiled = CeilDiv(N, config.TileM) * config.TileM;
+                int kCeiled = CeilDiv(K, kUnit) * kUnit;
+
+                int aOne = K;
+                int aTwo = M;
+                int bOne = N;
+                int bTwo = K;
+                int cOne = N;
+                int cTwo = M;
+
+                int aOneI = kCeiled;
+                int aTwoI = mCeiled;
+                int bOneI = nCeiled;
+                int bTwoI = kCeiled;
+                int cOneI = nCeiled;
+                int cTwoI = mCeiled;
+
+                bool aNoTemp = aOne == aOneI && aTwo == aTwoI;
+                bool bNoTemp = bOne == bOneI && bTwo == bTwoI;
+                bool cNoTemp = cOne == cOneI && cTwo == cTwoI;
+
+                long aSize = (long)aOneI * aTwoI;
+                long bSize = (long)bOneI * bTwoI;
+                long cSize = (long)cOneI * cTwoI;
+                if (aSize > int.MaxValue || bSize > int.MaxValue || cSize > int.MaxValue)
+                    return false;
+
+                IGpuBuffer? aTemp = null;
+                IGpuBuffer? bTemp = null;
+                IGpuBuffer? cTemp = null;
+                IGpuBuffer aBuf = A;
+                IGpuBuffer bBuf = B;
+                IGpuBuffer cBuf = C;
+
+                try
+                {
+                    if (!aNoTemp)
+                    {
+                        if (timingEnabled) { Synchronize(); sw!.Restart(); }
+                        aTemp = AllocateBuffer((int)aSize);
+                        aBuf = aTemp;
+                        if (timingEnabled) { allocTime += sw!.ElapsedTicks; sw.Restart(); }
+                        ClBlastCopyMatrix(A, aBuf, aOne, aTwo, aOne, 0, aOneI, aTwoI, aOneI, 0, true);
+                        if (timingEnabled) { Synchronize(); packATime = sw!.ElapsedTicks; }
+                    }
+
+                    if (!bNoTemp)
+                    {
+                        if (timingEnabled) { sw!.Restart(); }
+                        bTemp = AllocateBuffer((int)bSize);
+                        bBuf = bTemp;
+                        if (timingEnabled) { allocTime += sw!.ElapsedTicks; sw.Restart(); }
+                        ClBlastCopyMatrix(B, bBuf, bOne, bTwo, bOne, 0, bOneI, bTwoI, bOneI, 0, true);
+                        if (timingEnabled) { Synchronize(); packBTime = sw!.ElapsedTicks; }
+                    }
+
+                    if (!cNoTemp)
+                    {
+                        if (timingEnabled) { sw!.Restart(); }
+                        cTemp = AllocateBuffer((int)cSize);
+                        cBuf = cTemp;
+                        if (timingEnabled) { allocTime += sw!.ElapsedTicks; sw.Restart(); }
+                        if (beta != 0.0f)
+                        {
+                            ClBlastCopyMatrix(C, cBuf, cOne, cTwo, cOne, 0, cOneI, cTwoI, cOneI, 0, true);
+                            if (timingEnabled) { Synchronize(); packCTime = sw!.ElapsedTicks; }
+                        }
+                    }
+
+                    if (timingEnabled) { sw!.Restart(); }
+                    if (!TryExecuteDynamicGemm(aBuf, bBuf, cBuf, mCeiled, nCeiled, kCeiled, alpha, beta, config))
+                        return false;
+                    if (timingEnabled) { Synchronize(); gemmTime = sw!.ElapsedTicks; }
+
+                    if (!cNoTemp)
+                    {
+                        if (timingEnabled) { sw!.Restart(); }
+                        ClBlastCopyMatrix(cBuf, C, cOneI, cTwoI, cOneI, 0, cOne, cTwo, cOne, 0, false);
+                        if (timingEnabled) { Synchronize(); unpackCTime = sw!.ElapsedTicks; }
+                    }
+
+                    if (timingEnabled)
+                    {
+                        double ticksPerMs = System.Diagnostics.Stopwatch.Frequency / 1000.0;
+                        var total = allocTime + packATime + packBTime + packCTime + gemmTime + unpackCTime;
+                        Console.WriteLine($"[TIMING {M}x{N}x{K}] Alloc={allocTime/ticksPerMs:F2}ms PackA={packATime/ticksPerMs:F2}ms PackB={packBTime/ticksPerMs:F2}ms GEMM={gemmTime/ticksPerMs:F2}ms UnpackC={unpackCTime/ticksPerMs:F2}ms Total={total/ticksPerMs:F2}ms");
+                    }
+
+                    return true;
+                }
+                finally
+                {
+                    cTemp?.Dispose();
+                    bTemp?.Dispose();
+                    aTemp?.Dispose();
+                }
             }
         }
 
@@ -1282,20 +1438,48 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             var bufferC = ((DirectOpenClGpuBuffer)C).Buffer;
 
             bool offlineEnabled = TryGetOfflineTuningMode(out _);
+
+            // DIAGNOSTIC TRACING (always prints for debugging)
+            bool traceEnabled = Environment.GetEnvironmentVariable("AIDOTNET_GEMM_TRACE") == "1";
+
             if (!offlineEnabled && TryGetClBlastBaselineConfig(out var baselineConfig))
             {
+                if (traceEnabled)
+                    Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] Trying CLBlast baseline (TileM={baselineConfig.TileM}, TileN={baselineConfig.TileN}, TileK={baselineConfig.TileK})");
+
                 if (TryExecuteClBlastBaselineGemm(A, B, C, M, N, K, alpha, beta, baselineConfig))
                 {
+                    if (traceEnabled)
+                        Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] SUCCESS: CLBlast baseline executed");
                     return;
                 }
+                if (traceEnabled)
+                    Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] FALLBACK: CLBlast baseline FAILED");
+            }
+            else
+            {
+                if (traceEnabled)
+                    Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] SKIP: CLBlast baseline not available (offline={offlineEnabled})");
             }
 
             if (_dynamicGemm != null && M >= 128 && N >= 128 && K >= 64 &&
                 TryGetTunedConfig(M, N, K, out var tunedConfig))
             {
+                if (traceEnabled)
+                    Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] Trying dynamic GEMM");
                 if (TryExecutePackedDynamicGemm(A, B, C, M, N, K, alpha, beta, tunedConfig))
+                {
+                    if (traceEnabled)
+                        Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] SUCCESS: Dynamic GEMM executed");
                     return;
+                }
+                if (traceEnabled)
+                    Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] FALLBACK: Dynamic GEMM FAILED");
             }
+
+            // FALLBACK: Using our own kernels (NOT CLBlast identical!)
+            if (traceEnabled)
+                Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] FALLBACK: Using built-in kernel (NOT CLBlast!)");
 
             // Choose kernel based on matrix size
             // Use optimized kernel for matrices >= 128 in any dimension
@@ -1303,6 +1487,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             {
                 // Large matrix - use CLBlast-style register-blocked kernel
                 // Kernel uses 16x16 work group (256 threads), each computes 4x4 outputs = 64x64 tile
+                _logger?.LogWarning("[GEMM {M}x{N}x{K}] FALLBACK kernel: gemm_double_buffered (expected ~30% slower than CLBlast)", M, N, K);
                 var kernel = _kernelCache["gemm_double_buffered"];
 
                 kernel.SetArg(0, bufferA.Handle);
@@ -2817,6 +3002,751 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         /// Checks if the CLBlast library is available for use.
         /// </summary>
         public static bool IsClBlastAvailable => ClBlastNative.IsAvailable;
+
+        #endregion
+
+        #region Enhanced Diagnostics and Roofline Analysis
+
+        /// <summary>
+        /// Environment variable to enable deep profiling: AIDOTNET_GEMM_PROFILE=1
+        /// This enables detailed roofline model analysis and bottleneck detection.
+        /// </summary>
+        private const string GemmProfileEnvVar = "AIDOTNET_GEMM_PROFILE";
+
+        /// <summary>
+        /// Environment variable to set theoretical peak GFLOPS: AIDOTNET_GPU_PEAK_GFLOPS=5196
+        /// If not set, estimates based on compute units and assumed clock speed.
+        /// </summary>
+        private const string GpuPeakGflopsEnvVar = "AIDOTNET_GPU_PEAK_GFLOPS";
+
+        /// <summary>
+        /// Environment variable to set memory bandwidth in GB/s: AIDOTNET_GPU_BANDWIDTH_GBS=224
+        /// If not set, uses a conservative estimate of 200 GB/s.
+        /// </summary>
+        private const string GpuBandwidthEnvVar = "AIDOTNET_GPU_BANDWIDTH_GBS";
+
+        /// <summary>
+        /// Roofline model analysis result containing bottleneck information.
+        /// </summary>
+        public sealed class RooflineAnalysis
+        {
+            /// <summary>Matrix dimensions (M x N x K).</summary>
+            public int M { get; init; }
+            public int N { get; init; }
+            public int K { get; init; }
+
+            /// <summary>Achieved performance in GFLOPS.</summary>
+            public double AchievedGflops { get; init; }
+
+            /// <summary>Theoretical peak performance in GFLOPS.</summary>
+            public double PeakGflops { get; init; }
+
+            /// <summary>Memory bandwidth in GB/s.</summary>
+            public double MemoryBandwidthGBs { get; init; }
+
+            /// <summary>Arithmetic intensity (FLOPs per byte).</summary>
+            public double ArithmeticIntensity { get; init; }
+
+            /// <summary>Ridge point (AI where memory and compute roofs meet).</summary>
+            public double RidgePoint { get; init; }
+
+            /// <summary>Maximum attainable performance based on roofline model.</summary>
+            public double RooflineLimit { get; init; }
+
+            /// <summary>Efficiency as percentage of roofline limit.</summary>
+            public double RooflineEfficiency { get; init; }
+
+            /// <summary>Efficiency as percentage of theoretical peak.</summary>
+            public double PeakEfficiency { get; init; }
+
+            /// <summary>Whether the operation is memory-bound (AI < ridge point).</summary>
+            public bool IsMemoryBound { get; init; }
+
+            /// <summary>Estimated memory bytes transferred.</summary>
+            public long MemoryBytesTransferred { get; init; }
+
+            /// <summary>Effective memory bandwidth achieved (GB/s).</summary>
+            public double AchievedBandwidthGBs { get; init; }
+
+            /// <summary>Total FLOPs performed (2*M*N*K for GEMM).</summary>
+            public long TotalFlops { get; init; }
+
+            /// <summary>Execution time in milliseconds.</summary>
+            public double TimeMs { get; init; }
+
+            /// <summary>Primary bottleneck identified.</summary>
+            public string Bottleneck { get; init; } = string.Empty;
+
+            /// <summary>Recommendations for improvement.</summary>
+            public List<string> Recommendations { get; init; } = new();
+
+            public override string ToString()
+            {
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine($"=== GEMM Roofline Analysis ({M}x{N}x{K}) ===");
+                sb.AppendLine($"Achieved:    {AchievedGflops:F2} GFLOPS ({PeakEfficiency:F1}% of peak, {RooflineEfficiency:F1}% of roofline)");
+                sb.AppendLine($"Peak:        {PeakGflops:F0} GFLOPS");
+                sb.AppendLine($"Roofline:    {RooflineLimit:F2} GFLOPS (at AI={ArithmeticIntensity:F2})");
+                sb.AppendLine($"Ridge Point: {RidgePoint:F2} FLOPs/byte");
+                sb.AppendLine($"Bound:       {(IsMemoryBound ? "MEMORY" : "COMPUTE")}");
+                sb.AppendLine($"Bandwidth:   {AchievedBandwidthGBs:F2} GB/s (of {MemoryBandwidthGBs:F0} GB/s peak)");
+                sb.AppendLine($"Time:        {TimeMs:F3} ms");
+                sb.AppendLine($"Bottleneck:  {Bottleneck}");
+                if (Recommendations.Count > 0)
+                {
+                    sb.AppendLine("Recommendations:");
+                    foreach (var rec in Recommendations)
+                        sb.AppendLine($"  - {rec}");
+                }
+                return sb.ToString();
+            }
+        }
+
+        /// <summary>
+        /// Performs GEMM with comprehensive profiling and returns roofline analysis.
+        /// Enable with AIDOTNET_GEMM_PROFILE=1 for automatic analysis output.
+        /// </summary>
+        public RooflineAnalysis ProfileGemm(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha = 1.0f, float beta = 0.0f, int warmupRuns = 2, int benchmarkRuns = 5)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            // Get GPU specs from environment or estimate
+            double peakGflops = GetEnvInt(GpuPeakGflopsEnvVar, 0);
+            if (peakGflops <= 0)
+            {
+                // Estimate: CUs * 64 FP32 ALUs * 2 (FMA) * ~1.8 GHz clock
+                peakGflops = ComputeUnits * 64 * 2 * 1.8;
+            }
+
+            double bandwidthGBs = GetEnvInt(GpuBandwidthEnvVar, 0);
+            if (bandwidthGBs <= 0)
+            {
+                // Conservative estimate for GDDR6
+                bandwidthGBs = 200.0;
+            }
+
+            // Warmup runs
+            for (int i = 0; i < warmupRuns; i++)
+            {
+                Gemm(A, B, C, M, N, K, alpha, beta);
+                Synchronize();
+            }
+
+            // Benchmark runs
+            var sw = Stopwatch.StartNew();
+            for (int i = 0; i < benchmarkRuns; i++)
+            {
+                Gemm(A, B, C, M, N, K, alpha, beta);
+                Synchronize();
+            }
+            sw.Stop();
+
+            double avgTimeMs = sw.Elapsed.TotalMilliseconds / benchmarkRuns;
+            long totalFlops = 2L * M * N * K;
+            double achievedGflops = totalFlops / (avgTimeMs * 1e6);
+
+            // Memory bytes: A(M*K) + B(K*N) + C(M*N read + write)
+            // For beta=0: A + B + C_write = M*K + K*N + M*N floats
+            // For beta!=0: A + B + C_read + C_write = M*K + K*N + 2*M*N floats
+            long memBytes = ((long)M * K + (long)K * N + (beta == 0 ? (long)M * N : 2L * M * N)) * sizeof(float);
+            double achievedBandwidthGBs = memBytes / (avgTimeMs * 1e6);
+
+            // Arithmetic intensity (FLOPs per byte)
+            double ai = (double)totalFlops / memBytes;
+
+            // Ridge point: where memory and compute roofs meet
+            double ridgePoint = peakGflops / bandwidthGBs;
+
+            // Roofline limit
+            double rooflineLimit = Math.Min(peakGflops, ai * bandwidthGBs);
+            bool isMemoryBound = ai < ridgePoint;
+
+            // Efficiency
+            double rooflineEfficiency = 100.0 * achievedGflops / rooflineLimit;
+            double peakEfficiency = 100.0 * achievedGflops / peakGflops;
+
+            // Bottleneck analysis
+            var recommendations = new List<string>();
+            string bottleneck;
+
+            if (rooflineEfficiency >= 90)
+            {
+                bottleneck = "Near-optimal - approaching roofline";
+            }
+            else if (isMemoryBound)
+            {
+                bottleneck = $"MEMORY BANDWIDTH (AI={ai:F2} < ridge={ridgePoint:F2})";
+                if (M * N < 256 * 256)
+                    recommendations.Add("Use batched GEMM to amortize memory transfer overhead");
+                if (achievedBandwidthGBs < bandwidthGBs * 0.7)
+                    recommendations.Add("Check memory access patterns - may have uncoalesced accesses");
+                recommendations.Add("Consider fusing with subsequent operations to reduce memory traffic");
+            }
+            else
+            {
+                bottleneck = "COMPUTE (AI > ridge point, should be compute-bound)";
+                if (rooflineEfficiency < 50)
+                {
+                    recommendations.Add("Check occupancy - may need smaller tile sizes for better wave scheduling");
+                    recommendations.Add("Verify LDS bank conflicts with AMD rocprof-compute");
+                    recommendations.Add("Check register spilling - may need fewer registers per thread");
+                }
+                if (rooflineEfficiency < 70)
+                {
+                    recommendations.Add("Try larger thread tiles (16x8 or 8x16) for more ILP");
+                    recommendations.Add("Enable Wave32 mode if on RDNA architecture");
+                    recommendations.Add("Check loop unrolling factor - may need more aggressive unrolling");
+                }
+                if (peakEfficiency < 50)
+                    recommendations.Add("Check for instruction mix - may have too many non-FMA instructions");
+            }
+
+            // Additional checks
+            if (M < 128 || N < 128)
+                recommendations.Add($"Small matrix ({M}x{N}) - consider XgemmDirect kernel for reduced overhead");
+            if (K < 64)
+                recommendations.Add($"Small K dimension ({K}) - reduction overhead may dominate");
+            if ((long)M * N * K < 1000000)
+                recommendations.Add("Matrix too small to saturate GPU - batch multiple operations");
+
+            var result = new RooflineAnalysis
+            {
+                M = M,
+                N = N,
+                K = K,
+                AchievedGflops = achievedGflops,
+                PeakGflops = peakGflops,
+                MemoryBandwidthGBs = bandwidthGBs,
+                ArithmeticIntensity = ai,
+                RidgePoint = ridgePoint,
+                RooflineLimit = rooflineLimit,
+                RooflineEfficiency = rooflineEfficiency,
+                PeakEfficiency = peakEfficiency,
+                IsMemoryBound = isMemoryBound,
+                MemoryBytesTransferred = memBytes,
+                AchievedBandwidthGBs = achievedBandwidthGBs,
+                TotalFlops = totalFlops,
+                TimeMs = avgTimeMs,
+                Bottleneck = bottleneck,
+                Recommendations = recommendations
+            };
+
+            // Auto-print if profiling is enabled
+            if (GetEnvBool(GemmProfileEnvVar))
+            {
+                Console.WriteLine(result);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Compares our GEMM implementation against CLBlast and returns detailed analysis.
+        /// </summary>
+        public string CompareWithClBlast(int M, int N, int K, int warmupRuns = 3, int benchmarkRuns = 10)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"=== GEMM Comparison: Our Implementation vs CLBlast ({M}x{N}x{K}) ===");
+
+            // Allocate test matrices
+            var random = new Random(42);
+            var dataA = new float[M * K];
+            var dataB = new float[K * N];
+            for (int i = 0; i < dataA.Length; i++) dataA[i] = (float)(random.NextDouble() - 0.5);
+            for (int i = 0; i < dataB.Length; i++) dataB[i] = (float)(random.NextDouble() - 0.5);
+
+            var bufA = AllocateBuffer(dataA);
+            var bufB = AllocateBuffer(dataB);
+            var bufC_ours = AllocateBuffer(M * N);
+            var bufC_clblast = AllocateBuffer(M * N);
+
+            try
+            {
+                long flops = 2L * M * N * K;
+
+                // Benchmark our implementation
+                for (int i = 0; i < warmupRuns; i++)
+                {
+                    Gemm(bufA, bufB, bufC_ours, M, N, K, 1.0f, 0.0f);
+                    Synchronize();
+                }
+
+                var sw = Stopwatch.StartNew();
+                for (int i = 0; i < benchmarkRuns; i++)
+                {
+                    Gemm(bufA, bufB, bufC_ours, M, N, K, 1.0f, 0.0f);
+                    Synchronize();
+                }
+                sw.Stop();
+                double ourTimeMs = sw.Elapsed.TotalMilliseconds / benchmarkRuns;
+                double ourGflops = flops / (ourTimeMs * 1e6);
+
+                sb.AppendLine($"Our Implementation: {ourGflops:F2} GFLOPS ({ourTimeMs:F3} ms)");
+
+                // Benchmark CLBlast if available
+                if (IsClBlastAvailable)
+                {
+                    for (int i = 0; i < warmupRuns; i++)
+                    {
+                        GemmWithClBlast(bufA, bufB, bufC_clblast, M, N, K, 1.0f, 0.0f);
+                    }
+
+                    double totalClBlastTime = 0;
+                    for (int i = 0; i < benchmarkRuns; i++)
+                    {
+                        totalClBlastTime += GemmWithClBlast(bufA, bufB, bufC_clblast, M, N, K, 1.0f, 0.0f);
+                    }
+                    double clblastTimeMs = totalClBlastTime / benchmarkRuns;
+                    double clblastGflops = flops / (clblastTimeMs * 1e6);
+
+                    sb.AppendLine($"CLBlast:            {clblastGflops:F2} GFLOPS ({clblastTimeMs:F3} ms)");
+
+                    double speedup = ourGflops / clblastGflops;
+                    sb.AppendLine($"Speedup:            {speedup:F2}x ({(speedup > 1 ? "FASTER" : "SLOWER")} than CLBlast)");
+
+                    // Verify correctness
+                    var resultOurs = ((DirectOpenClGpuBuffer)bufC_ours).Download();
+                    var resultClBlast = ((DirectOpenClGpuBuffer)bufC_clblast).Download();
+                    double maxDiff = 0;
+                    for (int i = 0; i < resultOurs.Length; i++)
+                    {
+                        maxDiff = Math.Max(maxDiff, Math.Abs(resultOurs[i] - resultClBlast[i]));
+                    }
+                    sb.AppendLine($"Max Diff:           {maxDiff:E3} (should be < 1e-4)");
+                }
+                else
+                {
+                    sb.AppendLine("CLBlast: NOT AVAILABLE");
+                }
+
+                return sb.ToString();
+            }
+            finally
+            {
+                bufA.Dispose();
+                bufB.Dispose();
+                bufC_ours.Dispose();
+                bufC_clblast.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Prints a summary of available diagnostic environment variables.
+        /// </summary>
+        public static void PrintDiagnosticHelp()
+        {
+            Console.WriteLine(@"
+=== AiDotNet GPU Diagnostic Environment Variables ===
+
+TIMING & TRACING:
+  AIDOTNET_GEMM_TIMING=1      Show timing breakdown for each GEMM operation
+  AIDOTNET_GEMM_TRACE=1       Trace kernel path selection (DIRECT vs INDIRECT)
+  AIDOTNET_GEMM_PROFILE=1     Enable roofline model analysis output
+
+TUNING:
+  AIDOTNET_GPU_TUNE=1         Enable offline auto-tuning (Bayesian search)
+  AIDOTNET_GPU_TUNE=exhaustive Full exhaustive search (slow but thorough)
+  AIDOTNET_GPU_TUNE_TRIALS=N  Number of tuning trials (default: 500)
+  AIDOTNET_GPU_TUNE_DIAG=1    Verbose tuning diagnostics
+  AIDOTNET_GPU_TUNE_LOG=path  Log tuning output to file
+  AIDOTNET_GPU_TUNE_CSV=path  Log trial results to CSV
+
+GPU SPECS (for accurate roofline analysis):
+  AIDOTNET_GPU_PEAK_GFLOPS=N  Theoretical peak FP32 GFLOPS (e.g., 5196 for RX 5500 XT)
+  AIDOTNET_GPU_BANDWIDTH_GBS=N Memory bandwidth in GB/s (e.g., 224 for RX 5500 XT)
+
+DEBUG:
+  AIDOTNET_FORCE_DIRECT=1     Force XgemmDirect path (skip indirect path)
+
+KERNEL VARIANTS (A/B testing):
+  AIDOTNET_GEMM_VARIANT=0     Original CLBlast baseline
+  AIDOTNET_GEMM_VARIANT=1     XOR LDS swizzling (eliminates bank conflicts)
+  AIDOTNET_GEMM_VARIANT=2     RDNA1 optimized (swizzle + Wave32 hints)
+");
+        }
+
+        /// <summary>
+        /// A/B tests different kernel optimization variants and returns comparative results.
+        /// Tests: Original CLBlast vs XOR Swizzle vs RDNA1 Optimized
+        /// </summary>
+        public string ABTestKernelVariants(int M, int N, int K, int warmupRuns = 3, int benchmarkRuns = 10)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"=== A/B Testing Kernel Variants ({M}x{N}x{K}) ===");
+            sb.AppendLine($"Device: {DeviceName} ({DeviceVendor})");
+            sb.AppendLine($"Warmup: {warmupRuns} runs, Benchmark: {benchmarkRuns} runs");
+            sb.AppendLine();
+
+            // Allocate test matrices
+            var random = new Random(42);
+            var dataA = new float[M * K];
+            var dataB = new float[K * N];
+            for (int i = 0; i < dataA.Length; i++) dataA[i] = (float)(random.NextDouble() - 0.5);
+            for (int i = 0; i < dataB.Length; i++) dataB[i] = (float)(random.NextDouble() - 0.5);
+
+            var bufA = AllocateBuffer(dataA);
+            var bufB = AllocateBuffer(dataB);
+            var bufC = AllocateBuffer(M * N);
+
+            try
+            {
+                long flops = 2L * M * N * K;
+                var results = new List<(string Name, double Gflops, double TimeMs)>();
+                float[]? referenceResult = null;
+
+                // Test each kernel variant
+                for (int variant = 0; variant <= 2; variant++)
+                {
+                    string variantName = variant switch
+                    {
+                        0 => "CLBlast Baseline",
+                        1 => "XOR Swizzle",
+                        2 => "RDNA1 Optimized",
+                        _ => "Unknown"
+                    };
+
+                    // Set kernel variant
+                    int originalVariant = DynamicGemmKernel.KernelVariant;
+                    bool originalDiag = DynamicGemmKernel.EnableDiagnostics;
+                    DynamicGemmKernel.KernelVariant = variant;
+                    DynamicGemmKernel.EnableDiagnostics = true; // Enable for debugging
+
+                    // Clear kernel cache to force recompilation with new variant
+                    _dynamicGemm?.ClearCache();
+
+                    try
+                    {
+                        // Zero output buffer
+                        ((DirectOpenClGpuBuffer)bufC).Buffer.CopyFromHost(new float[M * N]);
+
+                        // Warmup
+                        for (int i = 0; i < warmupRuns; i++)
+                        {
+                            Gemm(bufA, bufB, bufC, M, N, K, 1.0f, 0.0f);
+                            Synchronize();
+                        }
+
+                        // Benchmark
+                        var sw = Stopwatch.StartNew();
+                        for (int i = 0; i < benchmarkRuns; i++)
+                        {
+                            Gemm(bufA, bufB, bufC, M, N, K, 1.0f, 0.0f);
+                            Synchronize();
+                        }
+                        sw.Stop();
+
+                        double timeMs = sw.Elapsed.TotalMilliseconds / benchmarkRuns;
+                        double gflops = flops / (timeMs * 1e6);
+                        results.Add((variantName, gflops, timeMs));
+
+                        // Store reference result for verification
+                        if (variant == 0)
+                        {
+                            referenceResult = ((DirectOpenClGpuBuffer)bufC).Download();
+                        }
+                        else if (referenceResult != null)
+                        {
+                            // Verify correctness against baseline
+                            var currentResult = ((DirectOpenClGpuBuffer)bufC).Download();
+                            double maxDiff = 0;
+                            for (int i = 0; i < currentResult.Length; i++)
+                            {
+                                maxDiff = Math.Max(maxDiff, Math.Abs(currentResult[i] - referenceResult[i]));
+                            }
+                            sb.AppendLine($"{variantName}: {gflops:F2} GFLOPS ({timeMs:F3} ms) [MaxDiff: {maxDiff:E2}]");
+                            continue;
+                        }
+
+                        sb.AppendLine($"{variantName}: {gflops:F2} GFLOPS ({timeMs:F3} ms)");
+                    }
+                    catch (Exception ex)
+                    {
+                        sb.AppendLine($"{variantName}: FAILED - {ex.Message}");
+                    }
+                    finally
+                    {
+                        DynamicGemmKernel.KernelVariant = originalVariant;
+                        DynamicGemmKernel.EnableDiagnostics = originalDiag;
+                    }
+                }
+
+                // Summary
+                if (results.Count > 1)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine("=== Summary ===");
+                    var baseline = results[0];
+                    foreach (var result in results)
+                    {
+                        double speedup = result.Gflops / baseline.Gflops;
+                        string status = speedup > 1.01 ? "FASTER" : speedup < 0.99 ? "SLOWER" : "SAME";
+                        sb.AppendLine($"{result.Name}: {result.Gflops:F2} GFLOPS ({speedup:F2}x vs baseline) [{status}]");
+                    }
+
+                    var best = results.OrderByDescending(r => r.Gflops).First();
+                    sb.AppendLine();
+                    sb.AppendLine($"** WINNER: {best.Name} at {best.Gflops:F2} GFLOPS **");
+
+                    // Recommendation
+                    sb.AppendLine();
+                    sb.AppendLine("To use the best variant, set environment variable:");
+                    int bestVariant = results.IndexOf(best);
+                    sb.AppendLine($"  AIDOTNET_GEMM_VARIANT={bestVariant}");
+                }
+
+                return sb.ToString();
+            }
+            finally
+            {
+                bufA.Dispose();
+                bufB.Dispose();
+                bufC.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Comprehensive multi-size A/B testing with profiling and bottleneck analysis.
+        /// Tests all kernel variants across multiple matrix sizes to identify optimal configuration per size.
+        /// </summary>
+        /// <param name="sizes">Matrix sizes to test (M=N=K). Default: common sizes from 128 to 4096.</param>
+        /// <param name="warmupRuns">Warmup runs per test.</param>
+        /// <param name="benchmarkRuns">Benchmark runs per test.</param>
+        /// <returns>Comprehensive analysis report.</returns>
+        public string ComprehensiveAbTest(int[]? sizes = null, int warmupRuns = 2, int benchmarkRuns = 5)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            sizes ??= new[] { 128, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096 };
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("=".PadRight(100, '='));
+            sb.AppendLine("COMPREHENSIVE GEMM A/B TESTING - ALL SIZES & VARIANTS");
+            sb.AppendLine("=".PadRight(100, '='));
+            sb.AppendLine($"Device: {DeviceName} ({DeviceVendor})");
+            sb.AppendLine($"Compute Units: {ComputeUnits}");
+            sb.AppendLine($"Sizes: {string.Join(", ", sizes)}");
+            sb.AppendLine($"Warmup: {warmupRuns}, Benchmark: {benchmarkRuns}");
+            sb.AppendLine();
+
+            // Detect architecture and estimate peak
+            var arch = Profiling.GpuArchitectureSpec.DetectFromDeviceName(DeviceName);
+            double estimatedPeakGflops = ComputeUnits * 64 * 2 * 1.8; // Conservative estimate
+            var envPeak = Environment.GetEnvironmentVariable("AIDOTNET_GPU_PEAK_GFLOPS");
+            if (int.TryParse(envPeak, out int peakVal) && peakVal > 0)
+                estimatedPeakGflops = peakVal;
+
+            double estimatedBandwidth = 224.0; // Default for GDDR6
+            var envBw = Environment.GetEnvironmentVariable("AIDOTNET_GPU_BANDWIDTH_GBS");
+            if (int.TryParse(envBw, out int bwVal) && bwVal > 0)
+                estimatedBandwidth = bwVal;
+
+            var roofline = new Profiling.RooflineAnalyzer(estimatedPeakGflops, estimatedBandwidth);
+            sb.AppendLine($"Architecture: {arch.Name}");
+            sb.AppendLine($"Estimated Peak: {estimatedPeakGflops:F0} GFLOPS, Bandwidth: {estimatedBandwidth:F0} GB/s");
+            sb.AppendLine($"Ridge Point: {roofline.RidgePoint:F1} FLOPS/byte");
+            sb.AppendLine();
+
+            // Track results per size
+            var allResults = new Dictionary<int, List<(string Variant, double Gflops, double TimeMs, bool Correct)>>();
+            var winnerBySize = new Dictionary<int, (string Variant, double Gflops)>();
+
+            // Test each size
+            foreach (var size in sizes)
+            {
+                sb.AppendLine($"--- Size: {size}x{size}x{size} ---");
+
+                int M = size, N = size, K = size;
+                long flops = 2L * M * N * K;
+                double ai = Profiling.RooflineAnalyzer.CalculateGemmArithmeticIntensity(M, N, K);
+                double rooflineLimit = roofline.GetRooflineLimitGflops(ai);
+                bool isMemoryBound = ai < roofline.RidgePoint;
+
+                sb.AppendLine($"  AI: {ai:F1} FLOPS/byte, Roofline: {rooflineLimit:F0} GFLOPS, Bound: {(isMemoryBound ? "MEMORY" : "COMPUTE")}");
+
+                // Allocate test matrices
+                var random = new Random(42);
+                var dataA = new float[M * K];
+                var dataB = new float[K * N];
+                for (int i = 0; i < dataA.Length; i++) dataA[i] = (float)(random.NextDouble() - 0.5);
+                for (int i = 0; i < dataB.Length; i++) dataB[i] = (float)(random.NextDouble() - 0.5);
+
+                var bufA = AllocateBuffer(dataA);
+                var bufB = AllocateBuffer(dataB);
+                var bufC = AllocateBuffer(M * N);
+
+                try
+                {
+                    var sizeResults = new List<(string Variant, double Gflops, double TimeMs, bool Correct)>();
+                    float[]? referenceResult = null;
+
+                    // Test each kernel variant
+                    for (int variant = 0; variant <= 2; variant++)
+                    {
+                        string variantName = variant switch
+                        {
+                            0 => "CLBlast",
+                            1 => "XOR Swizzle",
+                            2 => "RDNA1 Opt",
+                            _ => "Unknown"
+                        };
+
+                        int originalVariant = DynamicGemmKernel.KernelVariant;
+                        DynamicGemmKernel.KernelVariant = variant;
+                        _dynamicGemm?.ClearCache();
+
+                        try
+                        {
+                            ((DirectOpenClGpuBuffer)bufC).Buffer.CopyFromHost(new float[M * N]);
+
+                            // Warmup
+                            for (int i = 0; i < warmupRuns; i++)
+                            {
+                                Gemm(bufA, bufB, bufC, M, N, K, 1.0f, 0.0f);
+                                Synchronize();
+                            }
+
+                            // Benchmark
+                            var sw = Stopwatch.StartNew();
+                            for (int i = 0; i < benchmarkRuns; i++)
+                            {
+                                Gemm(bufA, bufB, bufC, M, N, K, 1.0f, 0.0f);
+                                Synchronize();
+                            }
+                            sw.Stop();
+
+                            double timeMs = sw.Elapsed.TotalMilliseconds / benchmarkRuns;
+                            double gflops = flops / (timeMs * 1e6);
+                            double efficiency = 100.0 * gflops / estimatedPeakGflops;
+
+                            // Verify correctness
+                            bool correct = true;
+                            if (variant == 0)
+                            {
+                                referenceResult = ((DirectOpenClGpuBuffer)bufC).Download();
+                            }
+                            else if (referenceResult != null)
+                            {
+                                var currentResult = ((DirectOpenClGpuBuffer)bufC).Download();
+                                double maxDiff = 0;
+                                for (int i = 0; i < Math.Min(currentResult.Length, referenceResult.Length); i++)
+                                {
+                                    maxDiff = Math.Max(maxDiff, Math.Abs(currentResult[i] - referenceResult[i]));
+                                }
+                                correct = maxDiff < 0.01f; // Allow small numerical differences
+                            }
+
+                            sizeResults.Add((variantName, gflops, timeMs, correct));
+                            sb.AppendLine($"    {variantName,-12}: {gflops,7:F0} GFLOPS ({efficiency,5:F1}%) {timeMs,8:F3} ms {(correct ? "OK" : "WRONG!")}");
+                        }
+                        catch (Exception ex)
+                        {
+                            sb.AppendLine($"    {variantName,-12}: FAILED - {ex.Message}");
+                            sizeResults.Add((variantName, 0, 0, false));
+                        }
+                        finally
+                        {
+                            DynamicGemmKernel.KernelVariant = originalVariant;
+                        }
+                    }
+
+                    allResults[size] = sizeResults;
+
+                    // Determine winner for this size
+                    var validResults = sizeResults.Where(r => r.Correct && r.Gflops > 0).ToList();
+                    if (validResults.Any())
+                    {
+                        var best = validResults.OrderByDescending(r => r.Gflops).First();
+                        winnerBySize[size] = (best.Variant, best.Gflops);
+                        sb.AppendLine($"    ** Winner: {best.Variant} ({best.Gflops:F0} GFLOPS) **");
+                    }
+                }
+                finally
+                {
+                    bufA.Dispose();
+                    bufB.Dispose();
+                    bufC.Dispose();
+                }
+                sb.AppendLine();
+            }
+
+            // Summary table
+            sb.AppendLine("=".PadRight(100, '='));
+            sb.AppendLine("SUMMARY: BEST VARIANT PER SIZE");
+            sb.AppendLine("=".PadRight(100, '='));
+            sb.AppendLine();
+            sb.AppendLine(string.Format("{0,-8} {1,-12} {2,10} {3,10} {4,10} {5,-15}",
+                "Size", "Winner", "GFLOPS", "Eff%", "AI", "Bound"));
+            sb.AppendLine("-".PadRight(70, '-'));
+
+            foreach (var size in sizes)
+            {
+                if (winnerBySize.TryGetValue(size, out var winner))
+                {
+                    double ai = Profiling.RooflineAnalyzer.CalculateGemmArithmeticIntensity(size, size, size);
+                    bool isMemBound = ai < roofline.RidgePoint;
+                    double eff = 100.0 * winner.Gflops / estimatedPeakGflops;
+
+                    sb.AppendLine(string.Format("{0,-8} {1,-12} {2,10:F0} {3,9:F1}% {4,10:F1} {5,-15}",
+                        size, winner.Variant, winner.Gflops, eff, ai, isMemBound ? "MEMORY" : "COMPUTE"));
+                }
+            }
+
+            // Analyze patterns
+            sb.AppendLine();
+            sb.AppendLine("=".PadRight(100, '='));
+            sb.AppendLine("ANALYSIS & RECOMMENDATIONS");
+            sb.AppendLine("=".PadRight(100, '='));
+
+            // Group by winner
+            var byWinner = winnerBySize.GroupBy(kv => kv.Value.Variant).ToDictionary(g => g.Key, g => g.Select(kv => kv.Key).ToList());
+            foreach (var group in byWinner)
+            {
+                sb.AppendLine($"  {group.Key}: wins at sizes {string.Join(", ", group.Value)}");
+            }
+
+            // Size-specific recommendations
+            sb.AppendLine();
+            var smallSizes = winnerBySize.Where(kv => kv.Key <= 512).ToList();
+            var mediumSizes = winnerBySize.Where(kv => kv.Key > 512 && kv.Key <= 1536).ToList();
+            var largeSizes = winnerBySize.Where(kv => kv.Key > 1536).ToList();
+
+            if (smallSizes.Any())
+            {
+                var avgEff = smallSizes.Average(kv => 100.0 * kv.Value.Gflops / estimatedPeakGflops);
+                sb.AppendLine($"  Small (<=512): Avg efficiency {avgEff:F1}%");
+                if (avgEff < 30)
+                    sb.AppendLine($"    -> RECOMMENDATION: Consider CPU fallback or batching for sizes < 256");
+            }
+
+            if (mediumSizes.Any())
+            {
+                var avgEff = mediumSizes.Average(kv => 100.0 * kv.Value.Gflops / estimatedPeakGflops);
+                sb.AppendLine($"  Medium (513-1536): Avg efficiency {avgEff:F1}%");
+                if (avgEff < 50)
+                    sb.AppendLine($"    -> RECOMMENDATION: Focus on LDS tiling and register blocking");
+            }
+
+            if (largeSizes.Any())
+            {
+                var avgEff = largeSizes.Average(kv => 100.0 * kv.Value.Gflops / estimatedPeakGflops);
+                sb.AppendLine($"  Large (>1536): Avg efficiency {avgEff:F1}%");
+                if (avgEff < 60)
+                    sb.AppendLine($"    -> RECOMMENDATION: Optimize memory prefetching and double buffering");
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("=".PadRight(100, '='));
+
+            return sb.ToString();
+        }
 
         #endregion
 

@@ -17,9 +17,9 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL;
 /// </summary>
 internal sealed class GemmTuningDatabase : IDisposable
 {
-    private readonly string _signature;
-    private readonly string _databasePath;
-    private readonly string _historyPath;  // Tracks ALL tested configs, not just best
+    private readonly string _signature = string.Empty;
+    private readonly string _databasePath = string.Empty;
+    private readonly string _historyPath = string.Empty;  // Tracks ALL tested configs, not just best
     private readonly Dictionary<string, (GemmConfig Config, double GFlops)> _cache;
     private readonly HashSet<string> _testedConfigs;  // ConfigKey -> already tested
     private readonly Dictionary<string, double> _testedGflops;
@@ -53,7 +53,8 @@ internal sealed class GemmTuningDatabase : IDisposable
         }
         else
         {
-            _databasePath = normalizedCustomPath;
+            // normalizedCustomPath is non-null here since we checked !string.IsNullOrEmpty above
+            _databasePath = normalizedCustomPath ?? Path.Combine(aiDotNetPath, databaseFileName);
             var historyDir = Path.GetDirectoryName(_databasePath);
             if (string.IsNullOrWhiteSpace(historyDir))
                 historyDir = aiDotNetPath;
@@ -236,7 +237,7 @@ internal sealed class GemmTuningDatabase : IDisposable
                 if (_testedConfigs.Add(parsed.Value.Key))
                 {
                     var matrixKey = ExtractMatrixKey(parsed.Value.Key);
-                    if (!string.IsNullOrEmpty(matrixKey))
+                    if (matrixKey is { Length: > 0 })
                         IncrementMatrixCount(matrixKey);
                 }
 
@@ -329,8 +330,10 @@ internal sealed class GemmTuningDatabase : IDisposable
         if (string.IsNullOrWhiteSpace(signature))
             return string.Empty;
 
-        var sb = new StringBuilder(signature.Length);
-        foreach (var ch in signature)
+        // signature is non-null after the check above
+        string sigValue = signature ?? string.Empty;
+        var sb = new StringBuilder(sigValue.Length);
+        foreach (var ch in sigValue)
         {
             if (ch <= 0x7F && (char.IsLetterOrDigit(ch) || ch == '-' || ch == '_'))
                 sb.Append(ch);

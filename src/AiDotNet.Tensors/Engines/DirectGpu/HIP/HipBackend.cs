@@ -191,7 +191,8 @@ public sealed class HipBackend : IDirectGpuBackend
             }
 
             // Compile with architecture-specific flags
-            var options = new List<string>(compileFlags.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            // net471 compatible: Split(char, StringSplitOptions) is .NET Core 2.1+
+            var options = new List<string>(compileFlags.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
             {
                 "-O3",
                 "-ffast-math"
@@ -812,8 +813,9 @@ public sealed class HipBackend : IDirectGpuBackend
         var aData = DownloadBuffer(A);
         var bData = new float[size];
 
+        // net471 compatible: MathF.Log2 is .NET 5.0+, use log change of base
         for (int i = 0; i < size; i++)
-            bData[i] = MathF.Log2(aData[i]);
+            bData[i] = MathF.Log(aData[i]) / MathF.Log(2.0f);
 
         UploadToBuffer(B, bData);
     }

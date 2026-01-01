@@ -86,8 +86,9 @@ internal readonly struct ClBlastDeviceInfo
         if (string.IsNullOrEmpty(deviceName))
             return deviceName;
 
-        if (deviceName.Contains("pthread-", StringComparison.Ordinal))
-            deviceName = deviceName.Replace("pthread-", string.Empty, StringComparison.Ordinal);
+        // net471 compatible: Contains and Replace with StringComparison are .NET Core 2.1+
+        if (deviceName.IndexOf("pthread-", StringComparison.Ordinal) >= 0)
+            deviceName = deviceName.Replace("pthread-", string.Empty);
 
         return deviceName.Trim();
     }
