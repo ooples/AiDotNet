@@ -84,7 +84,8 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
     /// <param name="kernelSize">Size of the convolution kernel (default: 3).</param>
     /// <param name="stride">Convolution stride (default: 1).</param>
     /// <param name="padding">Padding size (default: 1).</param>
-    /// <param name="groups">Number of convolution groups (default: 1).</param>
+    /// <param name="groups">Number of convolution groups. Currently only groups=1 is supported (default: 1).</param>
+    /// <exception cref="NotSupportedException">Thrown when groups is not 1 (grouped deformable convolution is not yet supported).</exception>
     /// <param name="deformGroups">Number of deformable groups (default: 1).</param>
     /// <param name="useModulation">Whether to use modulation mask (DCNv2, default: true).</param>
     /// <param name="engine">Optional computation engine (CPU or GPU). If null, uses default CPU engine.</param>
@@ -113,6 +114,7 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride), "Stride must be positive.");
         if (padding < 0) throw new ArgumentOutOfRangeException(nameof(padding), "Padding must be non-negative.");
         if (groups < 1) throw new ArgumentOutOfRangeException(nameof(groups), "Groups must be at least 1.");
+        if (groups != 1) throw new NotSupportedException("Grouped deformable convolution is not supported; set groups to 1 or implement engine support.");
         if (deformGroups < 1) throw new ArgumentOutOfRangeException(nameof(deformGroups), "Deformable groups must be at least 1.");
         if (inputChannels % groups != 0) throw new ArgumentException($"Input channels ({inputChannels}) must be divisible by groups ({groups}).", nameof(groups));
         

@@ -77,9 +77,12 @@ public class OpenSora<T> : NeuralNetworkBase<T>
     // VAE decoder (latent to pixel)
     private List<ConvolutionalLayer<T>> _vaeDecoder = [];
 
+    // VAE encoder (pixel to latent) - learned convolutional layers for proper image encoding
+    private List<ConvolutionalLayer<T>> _vaeEncoder = [];
+
     // Noise schedule
-    private readonly double[] _betas;
-    private readonly double[] _alphasCumprod;
+    private double[] _betas;
+    private double[] _alphasCumprod;
 
     #endregion
 
@@ -156,6 +159,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         _ditFFN1.Clear();
         _ditFFN2.Clear();
         _vaeDecoder.Clear();
+        _vaeEncoder.Clear();
 
         int latentH = _height / 8;
         int latentW = _width / 8;
@@ -197,6 +201,12 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         _vaeDecoder.Add(new ConvolutionalLayer<T>(128, latentH * 4, latentW * 4, 64, 3, 1, 1));
         _vaeDecoder.Add(new ConvolutionalLayer<T>(64, _height, _width, _channels, 3, 1, 1));
 
+        // VAE encoder (reverse of decoder for learned image compression)
+        _vaeEncoder.Add(new ConvolutionalLayer<T>(_channels, _height, _width, 64, 3, 2, 1));
+        _vaeEncoder.Add(new ConvolutionalLayer<T>(64, _height / 2, _width / 2, 128, 3, 2, 1));
+        _vaeEncoder.Add(new ConvolutionalLayer<T>(128, _height / 4, _width / 4, 256, 3, 2, 1));
+        _vaeEncoder.Add(new ConvolutionalLayer<T>(256, latentH, latentW, latentDim, 3, 1, 1));
+
         // Register layers
         Layers.Add(_patchEmbed);
         foreach (var l in _ditQKV) Layers.Add(l);
@@ -207,6 +217,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         Layers.Add(_timeEmbed);
         Layers.Add(_finalLayer);
         foreach (var l in _vaeDecoder) Layers.Add(l);
+        foreach (var l in _vaeEncoder) Layers.Add(l);
     }
 
     #endregion
@@ -289,8 +300,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
     /// </summary>
     public List<Tensor<T>> ExtendVideo(List<Tensor<T>> existingFrames, Tensor<T>? textEmbedding = null, int? seed = null)
     {
-        // Use last few frames as conditioning
-        int contextFrames = Math.Min(4, existingFrames.Count);
+        // Use the last frame as conditioning for video extension
         var lastFrame = existingFrames[existingFrames.Count - 1];
 
         var newFrames = GenerateFromImage(lastFrame, textEmbedding, seed);
@@ -710,16 +720,48 @@ public class OpenSora<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Encodes an image to latent space using a learned VAE encoder approximation.
-    /// Uses strided convolutions for spatial downsampling with learned features.
+    /// Encodes an image to latent space using a learned VAE encoder.
+    /// Uses strided convolutional layers for spatial downsampling with learned features.
     /// </summary>
     private Tensor<T> EncodeImage(Tensor<T> image)
     {
-        int latentH = _height / 8;
-        int latentW = _width / 8;
-
         // Ensure input has batch dimension
         if (image.Rank == 3) image = AddBatchDimension(image);
+
+        // Check if encoder is initialized (should be after InitializeNetworkLayers)
+        if (_vaeEncoder.Count == 0)
+        {
+            // Fallback to simple downsampling if encoder not initialized
+            return FallbackEncodeImage(image);
+        }
+
+        // Process through learned VAE encoder layers
+        var encoded = image;
+        for (int i = 0; i < _vaeEncoder.Count; i++)
+        {
+            encoded = _vaeEncoder[i].Forward(encoded);
+
+            // Apply ReLU activation between layers (except final layer)
+            if (i < _vaeEncoder.Count - 1)
+            {
+                for (int j = 0; j < encoded.Length; j++)
+                {
+                    double val = NumOps.ToDouble(encoded.Data[j]);
+                    encoded.Data[j] = NumOps.FromDouble(Math.Max(0, val));
+                }
+            }
+        }
+
+        return encoded;
+    }
+
+    /// <summary>
+    /// Fallback image encoding using simple average pooling when learned encoder is not available.
+    /// </summary>
+    private Tensor<T> FallbackEncodeImage(Tensor<T> image)
+    {
+        int latentH = _height / 8;
+        int latentW = _width / 8;
 
         int batchSize = image.Shape[0];
         int channels = image.Shape[1];
@@ -729,21 +771,18 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         // Create latent with 4 channels (standard VAE latent dimension)
         var latent = new Tensor<T>([batchSize, 4, latentH, latentW]);
 
-        // Encode using bilinear downsampling with channel mixing
-        // This approximates VAE encoding by averaging spatial regions
+        // Simple average pooling fallback
         for (int b = 0; b < batchSize; b++)
         {
             for (int lh = 0; lh < latentH; lh++)
             {
                 for (int lw = 0; lw < latentW; lw++)
                 {
-                    // Compute the source region for this latent pixel
                     int srcY0 = lh * 8;
                     int srcY1 = Math.Min(srcY0 + 8, srcH);
                     int srcX0 = lw * 8;
                     int srcX1 = Math.Min(srcX0 + 8, srcW);
 
-                    // Average pooling over the 8x8 region
                     double[] channelSums = new double[channels];
                     int count = 0;
 
@@ -759,11 +798,6 @@ public class OpenSora<T> : NeuralNetworkBase<T>
                         }
                     }
 
-                    // Mix RGB channels to 4 latent channels (approximates learned VAE)
-                    // Latent channel 0: weighted R+G
-                    // Latent channel 1: weighted G+B
-                    // Latent channel 2: weighted R+B
-                    // Latent channel 3: mean of all channels
                     if (channels >= 3)
                     {
                         double r = channelSums[0] / count;
@@ -777,7 +811,6 @@ public class OpenSora<T> : NeuralNetworkBase<T>
                     }
                     else
                     {
-                        // For grayscale, replicate to 4 channels
                         double gray = channelSums[0] / count;
                         for (int c = 0; c < 4; c++)
                         {
@@ -1098,6 +1131,9 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         _numInferenceSteps = reader.ReadInt32();
         _guidanceScale = reader.ReadDouble();
         GuidanceScale = _guidanceScale;
+
+        // Re-initialize noise schedule with the restored inference steps
+        (_betas, _alphasCumprod) = InitializeNoiseSchedule(_numInferenceSteps);
 
         // Reinitialize layers with the restored configuration
         // This is necessary because the layer structure depends on these parameters

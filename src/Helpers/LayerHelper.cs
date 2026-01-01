@@ -6624,7 +6624,8 @@ public static class LayerHelper<T>
     /// <param name="embedDim">Embedding dimension (default: 120).</param>
     /// <param name="numFrames">Number of temporal frames (default: 6).</param>
     /// <param name="numBlocks">Number of transformer blocks (default: 8).</param>
-    /// <param name="scaleFactor">Upscaling factor for super-resolution (default: 4).</param>
+    /// <param name="scaleFactor">Upscaling factor for super-resolution. Supported values: 1, 2, or 4 (default: 4).</param>
+    /// <exception cref="ArgumentException">Thrown when scaleFactor is not 1, 2, or 4.</exception>
     /// <returns>A collection of layers for video restoration.</returns>
     /// <remarks>
     /// <para>
@@ -6656,6 +6657,10 @@ public static class LayerHelper<T>
         int numBlocks = 8,
         int scaleFactor = 4)
     {
+        // Validate scaleFactor - only 1, 2, or 4 are supported due to pixel shuffle implementation
+        if (scaleFactor != 1 && scaleFactor != 2 && scaleFactor != 4)
+            throw new ArgumentException($"scaleFactor must be 1, 2, or 4. Got: {scaleFactor}", nameof(scaleFactor));
+
         int h = inputHeight;
         int w = inputWidth;
 

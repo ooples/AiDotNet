@@ -264,6 +264,9 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="onnxModelPath">Path to the pretrained ONNX model.</param>
     /// <param name="scaleFactor">Upscaling factor of the pretrained model. Default: 4.</param>
+    /// <param name="numFeatures">Number of feature channels in the model. Default: 64 (standard BasicVSR++ architecture).</param>
+    /// <param name="numResidualBlocks">Number of residual blocks. Default: 15 (standard BasicVSR++ architecture).</param>
+    /// <param name="numPropagations">Number of propagation iterations. Default: 2 (standard BasicVSR++ architecture).</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Use this when you have a pretrained BasicVSR++ model:
@@ -275,11 +278,19 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
     /// var hrFrames = model.EnhanceVideo(lrFrames);
     /// </code>
     /// </para>
+    /// <para>
+    /// <b>Note:</b> The architecture parameters (numFeatures, numResidualBlocks, numPropagations)
+    /// default to the standard BasicVSR++ values. If your ONNX model uses a different architecture,
+    /// provide the correct values to ensure accurate metadata reporting.
+    /// </para>
     /// </remarks>
     public BasicVSRPlusPlus(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int scaleFactor = 4)
+        int scaleFactor = 4,
+        int numFeatures = 64,
+        int numResidualBlocks = 15,
+        int numPropagations = 2)
         : base(architecture, new CharbonnierLoss<T>())
     {
         if (string.IsNullOrWhiteSpace(onnxModelPath))
@@ -290,9 +301,9 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
         _scaleFactor = scaleFactor;
-        _numFeatures = 64;
-        _numResidualBlocks = 15;
-        _numPropagations = 2;
+        _numFeatures = numFeatures;
+        _numResidualBlocks = numResidualBlocks;
+        _numPropagations = numPropagations;
         _learningRate = 0.0001;
 
         _residualBlocks = [];
@@ -659,7 +670,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
             var iterBackwardAlignOutputs = new List<Tensor<T>>();
             var iterForwardAlignOutputs = new List<Tensor<T>>();
 
-            // Initialize lists with placeholder nulls for proper indexing
+            // Initialize lists with placeholder tensors for proper indexing
             for (int i = 0; i < numFrames; i++)
             {
                 iterBackwardPropFeatures.Add(new Tensor<T>([1]));
@@ -669,6 +680,12 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
                 iterBackwardAlignOutputs.Add(new Tensor<T>([1]));
                 iterForwardAlignOutputs.Add(new Tensor<T>([1]));
             }
+
+            // Initialize boundary frames that won't be processed in the loops
+            // Frame numFrames-1 is not processed in backward propagation
+            iterBackwardPropFeatures[numFrames - 1] = propagatedFeatures[numFrames - 1];
+            iterBackwardAlignInputs[numFrames - 1] = propagatedFeatures[numFrames - 1];
+            iterBackwardAlignOutputs[numFrames - 1] = propagatedFeatures[numFrames - 1];
 
             // Backward propagation (from last to first)
             var backwardFeats = new List<Tensor<T>>(propagatedFeatures);
@@ -693,6 +710,12 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
 
             // Forward propagation (from first to last)
             var forwardFeats = new List<Tensor<T>>(backwardFeats);
+
+            // Frame 0 is not processed in forward propagation
+            iterForwardPropFeatures[0] = backwardFeats[0];
+            iterForwardAlignInputs[0] = backwardFeats[0];
+            iterForwardAlignOutputs[0] = backwardFeats[0];
+
             for (int i = 1; i < numFrames; i++)
             {
                 // Warp feature from frame i-1 to frame i using forward flow
@@ -1387,6 +1410,91 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
                 }
                 block.SetParameters(newParams);
                 offset += blockParams.Length;
+            }
+        }
+
+        // Update flow estimator
+        if (_flowEstimator != null)
+        {
+            var flowParams = _flowEstimator.GetParameters();
+            if (offset + flowParams.Length <= parameters.Length)
+            {
+                var newParams = new Vector<T>(flowParams.Length);
+                for (int i = 0; i < flowParams.Length; i++)
+                {
+                    newParams[i] = parameters[offset + i];
+                }
+                _flowEstimator.SetParameters(newParams);
+                offset += flowParams.Length;
+            }
+        }
+
+        // Update propagation layers
+        for (int propIdx = 0; propIdx < _numPropagations; propIdx++)
+        {
+            if (propIdx < _backwardAlignments.Count)
+            {
+                var layerParams = _backwardAlignments[propIdx].GetParameters();
+                if (offset + layerParams.Length <= parameters.Length)
+                {
+                    var newParams = new Vector<T>(layerParams.Length);
+                    for (int i = 0; i < layerParams.Length; i++)
+                        newParams[i] = parameters[offset + i];
+                    _backwardAlignments[propIdx].SetParameters(newParams);
+                    offset += layerParams.Length;
+                }
+            }
+            if (propIdx < _forwardAlignments.Count)
+            {
+                var layerParams = _forwardAlignments[propIdx].GetParameters();
+                if (offset + layerParams.Length <= parameters.Length)
+                {
+                    var newParams = new Vector<T>(layerParams.Length);
+                    for (int i = 0; i < layerParams.Length; i++)
+                        newParams[i] = parameters[offset + i];
+                    _forwardAlignments[propIdx].SetParameters(newParams);
+                    offset += layerParams.Length;
+                }
+            }
+            if (propIdx < _backwardConvs.Count)
+            {
+                var layerParams = _backwardConvs[propIdx].GetParameters();
+                if (offset + layerParams.Length <= parameters.Length)
+                {
+                    var newParams = new Vector<T>(layerParams.Length);
+                    for (int i = 0; i < layerParams.Length; i++)
+                        newParams[i] = parameters[offset + i];
+                    _backwardConvs[propIdx].SetParameters(newParams);
+                    offset += layerParams.Length;
+                }
+            }
+            if (propIdx < _forwardConvs.Count)
+            {
+                var layerParams = _forwardConvs[propIdx].GetParameters();
+                if (offset + layerParams.Length <= parameters.Length)
+                {
+                    var newParams = new Vector<T>(layerParams.Length);
+                    for (int i = 0; i < layerParams.Length; i++)
+                        newParams[i] = parameters[offset + i];
+                    _forwardConvs[propIdx].SetParameters(newParams);
+                    offset += layerParams.Length;
+                }
+            }
+        }
+
+        // Update upsampling layers
+        foreach (var layer in _upsampleLayers)
+        {
+            var layerParams = layer.GetParameters();
+            if (offset + layerParams.Length <= parameters.Length)
+            {
+                var newParams = new Vector<T>(layerParams.Length);
+                for (int i = 0; i < layerParams.Length; i++)
+                {
+                    newParams[i] = parameters[offset + i];
+                }
+                layer.SetParameters(newParams);
+                offset += layerParams.Length;
             }
         }
 

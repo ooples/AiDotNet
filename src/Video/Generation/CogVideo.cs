@@ -599,7 +599,7 @@ public class CogVideo<T> : NeuralNetworkBase<T>
         if (t > 0 && posteriorVariance > 1e-20)
         {
             double stdDev = Math.Sqrt(posteriorVariance);
-            var random = new Random();
+            var random = RandomHelper.CreateSecureRandom();
 
             for (int i = 0; i < resultData.Length; i++)
             {

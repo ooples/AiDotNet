@@ -52,10 +52,10 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
     private readonly string? _onnxModelPath;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ILossFunction<T> _lossFunction;
-    private readonly int _numFeatures;
-    private readonly int _numInputFrames;
-    private readonly int _imageHeight;
-    private readonly int _imageWidth;
+    private int _numFeatures;
+    private int _numInputFrames;
+    private int _imageHeight;
+    private int _imageWidth;
 
     #endregion
 
@@ -163,23 +163,50 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
         // Median Absolute Deviation (MAD) estimator
         var data = new List<double>();
 
-        int h = frame.Rank == 4 ? frame.Shape[2] : frame.Shape[1];
-        int w = frame.Rank == 4 ? frame.Shape[3] : frame.Shape[2];
+        // Handle both 4D [N, C, H, W] and 3D [C, H, W] or 2D [H, W] tensors
+        int h, w, stride;
+        if (frame.Rank == 4)
+        {
+            // 4D tensor: [batch, channels, height, width]
+            h = frame.Shape[2];
+            w = frame.Shape[3];
+            stride = frame.Shape[3]; // Width stride for NCHW layout
+            // Use first batch, first channel for noise estimation
+        }
+        else if (frame.Rank == 3)
+        {
+            // 3D tensor: [channels, height, width]
+            h = frame.Shape[1];
+            w = frame.Shape[2];
+            stride = frame.Shape[2];
+        }
+        else
+        {
+            // 2D tensor: [height, width]
+            h = frame.Shape[0];
+            w = frame.Shape[1];
+            stride = w;
+        }
 
         // Compute Laplacian for high-frequency noise estimation
+        // For 4D tensors, use the first channel of the first batch element
         for (int y = 1; y < h - 1; y++)
         {
             for (int x = 1; x < w - 1; x++)
             {
-                double center = Convert.ToDouble(frame.Data[y * w + x]);
+                // Proper indexing for any rank tensor (use first batch/channel)
+                double center = Convert.ToDouble(frame.Data[y * stride + x]);
                 double laplacian = 4 * center
-                    - Convert.ToDouble(frame.Data[(y - 1) * w + x])
-                    - Convert.ToDouble(frame.Data[(y + 1) * w + x])
-                    - Convert.ToDouble(frame.Data[y * w + (x - 1)])
-                    - Convert.ToDouble(frame.Data[y * w + (x + 1)]);
+                    - Convert.ToDouble(frame.Data[(y - 1) * stride + x])
+                    - Convert.ToDouble(frame.Data[(y + 1) * stride + x])
+                    - Convert.ToDouble(frame.Data[y * stride + (x - 1)])
+                    - Convert.ToDouble(frame.Data[y * stride + (x + 1)]);
                 data.Add(Math.Abs(laplacian));
             }
         }
+
+        if (data.Count == 0)
+            return 0.0;
 
         data.Sort();
         double median = data[data.Count / 2];
@@ -348,7 +375,15 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        for (int i = 0; i < 4; i++) _ = reader.ReadInt32();
+        // Restore serialized configuration values
+        _numFeatures = reader.ReadInt32();
+        _numInputFrames = reader.ReadInt32();
+        _imageHeight = reader.ReadInt32();
+        _imageWidth = reader.ReadInt32();
+
+        // Reinitialize layers with restored configuration
+        ClearLayers();
+        InitializeLayers();
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>

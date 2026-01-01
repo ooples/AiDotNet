@@ -56,7 +56,7 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
     private InferenceSession? _onnxSession;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
-    private readonly Random _random = new();
+    private readonly Random _random = RandomHelper.CreateSecureRandom();
 
     #endregion
 

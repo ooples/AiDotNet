@@ -2783,23 +2783,23 @@ public interface IEngine
         int[] dilation);
 
     /// <summary>
-    /// Computes the gradient of GridSample with respect to the input (NCHW format).
+    /// Computes the gradient of GridSample with respect to the input (NHWC format).
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
-    /// <param name="gradOutput">The gradient flowing back from the output.</param>
-    /// <param name="grid">The sampling grid from forward pass.</param>
-    /// <param name="inputShape">The shape of the original input.</param>
-    /// <returns>The gradient with respect to the input tensor.</returns>
+    /// <param name="gradOutput">The gradient flowing back from the output [batch, outH, outW, channels].</param>
+    /// <param name="grid">The sampling grid from forward pass [batch, outH, outW, 2].</param>
+    /// <param name="inputShape">The shape of the original input [batch, height, width, channels].</param>
+    /// <returns>The gradient with respect to the input tensor [batch, height, width, channels].</returns>
     Tensor<T> GridSampleBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> grid, int[] inputShape);
 
     /// <summary>
-    /// Computes the gradient of GridSample with respect to the grid (NCHW format).
+    /// Computes the gradient of GridSample with respect to the grid (NHWC format).
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
-    /// <param name="gradOutput">The gradient flowing back from the output.</param>
-    /// <param name="input">The original input tensor.</param>
-    /// <param name="grid">The sampling grid from forward pass.</param>
-    /// <returns>The gradient with respect to the grid tensor.</returns>
+    /// <param name="gradOutput">The gradient flowing back from the output [batch, outH, outW, channels].</param>
+    /// <param name="input">The original input tensor [batch, height, width, channels].</param>
+    /// <param name="grid">The sampling grid from forward pass [batch, outH, outW, 2].</param>
+    /// <returns>The gradient with respect to the grid tensor [batch, outH, outW, 2].</returns>
     Tensor<T> GridSampleBackwardGrid<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> grid);
 
     #endregion

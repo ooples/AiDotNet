@@ -5230,12 +5230,29 @@ public class CpuEngine : IEngine
         if (kernel == null) throw new ArgumentNullException(nameof(kernel));
         if (offset == null) throw new ArgumentNullException(nameof(offset));
 
+        // Validate tensor ranks (must be 4D for deformable conv)
+        if (gradOutput.Rank != 4) throw new ArgumentException($"DeformableConv2DBackwardOffset requires 4D gradOutput tensor. Got rank {gradOutput.Rank}.", nameof(gradOutput));
+        if (input.Rank != 4) throw new ArgumentException($"DeformableConv2DBackwardOffset requires 4D input tensor. Got rank {input.Rank}.", nameof(input));
+        if (kernel.Rank != 4) throw new ArgumentException($"DeformableConv2DBackwardOffset requires 4D kernel tensor. Got rank {kernel.Rank}.", nameof(kernel));
+        if (offset.Rank != 4) throw new ArgumentException($"DeformableConv2DBackwardOffset requires 4D offset tensor. Got rank {offset.Rank}.", nameof(offset));
+        if (mask != null && mask.Rank != 4) throw new ArgumentException($"DeformableConv2DBackwardOffset requires 4D mask tensor. Got rank {mask.Rank}.", nameof(mask));
+
+        // Validate parameter arrays
+        if (stride == null || stride.Length != 2) throw new ArgumentException("Stride must be array of 2 elements.", nameof(stride));
+        if (padding == null || padding.Length != 2) throw new ArgumentException("Padding must be array of 2 elements.", nameof(padding));
+        if (dilation == null || dilation.Length != 2) throw new ArgumentException("Dilation must be array of 2 elements.", nameof(dilation));
+
         var numOps = MathHelper.GetNumericOperations<T>();
 
         int batch = input.Shape[0];
         int inChannels = input.Shape[1];
         int height = input.Shape[2];
         int width = input.Shape[3];
+
+        // Validate batch consistency
+        if (gradOutput.Shape[0] != batch) throw new ArgumentException($"Batch size mismatch: input has {batch}, gradOutput has {gradOutput.Shape[0]}.", nameof(gradOutput));
+        if (offset.Shape[0] != batch) throw new ArgumentException($"Batch size mismatch: input has {batch}, offset has {offset.Shape[0]}.", nameof(offset));
+        if (mask != null && mask.Shape[0] != batch) throw new ArgumentException($"Batch size mismatch: input has {batch}, mask has {mask.Shape[0]}.", nameof(mask));
 
         int outChannels = kernel.Shape[0];
         int kernelHeight = kernel.Shape[2];
@@ -5525,12 +5542,29 @@ public class CpuEngine : IEngine
         if (kernel == null) throw new ArgumentNullException(nameof(kernel));
         if (offset == null) throw new ArgumentNullException(nameof(offset));
 
+        // Validate tensor ranks (must be 4D for deformable conv)
+        if (gradOutput.Rank != 4) throw new ArgumentException($"DeformableConv2DBackwardMask requires 4D gradOutput tensor. Got rank {gradOutput.Rank}.", nameof(gradOutput));
+        if (input.Rank != 4) throw new ArgumentException($"DeformableConv2DBackwardMask requires 4D input tensor. Got rank {input.Rank}.", nameof(input));
+        if (kernel.Rank != 4) throw new ArgumentException($"DeformableConv2DBackwardMask requires 4D kernel tensor. Got rank {kernel.Rank}.", nameof(kernel));
+        if (offset.Rank != 4) throw new ArgumentException($"DeformableConv2DBackwardMask requires 4D offset tensor. Got rank {offset.Rank}.", nameof(offset));
+        if (mask != null && mask.Rank != 4) throw new ArgumentException($"DeformableConv2DBackwardMask requires 4D mask tensor. Got rank {mask.Rank}.", nameof(mask));
+
+        // Validate parameter arrays
+        if (stride == null || stride.Length != 2) throw new ArgumentException("Stride must be array of 2 elements.", nameof(stride));
+        if (padding == null || padding.Length != 2) throw new ArgumentException("Padding must be array of 2 elements.", nameof(padding));
+        if (dilation == null || dilation.Length != 2) throw new ArgumentException("Dilation must be array of 2 elements.", nameof(dilation));
+
         var numOps = MathHelper.GetNumericOperations<T>();
 
         int batch = input.Shape[0];
         int inChannels = input.Shape[1];
         int height = input.Shape[2];
         int width = input.Shape[3];
+
+        // Validate batch consistency
+        if (gradOutput.Shape[0] != batch) throw new ArgumentException($"Batch size mismatch: input has {batch}, gradOutput has {gradOutput.Shape[0]}.", nameof(gradOutput));
+        if (offset.Shape[0] != batch) throw new ArgumentException($"Batch size mismatch: input has {batch}, offset has {offset.Shape[0]}.", nameof(offset));
+        if (mask != null && mask.Shape[0] != batch) throw new ArgumentException($"Batch size mismatch: input has {batch}, mask has {mask.Shape[0]}.", nameof(mask));
 
         int outChannels = kernel.Shape[0];
         int kernelHeight = kernel.Shape[2];
@@ -5614,7 +5648,11 @@ public class CpuEngine : IEngine
     {
         if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
         if (grid == null) throw new ArgumentNullException(nameof(grid));
-        if (inputShape == null || inputShape.Length != 4) throw new ArgumentException("inputShape must be array of 4 elements.", nameof(inputShape));
+        if (inputShape == null || inputShape.Length != 4) throw new ArgumentException("inputShape must be array of 4 elements [batch, height, width, channels].", nameof(inputShape));
+
+        // Validate tensor ranks for NHWC layout
+        if (gradOutput.Rank != 4) throw new ArgumentException($"GridSampleBackwardInput requires 4D gradOutput tensor (NHWC). Got rank {gradOutput.Rank}.", nameof(gradOutput));
+        if (grid.Rank != 4) throw new ArgumentException($"GridSampleBackwardInput requires 4D grid tensor [batch, outH, outW, 2]. Got rank {grid.Rank}.", nameof(grid));
 
         var numOps = MathHelper.GetNumericOperations<T>();
 
@@ -5626,6 +5664,14 @@ public class CpuEngine : IEngine
 
         int outHeight = grid.Shape[1];
         int outWidth = grid.Shape[2];
+
+        // Validate shape consistency
+        if (grid.Shape[0] != batch) throw new ArgumentException($"Batch size mismatch: inputShape has {batch}, grid has {grid.Shape[0]}.", nameof(grid));
+        if (grid.Shape[3] != 2) throw new ArgumentException($"Grid last dimension must be 2 (x,y coordinates). Got {grid.Shape[3]}.", nameof(grid));
+        if (gradOutput.Shape[0] != batch) throw new ArgumentException($"Batch size mismatch: inputShape has {batch}, gradOutput has {gradOutput.Shape[0]}.", nameof(gradOutput));
+        if (gradOutput.Shape[1] != outHeight || gradOutput.Shape[2] != outWidth)
+            throw new ArgumentException($"gradOutput spatial dims [{gradOutput.Shape[1]},{gradOutput.Shape[2]}] must match grid spatial dims [{outHeight},{outWidth}].", nameof(gradOutput));
+        if (gradOutput.Shape[3] != channels) throw new ArgumentException($"Channel mismatch: inputShape has {channels}, gradOutput has {gradOutput.Shape[3]}.", nameof(gradOutput));
 
         var gradInput = new Tensor<T>(inputShape);
         var gradInputData = gradInput.Data;
@@ -5674,6 +5720,11 @@ public class CpuEngine : IEngine
         if (input == null) throw new ArgumentNullException(nameof(input));
         if (grid == null) throw new ArgumentNullException(nameof(grid));
 
+        // Validate tensor ranks for NHWC layout
+        if (gradOutput.Rank != 4) throw new ArgumentException($"GridSampleBackwardGrid requires 4D gradOutput tensor (NHWC). Got rank {gradOutput.Rank}.", nameof(gradOutput));
+        if (input.Rank != 4) throw new ArgumentException($"GridSampleBackwardGrid requires 4D input tensor (NHWC). Got rank {input.Rank}.", nameof(input));
+        if (grid.Rank != 4) throw new ArgumentException($"GridSampleBackwardGrid requires 4D grid tensor [batch, outH, outW, 2]. Got rank {grid.Rank}.", nameof(grid));
+
         var numOps = MathHelper.GetNumericOperations<T>();
 
         // NHWC layout: [batch, height, width, channels]
@@ -5684,6 +5735,14 @@ public class CpuEngine : IEngine
 
         int outHeight = grid.Shape[1];
         int outWidth = grid.Shape[2];
+
+        // Validate shape consistency
+        if (grid.Shape[0] != batch) throw new ArgumentException($"Batch size mismatch: input has {batch}, grid has {grid.Shape[0]}.", nameof(grid));
+        if (grid.Shape[3] != 2) throw new ArgumentException($"Grid last dimension must be 2 (x,y coordinates). Got {grid.Shape[3]}.", nameof(grid));
+        if (gradOutput.Shape[0] != batch) throw new ArgumentException($"Batch size mismatch: input has {batch}, gradOutput has {gradOutput.Shape[0]}.", nameof(gradOutput));
+        if (gradOutput.Shape[1] != outHeight || gradOutput.Shape[2] != outWidth)
+            throw new ArgumentException($"gradOutput spatial dims [{gradOutput.Shape[1]},{gradOutput.Shape[2]}] must match grid spatial dims [{outHeight},{outWidth}].", nameof(gradOutput));
+        if (gradOutput.Shape[3] != channels) throw new ArgumentException($"Channel mismatch: input has {channels}, gradOutput has {gradOutput.Shape[3]}.", nameof(gradOutput));
 
         var gradGrid = new Tensor<T>(grid.Shape);
         var gradGridData = gradGrid.Data;
