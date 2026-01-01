@@ -580,28 +580,53 @@ public static class LayerHelper<T>
     /// </summary>
     private static IEnumerable<ILayer<T>> CreateResNetConvLayers(NeuralNetworkArchitecture<T> architecture, int inputDepth, int inputHeight, int inputWidth, int blockCount, int blockSize)
     {
+        int ConvolutionOutputSize(int inputSize, int kernelSize, int stride, int padding)
+        {
+            if (inputSize + 2 * padding < kernelSize)
+                throw new ArgumentException("Input dimensions with padding must be at least kernel size.");
+
+            return (inputSize - kernelSize + 2 * padding) / stride + 1;
+        }
+
+        int PoolingOutputSize(int inputSize, int poolSize, int stride)
+        {
+            return (inputSize - poolSize) / stride + 1;
+        }
+
+        const int initialKernelSize = 7;
+        const int initialStride = 2;
+        const int initialPadding = 3;
+
+        int convOutputHeight = ConvolutionOutputSize(inputHeight, initialKernelSize, initialStride, initialPadding);
+        int convOutputWidth = ConvolutionOutputSize(inputWidth, initialKernelSize, initialStride, initialPadding);
+
+        const int initialPoolSize = 3;
+        const int initialPoolStride = 2;
+
+        int pooledHeight = PoolingOutputSize(convOutputHeight, initialPoolSize, initialPoolStride);
+        int pooledWidth = PoolingOutputSize(convOutputWidth, initialPoolSize, initialPoolStride);
         // Initial convolutional layer
         yield return new ConvolutionalLayer<T>(
             inputDepth: inputDepth,
             inputHeight: inputHeight,
             inputWidth: inputWidth,
             outputDepth: 64,
-            kernelSize: 7,
-            stride: 2,
-            padding: 3,
+            kernelSize: initialKernelSize,
+            stride: initialStride,
+            padding: initialPadding,
             activationFunction: new ReLUActivation<T>()
         );
 
         yield return new MaxPoolingLayer<T>(
-            inputShape: [64, inputHeight / 2, inputWidth / 2],
-            poolSize: 3,
-            stride: 2
+            inputShape: [64, convOutputHeight, convOutputWidth],
+            poolSize: initialPoolSize,
+            stride: initialPoolStride
         );
 
         // Residual blocks
         int currentDepth = 64;
-        int currentHeight = inputHeight / 4;
-        int currentWidth = inputWidth / 4;
+        int currentHeight = pooledHeight;
+        int currentWidth = pooledWidth;
 
         for (int i = 0; i < blockCount; i++)
         {
@@ -616,13 +641,16 @@ public static class LayerHelper<T>
             }
             if (i < blockCount - 1)
             {
+                int nextHeight = PoolingOutputSize(currentHeight, 2, 2);
+                int nextWidth = PoolingOutputSize(currentWidth, 2, 2);
+
                 yield return new MaxPoolingLayer<T>(
                     inputShape: [currentDepth, currentHeight, currentWidth],
                     poolSize: 2,
                     stride: 2
                 );
-                currentHeight /= 2;
-                currentWidth /= 2;
+                currentHeight = nextHeight;
+                currentWidth = nextWidth;
             }
         }
 
