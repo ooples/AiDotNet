@@ -36,6 +36,12 @@ internal static class ClBlastGemmRoutineDatabaseData
                 new ClBlastDeviceEntry("AMD Radeon RX 5700 XT", new short[] { 576, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }),
                 new ClBlastDeviceEntry("default", new short[] { 448, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }),
             }),
+            // RX 5500 XT (gfx1012) - RDNA1 with 11 CUs
+            new ClBlastArchitectureEntry("gfx1012:xnack-", new[]
+            {
+                new ClBlastDeviceEntry("AMD Radeon RX 5500 XT", new short[] { 448, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }),
+                new ClBlastDeviceEntry("default", new short[] { 448, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }),
+            }),
             new ClBlastArchitectureEntry("gfx1030", new[]
             {
                 new ClBlastDeviceEntry("AMD Radeon RX 6800 XT", new short[] { 448, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }),

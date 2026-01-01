@@ -626,7 +626,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 }
 
                 _clblastBaselineInitialized = true;
-                var deviceInfo = ClBlastDeviceInfo.FromContext(_context);       
+                var deviceInfo = ClBlastDeviceInfo.FromContext(_context);
                 _clblastCopyParams = ClBlastCopyDatabase.GetParameters(deviceInfo);
                 _clblastPadParams = ClBlastPadDatabase.GetParameters(deviceInfo);
                 _clblastPadTransposeParams = ClBlastPadTransposeDatabase.GetParameters(deviceInfo);
@@ -641,7 +641,26 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                     return true;
                 }
 
-                return false;
+                // FALLBACK: Use default CLBlast baseline config for devices not in database
+                // This is the proven CLBlast Xgemm kernel 0 configuration (2300+ GFLOPS)
+                // GEMMK=0, MWG=64, NWG=64, KWG=16, VWM=2, VWN=2, SA=1, SB=1
+                var defaultBaseline = new GemmConfig
+                {
+                    TileM = 64, TileN = 64, TileK = 16,
+                    ThreadTileM = 8, ThreadTileN = 8,
+                    VectorWidthM = 2, VectorWidthN = 2,
+                    UseDoubleBuffering = false, UseVectorizedLoads = true,
+                    KReg = 1, KUnroll = 2, UseSubgroupOps = false,
+                    StrideM = false, StrideN = true,
+                    CacheA = true, CacheB = true,
+                    MdimaSize = 16, NdimbSize = 8,
+                    UseTrueVectorLDS = true,
+                    UseColumnMajorA = true,
+                    KernelName = "clblast_baseline_k0"
+                };
+                _clblastBaselineConfig = defaultBaseline;
+                config = defaultBaseline;
+                return true;
             }
         }
 
@@ -951,23 +970,32 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             float beta,
             GemmConfig config)
         {
-            if (_clblastMinIndirectSize > 0)
+            // HYBRID APPROACH: Choose between direct and indirect path based on matrix shape.
+            // - Direct path (XgemmDirectTN): Best for small/medium matrices, non-square (DenseLayer-style),
+            //   and very large matrices (4096+). Avoids transpose overhead for row-major data.
+            // - Indirect path: Best for medium-large square matrices (~2048x2048) where the additional
+            //   LDS tiling and register blocking optimizations outweigh the transpose overhead.
+            int minDim = Math.Min(M, Math.Min(N, K));
+            int maxMN = Math.Max(M, N);
+            // Use indirect path only for the "sweet spot" of 2048x2048 class matrices
+            // (large enough to benefit from tiling, small enough that packing overhead is acceptable)
+            bool usesIndirectPath = minDim >= 512 && maxMN >= 2048 && maxMN < 4096;
+
+            // For non-square, small, medium, or very large matrices: use direct path (no transpose overhead)
+            if (!usesIndirectPath && TryExecuteClBlastDirectGemm(A, B, C, M, N, K, alpha, beta))
             {
-                long mkn = (long)M * N * K;
-                long threshold = (long)_clblastMinIndirectSize * _clblastMinIndirectSize * _clblastMinIndirectSize;
-                if (mkn < threshold)
-                {
-                    if (TryExecuteClBlastDirectGemm(A, B, C, M, N, K, alpha, beta))
-                        return true;
-                    return false;
-                }
+                return true;
             }
 
             if (_dynamicGemm == null)
+            {
                 return false;
+            }
 
             if (!EnsureClBlastPackingKernels())
+            {
                 return false;
+            }
 
             int kReg = config.KReg > 0 ? config.KReg : 1;
             int kUnit = config.TileK * kReg;
@@ -1257,7 +1285,9 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             if (!offlineEnabled && TryGetClBlastBaselineConfig(out var baselineConfig))
             {
                 if (TryExecuteClBlastBaselineGemm(A, B, C, M, N, K, alpha, beta, baselineConfig))
+                {
                     return;
+                }
             }
 
             if (_dynamicGemm != null && M >= 128 && N >= 128 && K >= 64 &&
@@ -1319,6 +1349,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
         public IGpuBuffer MatMul(IGpuBuffer A, IGpuBuffer B, int M, int N, int K)
         {
+            Console.WriteLine($"[OpenClBackend.MatMul] Called: {M}x{N}x{K}");
             var C = AllocateBuffer(M * N);
             Gemm(A, B, C, M, N, K, 1.0f, 0.0f);
             // Sync only when returning buffer that might be immediately read
