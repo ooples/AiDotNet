@@ -57,6 +57,7 @@ internal static class ClBlastXgemmDirectDatabaseData
             // RX 5500 XT (gfx1012) - RDNA1 with 11 CUs, optimized for smaller workgroups
             // PadA=4, PadB=4 for 32-bank LDS conflict avoidance (indices 5,6)
             // VWM=4, VWN=4 for wider vectorization (float4 instead of float2) - indices 7,8
+            // KWID=2 (standard K-loop depth; higher KWID values cause register pressure on 11-CU RDNA1)
             new ClBlastArchitectureEntry("gfx1012:xnack-", new[]
             {
                 new ClBlastDeviceEntry("AMD Radeon RX 5500 XT", new short[] { 2, 8, 8, 16, 16, 4, 4, 4, 4, 32, 0, 0, 0, 0, 0, 0 }),

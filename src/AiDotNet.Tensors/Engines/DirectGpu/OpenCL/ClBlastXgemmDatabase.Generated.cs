@@ -78,6 +78,7 @@ internal static class ClBlastXgemmDatabaseData
             }),
             // RX 5500 XT (gfx1012) - RDNA1 with 11 CUs, using RX 5700 XT tuned parameters for similar architecture
             // VWM=4, VWN=4 for wider vectorization (float4 instead of float2) - indices 14,15
+            // KWI=2 (standard K-loop depth; higher KWI values cause register pressure on 11-CU RDNA1)
             new ClBlastArchitectureEntry("gfx1012:xnack-", new[]
             {
                 new ClBlastDeviceEntry("AMD Radeon RX 5500 XT", new short[] { 0, 1, 16, 2, 16, 8, 64, 8, 8, 64, 1, 1, 0, 1, 4, 4 }),
