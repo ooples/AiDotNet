@@ -145,9 +145,8 @@ public class BayesianRegression<T> : RegressionBase<T>
             x = ApplyKernel(x);
         }
 
-        // Apply regularization
-        x = Regularization.Regularize(x);
-        y = Regularization.Regularize(y);
+        // Note: Bayesian regression has built-in regularization through the prior precision (alpha).
+        // Additional regularization is not applied through data transformation.
 
         // Compute prior precision (inverse of prior covariance)
         var priorPrecision = Matrix<T>.CreateIdentity(d).Multiply(NumOps.FromDouble(_bayesOptions.Alpha));
@@ -215,8 +214,25 @@ public class BayesianRegression<T> : RegressionBase<T>
             input = ApplyKernel(input);
         }
 
-        var coefficientsMatrix = Coefficients.AppendAsMatrix(Intercept);
-        return input.Multiply(coefficientsMatrix).GetColumn(0);
+        // Create coefficient vector with intercept at position 0 (matching constant column at front)
+        // input × coefficients = (N, d+1) × (d+1,) = (N,)
+        Vector<T> allCoeffs;
+        if (Options.UseIntercept)
+        {
+            // Prepend intercept to match the constant column at front
+            allCoeffs = new Vector<T>(Coefficients.Length + 1);
+            allCoeffs[0] = Intercept;
+            for (int i = 0; i < Coefficients.Length; i++)
+            {
+                allCoeffs[i + 1] = Coefficients[i];
+            }
+        }
+        else
+        {
+            allCoeffs = Coefficients;
+        }
+
+        return input.Multiply(allCoeffs);
     }
 
     /// <summary>
@@ -253,22 +269,26 @@ public class BayesianRegression<T> : RegressionBase<T>
     /// </remarks>
     public (Vector<T> Mean, Vector<T> Variance) PredictWithUncertainty(Matrix<T> input)
     {
+        // Call Predict with original input - it handles its own augmentation
+        var mean = Predict(input);
+
+        // Now augment input for variance calculation
+        var augmentedInput = input;
         if (Options.UseIntercept)
         {
-            input = input.AddConstantColumn(NumOps.One);
+            augmentedInput = augmentedInput.AddConstantColumn(NumOps.One);
         }
 
         if (_bayesOptions.KernelType != KernelType.Linear)
         {
-            input = ApplyKernel(input);
+            augmentedInput = ApplyKernel(augmentedInput);
         }
 
-        var mean = Predict(input);
-        var variance = new Vector<T>(input.Rows);
+        var variance = new Vector<T>(augmentedInput.Rows);
 
-        for (int i = 0; i < input.Rows; i++)
+        for (int i = 0; i < augmentedInput.Rows; i++)
         {
-            var x = input.GetRow(i);
+            var x = augmentedInput.GetRow(i);
             var xCov = x.DotProduct(_posteriorCovariance.Multiply(x));
             variance[i] = NumOps.Add(xCov, NumOps.FromDouble(1.0 / _bayesOptions.Beta));
         }

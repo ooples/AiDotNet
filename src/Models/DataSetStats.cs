@@ -135,10 +135,29 @@ public class DataSetStats<T, TInput, TOutput>
     public TInput Features { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether data was actually provided for this dataset.
+    /// </summary>
+    /// <value>True if data was provided, false if this is a placeholder for missing data.</value>
+    /// <remarks>
+    /// <para>
+    /// This property distinguishes between "data was never provided" (false) and "data was provided
+    /// but may be empty" (true). This is important for evaluation because an empty DataSetStats
+    /// could mean either scenario, and users need to know whether metrics are unavailable due to
+    /// missing data or due to actual empty data.
+    /// </para>
+    /// <para><b>For Beginners:</b> This flag tells you whether this dataset was actually evaluated.
+    /// If false, it means the data was never provided (e.g., no validation set was given),
+    /// so the statistics in this object are not meaningful.
+    /// </para>
+    /// </remarks>
+    public bool IsDataProvided { get; set; }
+
+    /// <summary>
     /// Initializes a new instance of the DataSetStats class with default empty model data.
     /// </summary>
     public DataSetStats()
     {
         (Features, Actual, Predicted) = ModelHelper<T, TInput, TOutput>.CreateDefaultModelData();
+        IsDataProvided = false;
     }
 }

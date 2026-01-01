@@ -61,9 +61,9 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// The mean of the target variable used for centering.
     /// </summary>
     /// <value>
-    /// A vector containing the mean value of the target variable.
+    /// The mean value of the target variable.
     /// </value>
-    private Vector<T> _yMean;
+    private T _yMean;
 
     /// <summary>
     /// The means of the predictor variables used for centering.
@@ -112,7 +112,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         _loadings = new Matrix<T>(0, 0);
         _scores = new Matrix<T>(0, 0);
         _weights = new Matrix<T>(0, 0);
-        _yMean = new Vector<T>(0);
+        _yMean = NumOps.Zero;
         _xMean = new Vector<T>(0);
         _yStd = NumOps.Zero;
         _xStd = new Vector<T>(0);
@@ -148,7 +148,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         ValidateInputs(x, y);
 
         // Center and scale the data
-        (Matrix<T> xScaled, Vector<T> yScaled, _xMean, _xStd, _yStd) = RegressionHelper<T>.CenterAndScale(x, y);
+        (Matrix<T> xScaled, Vector<T> yScaled, _xMean, _xStd, _yMean, _yStd) = RegressionHelper<T>.CenterAndScale(x, y);
 
         int numComponents = Math.Min(_options.NumComponents, x.Columns);
         _loadings = new Matrix<T>(x.Columns, numComponents);
@@ -193,7 +193,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         }
 
         // Calculate intercept
-        Intercept = NumOps.Subtract(_yMean[0], Coefficients.DotProduct(_xMean));
+        Intercept = NumOps.Subtract(_yMean, Coefficients.DotProduct(_xMean));
 
         // Apply regularization to the model matrices
         _loadings = Regularization.Regularize(_loadings);
@@ -393,7 +393,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         SerializationHelper<T>.SerializeMatrix(writer, _loadings);
         SerializationHelper<T>.SerializeMatrix(writer, _scores);
         SerializationHelper<T>.SerializeMatrix(writer, _weights);
-        SerializationHelper<T>.SerializeVector(writer, _yMean);
+        SerializationHelper<T>.WriteValue(writer, _yMean);
         SerializationHelper<T>.SerializeVector(writer, _xMean);
         SerializationHelper<T>.WriteValue(writer, _yStd);
         SerializationHelper<T>.SerializeVector(writer, _xStd);
@@ -430,7 +430,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         _loadings = SerializationHelper<T>.DeserializeMatrix(reader);
         _scores = SerializationHelper<T>.DeserializeMatrix(reader);
         _weights = SerializationHelper<T>.DeserializeMatrix(reader);
-        _yMean = SerializationHelper<T>.DeserializeVector(reader);
+        _yMean = SerializationHelper<T>.ReadValue(reader);
         _xMean = SerializationHelper<T>.DeserializeVector(reader);
         _yStd = SerializationHelper<T>.ReadValue(reader);
         _xStd = SerializationHelper<T>.DeserializeVector(reader);
@@ -492,10 +492,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         }
 
         // Copy means and standard deviations used for scaling
-        if (_yMean != null)
-        {
-            newModel._yMean = _yMean.Clone();
-        }
+        newModel._yMean = _yMean;
 
         if (_xMean != null)
         {

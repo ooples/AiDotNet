@@ -160,14 +160,20 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
             OptimizeHyperparameters(x, y);
         }
 
-        // Apply regularization to the kernel matrix
-        Matrix<T> regularizedKernelMatrix = Regularization.Regularize(_kernelMatrix);
+        // Note: GP regularization is already handled via noise level added to the diagonal.
+        // Ridge-type regularization can be added by using the regularization strength.
+        var regularizationStrength = Regularization?.GetOptions().Strength ?? 0.0;
+        if (regularizationStrength > 0)
+        {
+            T regTerm = NumOps.FromDouble(regularizationStrength);
+            for (int i = 0; i < n; i++)
+            {
+                _kernelMatrix[i, i] = NumOps.Add(_kernelMatrix[i, i], regTerm);
+            }
+        }
 
-        // Solve (K + s²I + R)a = y, where R is the regularization term
-        _alpha = MatrixSolutionHelper.SolveLinearSystem(regularizedKernelMatrix, y, Options.DecompositionType);
-
-        // Apply regularization to the alpha coefficients
-        _alpha = Regularization.Regularize(_alpha);
+        // Solve (K + s²I)a = y
+        _alpha = MatrixSolutionHelper.SolveLinearSystem(_kernelMatrix, y, Options.DecompositionType);
 
         // Store x as support vectors for prediction
         SupportVectors = x;

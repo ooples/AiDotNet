@@ -137,20 +137,25 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
             }
         }
 
-        // Add ridge penalty to the diagonal
+        // Add ridge penalty to the diagonal (LambdaKRR is the primary regularization for KRR)
         for (int i = 0; i < n; i++)
         {
             _gramMatrix[i, i] = NumOps.Add(_gramMatrix[i, i], NumOps.FromDouble(Options.LambdaKRR));
         }
 
-        // Apply regularization to the Gram matrix
-        Matrix<T> regularizedGramMatrix = Regularization.Regularize(_gramMatrix);
+        // Add additional regularization strength if specified
+        var regularizationStrength = Regularization?.GetOptions().Strength ?? 0.0;
+        if (regularizationStrength > 0)
+        {
+            T regTerm = NumOps.FromDouble(regularizationStrength);
+            for (int i = 0; i < n; i++)
+            {
+                _gramMatrix[i, i] = NumOps.Add(_gramMatrix[i, i], regTerm);
+            }
+        }
 
-        // Solve (K + ?I + R)a = y, where R is the regularization term
-        _dualCoefficients = MatrixSolutionHelper.SolveLinearSystem(regularizedGramMatrix, y, Options.DecompositionType);
-
-        // Apply regularization to the dual coefficients
-        _dualCoefficients = Regularization.Regularize(_dualCoefficients);
+        // Solve (K + λI)a = y
+        _dualCoefficients = MatrixSolutionHelper.SolveLinearSystem(_gramMatrix, y, Options.DecompositionType);
 
         // Store X as support vectors for prediction
         SupportVectors = X;

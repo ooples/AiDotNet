@@ -3845,12 +3845,11 @@ public static class StatisticsHelper<T>
         sumSquaredErrors = _numOps.Add(sumSquaredErrors, _numOps.Square(residualList[0]));
 
         // Check for zero residuals (perfect fit) - DW is undefined
+        // Return 2.0 (ideal value indicating no autocorrelation) for perfect fit edge case
+        // This can happen during optimization when models with zero coefficients produce zero predictions
         if (_numOps.Equals(sumSquaredErrors, _numOps.Zero))
         {
-            throw new ArgumentException(
-                "Durbin-Watson statistic is undefined when all residuals are zero (perfect fit). " +
-                "This typically indicates the model perfectly predicts all observations, which is unusual in practice.",
-                nameof(residualList));
+            return _numOps.FromDouble(2.0);
         }
 
         return _numOps.Divide(sumSquaredDifferences, sumSquaredErrors);

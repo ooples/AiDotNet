@@ -103,7 +103,12 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private NeuralNetwork<T> CreateEncoderNetwork(int inputSize, int outputSize)
     {
-        var architecture = new NeuralNetworkArchitecture<T>(inputSize, outputSize, NetworkComplexity.Medium);
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: inputSize,
+            outputSize: outputSize);
         var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
 
         for (int i = 0; i < 2; i++)
@@ -118,7 +123,12 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private NeuralNetwork<T> CreateActorNetwork()
     {
-        var architecture = new NeuralNetworkArchitecture<T>(_options.LatentSize, _options.ActionSize, NetworkComplexity.Medium);
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: _options.LatentSize,
+            outputSize: _options.ActionSize);
         var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
 
         for (int i = 0; i < 2; i++)

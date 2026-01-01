@@ -379,7 +379,9 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
         using BinaryWriter writer = new BinaryWriter(ms);
 
         // Write base class data
-        base.Serialize();
+        byte[] baseData = base.Serialize();
+        writer.Write(baseData.Length);
+        writer.Write(baseData);
 
         // Write GAM-specific data
         writer.Write(_options.NumSplines);
@@ -449,7 +451,9 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
         using BinaryReader reader = new BinaryReader(ms);
 
         // Read base class data
-        base.Deserialize(modelData);
+        int baseDataLength = reader.ReadInt32();
+        byte[] baseData = reader.ReadBytes(baseDataLength);
+        base.Deserialize(baseData);
 
         // Read GAM-specific data
         _options.NumSplines = reader.ReadInt32();

@@ -125,18 +125,22 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
         var numSamples = x.Rows;
         var featuresToConsider = (int)Math.Max(1, Math.Round(_options.MaxFeatures * numFeatures));
 
-        var treeTasks = Enumerable.Range(0, _options.NumberOfTrees).Select(_ => Task.Run(() =>
+        // Pre-generate seeds for reproducibility (calling _random.Next() in parallel is non-deterministic)
+        var seeds = Enumerable.Range(0, _options.NumberOfTrees).Select(_ => _random.Next()).ToArray();
+        var bootstrapSamples = Enumerable.Range(0, _options.NumberOfTrees)
+            .Select(_ => GetBootstrapSampleIndices(numSamples)).ToArray();
+
+        var treeTasks = Enumerable.Range(0, _options.NumberOfTrees).Select(i => Task.Run(() =>
         {
-            var bootstrapIndices = GetBootstrapSampleIndices(numSamples);
-            var bootstrapX = x.GetRows(bootstrapIndices);
-            var bootstrapY = y.GetElements(bootstrapIndices);
+            var bootstrapX = x.GetRows(bootstrapSamples[i]);
+            var bootstrapY = y.GetElements(bootstrapSamples[i]);
 
             var treeOptions = new DecisionTreeOptions
             {
                 MaxDepth = _options.MaxDepth,
                 MinSamplesSplit = _options.MinSamplesSplit,
                 MaxFeatures = featuresToConsider / (double)numFeatures,
-                Seed = _random.Next(),
+                Seed = seeds[i],
                 SplitCriterion = _options.SplitCriterion
             };
             var tree = new DecisionTreeRegression<T>(treeOptions, Regularization);
@@ -173,8 +177,9 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </remarks>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
-        var regularizedInput = Regularization.Regularize(input);
-        var predictionTasks = _trees.Select(tree => Task.Run(() => tree.Predict(regularizedInput)));
+        // Note: Tree-based methods handle regularization through tree structure parameters
+        // (MaxDepth, MinSamplesSplit, etc.), not through data transformation
+        var predictionTasks = _trees.Select(tree => Task.Run(() => tree.Predict(input)));
         var predictions = await ParallelProcessingHelper.ProcessTasksInParallel(predictionTasks).ConfigureAwait(false);
 
         var result = new T[input.Rows];
@@ -186,8 +191,7 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
             );
         }
 
-        var regularizedPredictions = new Vector<T>(result);
-        return Regularization.Regularize(regularizedPredictions);
+        return new Vector<T>(result);
     }
 
     /// <summary>

@@ -127,9 +127,13 @@ public class MultivariateRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        // Multiply input by coefficients and add intercept
+        var predictions = input.Multiply(Coefficients);
         if (Options.UseIntercept)
-            input = input.AddConstantColumn(NumOps.One);
-        return input.Multiply(Coefficients);
+        {
+            predictions = predictions.Add(Intercept);
+        }
+        return predictions;
     }
 
     /// <summary>

@@ -1,6 +1,7 @@
 using System.IO;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -71,7 +72,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     private readonly int _numHeads;
     private readonly int _patchSize;
     private readonly int _vocabularySize;
-    private readonly string _languageModelType;
+    private readonly LanguageModelBackbone _languageModelBackbone;
     private readonly int _numPerceiverTokens;
     private readonly int _maxImagesInContext;
     private readonly int _numPerceiverLayers;
@@ -100,7 +101,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     public int MaxImagesInContext => _maxImagesInContext;
 
     /// <inheritdoc/>
-    public string LanguageModelType => _languageModelType;
+    public LanguageModelBackbone LanguageModelBackbone => _languageModelBackbone;
 
     #endregion
 
@@ -147,7 +148,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         _numHeads = 16;
         _patchSize = 14;
         _vocabularySize = 32000;
-        _languageModelType = "chinchilla";
+        _languageModelBackbone = LanguageModelBackbone.Chinchilla;
         _numPerceiverLayers = 6;
 
         InferenceSession? visionEncoder = null;
@@ -159,7 +160,9 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
             languageModel = new InferenceSession(languageModelPath);
             _visionEncoder = visionEncoder;
             _languageModel = languageModel;
-            _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+            // Tokenizer is required for ONNX mode - must match the language model backbone
+            _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer),
+                $"Tokenizer is required for ONNX mode. Use AutoTokenizer.FromPretrained(\"{Tokenization.LanguageModelTokenizerFactory.GetHuggingFaceModelName(_languageModelBackbone)}\") or equivalent.");
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
             InitializeLayers();
@@ -189,7 +192,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         int numLmLayers = 32,
         int numHeads = 16,
         int vocabularySize = 32000,
-        string languageModelType = "chinchilla",
+        LanguageModelBackbone languageModelBackbone = LanguageModelBackbone.Chinchilla,
         int numPerceiverLayers = 6,
         ITokenizer? tokenizer = null,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
@@ -209,10 +212,11 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         _numHeads = numHeads;
         _patchSize = 14;
         _vocabularySize = vocabularySize;
-        _languageModelType = languageModelType;
+        _languageModelBackbone = languageModelBackbone;
         _numPerceiverLayers = numPerceiverLayers;
 
-        _tokenizer = tokenizer ?? ClipTokenizerFactory.CreateSimple();
+        // Use factory to create appropriate tokenizer for the backbone, or use provided tokenizer
+        _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(languageModelBackbone);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
 
@@ -1154,7 +1158,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
                 { "NumLmLayers", _numLmLayers },
                 { "NumPerceiverLayers", _numPerceiverLayers },
                 { "VocabularySize", _vocabularySize },
-                { "LanguageModelType", _languageModelType },
+                { "LanguageModelBackbone", _languageModelBackbone.ToString() },
                 { "UseNativeMode", _useNativeMode },
                 { "ParameterCount", ParameterCount },
                 { "TaskType", Architecture.TaskType.ToString() }
@@ -1178,7 +1182,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         writer.Write(_numHeads);
         writer.Write(_patchSize);
         writer.Write(_vocabularySize);
-        writer.Write(_languageModelType);
+        writer.Write((int)_languageModelBackbone);
         writer.Write(_numPerceiverLayers);
         writer.Write(_useNativeMode);
     }
@@ -1198,7 +1202,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         _ = reader.ReadInt32();
         _ = reader.ReadInt32();
         _ = reader.ReadInt32();
-        _ = reader.ReadString();
+        _ = (LanguageModelBackbone)reader.ReadInt32();
         _ = reader.ReadInt32();
         _ = reader.ReadBoolean();
     }
@@ -1225,7 +1229,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
                 _numLmLayers,
                 _numHeads,
                 _vocabularySize,
-                _languageModelType,
+                _languageModelBackbone,
                 _numPerceiverLayers,
                 _tokenizer,
                 freshOptimizer,

@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -81,7 +82,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     private readonly int _numHeads;
     private readonly int _patchSize;
     private readonly int _vocabularySize;
-    private readonly string _languageModelType;
+    private readonly LanguageModelBackbone _languageModelBackbone;
     private readonly string _visionEncoderType;
     private readonly int _numVisualTokens;
 
@@ -103,7 +104,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     #region ILLaVAModel Properties
 
     /// <inheritdoc/>
-    public string LanguageModelType => _languageModelType;
+    public LanguageModelBackbone LanguageModelBackbone => _languageModelBackbone;
 
     /// <inheritdoc/>
     public string VisionEncoderType => _visionEncoderType;
@@ -118,12 +119,19 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     /// <summary>
     /// Creates a LLaVA network using pretrained ONNX models.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For ONNX mode, you MUST provide a tokenizer that matches your language model backbone.
+    /// Use <see cref="HuggingFace.AutoTokenizer.FromPretrained(string, string?)"/> to load
+    /// the correct pretrained tokenizer.
+    /// </para>
+    /// </remarks>
     public LLaVANeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         string visionEncoderPath,
         string languageModelPath,
         ITokenizer tokenizer,
-        string languageModelType = "llama",
+        LanguageModelBackbone languageModelBackbone = LanguageModelBackbone.LLaMA,
         string visionEncoderType = "clip-vit-l",
         int embeddingDimension = 4096,
         int maxSequenceLength = 2048,
@@ -144,7 +152,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         _useNativeMode = false;
         _visionEncoderPath = visionEncoderPath;
         _languageModelPath = languageModelPath;
-        _languageModelType = languageModelType.ToLowerInvariant();
+        _languageModelBackbone = languageModelBackbone;
         _visionEncoderType = visionEncoderType.ToLowerInvariant();
         _embeddingDimension = embeddingDimension;
         _maxSequenceLength = maxSequenceLength;
@@ -167,7 +175,9 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
             languageModel = new InferenceSession(languageModelPath);
             _visionEncoder = visionEncoder;
             _languageModel = languageModel;
-            _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+            // Tokenizer is required for ONNX mode - must match the language model backbone
+            _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer),
+                $"Tokenizer is required for ONNX mode. Use AutoTokenizer.FromPretrained(\"{Tokenization.LanguageModelTokenizerFactory.GetHuggingFaceModelName(languageModelBackbone)}\") or equivalent.");
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
             InitializeLayers();
@@ -183,6 +193,14 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     /// <summary>
     /// Creates a LLaVA network using native library layers.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// In native training mode, a default tokenizer appropriate for the language model backbone
+    /// will be created if not provided. For production inference, consider using
+    /// <see cref="HuggingFace.AutoTokenizer.FromPretrained(string, string?)"/> with the model name
+    /// from <see cref="Tokenization.LanguageModelTokenizerFactory.GetHuggingFaceModelName(LanguageModelBackbone)"/>.
+    /// </para>
+    /// </remarks>
     public LLaVANeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         int imageSize = 336,
@@ -195,7 +213,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         int numVisionLayers = 24,
         int numLmLayers = 32,
         int numHeads = 16,
-        string languageModelType = "llama",
+        LanguageModelBackbone languageModelBackbone = LanguageModelBackbone.LLaMA,
         string visionEncoderType = "clip-vit-l",
         ITokenizer? tokenizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
@@ -213,11 +231,12 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         _numHeads = numHeads;
         _patchSize = patchSize;
         _vocabularySize = vocabularySize;
-        _languageModelType = languageModelType.ToLowerInvariant();
+        _languageModelBackbone = languageModelBackbone;
         _visionEncoderType = visionEncoderType.ToLowerInvariant();
         _numVisualTokens = (imageSize / patchSize) * (imageSize / patchSize);
 
-        _tokenizer = tokenizer ?? Tokenization.ClipTokenizerFactory.CreateSimple();
+        // Use factory to create appropriate tokenizer for the backbone, or use provided tokenizer
+        _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(languageModelBackbone);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
 
@@ -1268,7 +1287,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
                 { "ImageSize", _imageSize },
                 { "EmbeddingDimension", _embeddingDimension },
                 { "MaxSequenceLength", _maxSequenceLength },
-                { "LanguageModelType", _languageModelType },
+                { "LanguageModelBackbone", (int)_languageModelBackbone },
                 { "VisionEncoderType", _visionEncoderType },
                 { "NumVisualTokens", _numVisualTokens },
                 { "VisionHiddenDim", _visionHiddenDim },
@@ -1296,7 +1315,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         writer.Write(_patchSize);
         writer.Write(_vocabularySize);
         writer.Write(_numVisualTokens);
-        writer.Write(_languageModelType);
+        writer.Write((int)_languageModelBackbone);
         writer.Write(_visionEncoderType);
         writer.Write(_useNativeMode);
     }
@@ -1315,7 +1334,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         _ = reader.ReadInt32(); // patchSize
         _ = reader.ReadInt32(); // vocabularySize
         _ = reader.ReadInt32(); // numVisualTokens
-        _ = reader.ReadString(); // languageModelType
+        _ = reader.ReadInt32(); // languageModelBackbone (enum as int)
         _ = reader.ReadString(); // visionEncoderType
         _ = reader.ReadBoolean(); // useNativeMode
     }
@@ -1335,7 +1354,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
             _numVisionLayers,
             _numLmLayers,
             _numHeads,
-            _languageModelType,
+            _languageModelBackbone,
             _visionEncoderType);
     }
 

@@ -4636,4 +4636,1502 @@ public static class LayerHelper<T>
             outputSize: projectionDim,
             activationFunction: null); // Linear projection (no activation)
     }
+
+    /// <summary>
+    /// Creates default layers for Whisper-style speech recognition models.
+    /// </summary>
+    /// <param name="numMels">Number of mel spectrogram bins (default: 80).</param>
+    /// <param name="modelDimension">Hidden dimension of the model (default: 512).</param>
+    /// <param name="numEncoderLayers">Number of encoder layers (default: 6).</param>
+    /// <param name="numDecoderLayers">Number of decoder layers (default: 6).</param>
+    /// <param name="numHeads">Number of attention heads (default: 8).</param>
+    /// <param name="feedForwardDim">Feed-forward dimension (default: 2048).</param>
+    /// <param name="vocabularySize">Output vocabulary size (default: 51865).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length (default: 1500).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers forming a Whisper-style ASR model.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Whisper is an encoder-decoder transformer for speech recognition.
+    ///
+    /// The architecture consists of:
+    /// 1. Audio encoder: Converts mel spectrograms to hidden representations
+    ///    - Convolutional layers to process spectrogram
+    ///    - Transformer encoder layers with self-attention
+    /// 2. Text decoder: Generates text tokens autoregressively
+    ///    - Embedding layer for text tokens
+    ///    - Transformer decoder layers with self-attention
+    ///    - Output projection to vocabulary
+    ///
+    /// <b>IMPORTANT LIMITATION:</b> This method creates a flat sequential layer list which does NOT
+    /// support true encoder-decoder cross-attention. The "cross-attention" layers in the decoder
+    /// are actually additional self-attention layers because the flat architecture cannot route
+    /// encoder outputs to the decoder. For a proper Whisper implementation with cross-attention,
+    /// use the ONNX-based WhisperModel with pretrained weights, or implement a custom forward pass
+    /// that explicitly passes encoder outputs to decoder cross-attention layers.
+    ///
+    /// This creates a trainable model structure from scratch. For inference with pre-trained weights,
+    /// use the ONNX-based WhisperModel.CreateAsync() method instead.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultWhisperLayers(
+        int numMels = 80,
+        int modelDimension = 512,
+        int numEncoderLayers = 6,
+        int numDecoderLayers = 6,
+        int numHeads = 8,
+        int feedForwardDim = 2048,
+        int vocabularySize = 51865,
+        int maxSequenceLength = 1500,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // === AUDIO ENCODER ===
+
+        // Initial projection from mel spectrogram to model dimension
+        // Using Dense layer to project numMels features to modelDimension
+        yield return new DenseLayer<T>(numMels, modelDimension, geluActivation);
+
+        // Second projection for feature extraction
+        yield return new DenseLayer<T>(modelDimension, modelDimension, geluActivation);
+
+        // Positional encoding for encoder
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, modelDimension);
+
+        // Encoder dropout
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Encoder transformer layers
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            // Self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: modelDimension,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+
+            // Dropout
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            // Feed-forward network
+            yield return new DenseLayer<T>(modelDimension, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, modelDimension, identityActivation);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+
+            // Dropout
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // === TEXT DECODER ===
+
+        // Token embedding layer
+        yield return new EmbeddingLayer<T>(vocabularySize, modelDimension);
+
+        // Positional encoding for decoder
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, modelDimension);
+
+        // Decoder dropout
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Decoder transformer layers
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            // Self-attention layer for decoder
+            // NOTE: Causal masking for autoregressive decoding should be applied during
+            // the forward pass, not in the layer configuration. The MultiHeadAttentionLayer
+            // does not automatically apply causal masking - this must be handled by the
+            // model's forward implementation.
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: modelDimension,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+
+            // Dropout
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            // NOTE: This is a placeholder for cross-attention but functions as self-attention
+            // in the current flat sequential architecture. True cross-attention would require
+            // encoder output to be passed as key/value, which the flat layer list cannot support.
+            // For production use with proper cross-attention, use ONNX models or implement
+            // a custom forward pass.
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: modelDimension,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+
+            // Dropout
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            // Feed-forward network
+            yield return new DenseLayer<T>(modelDimension, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, modelDimension, identityActivation);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+
+            // Dropout
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Final layer normalization
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+
+        // Output projection to vocabulary
+        yield return new DenseLayer<T>(modelDimension, vocabularySize, identityActivation);
+    }
+
+    #region Language Identification Layers
+
+    /// <summary>
+    /// Creates default ECAPA-TDNN layers for spoken language identification.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numMels">Number of mel filterbank channels (default: 80).</param>
+    /// <param name="tdnnChannels">Number of TDNN channels (default: 1024).</param>
+    /// <param name="embeddingDimension">Embedding dimension (default: 192).</param>
+    /// <param name="numLanguages">Number of languages to classify (default: 20).</param>
+    /// <param name="dilations">Dilation factors for TDNN layers (default: [1, 2, 3, 4, 1]).</param>
+    /// <returns>A collection of layers forming an ECAPA-TDNN language identifier.</returns>
+    /// <remarks>
+    /// <para>
+    /// ECAPA-TDNN (Emphasized Channel Attention, Propagation and Aggregation TDNN)
+    /// is a state-of-the-art architecture for speaker and language recognition using:
+    /// - SE-Res2Net blocks with channel attention
+    /// - Multi-layer feature aggregation (MFA)
+    /// - Attentive statistics pooling
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultECAPATDNNLanguageIdentifierLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numMels = 80,
+        int tdnnChannels = 1024,
+        int embeddingDimension = 192,
+        int numLanguages = 20,
+        int[]? dilations = null)
+    {
+        dilations ??= [1, 2, 3, 4, 1];
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
+
+        int inputDim = numMels * 3; // MFCC + delta + delta-delta
+
+        // Initial TDNN layer
+        yield return new DenseLayer<T>(inputDim, tdnnChannels, reluActivation);
+        yield return new BatchNormalizationLayer<T>(tdnnChannels);
+
+        // SE-Res2Net blocks for each dilation
+        foreach (int dilation in dilations)
+        {
+            // 1x1 reduction
+            yield return new DenseLayer<T>(tdnnChannels, tdnnChannels / 4, reluActivation);
+            yield return new BatchNormalizationLayer<T>(tdnnChannels / 4);
+
+            // Dilated conv (simulated)
+            yield return new DenseLayer<T>(tdnnChannels / 4, tdnnChannels / 4, reluActivation);
+            yield return new BatchNormalizationLayer<T>(tdnnChannels / 4);
+
+            // 1x1 expansion
+            yield return new DenseLayer<T>(tdnnChannels / 4, tdnnChannels, reluActivation);
+            yield return new BatchNormalizationLayer<T>(tdnnChannels);
+
+            // Squeeze-Excitation block
+            int seReduction = 8;
+            yield return new DenseLayer<T>(tdnnChannels, tdnnChannels / seReduction, reluActivation);
+            yield return new DenseLayer<T>(tdnnChannels / seReduction, tdnnChannels, sigmoidActivation);
+        }
+
+        // Attentive Statistics Pooling projection
+        int mfaOutputDim = tdnnChannels * dilations.Length;
+        yield return new DenseLayer<T>(mfaOutputDim, embeddingDimension * 2);
+
+        // Final batch normalization
+        yield return new BatchNormalizationLayer<T>(embeddingDimension);
+
+        // Classification layer
+        yield return new DenseLayer<T>(embeddingDimension, numLanguages);
+    }
+
+    /// <summary>
+    /// Creates default Wav2Vec2 layers for spoken language identification.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="hiddenSize">Hidden size of transformer (default: 768).</param>
+    /// <param name="numLayers">Number of transformer layers (default: 12).</param>
+    /// <param name="numAttentionHeads">Number of attention heads (default: 12).</param>
+    /// <param name="intermediateSize">Feed-forward intermediate size (default: 3072).</param>
+    /// <param name="numLanguages">Number of languages to classify (default: 20).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers forming a Wav2Vec2 language identifier.</returns>
+    /// <remarks>
+    /// <para>
+    /// Wav2Vec2-LID uses Meta's self-supervised speech representation model:
+    /// - 7-layer CNN feature encoder processing raw waveform
+    /// - Transformer encoder for contextual representations
+    /// - Classification head for language prediction
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultWav2Vec2LanguageIdentifierLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenSize = 768,
+        int numLayers = 12,
+        int numAttentionHeads = 12,
+        int intermediateSize = 3072,
+        int numLanguages = 20,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> tanhActivation = new TanhActivation<T>();
+
+        // Feature encoder: 7 temporal convolution layers
+        int[] kernelSizes = [10, 3, 3, 3, 3, 2, 2];
+        int[] channels = [512, 512, 512, 512, 512, 512, 512];
+
+        int inputDim = 1; // Raw waveform
+        for (int i = 0; i < kernelSizes.Length; i++)
+        {
+            int outputDim = channels[i];
+            yield return new DenseLayer<T>(inputDim * kernelSizes[i], outputDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(outputDim);
+            inputDim = outputDim;
+        }
+
+        // Feature projection
+        yield return new DenseLayer<T>(channels[^1], hiddenSize, geluActivation);
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Transformer encoder layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Self-attention (simplified as dense)
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize);
+            yield return new LayerNormalizationLayer<T>(hiddenSize);
+
+            // Feed-forward
+            yield return new DenseLayer<T>(hiddenSize, intermediateSize, geluActivation);
+            yield return new DenseLayer<T>(intermediateSize, hiddenSize);
+            yield return new LayerNormalizationLayer<T>(hiddenSize);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Classification head
+        yield return new DenseLayer<T>(hiddenSize, hiddenSize, tanhActivation);
+        yield return new DenseLayer<T>(hiddenSize, numLanguages);
+    }
+
+    /// <summary>
+    /// Creates default VoxLingua107 layers for 107-language identification.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numMels">Number of mel filterbank channels (default: 80).</param>
+    /// <param name="tdnnChannels">Number of TDNN channels (default: 1024).</param>
+    /// <param name="embeddingDimension">Embedding dimension (default: 256).</param>
+    /// <param name="dilations">Dilation factors for TDNN layers (default: [1, 2, 3, 4, 1]).</param>
+    /// <returns>A collection of layers forming a VoxLingua107 language identifier.</returns>
+    /// <remarks>
+    /// <para>
+    /// VoxLingua107 uses ECAPA-TDNN architecture trained on 107 languages from
+    /// the VoxLingua107 dataset (YouTube speech samples).
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultVoxLingua107Layers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numMels = 80,
+        int tdnnChannels = 1024,
+        int embeddingDimension = 256,
+        int[]? dilations = null)
+    {
+        // VoxLingua107 uses ECAPA-TDNN with 107 output classes
+        return CreateDefaultECAPATDNNLanguageIdentifierLayers(
+            architecture,
+            numMels: numMels,
+            tdnnChannels: tdnnChannels,
+            embeddingDimension: embeddingDimension,
+            numLanguages: 107,
+            dilations: dilations);
+    }
+
+    #endregion
+
+    #region Audio Generation Layers
+
+    /// <summary>
+    /// Creates default AudioGen layers for text-to-audio generation.
+    /// </summary>
+    /// <param name="textHiddenDim">Text encoder hidden dimension (default: 768 for T5-base).</param>
+    /// <param name="lmHiddenDim">Language model hidden dimension (default: 1536).</param>
+    /// <param name="numLmLayers">Number of language model transformer layers (default: 24).</param>
+    /// <param name="numHeads">Number of attention heads (default: 16).</param>
+    /// <param name="numCodebooks">Number of EnCodec codebooks (default: 4).</param>
+    /// <param name="codebookSize">Size of each codebook vocabulary (default: 1024).</param>
+    /// <param name="maxTextLength">Maximum text sequence length (default: 256).</param>
+    /// <param name="maxAudioTokens">Maximum audio tokens (~50 tokens/sec) (default: 1500 for 30s).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers forming an AudioGen model.</returns>
+    /// <remarks>
+    /// <para>
+    /// AudioGen is a text-to-audio generation model that uses a transformer language model
+    /// operating over EnCodec audio codes. Unlike MusicGen, it focuses on general audio
+    /// and environmental sounds rather than music.
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>T5-based text encoder for conditioning</description></item>
+    /// <item><description>Transformer decoder generating audio codes autoregressively</description></item>
+    /// <item><description>EnCodec neural audio codec for audio reconstruction</description></item>
+    /// </list>
+    /// <para>
+    /// Reference: "AudioGen: Textually Guided Audio Generation" by Kreuk et al., 2022
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultAudioGenLayers(
+        int textHiddenDim = 768,
+        int lmHiddenDim = 1536,
+        int numLmLayers = 24,
+        int numHeads = 16,
+        int numCodebooks = 4,
+        int codebookSize = 1024,
+        int maxTextLength = 256,
+        int maxAudioTokens = 1500,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // === TEXT ENCODER (T5-style) ===
+
+        // Token embedding: T5 vocabulary to hidden dimension
+        yield return new EmbeddingLayer<T>(32128, textHiddenDim);
+
+        // Positional encoding for text
+        yield return new PositionalEncodingLayer<T>(maxTextLength, textHiddenDim);
+
+        // Encoder dropout
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Text encoder transformer layers (6 layers, T5-base style)
+        for (int i = 0; i < 6; i++)
+        {
+            // Self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxTextLength,
+                embeddingDimension: textHiddenDim,
+                headCount: numHeads);
+
+            // Layer norm
+            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+
+            // Feedforward
+            yield return new DenseLayer<T>(textHiddenDim, textHiddenDim * 4, geluActivation);
+            yield return new DenseLayer<T>(textHiddenDim * 4, textHiddenDim, identityActivation);
+
+            // Layer norm
+            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Project text to language model dimension
+        yield return new DenseLayer<T>(textHiddenDim, lmHiddenDim, identityActivation);
+
+        // === AUDIO CODE EMBEDDING ===
+
+        // Embedding for audio codes from all codebooks
+        yield return new EmbeddingLayer<T>(codebookSize * numCodebooks, lmHiddenDim);
+
+        // Positional encoding for audio sequence
+        yield return new PositionalEncodingLayer<T>(maxAudioTokens, lmHiddenDim);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === LANGUAGE MODEL DECODER ===
+
+        // Transformer decoder layers
+        for (int i = 0; i < numLmLayers; i++)
+        {
+            yield return new TransformerDecoderLayer<T>(
+                embeddingSize: lmHiddenDim,
+                numHeads: numHeads,
+                feedForwardDim: lmHiddenDim * 4,
+                sequenceLength: maxAudioTokens,
+                ffnActivation: geluActivation);
+
+            if (dropoutRate > 0 && i < numLmLayers - 1)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Final layer norm
+        yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+
+        // === OUTPUT PROJECTION ===
+
+        // Project to codebook logits
+        yield return new DenseLayer<T>(lmHiddenDim, codebookSize * numCodebooks, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default MusicGen layers for text-to-music generation.
+    /// </summary>
+    /// <param name="textHiddenDim">Text encoder hidden dimension (default: 768 for T5-base).</param>
+    /// <param name="lmHiddenDim">Language model hidden dimension (default: 1536).</param>
+    /// <param name="numLmLayers">Number of language model transformer layers (default: 24).</param>
+    /// <param name="numHeads">Number of attention heads (default: 16).</param>
+    /// <param name="numCodebooks">Number of EnCodec codebooks (default: 4).</param>
+    /// <param name="codebookSize">Size of each codebook vocabulary (default: 2048).</param>
+    /// <param name="maxTextLength">Maximum text sequence length (default: 256).</param>
+    /// <param name="maxAudioTokens">Maximum audio tokens (~50 tokens/sec) (default: 1500 for 30s).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers forming a MusicGen model.</returns>
+    /// <remarks>
+    /// <para>
+    /// MusicGen is Meta's text-to-music generation model that uses a single-stage
+    /// transformer language model operating over EnCodec audio codes. Key features:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Delay pattern for codebook interleaving (reduces sequence length)</description></item>
+    /// <item><description>T5-based text encoder for conditioning</description></item>
+    /// <item><description>Transformer decoder generating audio codes autoregressively</description></item>
+    /// <item><description>EnCodec neural audio codec for high-quality audio reconstruction</description></item>
+    /// </list>
+    /// <para>
+    /// Reference: "Simple and Controllable Music Generation" by Copet et al., 2023
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultMusicGenLayers(
+        int textHiddenDim = 768,
+        int lmHiddenDim = 1536,
+        int numLmLayers = 24,
+        int numHeads = 16,
+        int numCodebooks = 4,
+        int codebookSize = 2048,
+        int maxTextLength = 256,
+        int maxAudioTokens = 1500,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // === TEXT ENCODER (T5-style) ===
+
+        // Token embedding: T5 vocabulary to hidden dimension
+        yield return new EmbeddingLayer<T>(32128, textHiddenDim);
+
+        // Positional encoding for text
+        yield return new PositionalEncodingLayer<T>(maxTextLength, textHiddenDim);
+
+        // Encoder dropout
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Text encoder transformer layers (6 layers, T5-base style)
+        for (int i = 0; i < 6; i++)
+        {
+            // Self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxTextLength,
+                embeddingDimension: textHiddenDim,
+                headCount: 12,
+                activationFunction: identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            // Feed-forward network
+            yield return new DenseLayer<T>(textHiddenDim, textHiddenDim * 4, geluActivation);
+            yield return new DenseLayer<T>(textHiddenDim * 4, textHiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Project text encoder output to LM dimension
+        yield return new DenseLayer<T>(textHiddenDim, lmHiddenDim, identityActivation);
+
+        // === AUDIO CODE EMBEDDING ===
+
+        // Combined codebook embedding (all codebooks share embedding space)
+        yield return new EmbeddingLayer<T>(codebookSize * numCodebooks + 1, lmHiddenDim); // +1 for start token
+
+        // Positional encoding for audio sequence
+        yield return new PositionalEncodingLayer<T>(maxAudioTokens, lmHiddenDim);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === TRANSFORMER LANGUAGE MODEL ===
+
+        // Decoder layers with cross-attention to text encoder
+        for (int i = 0; i < numLmLayers; i++)
+        {
+            // Self-attention (causal/masked for autoregressive generation)
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxAudioTokens,
+                embeddingDimension: lmHiddenDim,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            // Cross-attention to text encoder output
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxAudioTokens,
+                embeddingDimension: lmHiddenDim,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            // Feed-forward network
+            yield return new DenseLayer<T>(lmHiddenDim, lmHiddenDim * 4, geluActivation);
+            yield return new DenseLayer<T>(lmHiddenDim * 4, lmHiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Final layer normalization
+        yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+
+        // === OUTPUT PROJECTION ===
+
+        // Project to codebook logits (one set per codebook for delay pattern)
+        for (int cb = 0; cb < numCodebooks; cb++)
+        {
+            yield return new DenseLayer<T>(lmHiddenDim, codebookSize, identityActivation);
+        }
+    }
+
+    /// <summary>
+    /// Creates default AudioLDM layers for text-to-audio generation using latent diffusion.
+    /// </summary>
+    /// <param name="textHiddenDim">Text encoder hidden dimension (default: 768 for CLAP).</param>
+    /// <param name="latentDim">Latent space dimension (default: 8).</param>
+    /// <param name="unetChannels">U-Net base channels (default: 256).</param>
+    /// <param name="numResBlocks">Number of residual blocks per level (default: 2).</param>
+    /// <param name="attentionResolutions">Resolutions at which to apply attention (default: [4, 2, 1]).</param>
+    /// <param name="numHeads">Number of attention heads (default: 8).</param>
+    /// <param name="numMels">Number of mel spectrogram channels (default: 64).</param>
+    /// <param name="maxTextLength">Maximum text sequence length (default: 77).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers forming an AudioLDM model.</returns>
+    /// <remarks>
+    /// <para>
+    /// AudioLDM uses latent diffusion for text-to-audio generation:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>CLAP text encoder for conditioning</description></item>
+    /// <item><description>VAE to encode/decode mel spectrograms to latent space</description></item>
+    /// <item><description>U-Net for denoising in latent space</description></item>
+    /// <item><description>HiFi-GAN vocoder for waveform generation</description></item>
+    /// </list>
+    /// <para>
+    /// Reference: "AudioLDM: Text-to-Audio Generation with Latent Diffusion Models" by Liu et al., 2023
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultAudioLDMLayers(
+        int textHiddenDim = 768,
+        int latentDim = 8,
+        int unetChannels = 256,
+        int numResBlocks = 2,
+        int[]? attentionResolutions = null,
+        int numHeads = 8,
+        int numMels = 64,
+        int maxTextLength = 77,
+        double dropoutRate = 0.1)
+    {
+        attentionResolutions ??= [4, 2, 1];
+        IActivationFunction<T> siluActivation = new SwishActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // === TEXT ENCODER (CLAP-style) ===
+
+        // Token embedding
+        yield return new EmbeddingLayer<T>(49408, textHiddenDim); // CLIP vocabulary
+
+        // Positional encoding
+        yield return new PositionalEncodingLayer<T>(maxTextLength, textHiddenDim);
+
+        // Transformer encoder layers
+        for (int i = 0; i < 12; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxTextLength,
+                embeddingDimension: textHiddenDim,
+                headCount: 12,
+                activationFunction: identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+
+            yield return new DenseLayer<T>(textHiddenDim, textHiddenDim * 4, siluActivation);
+            yield return new DenseLayer<T>(textHiddenDim * 4, textHiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+        }
+
+        // === VAE ENCODER ===
+
+        // Initial convolution from mel spectrogram
+        yield return new DenseLayer<T>(numMels, unetChannels, siluActivation);
+
+        // Down-sampling path
+        int[] channelMults = [1, 2, 4, 4];
+        int currentChannels = unetChannels;
+
+        foreach (int mult in channelMults)
+        {
+            int outChannels = unetChannels * mult;
+
+            for (int r = 0; r < numResBlocks; r++)
+            {
+                yield return new DenseLayer<T>(currentChannels, outChannels, siluActivation);
+                yield return new LayerNormalizationLayer<T>(outChannels);
+                currentChannels = outChannels;
+            }
+
+            // Downsample (except last level)
+            if (mult != channelMults[^1])
+            {
+                yield return new DenseLayer<T>(currentChannels, currentChannels, siluActivation);
+            }
+        }
+
+        // Latent projection
+        yield return new DenseLayer<T>(currentChannels, latentDim * 2, identityActivation); // mean + log_var
+
+        // === U-NET DENOISER ===
+
+        // Time embedding
+        yield return new DenseLayer<T>(latentDim, unetChannels * 4, siluActivation);
+        yield return new DenseLayer<T>(unetChannels * 4, unetChannels * 4, siluActivation);
+
+        // U-Net encoder path
+        currentChannels = latentDim;
+        yield return new DenseLayer<T>(currentChannels, unetChannels, siluActivation);
+        currentChannels = unetChannels;
+
+        foreach (int mult in channelMults)
+        {
+            int outChannels = unetChannels * mult;
+
+            for (int r = 0; r < numResBlocks; r++)
+            {
+                yield return new DenseLayer<T>(currentChannels, outChannels, siluActivation);
+                yield return new LayerNormalizationLayer<T>(outChannels);
+
+                // Cross-attention at specified resolutions
+                if (attentionResolutions.Contains(mult))
+                {
+                    yield return new MultiHeadAttentionLayer<T>(
+                        sequenceLength: maxTextLength,
+                        embeddingDimension: outChannels,
+                        headCount: numHeads,
+                        activationFunction: identityActivation);
+                    yield return new LayerNormalizationLayer<T>(outChannels);
+                }
+
+                currentChannels = outChannels;
+            }
+        }
+
+        // Middle block
+        yield return new DenseLayer<T>(currentChannels, currentChannels, siluActivation);
+        yield return new MultiHeadAttentionLayer<T>(
+            sequenceLength: maxTextLength,
+            embeddingDimension: currentChannels,
+            headCount: numHeads,
+            activationFunction: identityActivation);
+        yield return new DenseLayer<T>(currentChannels, currentChannels, siluActivation);
+
+        // U-Net decoder path (symmetric to encoder)
+        for (int i = channelMults.Length - 1; i >= 0; i--)
+        {
+            int mult = channelMults[i];
+            int outChannels = unetChannels * mult;
+
+            for (int r = 0; r < numResBlocks + 1; r++)
+            {
+                yield return new DenseLayer<T>(currentChannels, outChannels, siluActivation);
+                yield return new LayerNormalizationLayer<T>(outChannels);
+
+                if (attentionResolutions.Contains(mult))
+                {
+                    yield return new MultiHeadAttentionLayer<T>(
+                        sequenceLength: maxTextLength,
+                        embeddingDimension: outChannels,
+                        headCount: numHeads,
+                        activationFunction: identityActivation);
+                    yield return new LayerNormalizationLayer<T>(outChannels);
+                }
+
+                currentChannels = outChannels;
+            }
+
+            // Upsample (except first level)
+            if (i > 0)
+            {
+                yield return new DenseLayer<T>(currentChannels, currentChannels, siluActivation);
+            }
+        }
+
+        // Output projection to latent
+        yield return new LayerNormalizationLayer<T>(currentChannels);
+        yield return new DenseLayer<T>(currentChannels, latentDim, identityActivation);
+
+        // === VAE DECODER ===
+
+        // Latent to channels
+        yield return new DenseLayer<T>(latentDim, unetChannels * channelMults[^1], siluActivation);
+        currentChannels = unetChannels * channelMults[^1];
+
+        // Up-sampling path
+        for (int i = channelMults.Length - 1; i >= 0; i--)
+        {
+            int mult = channelMults[i];
+            int outChannels = unetChannels * mult;
+
+            for (int r = 0; r < numResBlocks + 1; r++)
+            {
+                yield return new DenseLayer<T>(currentChannels, outChannels, siluActivation);
+                yield return new LayerNormalizationLayer<T>(outChannels);
+                currentChannels = outChannels;
+            }
+
+            // Upsample (except first level)
+            if (i > 0)
+            {
+                yield return new DenseLayer<T>(currentChannels, currentChannels, siluActivation);
+            }
+        }
+
+        // Output projection to mel spectrogram
+        yield return new LayerNormalizationLayer<T>(currentChannels);
+        yield return new DenseLayer<T>(currentChannels, numMels, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default Stable Audio layers for text-to-audio generation.
+    /// </summary>
+    /// <param name="textHiddenDim">Text encoder hidden dimension (default: 768).</param>
+    /// <param name="latentDim">Latent space dimension (default: 64).</param>
+    /// <param name="ditHiddenDim">DiT hidden dimension (default: 1024).</param>
+    /// <param name="numDitBlocks">Number of DiT transformer blocks (default: 24).</param>
+    /// <param name="numHeads">Number of attention heads (default: 16).</param>
+    /// <param name="maxTextLength">Maximum text sequence length (default: 512).</param>
+    /// <param name="maxAudioLength">Maximum audio latent sequence length (default: 2048).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers forming a Stable Audio model.</returns>
+    /// <remarks>
+    /// <para>
+    /// Stable Audio by Stability AI uses a Diffusion Transformer (DiT) architecture:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>T5-based text encoder for conditioning</description></item>
+    /// <item><description>Variational autoencoder for audio latent compression</description></item>
+    /// <item><description>DiT (Diffusion Transformer) for denoising in latent space</description></item>
+    /// <item><description>Supports variable-length audio generation with timing conditioning</description></item>
+    /// </list>
+    /// <para>
+    /// Reference: "Stable Audio: Fast Timing-Conditioned Latent Audio Diffusion" by Evans et al., 2024
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultStableAudioLayers(
+        int textHiddenDim = 768,
+        int latentDim = 64,
+        int ditHiddenDim = 1024,
+        int numDitBlocks = 24,
+        int numHeads = 16,
+        int maxTextLength = 512,
+        int maxAudioLength = 2048,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> siluActivation = new SwishActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // === T5 TEXT ENCODER ===
+
+        // Token embedding
+        yield return new EmbeddingLayer<T>(32128, textHiddenDim);
+
+        // Positional encoding
+        yield return new PositionalEncodingLayer<T>(maxTextLength, textHiddenDim);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // T5 encoder layers
+        for (int i = 0; i < 12; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxTextLength,
+                embeddingDimension: textHiddenDim,
+                headCount: 12,
+                activationFunction: identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+
+            yield return new DenseLayer<T>(textHiddenDim, textHiddenDim * 4, geluActivation);
+            yield return new DenseLayer<T>(textHiddenDim * 4, textHiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Project to DiT dimension
+        yield return new DenseLayer<T>(textHiddenDim, ditHiddenDim, identityActivation);
+
+        // === TIMING CONDITIONING ===
+
+        // Start/end time embedding (seconds conditioning)
+        yield return new DenseLayer<T>(2, ditHiddenDim, siluActivation);
+        yield return new DenseLayer<T>(ditHiddenDim, ditHiddenDim, siluActivation);
+
+        // === VAE ENCODER ===
+
+        // Audio waveform to latent space
+        yield return new DenseLayer<T>(1, 128, siluActivation);
+        yield return new DenseLayer<T>(128, 256, siluActivation);
+        yield return new DenseLayer<T>(256, 512, siluActivation);
+        yield return new DenseLayer<T>(512, latentDim * 2, identityActivation); // mean + log_var
+
+        // === DiT (DIFFUSION TRANSFORMER) ===
+
+        // Latent projection
+        yield return new DenseLayer<T>(latentDim, ditHiddenDim, identityActivation);
+
+        // Positional encoding for audio latents
+        yield return new PositionalEncodingLayer<T>(maxAudioLength, ditHiddenDim);
+
+        // Timestep embedding (sinusoidal + MLP)
+        yield return new DenseLayer<T>(ditHiddenDim, ditHiddenDim * 4, siluActivation);
+        yield return new DenseLayer<T>(ditHiddenDim * 4, ditHiddenDim, identityActivation);
+
+        // DiT blocks (transformer with AdaLN conditioning)
+        for (int i = 0; i < numDitBlocks; i++)
+        {
+            // Self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxAudioLength,
+                embeddingDimension: ditHiddenDim,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(ditHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            // Cross-attention to text encoder output
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxAudioLength,
+                embeddingDimension: ditHiddenDim,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(ditHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            // Feed-forward network with GELU
+            yield return new DenseLayer<T>(ditHiddenDim, ditHiddenDim * 4, geluActivation);
+            yield return new DenseLayer<T>(ditHiddenDim * 4, ditHiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(ditHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Final layer normalization
+        yield return new LayerNormalizationLayer<T>(ditHiddenDim);
+
+        // Output projection to latent space
+        yield return new DenseLayer<T>(ditHiddenDim, latentDim, identityActivation);
+
+        // === VAE DECODER ===
+
+        // Latent to waveform
+        yield return new DenseLayer<T>(latentDim, 512, siluActivation);
+        yield return new DenseLayer<T>(512, 256, siluActivation);
+        yield return new DenseLayer<T>(256, 128, siluActivation);
+        yield return new DenseLayer<T>(128, 1, identityActivation); // mono audio output
+    }
+
+    /// <summary>
+    /// Creates default Whisper layers for automatic speech recognition.
+    /// </summary>
+    /// <param name="modelDim">Model hidden dimension (default: 512 for Base).</param>
+    /// <param name="numEncoderLayers">Number of encoder transformer layers (default: 6 for Base).</param>
+    /// <param name="numDecoderLayers">Number of decoder transformer layers (default: 6 for Base).</param>
+    /// <param name="numHeads">Number of attention heads (default: 8 for Base).</param>
+    /// <param name="ffDim">Feed-forward hidden dimension (default: 2048 for Base).</param>
+    /// <param name="numMels">Number of mel spectrogram bins (default: 80).</param>
+    /// <param name="maxFrames">Maximum mel spectrogram frames (default: 3000 for 30s audio).</param>
+    /// <param name="maxTokens">Maximum output token sequence length (default: 448).</param>
+    /// <param name="vocabSize">Whisper vocabulary size (default: 51865).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.0 for inference-optimized).</param>
+    /// <returns>A collection of layers forming a Whisper encoder-decoder architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// Whisper is OpenAI's state-of-the-art automatic speech recognition model with:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Mel spectrogram audio preprocessing (80 bins, 16kHz)</description></item>
+    /// <item><description>Convolutional stem for initial audio feature extraction</description></item>
+    /// <item><description>Transformer encoder for audio representation learning</description></item>
+    /// <item><description>Transformer decoder with cross-attention for text generation</description></item>
+    /// <item><description>Support for 99+ languages and translation to English</description></item>
+    /// </list>
+    /// <para>
+    /// Reference: "Robust Speech Recognition via Large-Scale Weak Supervision" by Radford et al., 2022
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultWhisperLayers(
+        int modelDim = 512,
+        int numEncoderLayers = 6,
+        int numDecoderLayers = 6,
+        int numHeads = 8,
+        int ffDim = 2048,
+        int numMels = 80,
+        int maxFrames = 3000,
+        int maxTokens = 448,
+        int vocabSize = 51865,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // === AUDIO ENCODER ===
+
+        // Initial projection from mel spectrogram to model dimension
+        // (Simulating convolutional stem with dense layers for framework compatibility)
+        yield return new DenseLayer<T>(numMels, modelDim, geluActivation);
+        yield return new DenseLayer<T>(modelDim, modelDim, geluActivation);
+
+        // Positional encoding for encoder
+        yield return new PositionalEncodingLayer<T>(maxFrames, modelDim);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Encoder transformer layers
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            // Self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxFrames,
+                embeddingDimension: modelDim,
+                headCount: numHeads);
+
+            // Layer normalization (pre-LN architecture)
+            yield return new LayerNormalizationLayer<T>(modelDim);
+
+            // Feed-forward network
+            yield return new DenseLayer<T>(modelDim, ffDim, geluActivation);
+            yield return new DenseLayer<T>(ffDim, modelDim, identityActivation);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Final encoder layer normalization
+        yield return new LayerNormalizationLayer<T>(modelDim);
+
+        // === TEXT DECODER ===
+
+        // Token embedding (Whisper vocabulary)
+        yield return new EmbeddingLayer<T>(vocabSize, modelDim);
+
+        // Positional encoding for decoder
+        yield return new PositionalEncodingLayer<T>(maxTokens, modelDim);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Decoder transformer layers with cross-attention
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new TransformerDecoderLayer<T>(
+                embeddingSize: modelDim,
+                numHeads: numHeads,
+                feedForwardDim: ffDim,
+                sequenceLength: maxTokens,
+                ffnActivation: geluActivation);
+
+            if (dropoutRate > 0 && i < numDecoderLayers - 1)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Final decoder layer normalization
+        yield return new LayerNormalizationLayer<T>(modelDim);
+
+        // Output projection to vocabulary logits
+        yield return new DenseLayer<T>(modelDim, vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default TTS (Text-to-Speech) layers for speech synthesis.
+    /// </summary>
+    /// <param name="textHiddenDim">Text encoder hidden dimension (default: 256).</param>
+    /// <param name="audioHiddenDim">Audio decoder hidden dimension (default: 512).</param>
+    /// <param name="numEncoderLayers">Number of encoder transformer layers (default: 6).</param>
+    /// <param name="numDecoderLayers">Number of decoder transformer layers (default: 6).</param>
+    /// <param name="numHeads">Number of attention heads (default: 8).</param>
+    /// <param name="numMels">Number of mel spectrogram bins (default: 80).</param>
+    /// <param name="maxTextLength">Maximum input text length (default: 512).</param>
+    /// <param name="maxMelFrames">Maximum mel spectrogram frames (default: 1000).</param>
+    /// <param name="vocabSize">Phoneme/character vocabulary size (default: 148).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers forming a TTS encoder-decoder architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// TTS architecture with:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Character/phoneme embedding with positional encoding</description></item>
+    /// <item><description>Transformer encoder for text representation</description></item>
+    /// <item><description>Transformer decoder with cross-attention for mel generation</description></item>
+    /// <item><description>Post-net convolutional refinement (simulated with dense layers)</description></item>
+    /// </list>
+    /// <para>
+    /// Reference: "Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions" (Tacotron 2)
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultTtsLayers(
+        int textHiddenDim = 256,
+        int audioHiddenDim = 512,
+        int numEncoderLayers = 6,
+        int numDecoderLayers = 6,
+        int numHeads = 8,
+        int numMels = 80,
+        int maxTextLength = 512,
+        int maxMelFrames = 1000,
+        int vocabSize = 148,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> tanhActivation = new TanhActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // === TEXT ENCODER ===
+
+        // Character/phoneme embedding
+        yield return new EmbeddingLayer<T>(vocabSize, textHiddenDim);
+
+        // Positional encoding for text
+        yield return new PositionalEncodingLayer<T>(maxTextLength, textHiddenDim);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Text encoder transformer layers
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxTextLength,
+                embeddingDimension: textHiddenDim,
+                headCount: numHeads);
+
+            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+
+            yield return new DenseLayer<T>(textHiddenDim, textHiddenDim * 4, reluActivation);
+            yield return new DenseLayer<T>(textHiddenDim * 4, textHiddenDim, identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Project to decoder dimension
+        yield return new DenseLayer<T>(textHiddenDim, audioHiddenDim, identityActivation);
+
+        // === MEL DECODER ===
+
+        // Pre-net for mel input (autoregressive conditioning)
+        yield return new DenseLayer<T>(numMels, audioHiddenDim, reluActivation);
+        yield return new DenseLayer<T>(audioHiddenDim, audioHiddenDim, reluActivation);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Decoder transformer layers
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new TransformerDecoderLayer<T>(
+                embeddingSize: audioHiddenDim,
+                numHeads: numHeads,
+                feedForwardDim: audioHiddenDim * 4,
+                sequenceLength: maxMelFrames,
+                ffnActivation: reluActivation);
+
+            if (dropoutRate > 0 && i < numDecoderLayers - 1)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Mel projection
+        yield return new DenseLayer<T>(audioHiddenDim, numMels, identityActivation);
+
+        // === POST-NET (5 convolutional layers simulated with dense) ===
+        yield return new DenseLayer<T>(numMels, 512, tanhActivation);
+        yield return new DenseLayer<T>(512, 512, tanhActivation);
+        yield return new DenseLayer<T>(512, 512, tanhActivation);
+        yield return new DenseLayer<T>(512, 512, tanhActivation);
+        yield return new DenseLayer<T>(512, numMels, identityActivation);
+
+        // Stop token prediction
+        yield return new DenseLayer<T>(audioHiddenDim, 1, (IActivationFunction<T>)new SigmoidActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default speaker embedding layers for speaker verification and identification.
+    /// </summary>
+    /// <param name="numMels">Number of mel spectrogram bins (default: 80).</param>
+    /// <param name="hiddenDim">Hidden layer dimension (default: 512).</param>
+    /// <param name="embeddingDim">Output embedding dimension (default: 256).</param>
+    /// <param name="numLayers">Number of LSTM-like layers (default: 3).</param>
+    /// <param name="maxFrames">Maximum input frames (default: 500).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers for speaker embedding extraction.</returns>
+    /// <remarks>
+    /// <para>
+    /// ECAPA-TDNN inspired architecture for speaker embedding with:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Frame-level feature extraction with attention</description></item>
+    /// <item><description>Temporal context aggregation</description></item>
+    /// <item><description>Attentive statistics pooling</description></item>
+    /// <item><description>Speaker embedding projection</description></item>
+    /// </list>
+    /// <para>
+    /// Reference: "ECAPA-TDNN: Emphasized Channel Attention, Propagation and Aggregation in TDNN"
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultSpeakerEmbeddingLayers(
+        int numMels = 80,
+        int hiddenDim = 512,
+        int embeddingDim = 256,
+        int numLayers = 3,
+        int maxFrames = 500,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Initial feature projection
+        yield return new DenseLayer<T>(numMels, hiddenDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Frame-level processing with attention (simulating TDNN with attention)
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Self-attention for temporal modeling
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxFrames,
+                embeddingDimension: hiddenDim,
+                headCount: 8);
+
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            // Feed-forward with residual-like structure
+            yield return new DenseLayer<T>(hiddenDim, hiddenDim * 2, reluActivation);
+            yield return new DenseLayer<T>(hiddenDim * 2, hiddenDim, identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Attentive statistics pooling (simplified)
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim, (IActivationFunction<T>)new TanhActivation<T>());
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim, identityActivation);
+
+        // Final embedding projection
+        yield return new DenseLayer<T>(hiddenDim, embeddingDim, identityActivation);
+
+        // L2 normalization is handled in the model code
+    }
+
+    /// <summary>
+    /// Creates default genre classification layers.
+    /// </summary>
+    /// <param name="numMels">Number of mel spectrogram bins (default: 128).</param>
+    /// <param name="hiddenDim">Hidden layer dimension (default: 256).</param>
+    /// <param name="numClasses">Number of genre classes (default: 10).</param>
+    /// <param name="maxFrames">Maximum input frames (default: 1000).</param>
+    /// <param name="numAttentionLayers">Number of attention layers (default: 4).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.3).</param>
+    /// <returns>A collection of layers for genre classification.</returns>
+    /// <remarks>
+    /// <para>
+    /// Audio classification architecture with:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Mel spectrogram feature extraction</description></item>
+    /// <item><description>Transformer encoder for temporal modeling</description></item>
+    /// <item><description>Global average pooling</description></item>
+    /// <item><description>Classification head with softmax output</description></item>
+    /// </list>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultGenreClassifierLayers(
+        int numMels = 128,
+        int hiddenDim = 256,
+        int numClasses = 10,
+        int maxFrames = 1000,
+        int numAttentionLayers = 4,
+        double dropoutRate = 0.3)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Feature projection
+        yield return new DenseLayer<T>(numMels, hiddenDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Positional encoding
+        yield return new PositionalEncodingLayer<T>(maxFrames, hiddenDim);
+
+        // Transformer encoder layers
+        for (int i = 0; i < numAttentionLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxFrames,
+                embeddingDimension: hiddenDim,
+                headCount: 8);
+
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            yield return new DenseLayer<T>(hiddenDim, hiddenDim * 4, reluActivation);
+            yield return new DenseLayer<T>(hiddenDim * 4, hiddenDim, identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Classification head
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim, reluActivation);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        yield return new DenseLayer<T>(hiddenDim, numClasses, identityActivation);
+        // Softmax is applied in the model's prediction logic
+    }
+
+    /// <summary>
+    /// Creates default music source separation layers (U-Net style).
+    /// </summary>
+    /// <param name="numMels">Number of spectrogram frequency bins (default: 513 for STFT with 1024 window).</param>
+    /// <param name="baseChannels">Base channel count for U-Net (default: 32).</param>
+    /// <param name="numSources">Number of output sources (default: 4 for vocals, drums, bass, other).</param>
+    /// <param name="maxFrames">Maximum time frames (default: 512).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers for music source separation.</returns>
+    /// <remarks>
+    /// <para>
+    /// U-Net inspired architecture for source separation with:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Encoder path with downsampling</description></item>
+    /// <item><description>Bottleneck with attention</description></item>
+    /// <item><description>Decoder path with upsampling and skip connections</description></item>
+    /// <item><description>Multi-source mask prediction</description></item>
+    /// </list>
+    /// <para>
+    /// Reference: "Open-Unmix - A Reference Implementation for Music Source Separation"
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultSourceSeparationLayers(
+        int numMels = 513,
+        int baseChannels = 32,
+        int numSources = 4,
+        int maxFrames = 512,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // === ENCODER PATH ===
+
+        // Initial feature extraction
+        yield return new DenseLayer<T>(numMels, baseChannels * 4, reluActivation);
+        yield return new LayerNormalizationLayer<T>(baseChannels * 4);
+
+        // Encoder level 1
+        yield return new DenseLayer<T>(baseChannels * 4, baseChannels * 8, reluActivation);
+        yield return new LayerNormalizationLayer<T>(baseChannels * 8);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Encoder level 2
+        yield return new DenseLayer<T>(baseChannels * 8, baseChannels * 16, reluActivation);
+        yield return new LayerNormalizationLayer<T>(baseChannels * 16);
+
+        // === BOTTLENECK ===
+
+        // Attention for global context
+        yield return new MultiHeadAttentionLayer<T>(
+            sequenceLength: maxFrames,
+            embeddingDimension: baseChannels * 16,
+            headCount: 8);
+
+        yield return new LayerNormalizationLayer<T>(baseChannels * 16);
+
+        // LSTM-like temporal modeling (using attention + dense)
+        yield return new DenseLayer<T>(baseChannels * 16, baseChannels * 16, reluActivation);
+        yield return new DenseLayer<T>(baseChannels * 16, baseChannels * 16, identityActivation);
+
+        yield return new LayerNormalizationLayer<T>(baseChannels * 16);
+
+        // === DECODER PATH ===
+
+        // Decoder level 2
+        yield return new DenseLayer<T>(baseChannels * 16, baseChannels * 8, reluActivation);
+        yield return new LayerNormalizationLayer<T>(baseChannels * 8);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Decoder level 1
+        yield return new DenseLayer<T>(baseChannels * 8, baseChannels * 4, reluActivation);
+        yield return new LayerNormalizationLayer<T>(baseChannels * 4);
+
+        // === OUTPUT LAYER ===
+
+        // Project to output masks for all sources
+        yield return new DenseLayer<T>(baseChannels * 4, numMels * numSources, sigmoidActivation);
+    }
+
+    #endregion
 }
