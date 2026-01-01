@@ -73,7 +73,7 @@ extern "C" __global__ void softmax(const float* input, float* output, int batchS
         sumExp += expVal;
     }
 
-    float invSum = 1.0f / sumExp;
+    float invSum = (sumExp > 0.0f) ? (1.0f / sumExp) : 1.0f;
     for (int f = 0; f < features; f++)
     {
         output[baseIdx + f] *= invSum;
@@ -105,7 +105,8 @@ extern "C" __global__ void divide_vectors(const float* A, const float* B, float*
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size) return;
-    C[idx] = A[idx] / B[idx];
+    float b = B[idx];
+    C[idx] = (b != 0.0f) ? (A[idx] / b) : 0.0f;
 }
 
 extern "C" __global__ void min_vectors(const float* A, const float* B, float* C, int size)

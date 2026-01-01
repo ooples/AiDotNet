@@ -201,7 +201,9 @@ public sealed class CudaBackend : IDirectGpuBackend
 
         using var _ = PushContext();
         int size = data.Length;
-        ulong byteSize = (ulong)(size * sizeof(float));
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(data), "Buffer size must be positive.");
+        ulong byteSize = (ulong)size * sizeof(float);
 
         CuBlasNative.CheckCudaResult(CuBlasNative.cuMemAlloc(out IntPtr devicePtr, byteSize), "cuMemAlloc");
 
@@ -231,8 +233,11 @@ public sealed class CudaBackend : IDirectGpuBackend
         if (!IsAvailable)
             throw new InvalidOperationException("CUDA backend is not available.");
 
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Buffer size must be positive.");
+
         using var _ = PushContext();
-        ulong byteSize = (ulong)(size * sizeof(float));
+        ulong byteSize = (ulong)size * sizeof(float);
         CuBlasNative.CheckCudaResult(CuBlasNative.cuMemAlloc(out IntPtr devicePtr, byteSize), "cuMemAlloc");
         CuBlasNative.CheckCudaResult(CuBlasNative.cuMemsetD32(devicePtr, 0, (ulong)size), "cuMemsetD32");
         return new CudaGpuBuffer(_cudaContext, devicePtr, size);
@@ -269,6 +274,8 @@ public sealed class CudaBackend : IDirectGpuBackend
         if (!IsAvailable)
             throw new InvalidOperationException("CUDA backend is not available.");
 
+        ValidateGemmArgs(A, B, C, M, N, K);
+
         using var _ = PushContext();
         float alphaVal = alpha;
         float betaVal = beta;
@@ -290,6 +297,7 @@ public sealed class CudaBackend : IDirectGpuBackend
 
     public IGpuBuffer MatMul(IGpuBuffer A, IGpuBuffer B, int M, int N, int K)
     {
+        ValidateGemmArgs(A, B, null, M, N, K);
         var output = AllocateBuffer(M * N);
         Gemm(A, B, output, M, N, K, 1.0f, 0.0f);
         return output;
@@ -299,6 +307,8 @@ public sealed class CudaBackend : IDirectGpuBackend
     {
         if (!IsAvailable)
             throw new InvalidOperationException("CUDA backend is not available.");
+
+        ValidateBatchedGemmArgs(A, B, C, M, N, K, batchCount);
 
         using var _ = PushContext();
         float alphaVal = alpha;
@@ -541,8 +551,15 @@ public sealed class CudaBackend : IDirectGpuBackend
         if (!IsAvailable)
             throw new InvalidOperationException("CUDA backend is not available.");
 
-        if (outerSize <= 0)
-            return;
+        if (outerSize <= 0 || reduceSize <= 0)
+            throw new ArgumentException("outerSize and reduceSize must be positive.");
+
+        long requiredInput = (long)outerSize * reduceSize;
+        if (requiredInput > int.MaxValue || A.Size < requiredInput)
+            throw new ArgumentException("Input buffer size is too small for the specified dimensions.");
+
+        if (B.Size < outerSize)
+            throw new ArgumentException("Output buffer size is too small for the specified dimensions.");
 
         if (!_kernelCache.TryGetValue("sum_axis", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: sum_axis");
@@ -723,6 +740,48 @@ public sealed class CudaBackend : IDirectGpuBackend
             "cuLaunchKernel");
     }
 
+    private static void ValidateGemmArgs(IGpuBuffer A, IGpuBuffer B, IGpuBuffer? C, int M, int N, int K)
+    {
+        if (M <= 0 || N <= 0 || K <= 0)
+            throw new ArgumentException("Matrix dimensions M, N, K must be positive.");
+
+        long requiredA = (long)M * K;
+        long requiredB = (long)K * N;
+        long requiredC = (long)M * N;
+
+        if (requiredA > int.MaxValue || requiredB > int.MaxValue || requiredC > int.MaxValue)
+            throw new ArgumentException("Matrix dimensions are too large.");
+
+        if (A.Size < requiredA)
+            throw new ArgumentException("Buffer A is too small for the specified dimensions.");
+        if (B.Size < requiredB)
+            throw new ArgumentException("Buffer B is too small for the specified dimensions.");
+        if (C != null && C.Size < requiredC)
+            throw new ArgumentException("Buffer C is too small for the specified dimensions.");
+    }
+
+    private static void ValidateBatchedGemmArgs(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, int batchCount)
+    {
+        if (batchCount <= 0)
+            throw new ArgumentException("batchCount must be positive.");
+
+        ValidateGemmArgs(A, B, C, M, N, K);
+
+        long requiredA = (long)batchCount * M * K;
+        long requiredB = (long)batchCount * K * N;
+        long requiredC = (long)batchCount * M * N;
+
+        if (requiredA > int.MaxValue || requiredB > int.MaxValue || requiredC > int.MaxValue)
+            throw new ArgumentException("Batched GEMM dimensions are too large.");
+
+        if (A.Size < requiredA)
+            throw new ArgumentException("Buffer A is too small for the specified batch dimensions.");
+        if (B.Size < requiredB)
+            throw new ArgumentException("Buffer B is too small for the specified batch dimensions.");
+        if (C.Size < requiredC)
+            throw new ArgumentException("Buffer C is too small for the specified batch dimensions.");
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -784,9 +843,19 @@ public sealed class CudaBackend : IDirectGpuBackend
             if (_devicePtr == IntPtr.Zero)
                 return;
 
-            CuBlasNative.CheckCudaResult(CuBlasNative.cuCtxPushCurrent(_context), "cuCtxPushCurrent");
-            CuBlasNative.cuMemFree(_devicePtr);
-            CuBlasNative.CheckCudaResult(CuBlasNative.cuCtxPopCurrent(out _), "cuCtxPopCurrent");
+            try
+            {
+                if (_context != IntPtr.Zero)
+                {
+                    CuBlasNative.cuCtxPushCurrent(_context);
+                    CuBlasNative.cuMemFree(_devicePtr);
+                    CuBlasNative.cuCtxPopCurrent(out _);
+                }
+            }
+            catch
+            {
+                // Suppress disposal errors to avoid crashing finalizers.
+            }
 
             _devicePtr = IntPtr.Zero;
             _context = IntPtr.Zero;
