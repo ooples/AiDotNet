@@ -1414,7 +1414,8 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
             try
             {
-                var kernel = _dynamicGemm.GetKernel(config);
+                // Use size-aware kernel selection that falls back to baseline for small matrices
+                var kernel = _dynamicGemm.GetKernelForSize(config, M, N, K);
                 _dynamicGemm.Execute(kernel, config, A, B, C, M, N, K, alpha, beta);
                 return true;
             }
@@ -3115,8 +3116,9 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             double peakGflops = GetEnvInt(GpuPeakGflopsEnvVar, 0);
             if (peakGflops <= 0)
             {
-                // Estimate: CUs * 64 FP32 ALUs * 2 (FMA) * ~1.8 GHz clock
-                peakGflops = ComputeUnits * 64 * 2 * 1.8;
+                // Use architecture-specific clock speed for accurate peak GFLOPS
+                var arch = Profiling.GpuArchitectureSpec.DetectFromDeviceName(DeviceName);
+                peakGflops = arch.CalculatePeakGflops(ComputeUnits);
             }
 
             double bandwidthGBs = GetEnvInt(GpuBandwidthEnvVar, 0);
@@ -3536,9 +3538,9 @@ KERNEL VARIANTS (A/B testing):
             sb.AppendLine($"Warmup: {warmupRuns}, Benchmark: {benchmarkRuns}");
             sb.AppendLine();
 
-            // Detect architecture and estimate peak
+            // Detect architecture and estimate peak using architecture-specific clock speed
             var arch = Profiling.GpuArchitectureSpec.DetectFromDeviceName(DeviceName);
-            double estimatedPeakGflops = ComputeUnits * 64 * 2 * 1.8; // Conservative estimate
+            double estimatedPeakGflops = arch.CalculatePeakGflops(ComputeUnits);
             var envPeak = Environment.GetEnvironmentVariable("AIDOTNET_GPU_PEAK_GFLOPS");
             if (int.TryParse(envPeak, out int peakVal) && peakVal > 0)
                 estimatedPeakGflops = peakVal;

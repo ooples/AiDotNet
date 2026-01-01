@@ -99,8 +99,9 @@ public sealed class GemmProfiler
         // Auto-detect if not specified
         if (peakGflops <= 0)
         {
-            // Estimate from CUs: CUs * 64 FP32 ALUs * 2 (FMA) * ~1.8 GHz
-            peakGflops = backend.ComputeUnits * 64 * 2 * 1.8;
+            // Use architecture-specific clock speed for accurate peak GFLOPS
+            var arch = GpuArchitectureSpec.DetectFromDeviceName(backend.DeviceName);
+            peakGflops = arch.CalculatePeakGflops(backend.ComputeUnits);
 
             // Check environment variable override
             var envPeak = Environment.GetEnvironmentVariable("AIDOTNET_GPU_PEAK_GFLOPS");

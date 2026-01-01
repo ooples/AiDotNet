@@ -83,10 +83,25 @@ public sealed class GpuArchitectureSpec
     /// <summary>Typical kernel launch overhead in microseconds.</summary>
     public int TypicalLaunchOverheadUs { get; init; }
 
+    /// <summary>Typical boost clock speed in GHz for peak GFLOPS calculations.</summary>
+    public double TypicalBoostClockGHz { get; init; }
+
+    /// <summary>FP32 ALUs per Compute Unit (64 for AMD, varies for NVIDIA).</summary>
+    public int Fp32AlusPerCu { get; init; } = 64;
+
     /// <summary>
     /// Gets the maximum wavefronts per compute unit.
     /// </summary>
     public int MaxWavesPerCu => MaxWavesPerSimd * SimdsPerCu;
+
+    /// <summary>
+    /// Calculates estimated peak GFLOPS based on compute units and architecture.
+    /// Formula: CUs * ALUs/CU * 2 (FMA) * clockGHz
+    /// </summary>
+    public double CalculatePeakGflops(int computeUnits)
+    {
+        return computeUnits * Fp32AlusPerCu * 2 * TypicalBoostClockGHz;
+    }
 
     /// <summary>
     /// Predefined specifications for common AMD architectures.
@@ -108,7 +123,9 @@ public sealed class GpuArchitectureSpec
             L1CachePerCuBytes = 16384,
             L2CacheTotalBytes = 4 * 1024 * 1024,
             InfinityCacheBytes = 0,
-            TypicalLaunchOverheadUs = 300
+            TypicalLaunchOverheadUs = 300,
+            TypicalBoostClockGHz = 1.5,  // Polaris ~1.3 GHz, Vega ~1.6 GHz
+            Fp32AlusPerCu = 64
         };
 
         /// <summary>AMD RDNA1 (RX 5000 series) specifications.</summary>
@@ -126,7 +143,9 @@ public sealed class GpuArchitectureSpec
             L1CachePerCuBytes = 16384,
             L2CacheTotalBytes = 4 * 1024 * 1024,
             InfinityCacheBytes = 0,
-            TypicalLaunchOverheadUs = 300
+            TypicalLaunchOverheadUs = 300,
+            TypicalBoostClockGHz = 1.845,  // RX 5500 XT: 1.845 GHz, RX 5700 XT: 1.905 GHz
+            Fp32AlusPerCu = 64
         };
 
         /// <summary>AMD RDNA2 (RX 6000 series) specifications.</summary>
@@ -144,7 +163,9 @@ public sealed class GpuArchitectureSpec
             L1CachePerCuBytes = 16384,
             L2CacheTotalBytes = 4 * 1024 * 1024,
             InfinityCacheBytes = 128 * 1024 * 1024,  // 128 MB Infinity Cache
-            TypicalLaunchOverheadUs = 300
+            TypicalLaunchOverheadUs = 300,
+            TypicalBoostClockGHz = 2.25,  // RX 6800 XT: 2.25 GHz, RX 6900 XT: 2.25 GHz
+            Fp32AlusPerCu = 64
         };
 
         /// <summary>AMD RDNA3 (RX 7000 series) specifications.</summary>
@@ -162,7 +183,9 @@ public sealed class GpuArchitectureSpec
             L1CachePerCuBytes = 32768,  // Doubled
             L2CacheTotalBytes = 6 * 1024 * 1024,
             InfinityCacheBytes = 96 * 1024 * 1024,  // 96 MB (reduced)
-            TypicalLaunchOverheadUs = 250
+            TypicalLaunchOverheadUs = 250,
+            TypicalBoostClockGHz = 2.5,  // RX 7900 XTX: 2.5 GHz
+            Fp32AlusPerCu = 64
         };
 
         /// <summary>AMD CDNA (MI100, MI200) specifications.</summary>
@@ -180,7 +203,9 @@ public sealed class GpuArchitectureSpec
             L1CachePerCuBytes = 16384,
             L2CacheTotalBytes = 8 * 1024 * 1024,
             InfinityCacheBytes = 0,
-            TypicalLaunchOverheadUs = 200
+            TypicalLaunchOverheadUs = 200,
+            TypicalBoostClockGHz = 1.5,  // MI100: 1.5 GHz, MI250: 1.7 GHz
+            Fp32AlusPerCu = 64
         };
     }
 

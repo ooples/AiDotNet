@@ -33,6 +33,132 @@ internal sealed class DynamicGemmKernel : IDisposable
     public static string? LogFilePath { get; set; }
 
     /// <summary>
+    /// Kernel variant to use. Set via AIDOTNET_GEMM_VARIANT environment variable.
+    /// 0 = Original CLBlast (baseline)
+    /// 1 = XOR swizzling (eliminates LDS bank conflicts)
+    /// 2 = RDNA1 optimized (XOR swizzle + Wave32 hints)
+    /// 3 = A/B testing mode (runs both and compares)
+    /// </summary>
+    public static int KernelVariant { get; set; } = GetKernelVariant();
+
+    /// <summary>
+    /// Default minimum matrix dimension for XOR swizzle variants (1 and 2).
+    /// For smaller matrices, falls back to CLBlast baseline (variant 0) due to correctness issues.
+    /// Can be overridden via AIDOTNET_GEMM_MIN_SWIZZLE_SIZE environment variable.
+    /// </summary>
+    public const int DefaultMinSwizzleSize = 512;
+
+    /// <summary>
+    /// Minimum matrix dimension for XOR swizzle variants.
+    /// Configurable via AIDOTNET_GEMM_MIN_SWIZZLE_SIZE environment variable for benchmarking.
+    /// </summary>
+    public static int MinSwizzleSize { get; set; } = GetMinSwizzleSize();
+
+    /// <summary>
+    /// Minimum size for using the dynamic GEMM kernel vs the simple gemm_small kernel.
+    /// For very small matrices, the simple kernel has lower overhead.
+    /// Configurable via AIDOTNET_GEMM_MIN_DYNAMIC_SIZE environment variable.
+    /// </summary>
+    public static int MinDynamicSize { get; set; } = GetMinDynamicSize();
+
+    private static int GetMinSwizzleSize()
+    {
+        string? envVar = Environment.GetEnvironmentVariable("AIDOTNET_GEMM_MIN_SWIZZLE_SIZE");
+        if (int.TryParse(envVar, out int size) && size >= 64 && size <= 4096)
+            return size;
+        return DefaultMinSwizzleSize;
+    }
+
+    private static int GetMinDynamicSize()
+    {
+        string? envVar = Environment.GetEnvironmentVariable("AIDOTNET_GEMM_MIN_DYNAMIC_SIZE");
+        if (int.TryParse(envVar, out int size) && size >= 32 && size <= 1024)
+            return size;
+        return 256; // Default: matrices < 256 use simple kernel
+    }
+
+    private static int GetKernelVariant()
+    {
+        string? envVar = Environment.GetEnvironmentVariable("AIDOTNET_GEMM_VARIANT");
+        if (int.TryParse(envVar, out int variant) && variant >= 0 && variant <= 3)
+            return variant;
+        return 0; // Default to original CLBlast baseline
+    }
+
+    /// <summary>
+    /// Kernel tier based on matrix size for optimal performance.
+    /// </summary>
+    public enum GemmKernelTier
+    {
+        /// <summary>Very small matrices - use simple gemm_small kernel (lowest overhead).</summary>
+        Simple,
+
+        /// <summary>Small-medium matrices - use CLBlast baseline (dynamic, no XOR swizzle).</summary>
+        Baseline,
+
+        /// <summary>Large matrices - use XOR swizzle variant (best for large matrices).</summary>
+        Optimized
+    }
+
+    /// <summary>
+    /// Determines the optimal kernel tier based on matrix dimensions.
+    /// </summary>
+    /// <param name="M">Matrix M dimension</param>
+    /// <param name="N">Matrix N dimension</param>
+    /// <param name="K">Matrix K dimension</param>
+    /// <returns>The optimal kernel tier</returns>
+    public static GemmKernelTier GetKernelTier(int M, int N, int K)
+    {
+        int minDim = Math.Min(Math.Min(M, N), K);
+
+        // Very small matrices: use simple kernel
+        if (minDim < MinDynamicSize)
+            return GemmKernelTier.Simple;
+
+        // Small-medium matrices: use baseline (no XOR swizzle)
+        if (minDim < MinSwizzleSize)
+            return GemmKernelTier.Baseline;
+
+        // Large matrices: use optimized variant
+        return GemmKernelTier.Optimized;
+    }
+
+    /// <summary>
+    /// Checks if dynamic GEMM should be used for the given matrix size.
+    /// Returns false for very small matrices where the simple kernel is more efficient.
+    /// </summary>
+    public static bool ShouldUseDynamicGemm(int M, int N, int K)
+    {
+        return GetKernelTier(M, N, K) != GemmKernelTier.Simple;
+    }
+
+    /// <summary>
+    /// Gets the effective kernel variant for a given matrix size.
+    /// Falls back to CLBlast baseline for small matrices where XOR swizzle has correctness issues.
+    /// </summary>
+    /// <param name="M">Matrix M dimension</param>
+    /// <param name="N">Matrix N dimension</param>
+    /// <param name="K">Matrix K dimension</param>
+    /// <returns>The effective kernel variant to use</returns>
+    public static int GetEffectiveVariant(int M, int N, int K)
+    {
+        // XOR swizzle variants (1 and 2) have correctness issues for small matrices
+        // Fall back to CLBlast baseline (variant 0) for sizes < MinSwizzleSize
+        if (KernelVariant is 1 or 2)
+        {
+            if (M < MinSwizzleSize || N < MinSwizzleSize || K < MinSwizzleSize)
+            {
+                if (EnableDiagnostics)
+                {
+                    Console.WriteLine($"[DynamicGemm] Size {M}x{N}x{K} < {MinSwizzleSize}, falling back from variant {KernelVariant} to CLBlast baseline");
+                }
+                return 0; // Fall back to CLBlast baseline
+            }
+        }
+        return KernelVariant;
+    }
+
+    /// <summary>
     /// Gets the number of cached kernels.
     /// </summary>
     public int CachedKernelCount => _cache.Count;
@@ -56,6 +182,19 @@ internal sealed class DynamicGemmKernel : IDisposable
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _cache = new Dictionary<string, (DirectOpenClProgram, DirectOpenClKernel)>();
+    }
+
+    /// <summary>
+    /// Clears all cached kernels. Used during A/B testing to force recompilation.
+    /// </summary>
+    public void ClearCache()
+    {
+        foreach (var (program, kernel) in _cache.Values)
+        {
+            kernel.Dispose();
+            program.Dispose();
+        }
+        _cache.Clear();
     }
 
     /// <summary>
@@ -107,15 +246,40 @@ internal sealed class DynamicGemmKernel : IDisposable
     }
 
     /// <summary>
+    /// Gets or compiles a kernel for the given configuration and matrix size.
+    /// Uses the effective variant based on matrix dimensions (falls back to baseline for small matrices).
+    /// </summary>
+    /// <param name="config">GEMM configuration</param>
+    /// <param name="M">Matrix M dimension</param>
+    /// <param name="N">Matrix N dimension</param>
+    /// <param name="K">Matrix K dimension</param>
+    /// <returns>Compiled kernel for the configuration</returns>
+    public DirectOpenClKernel GetKernelForSize(GemmConfig config, int M, int N, int K)
+    {
+        int effectiveVariant = GetEffectiveVariant(M, N, K);
+        return GetKernelWithVariant(config, effectiveVariant);
+    }
+
+    /// <summary>
     /// Gets or compiles a kernel for the given configuration.
+    /// Uses the global KernelVariant setting.
     /// </summary>
     public DirectOpenClKernel GetKernel(GemmConfig config)
     {
-        var key = config.ToKey();
+        return GetKernelWithVariant(config, KernelVariant);
+    }
+
+    /// <summary>
+    /// Gets or compiles a kernel for the given configuration with a specific variant.
+    /// </summary>
+    private DirectOpenClKernel GetKernelWithVariant(GemmConfig config, int variant)
+    {
+        // Include variant in cache key to allow different kernels for same config
+        var key = $"{config.ToKey()}_v{variant}";
 
         if (_cache.TryGetValue(key, out var cached))
         {
-            LogDiag($"Cache HIT: {config.KernelName} (key={key})");
+            LogDiag($"Cache HIT: {config.KernelName} variant={variant} (key={key})");
             return cached.Kernel;
         }
 
@@ -149,8 +313,8 @@ internal sealed class DynamicGemmKernel : IDisposable
         string source;
         try
         {
-            source = GenerateKernelSource(config);
-            LogDiag($"  Kernel source generated: {source.Length} chars");
+            source = GenerateKernelSource(config, variant);
+            LogDiag($"  Kernel source generated: {source.Length} chars, variant={variant}");
         }
         catch (Exception ex)
         {
@@ -298,13 +462,41 @@ internal sealed class DynamicGemmKernel : IDisposable
     /// - K-loop unrolling (KWI×KREG) for maximum ILP
     /// - Partition camping avoidance with staggered work group indices
     /// </summary>
-    private static string GenerateKernelSource(GemmConfig config)
+    /// <param name="config">GEMM configuration</param>
+    /// <param name="variant">Kernel variant to use (0=CLBlast, 1=XOR Swizzle, 2=RDNA1 Opt)</param>
+    private static string GenerateKernelSource(GemmConfig config, int variant)
     {
         if (TryGetClBlastBaselineKernel(config, out int gemmK))
         {
-            if (EnableDiagnostics)
-                Console.WriteLine($"[DynamicGemm] SELECTED CLBlast BASELINE kernel: {config.KernelName} GEMMK={gemmK}");
-            return ClBlastXgemmKernel.BuildSource(config, gemmK);
+            // Select kernel variant based on passed variant parameter
+            switch (variant)
+            {
+                case 1:
+                    // XOR swizzling - eliminates LDS bank conflicts without padding overhead
+                    {
+                        var source = ClBlastXgemmKernel.BuildSourceWithSwizzle(config, gemmK, 0x0F);
+                        if (EnableDiagnostics)
+                        {
+                            Console.WriteLine($"[DynamicGemm] SELECTED XOR SWIZZLE kernel: {config.KernelName} GEMMK={gemmK}");
+                            Console.WriteLine($"[DynamicGemm] Swizzle defines present: LDS_SWIZZLE_A={source.Contains("LDS_SWIZZLE_A(kg, mg)")}, LDS_STRIDE_A={source.Contains("LDS_STRIDE_A")}");
+                            Console.WriteLine($"[DynamicGemm] Original pattern present: alm[kg*(MWG/VWM)={source.Contains("alm[kg*(MWG/VWM)")}");
+                        }
+                        return source;
+                    }
+
+                case 2:
+                    // RDNA1 optimized - XOR swizzle + Wave32 hints
+                    if (EnableDiagnostics)
+                        Console.WriteLine($"[DynamicGemm] SELECTED RDNA1 OPTIMIZED kernel: {config.KernelName} GEMMK={gemmK}");
+                    return ClBlastXgemmKernel.BuildSourceOptimizedRdna1(config, gemmK, 0x0F, true);
+
+                case 0:
+                default:
+                    // Original CLBlast baseline (default)
+                    if (EnableDiagnostics)
+                        Console.WriteLine($"[DynamicGemm] SELECTED CLBlast BASELINE kernel: {config.KernelName} GEMMK={gemmK}");
+                    return ClBlastXgemmKernel.BuildSource(config, gemmK);
+            }
         }
 
         // CLBlast-style parameters
