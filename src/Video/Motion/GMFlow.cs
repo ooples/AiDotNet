@@ -229,10 +229,61 @@ public class GMFlow<T> : NeuralNetworkBase<T>
         return warped;
     }
 
-    public override Tensor<T> Predict(Tensor<T> input) => input;
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        // Expects concatenated frame pair [B, C*2, H, W]
+        // Split into two frames and estimate flow
+        int batchSize = input.Shape[0];
+        int channels = input.Shape[1] / 2;
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        var frame1 = new Tensor<T>([batchSize, channels, height, width]);
+        var frame2 = new Tensor<T>([batchSize, channels, height, width]);
+
+        // Split channels
+        int frameSize = channels * height * width;
+        for (int b = 0; b < batchSize; b++)
+        {
+            Array.Copy(input.Data, b * 2 * frameSize, frame1.Data, b * frameSize, frameSize);
+            Array.Copy(input.Data, b * 2 * frameSize + frameSize, frame2.Data, b * frameSize, frameSize);
+        }
+
+        return EstimateFlow(frame1, frame2);
+    }
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        var prediction = Predict(input);
+
+        // Compute loss gradient
+        var lossGradient = prediction.Transform((v, idx) =>
+            NumOps.Subtract(v, expectedOutput.Data[idx]));
+
+        // Backward pass through all layers
+        var gradient = lossGradient;
+        foreach (var layer in _refinement.AsEnumerable().Reverse())
+        {
+            gradient = layer.Backward(gradient);
+        }
+        foreach (var layer in _flowDecoder.AsEnumerable().Reverse())
+        {
+            gradient = layer.Backward(gradient);
+        }
+        foreach (var layer in _crossAttention.AsEnumerable().Reverse())
+        {
+            gradient = layer.Backward(gradient);
+        }
+        foreach (var layer in _selfAttention.AsEnumerable().Reverse())
+        {
+            gradient = layer.Backward(gradient);
+        }
+        foreach (var layer in _encoder.AsEnumerable().Reverse())
+        {
+            gradient = layer.Backward(gradient);
+        }
+
+        // Update parameters
         T lr = NumOps.FromDouble(0.0001);
         foreach (var layer in Layers)
             layer.UpdateParameters(lr);

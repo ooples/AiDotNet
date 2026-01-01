@@ -39,14 +39,14 @@ public class OpenSora<T> : NeuralNetworkBase<T>
 {
     #region Fields
 
-    private readonly int _height;
-    private readonly int _width;
-    private readonly int _channels;
-    private readonly int _numFrames;
-    private readonly int _hiddenDim;
-    private readonly int _numLayers;
-    private readonly int _numInferenceSteps;
-    private readonly double _guidanceScale;
+    private int _height;
+    private int _width;
+    private int _channels;
+    private int _numFrames;
+    private int _hiddenDim;
+    private int _numLayers;
+    private int _numInferenceSteps;
+    private double _guidanceScale;
 
     // Patch embedding for spatiotemporal input
     private readonly ConvolutionalLayer<T> _patchEmbed;
@@ -643,8 +643,14 @@ public class OpenSora<T> : NeuralNetworkBase<T>
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        for (int i = 0; i < 7; i++) _ = reader.ReadInt32();
-        _ = reader.ReadDouble();
+        _height = reader.ReadInt32();
+        _width = reader.ReadInt32();
+        _channels = reader.ReadInt32();
+        _numFrames = reader.ReadInt32();
+        _hiddenDim = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _numInferenceSteps = reader.ReadInt32();
+        _guidanceScale = reader.ReadDouble();
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>

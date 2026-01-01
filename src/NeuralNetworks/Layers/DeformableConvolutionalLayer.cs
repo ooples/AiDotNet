@@ -1,5 +1,6 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -31,6 +32,7 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
 {
     #region Fields
 
+    private readonly IEngine _engine;
     private readonly int _inputHeight;
     private readonly int _inputWidth;
     private readonly int _inputChannels;
@@ -84,6 +86,7 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
     /// <param name="groups">Number of convolution groups (default: 1).</param>
     /// <param name="deformGroups">Number of deformable groups (default: 1).</param>
     /// <param name="useModulation">Whether to use modulation mask (DCNv2, default: true).</param>
+    /// <param name="engine">Optional computation engine (CPU or GPU). If null, uses default CPU engine.</param>
     public DeformableConvolutionalLayer(
         int inputHeight,
         int inputWidth,
@@ -94,11 +97,13 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         int padding = 1,
         int groups = 1,
         int deformGroups = 1,
-        bool useModulation = true)
+        bool useModulation = true,
+        IEngine? engine = null)
         : base(
             [inputChannels, inputHeight, inputWidth],
             [outputChannels, (inputHeight + 2 * padding - kernelSize) / stride + 1, (inputWidth + 2 * padding - kernelSize) / stride + 1])
     {
+        _engine = engine ?? new CpuEngine();
         _inputHeight = inputHeight;
         _inputWidth = inputWidth;
         _inputChannels = inputChannels;
@@ -139,147 +144,128 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
     {
         _lastInput = input;
 
-        bool hasBatch = input.Rank == 4;
-        int batch = hasBatch ? input.Shape[0] : 1;
-        int channels = hasBatch ? input.Shape[1] : input.Shape[0];
-        int height = hasBatch ? input.Shape[2] : input.Shape[1];
-        int width = hasBatch ? input.Shape[3] : input.Shape[2];
+        // Ensure 4D input [batch, channels, height, width]
+        var input4D = EnsureBatchDimension(input);
+        int batch = input4D.Shape[0];
+        int channels = input4D.Shape[1];
+        int height = input4D.Shape[2];
+        int width = input4D.Shape[3];
 
-        // Calculate output dimensions
-        int outH = (height + 2 * _padding - _kernelSize) / _stride + 1;
-        int outW = (width + 2 * _padding - _kernelSize) / _stride + 1;
-
-        // Predict offsets using offset convolution
-        var offsets = PredictOffsets(input, hasBatch, batch, height, width, outH, outW);
+        // Predict offsets using standard convolution via IEngine
+        var offsets = PredictOffsetsViaEngine(input4D);
         _lastOffsets = offsets;
 
         // Predict modulation mask if using DCNv2
         Tensor<T>? mask = null;
         if (_useModulation)
         {
-            mask = PredictMask(input, hasBatch, batch, height, width, outH, outW);
+            mask = PredictMaskViaEngine(input4D);
             _lastMask = mask;
         }
 
-        // Perform deformable convolution
-        var output = DeformableConv(input, offsets, mask, hasBatch, batch, channels, height, width, outH, outW);
+        // Perform deformable convolution using IEngine
+        var output = _engine.DeformableConv2D(
+            input4D,
+            _weights,
+            offsets,
+            mask,
+            new[] { _stride, _stride },
+            new[] { _padding, _padding },
+            new[] { 1, 1 });
 
-        return output;
+        // Add bias
+        output = AddBias(output);
+
+        // Remove batch dimension if input didn't have one
+        return input.Rank == 3 ? RemoveBatchDimension(output) : output;
     }
 
-    private Tensor<T> PredictOffsets(Tensor<T> input, bool hasBatch, int batch, int height, int width, int outH, int outW)
+    private Tensor<T> PredictOffsetsViaEngine(Tensor<T> input)
     {
-        int offsetChannels = 2 * _kernelSize * _kernelSize * _deformGroups;
-        var outShape = hasBatch ? new[] { batch, offsetChannels, outH, outW } : new[] { offsetChannels, outH, outW };
-        var offsets = new Tensor<T>(outShape);
+        // Use IEngine Conv2D for offset prediction
+        var offsetOutput = _engine.Conv2D(
+            input,
+            _offsetWeights,
+            new[] { _stride, _stride },
+            new[] { _padding, _padding },
+            new[] { 1, 1 });
 
-        // Simple convolution for offset prediction
-        ApplyConvolution(input, _offsetWeights, _offsetBias, offsets, hasBatch, batch, _inputChannels, height, width, offsetChannels, outH, outW);
-
-        return offsets;
+        // Add bias
+        return AddBiasToTensor(offsetOutput, _offsetBias);
     }
 
-    private Tensor<T> PredictMask(Tensor<T> input, bool hasBatch, int batch, int height, int width, int outH, int outW)
+    private Tensor<T> PredictMaskViaEngine(Tensor<T> input)
     {
-        int maskChannels = _kernelSize * _kernelSize * _deformGroups;
-        var outShape = hasBatch ? new[] { batch, maskChannels, outH, outW } : new[] { maskChannels, outH, outW };
-        var mask = new Tensor<T>(outShape);
+        // Use IEngine Conv2D for mask prediction
+        var maskOutput = _engine.Conv2D(
+            input,
+            _maskWeights!,
+            new[] { _stride, _stride },
+            new[] { _padding, _padding },
+            new[] { 1, 1 });
 
-        // Simple convolution for mask prediction, followed by sigmoid
-        ApplyConvolution(input, _maskWeights!, _maskBias!, mask, hasBatch, batch, _inputChannels, height, width, maskChannels, outH, outW);
+        // Add bias
+        maskOutput = AddBiasToTensor(maskOutput, _maskBias!);
 
-        // Apply sigmoid to mask
-        for (int i = 0; i < mask.Length; i++)
-        {
-            double val = NumOps.ToDouble(mask.Data[i]);
-            mask.Data[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-val)));
-        }
+        // Apply sigmoid activation for modulation weights
+        maskOutput = _engine.Sigmoid(maskOutput);
 
-        return mask;
+        return maskOutput;
     }
 
-    private Tensor<T> DeformableConv(Tensor<T> input, Tensor<T> offsets, Tensor<T>? mask,
-        bool hasBatch, int batch, int channels, int height, int width, int outH, int outW)
+    private Tensor<T> AddBias(Tensor<T> output)
     {
-        var outShape = hasBatch
-            ? new[] { batch, _outputChannels, outH, outW }
-            : new[] { _outputChannels, outH, outW };
-        var output = new Tensor<T>(outShape);
+        return AddBiasToTensor(output, _bias);
+    }
 
-        int inChannelsPerGroup = channels / _groups;
-        int outChannelsPerGroup = _outputChannels / _groups;
-        int k2 = _kernelSize * _kernelSize;
+    private Tensor<T> AddBiasToTensor(Tensor<T> output, Tensor<T> bias)
+    {
+        int batch = output.Shape[0];
+        int channels = output.Shape[1];
+        int height = output.Shape[2];
+        int width = output.Shape[3];
 
         for (int b = 0; b < batch; b++)
         {
-            for (int g = 0; g < _groups; g++)
+            for (int c = 0; c < channels; c++)
             {
-                for (int oc = 0; oc < outChannelsPerGroup; oc++)
+                T biasVal = bias.Data[c];
+                for (int h = 0; h < height; h++)
                 {
-                    int outChannel = g * outChannelsPerGroup + oc;
-
-                    for (int oh = 0; oh < outH; oh++)
+                    for (int w = 0; w < width; w++)
                     {
-                        for (int ow = 0; ow < outW; ow++)
-                        {
-                            T sum = _bias.Data[outChannel];
-
-                            // For each kernel position
-                            for (int kh = 0; kh < _kernelSize; kh++)
-                            {
-                                for (int kw = 0; kw < _kernelSize; kw++)
-                                {
-                                    int kIdx = kh * _kernelSize + kw;
-
-                                    // Get offsets for this position
-                                    int dg = g % _deformGroups;
-                                    int offsetIdxX = dg * 2 * k2 + kIdx;
-                                    int offsetIdxY = dg * 2 * k2 + k2 + kIdx;
-
-                                    double offsetX = GetTensorValue(offsets, b, offsetIdxX, oh, ow, hasBatch, offsets.Shape);
-                                    double offsetY = GetTensorValue(offsets, b, offsetIdxY, oh, ow, hasBatch, offsets.Shape);
-
-                                    // Calculate sampling position
-                                    double srcH = oh * _stride - _padding + kh + offsetY;
-                                    double srcW = ow * _stride - _padding + kw + offsetX;
-
-                                    // Get modulation weight
-                                    double modWeight = 1.0;
-                                    if (mask != null)
-                                    {
-                                        int maskIdx = dg * k2 + kIdx;
-                                        modWeight = GetTensorValue(mask, b, maskIdx, oh, ow, hasBatch, mask.Shape);
-                                    }
-
-                                    // Sample from input for each input channel in this group
-                                    for (int ic = 0; ic < inChannelsPerGroup; ic++)
-                                    {
-                                        int inChannel = g * inChannelsPerGroup + ic;
-                                        T sampledValue = BilinearSample(input, b, inChannel, srcH, srcW, hasBatch, height, width, channels);
-
-                                        // Apply modulation
-                                        sampledValue = NumOps.Multiply(sampledValue, NumOps.FromDouble(modWeight));
-
-                                        // Multiply by weight
-                                        int weightIdx = oc * inChannelsPerGroup * k2 + ic * k2 + kIdx;
-                                        T weight = _weights.Data[weightIdx];
-                                        sum = NumOps.Add(sum, NumOps.Multiply(sampledValue, weight));
-                                    }
-                                }
-                            }
-
-                            // Store output
-                            int outIdx = hasBatch
-                                ? b * _outputChannels * outH * outW + outChannel * outH * outW + oh * outW + ow
-                                : outChannel * outH * outW + oh * outW + ow;
-                            output.Data[outIdx] = sum;
-                        }
+                        int idx = b * channels * height * width + c * height * width + h * width + w;
+                        output.Data[idx] = NumOps.Add(output.Data[idx], biasVal);
                     }
                 }
             }
         }
-
         return output;
+    }
+
+    private static Tensor<T> EnsureBatchDimension(Tensor<T> tensor)
+    {
+        if (tensor.Rank == 4) return tensor;
+
+        // Add batch dimension for 3D tensor [C, H, W] -> [1, C, H, W]
+        var newShape = new int[4];
+        newShape[0] = 1;
+        for (int i = 0; i < tensor.Shape.Length; i++)
+            newShape[i + 1] = tensor.Shape[i];
+
+        return tensor.Reshape(newShape);
+    }
+
+    private static Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    {
+        if (tensor.Rank != 4 || tensor.Shape[0] != 1) return tensor;
+
+        // Remove batch dimension [1, C, H, W] -> [C, H, W]
+        var newShape = new int[3];
+        for (int i = 0; i < 3; i++)
+            newShape[i] = tensor.Shape[i + 1];
+
+        return tensor.Reshape(newShape);
     }
 
     #endregion
@@ -289,14 +275,21 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
     /// <inheritdoc/>
     public override Tensor<T> Backward(Tensor<T> gradOutput)
     {
-        if (_lastInput == null)
+        if (_lastInput == null || _lastOffsets == null)
             throw new InvalidOperationException("Forward must be called before Backward.");
 
-        bool hasBatch = _lastInput.Rank == 4;
-        int batch = hasBatch ? _lastInput.Shape[0] : 1;
-        int channels = hasBatch ? _lastInput.Shape[1] : _lastInput.Shape[0];
-        int height = hasBatch ? _lastInput.Shape[2] : _lastInput.Shape[1];
-        int width = hasBatch ? _lastInput.Shape[3] : _lastInput.Shape[2];
+        // Ensure 4D tensors
+        var input4D = EnsureBatchDimension(_lastInput);
+        var gradOutput4D = EnsureBatchDimension(gradOutput);
+
+        int batch = input4D.Shape[0];
+        int inChannels = input4D.Shape[1];
+        int height = input4D.Shape[2];
+        int width = input4D.Shape[3];
+
+        int outChannels = gradOutput4D.Shape[1];
+        int outH = gradOutput4D.Shape[2];
+        int outW = gradOutput4D.Shape[3];
 
         // Initialize gradients
         _weightGradients = new Tensor<T>(_weights.Shape);
@@ -310,34 +303,176 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
             _maskBiasGradients = new Tensor<T>(_maskBias!.Shape);
         }
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        // 1. Compute bias gradients (sum over batch and spatial dimensions)
+        ComputeBiasGradients(gradOutput4D);
 
-        // Simplified gradient computation
-        // In practice, this requires computing gradients w.r.t. offsets and masks too
-        int outH = hasBatch ? gradOutput.Shape[2] : gradOutput.Shape[1];
-        int outW = hasBatch ? gradOutput.Shape[3] : gradOutput.Shape[2];
+        // 2. Compute kernel gradients using IEngine
+        _weightGradients = _engine.DeformableConv2DBackwardKernel(
+            gradOutput4D,
+            input4D,
+            _lastOffsets,
+            _lastMask,
+            kernelShape: _weights.Shape,
+            stride: new[] { _stride, _stride },
+            padding: new[] { _padding, _padding },
+            dilation: new[] { 1, 1 });
 
-        // Compute bias gradients
-        for (int oc = 0; oc < _outputChannels; oc++)
+        // 3. Compute input gradients from deformable conv using IEngine
+        var gradInputFromDeform = _engine.DeformableConv2DBackwardInput(
+            gradOutput4D,
+            input4D,
+            _weights,
+            _lastOffsets,
+            _lastMask,
+            inputShape: input4D.Shape,
+            stride: new[] { _stride, _stride },
+            padding: new[] { _padding, _padding },
+            dilation: new[] { 1, 1 });
+
+        // 4. Compute offset gradients using IEngine
+        var gradOffsets = _engine.DeformableConv2DBackwardOffset(
+            gradOutput4D,
+            input4D,
+            _weights,
+            _lastOffsets,
+            _lastMask,
+            stride: new[] { _stride, _stride },
+            padding: new[] { _padding, _padding },
+            dilation: new[] { 1, 1 });
+
+        // 5. Compute mask gradients if using modulation
+        Tensor<T>? gradMask = null;
+        if (_useModulation && _lastMask != null)
+        {
+            gradMask = _engine.DeformableConv2DBackwardMask(
+                gradOutput4D,
+                input4D,
+                _weights,
+                _lastOffsets,
+                _lastMask,
+                stride: new[] { _stride, _stride },
+                padding: new[] { _padding, _padding },
+                dilation: new[] { 1, 1 });
+
+            // Backprop through sigmoid: gradMask * sigmoid(x) * (1 - sigmoid(x))
+            // _lastMask is already sigmoid output, so grad = gradMask * mask * (1 - mask)
+            for (int i = 0; i < gradMask.Length; i++)
+            {
+                T m = _lastMask.Data[i];
+                T oneMinusM = NumOps.Subtract(NumOps.One, m);
+                gradMask.Data[i] = NumOps.Multiply(NumOps.Multiply(gradMask.Data[i], m), oneMinusM);
+            }
+        }
+
+        // 6. Backprop through offset prediction conv to get offset weight/bias gradients
+        // and input gradient contribution
+        var gradInputFromOffset = BackpropConvolution(
+            input4D, _offsetWeights, gradOffsets, _offsetWeightGradients, _offsetBiasGradients);
+
+        // 7. Backprop through mask prediction conv if using modulation
+        Tensor<T>? gradInputFromMask = null;
+        if (_useModulation && gradMask != null)
+        {
+            gradInputFromMask = BackpropConvolution(
+                input4D, _maskWeights!, gradMask, _maskWeightGradients!, _maskBiasGradients!);
+        }
+
+        // 8. Sum all input gradient contributions
+        var totalInputGrad = new Tensor<T>(input4D.Shape);
+        for (int i = 0; i < totalInputGrad.Length; i++)
+        {
+            totalInputGrad.Data[i] = gradInputFromDeform.Data[i];
+            totalInputGrad.Data[i] = NumOps.Add(totalInputGrad.Data[i], gradInputFromOffset.Data[i]);
+            if (gradInputFromMask != null)
+            {
+                totalInputGrad.Data[i] = NumOps.Add(totalInputGrad.Data[i], gradInputFromMask.Data[i]);
+            }
+        }
+
+        // Remove batch dimension if original input didn't have one
+        return _lastInput.Rank == 3 ? RemoveBatchDimension(totalInputGrad) : totalInputGrad;
+    }
+
+    private void ComputeBiasGradients(Tensor<T> gradOutput)
+    {
+        int batch = gradOutput.Shape[0];
+        int channels = gradOutput.Shape[1];
+        int outH = gradOutput.Shape[2];
+        int outW = gradOutput.Shape[3];
+
+        for (int c = 0; c < channels; c++)
         {
             T sum = NumOps.Zero;
             for (int b = 0; b < batch; b++)
             {
-                for (int oh = 0; oh < outH; oh++)
+                for (int h = 0; h < outH; h++)
                 {
-                    for (int ow = 0; ow < outW; ow++)
+                    for (int w = 0; w < outW; w++)
                     {
-                        int idx = hasBatch
-                            ? b * _outputChannels * outH * outW + oc * outH * outW + oh * outW + ow
-                            : oc * outH * outW + oh * outW + ow;
+                        int idx = b * channels * outH * outW + c * outH * outW + h * outW + w;
                         sum = NumOps.Add(sum, gradOutput.Data[idx]);
                     }
                 }
             }
-            _biasGradients.Data[oc] = sum;
+            _biasGradients!.Data[c] = sum;
+        }
+    }
+
+    private Tensor<T> BackpropConvolution(
+        Tensor<T> input,
+        Tensor<T> weights,
+        Tensor<T> gradOutput,
+        Tensor<T> weightGrad,
+        Tensor<T> biasGrad)
+    {
+        // Use IEngine for backward convolution
+        var gradInput = _engine.Conv2DBackwardInput(
+            gradOutput,
+            weights,
+            inputShape: input.Shape,
+            stride: new[] { _stride, _stride },
+            padding: new[] { _padding, _padding },
+            dilation: new[] { 1, 1 });
+
+        // Compute weight gradients
+        var computedWeightGrad = _engine.Conv2DBackwardKernel(
+            gradOutput,
+            input,
+            kernelShape: weights.Shape,
+            stride: new[] { _stride, _stride },
+            padding: new[] { _padding, _padding },
+            dilation: new[] { 1, 1 });
+
+        // Copy to weight gradient tensor
+        for (int i = 0; i < weightGrad.Length; i++)
+        {
+            weightGrad.Data[i] = computedWeightGrad.Data[i];
         }
 
-        return inputGradient;
+        // Compute bias gradients (sum over batch and spatial)
+        int batch = gradOutput.Shape[0];
+        int channels = gradOutput.Shape[1];
+        int outH = gradOutput.Shape[2];
+        int outW = gradOutput.Shape[3];
+
+        for (int c = 0; c < channels; c++)
+        {
+            T sum = NumOps.Zero;
+            for (int b = 0; b < batch; b++)
+            {
+                for (int h = 0; h < outH; h++)
+                {
+                    for (int w = 0; w < outW; w++)
+                    {
+                        int idx = b * channels * outH * outW + c * outH * outW + h * outW + w;
+                        sum = NumOps.Add(sum, gradOutput.Data[idx]);
+                    }
+                }
+            }
+            biasGrad.Data[c] = sum;
+        }
+
+        return gradInput;
     }
 
     #endregion
@@ -359,117 +494,23 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         return weights;
     }
 
-    private void ApplyConvolution(Tensor<T> input, Tensor<T> weights, Tensor<T> bias, Tensor<T> output,
-        bool hasBatch, int batch, int inChannels, int height, int width, int outChannels, int outH, int outW)
-    {
-        for (int b = 0; b < batch; b++)
-        {
-            for (int oc = 0; oc < outChannels; oc++)
-            {
-                for (int oh = 0; oh < outH; oh++)
-                {
-                    for (int ow = 0; ow < outW; ow++)
-                    {
-                        T sum = bias.Data[oc];
-
-                        for (int ic = 0; ic < inChannels; ic++)
-                        {
-                            for (int kh = 0; kh < _kernelSize; kh++)
-                            {
-                                for (int kw = 0; kw < _kernelSize; kw++)
-                                {
-                                    int ih = oh * _stride - _padding + kh;
-                                    int iw = ow * _stride - _padding + kw;
-
-                                    if (ih >= 0 && ih < height && iw >= 0 && iw < width)
-                                    {
-                                        int inputIdx = hasBatch
-                                            ? b * inChannels * height * width + ic * height * width + ih * width + iw
-                                            : ic * height * width + ih * width + iw;
-                                        int weightIdx = oc * inChannels * _kernelSize * _kernelSize +
-                                                       ic * _kernelSize * _kernelSize +
-                                                       kh * _kernelSize + kw;
-                                        sum = NumOps.Add(sum, NumOps.Multiply(input.Data[inputIdx], weights.Data[weightIdx]));
-                                    }
-                                }
-                            }
-                        }
-
-                        int outIdx = hasBatch
-                            ? b * outChannels * outH * outW + oc * outH * outW + oh * outW + ow
-                            : oc * outH * outW + oh * outW + ow;
-                        output.Data[outIdx] = sum;
-                    }
-                }
-            }
-        }
-    }
-
-    private double GetTensorValue(Tensor<T> tensor, int b, int c, int h, int w, bool hasBatch, int[] shape)
-    {
-        int channels = hasBatch ? shape[1] : shape[0];
-        int height = hasBatch ? shape[2] : shape[1];
-        int width = hasBatch ? shape[3] : shape[2];
-
-        int idx = hasBatch
-            ? b * channels * height * width + c * height * width + h * width + w
-            : c * height * width + h * width + w;
-        return NumOps.ToDouble(tensor.Data[idx]);
-    }
-
-    private T BilinearSample(Tensor<T> input, int b, int c, double h, double w, bool hasBatch, int height, int width, int channels)
-    {
-        if (h < 0 || h >= height - 1 || w < 0 || w >= width - 1)
-        {
-            // Out of bounds - return zero
-            return NumOps.Zero;
-        }
-
-        int h0 = (int)Math.Floor(h);
-        int w0 = (int)Math.Floor(w);
-        int h1 = h0 + 1;
-        int w1 = w0 + 1;
-
-        double hWeight = h - h0;
-        double wWeight = w - w0;
-
-        T v00 = GetInputValue(input, b, c, h0, w0, hasBatch, height, width, channels);
-        T v01 = GetInputValue(input, b, c, h0, w1, hasBatch, height, width, channels);
-        T v10 = GetInputValue(input, b, c, h1, w0, hasBatch, height, width, channels);
-        T v11 = GetInputValue(input, b, c, h1, w1, hasBatch, height, width, channels);
-
-        T top = NumOps.Add(
-            NumOps.Multiply(v00, NumOps.FromDouble(1 - wWeight)),
-            NumOps.Multiply(v01, NumOps.FromDouble(wWeight)));
-        T bottom = NumOps.Add(
-            NumOps.Multiply(v10, NumOps.FromDouble(1 - wWeight)),
-            NumOps.Multiply(v11, NumOps.FromDouble(wWeight)));
-
-        return NumOps.Add(
-            NumOps.Multiply(top, NumOps.FromDouble(1 - hWeight)),
-            NumOps.Multiply(bottom, NumOps.FromDouble(hWeight)));
-    }
-
-    private T GetInputValue(Tensor<T> input, int b, int c, int h, int w, bool hasBatch, int height, int width, int channels)
-    {
-        if (h < 0 || h >= height || w < 0 || w >= width)
-            return NumOps.Zero;
-
-        int idx = hasBatch
-            ? b * channels * height * width + c * height * width + h * width + w
-            : c * height * width + h * width + w;
-        return input.Data[idx];
-    }
-
     #endregion
 
     #region Layer Properties
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// This layer supports full training with gradient computation for all parameters:
+    /// - Main convolution weights and bias
+    /// - Offset prediction weights and bias
+    /// - Modulation mask weights and bias (if using DCNv2)
+    /// All gradients are computed using IEngine backward operations with bilinear interpolation support.
+    /// </remarks>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
+    public override bool SupportsJitCompilation =>
+        _weights != null && _bias != null && _offsetWeights != null && _offsetBias != null;
 
     #endregion
 
@@ -500,9 +541,53 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
     /// <inheritdoc/>
     public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
     {
-        // Deformable convolution is complex with dynamic offsets - return identity for now
-        // Full JIT compilation support can be added later
-        return inputNode;
+        if (!SupportsJitCompilation)
+            throw new InvalidOperationException("Layer weights not initialized. Cannot build computation graph.");
+
+        // Create constant nodes for weights
+        var kernelNode = TensorOperations<T>.Constant(_weights, $"{namePrefix}kernel");
+        var biasNode = TensorOperations<T>.Constant(_bias, $"{namePrefix}bias");
+        var offsetWeightsNode = TensorOperations<T>.Constant(_offsetWeights, $"{namePrefix}offset_weights");
+        var offsetBiasNode = TensorOperations<T>.Constant(_offsetBias, $"{namePrefix}offset_bias");
+
+        // First compute offsets using standard convolution
+        var offsetsNode = TensorOperations<T>.Conv2D(
+            inputNode,
+            offsetWeightsNode,
+            offsetBiasNode,
+            stride: new int[] { _stride, _stride },
+            padding: new int[] { _padding, _padding });
+
+        // Optionally compute modulation mask
+        ComputationNode<T>? maskNode = null;
+        if (_useModulation && _maskWeights != null && _maskBias != null)
+        {
+            var maskWeightsNode = TensorOperations<T>.Constant(_maskWeights, $"{namePrefix}mask_weights");
+            var maskBiasNode = TensorOperations<T>.Constant(_maskBias, $"{namePrefix}mask_bias");
+
+            var rawMaskNode = TensorOperations<T>.Conv2D(
+                inputNode,
+                maskWeightsNode,
+                maskBiasNode,
+                stride: new int[] { _stride, _stride },
+                padding: new int[] { _padding, _padding });
+
+            // Apply sigmoid activation to mask
+            maskNode = TensorOperations<T>.Sigmoid(rawMaskNode);
+        }
+
+        // Apply deformable convolution with computed offsets and mask
+        var deformConvNode = TensorOperations<T>.DeformableConv2D(
+            inputNode,
+            kernelNode,
+            offsetsNode,
+            maskNode,
+            biasNode,
+            stride: new int[] { _stride, _stride },
+            padding: new int[] { _padding, _padding },
+            dilation: new int[] { 1, 1 });
+
+        return deformConvNode;
     }
 
     #endregion

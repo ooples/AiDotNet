@@ -44,14 +44,14 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
 {
     #region Fields
 
-    private readonly int _height;
-    private readonly int _width;
-    private readonly int _channels;
-    private readonly int _numFrames;
-    private readonly int _latentDim;
-    private readonly int _numInferenceSteps;
-    private readonly double _guidanceScale;
-    private readonly SVDModelVariant _variant;
+    private int _height;
+    private int _width;
+    private int _channels;
+    private int _numFrames;
+    private int _latentDim;
+    private int _numInferenceSteps;
+    private double _guidanceScale;
+    private SVDModelVariant _variant;
 
     // VAE Encoder/Decoder
     private readonly List<ConvolutionalLayer<T>> _vaeEncoder;
@@ -547,22 +547,83 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
     {
         var frames = new List<Tensor<T>>();
 
-        // Assume latents have temporal dimension
+        // Latents should have temporal dimension [B, T, C, H, W]
+        // or we need to handle different shapes
         int batchSize = latents.Shape[0];
-        int channels = latents.Shape[1];
-        int height = latents.Shape[2];
-        int width = latents.Shape[3];
 
-        // Generate frames
-        for (int f = 0; f < _numFrames; f++)
+        // Check if latents have temporal dimension
+        if (latents.Rank == 5)
         {
-            // Decode each frame
-            var frameLatent = latents; // In practice, would extract temporal slice
-            var frame = DecodeFromLatent(frameLatent);
-            frames.Add(RemoveBatchDimension(frame));
+            // Shape is [B, T, C, H, W]
+            int numTemporalFrames = latents.Shape[1];
+            int channels = latents.Shape[2];
+            int height = latents.Shape[3];
+            int width = latents.Shape[4];
+
+            for (int f = 0; f < Math.Min(_numFrames, numTemporalFrames); f++)
+            {
+                // Extract temporal slice for frame f
+                var frameLatent = ExtractTemporalSlice(latents, f, batchSize, channels, height, width);
+                var frame = DecodeFromLatent(frameLatent);
+                frames.Add(RemoveBatchDimension(frame));
+            }
+        }
+        else
+        {
+            // Shape is [B, C, H, W] - interpolate from a single latent
+            int channels = latents.Shape[1];
+            int height = latents.Shape[2];
+            int width = latents.Shape[3];
+
+            for (int f = 0; f < _numFrames; f++)
+            {
+                // Add temporal variation by blending with noise based on frame position
+                double t = (double)f / Math.Max(_numFrames - 1, 1);
+                var frameLatent = AddTemporalVariation(latents, t, batchSize, channels, height, width);
+                var frame = DecodeFromLatent(frameLatent);
+                frames.Add(RemoveBatchDimension(frame));
+            }
         }
 
         return frames;
+    }
+
+    /// <summary>
+    /// Extracts a temporal slice from 5D latent tensor.
+    /// </summary>
+    private Tensor<T> ExtractTemporalSlice(Tensor<T> latents, int frameIndex, int batchSize, int channels, int height, int width)
+    {
+        var slice = new Tensor<T>([batchSize, channels, height, width]);
+        int sliceSize = channels * height * width;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int srcOffset = b * latents.Shape[1] * sliceSize + frameIndex * sliceSize;
+            int dstOffset = b * sliceSize;
+            Array.Copy(latents.Data, srcOffset, slice.Data, dstOffset, sliceSize);
+        }
+
+        return slice;
+    }
+
+    /// <summary>
+    /// Adds temporal variation to create different frames from a single latent.
+    /// </summary>
+    private Tensor<T> AddTemporalVariation(Tensor<T> latents, double t, int batchSize, int channels, int height, int width)
+    {
+        var result = new Tensor<T>([batchSize, channels, height, width]);
+
+        // Use sinusoidal temporal modulation
+        for (int i = 0; i < latents.Length; i++)
+        {
+            double val = NumOps.ToDouble(latents.Data[i]);
+            // Add smooth temporal variation using sine wave
+            double freq = 2.0 * Math.PI * (i % width) / width;
+            double temporalMod = 0.1 * Math.Sin(freq + t * Math.PI);
+            result.Data[i] = NumOps.FromDouble(val + temporalMod);
+        }
+
+        return result;
     }
 
     private Tensor<T> InitializeLatents(int[] shape, Random random)
@@ -1005,14 +1066,14 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadDouble();
-        _ = reader.ReadInt32();
+        _height = reader.ReadInt32();
+        _width = reader.ReadInt32();
+        _channels = reader.ReadInt32();
+        _numFrames = reader.ReadInt32();
+        _latentDim = reader.ReadInt32();
+        _numInferenceSteps = reader.ReadInt32();
+        _guidanceScale = reader.ReadDouble();
+        _variant = (SVDModelVariant)reader.ReadInt32();
     }
 
     /// <inheritdoc/>

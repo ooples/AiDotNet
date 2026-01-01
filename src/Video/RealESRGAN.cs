@@ -565,9 +565,21 @@ public class RealESRGAN<T> : NeuralNetworkBase<T>
         var fakeGradient = Discriminator.Backward(
             CalculateBCEGradient(fakeOutput, fakeLabels));
 
-        // Update discriminator parameters using learning rate
-        T learningRate = NumOps.FromDouble(0.0001);
-        Discriminator.UpdateParameters(learningRate);
+        // Update discriminator parameters using optimizer or fallback to default learning rate
+        if (_discriminatorOptimizer != null)
+        {
+            // Use configured optimizer
+            var currentParams = Discriminator.GetParameters();
+            var gradients = Discriminator.GetParameterGradients();
+            var updatedParams = _discriminatorOptimizer.UpdateParameters(currentParams, gradients);
+            Discriminator.SetParameters(updatedParams);
+        }
+        else
+        {
+            // Fallback to simple SGD with default learning rate
+            T learningRate = NumOps.FromDouble(0.0001);
+            Discriminator.UpdateParameters(learningRate);
+        }
     }
 
     /// <summary>
@@ -594,9 +606,21 @@ public class RealESRGAN<T> : NeuralNetworkBase<T>
         // Backpropagate through generator
         Generator!.Backward(combinedGradient);
 
-        // Update generator parameters using learning rate
-        T learningRate = NumOps.FromDouble(0.0001);
-        Generator.UpdateParameters(learningRate);
+        // Update generator parameters using optimizer or fallback to default learning rate
+        if (_generatorOptimizer != null)
+        {
+            // Use configured optimizer
+            var currentParams = Generator.GetParameters();
+            var gradients = Generator.GetParameterGradients();
+            var updatedParams = _generatorOptimizer.UpdateParameters(currentParams, gradients);
+            Generator.SetParameters(updatedParams);
+        }
+        else
+        {
+            // Fallback to simple SGD with default learning rate
+            T learningRate = NumOps.FromDouble(0.0001);
+            Generator.UpdateParameters(learningRate);
+        }
     }
 
     #endregion

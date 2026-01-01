@@ -318,6 +318,11 @@ public enum OperationType
     /// </summary>
     LocallyConnectedConv2D,
 
+    /// <summary>
+    /// 2D deformable convolution with learnable offsets and optional modulation.
+    /// </summary>
+    DeformableConv2D,
+
     // Pooling Operations
 
     /// <summary>

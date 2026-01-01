@@ -127,9 +127,9 @@ public class RealESRGANIntegrationTests
     #region Tensor Rank Support Tests
 
     [Fact]
-    public void Predict_With3DTensor_BatchChannelHeightWidth_ReturnsCorrectShape()
+    public void Predict_With4DTensor_BatchChannelHeightWidth_ReturnsCorrectShape()
     {
-        // Arrange - [batch, channels, height, width]
+        // Arrange - 4D tensor: [batch, channels, height, width]
         var generatorArch = CreateArchitecture(32, 32, 3);
         var discriminatorArch = CreateArchitecture(128, 128, 3);
         var model = new RealESRGAN<double>(

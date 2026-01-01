@@ -268,8 +268,33 @@ public class FILM<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // Expects concatenated frame pair
-        return input;
+        // Expects concatenated frame pair [B, C*2, H, W]
+        // Split into two frames and interpolate at t=0.5
+        int batchSize = input.Shape[0];
+        int channels = input.Shape[1] / 2;
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        var frame1 = new Tensor<T>([batchSize, channels, height, width]);
+        var frame2 = new Tensor<T>([batchSize, channels, height, width]);
+
+        // Split channels
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int h = 0; h < height; h++)
+                {
+                    for (int w = 0; w < width; w++)
+                    {
+                        frame1[b, c, h, w] = input[b, c, h, w];
+                        frame2[b, c, h, w] = input[b, channels + c, h, w];
+                    }
+                }
+            }
+        }
+
+        return Interpolate(frame1, frame2, 0.5);
     }
 
     /// <inheritdoc/>

@@ -6000,6 +6000,13 @@ public static class LayerHelper<T>
         int scaleFactor = 2,
         bool useTemporalConsistency = true)
     {
+        // Validate scaleFactor is a positive power of two (Real-ESRGAN only supports 2x/4x)
+        if (scaleFactor <= 0 || (scaleFactor & (scaleFactor - 1)) != 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(scaleFactor),
+                $"scaleFactor must be a positive power of two (e.g., 2, 4, 8). Got: {scaleFactor}");
+        }
+
         // Track current spatial dimensions
         int currentHeight = inputHeight;
         int currentWidth = inputWidth;
@@ -6114,6 +6121,13 @@ public static class LayerHelper<T>
         int inputWidth = 128,
         int scaleFactor = 2)
     {
+        // Validate scaleFactor is a positive power of two
+        if (scaleFactor <= 0 || (scaleFactor & (scaleFactor - 1)) != 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(scaleFactor),
+                $"scaleFactor must be a positive power of two (e.g., 2, 4, 8). Got: {scaleFactor}");
+        }
+
         int numFeatures = 32;  // Smaller feature dimension
         int currentHeight = inputHeight;
         int currentWidth = inputWidth;
@@ -6253,20 +6267,30 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(96, h, w, 96, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
 
-        // Flow estimation head
+        // Flow estimation head (outputs at downsampled resolution: h/8 x w/8)
         yield return new ConvolutionalLayer<T>(96, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new ConvolutionalLayer<T>(64, h, w, 4, 3, 1, 1);  // 4 = 2 flows * 2 directions
 
-        // Synthesis network (back to original resolution)
-        h = inputHeight; w = inputWidth;
-        yield return new ConvolutionalLayer<T>(inputChannels * 2 + 4, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        // NOTE: The synthesis network below expects input at the ORIGINAL resolution.
+        // Higher-level models (FILM, FLAVR, etc.) should:
+        // 1. Run the feature pyramid layers (indices 0-7) to get downsampled flow
+        // 2. Upsample the flow to original resolution
+        // 3. Concatenate original frames with upsampled flow
+        // 4. Run the synthesis network layers (indices 8+) on that concatenation
+        // The layer shapes below are defined for the concatenated input at original resolution.
+
+        // Synthesis network (expects original resolution: inputHeight x inputWidth)
+        // Input: [frames_concat (C*2), upsampled_flow (4)] = C*2 + 4 channels
+        int synthH = inputHeight;
+        int synthW = inputWidth;
+        yield return new ConvolutionalLayer<T>(inputChannels * 2 + 4, synthH, synthW, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         for (int i = 0; i < 4; i++)
         {
-            yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(numFeatures, synthH, synthW, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         }
 
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, inputChannels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, synthH, synthW, inputChannels, 3, 1, 1);
     }
 
     /// <summary>
@@ -6314,7 +6338,7 @@ public static class LayerHelper<T>
         // Global average pooling to get fixed-size feature vector
         yield return new GlobalPoolingLayer<T>(
             inputShape: [128, h, w],
-            poolingType: Enums.PoolingType.Average);
+            poolingType: PoolingType.Average);
 
         // Output: 6 parameters for affine transformation
         yield return new DenseLayer<T>(128, 64, new ReLUActivation<T>() as IActivationFunction<T>);
@@ -6386,7 +6410,7 @@ public static class LayerHelper<T>
         // Global average pooling for CLS-like token
         yield return new GlobalPoolingLayer<T>(
             inputShape: [embedDim, patchH, patchW],
-            poolingType: Enums.PoolingType.Average);
+            poolingType: PoolingType.Average);
 
         // Projection to shared embedding space (512 is common for CLIP-like models)
         yield return new DenseLayer<T>(embedDim, 512, new IdentityActivation<T>() as IActivationFunction<T>);

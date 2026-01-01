@@ -257,7 +257,7 @@ public class FlowFormer<T> : NeuralNetworkBase<T>
         return NumOps.FromDouble(value);
     }
 
-    public override Tensor<T> Predict(Tensor<T> input) => Forward(input);
+    public override Tensor<T> Predict(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {

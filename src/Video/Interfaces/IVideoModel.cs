@@ -47,8 +47,13 @@ public interface IVideoModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The standard video tensor shape is [batch, numFrames, channels, height, width].
-    /// For example, [1, 16, 3, 224, 224] means 1 video with 16 frames, RGB (3 channels), 224x224 resolution.
+    /// Video models support two input formats:
+    /// - 4D tensor: [batch, channels, height, width] for single frames or when frames are collapsed into batch
+    /// - 5D tensor: [batch, numFrames, channels, height, width] for explicit video sequences
+    /// </para>
+    /// <para>
+    /// When a 5D tensor is provided, the temporal dimension is typically flattened into the batch dimension
+    /// for processing (e.g., [2, 16, 3, 224, 224] becomes [32, 3, 224, 224]).
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This tells you what shape your input video data needs to be.

@@ -3,6 +3,8 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using Microsoft.ML.OnnxRuntime;
+using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.Video.ActionRecognition;
 
@@ -51,6 +53,7 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
     private readonly double _maskRatio;
     private readonly bool _useNativeMode;
     private readonly string? _onnxModelPath;
+    private readonly InferenceSession? _onnxSession;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     private readonly Random _random = new();
@@ -160,6 +163,11 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         int numFrames = 16)
         : base(architecture, new CrossEntropyLoss<T>())
     {
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"VideoMAE ONNX model not found: {onnxModelPath}");
+
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 224;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
@@ -172,6 +180,9 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
         _optimizer = null;
+
+        try { _onnxSession = new InferenceSession(onnxModelPath); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to load ONNX model: {ex.Message}", ex); }
 
         InitializeLayers();
     }
@@ -314,9 +325,7 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
     {
         if (!_useNativeMode)
         {
-            // ONNX mode placeholder
-            int batchSize = video.Shape[0];
-            return new Tensor<T>([batchSize, _numFeatures]);
+            return RunOnnxInference(video);
         }
 
         // Reshape video to batch of frame pairs
@@ -387,9 +396,31 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
             return Layers[14].Forward(classHead);
         }
 
-        // Return placeholder for ONNX mode
+        // In ONNX mode, this is handled by RunOnnxInference
         int batchSize = features.Shape[0];
         return new Tensor<T>([batchSize, _numClasses]);
+    }
+
+    private Tensor<T> RunOnnxInference(Tensor<T> input)
+    {
+        if (_onnxSession is null)
+            throw new InvalidOperationException("ONNX session is not initialized.");
+
+        var inputData = new float[input.Length];
+        for (int i = 0; i < input.Length; i++)
+            inputData[i] = Convert.ToSingle(input.Data[i]);
+
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(_onnxSession.InputMetadata.Keys.First(), onnxInput) };
+
+        using var results = _onnxSession.Run(inputs);
+        var outputTensor = results.First().AsTensor<float>();
+
+        var outputData = new T[outputTensor.Length];
+        for (int i = 0; i < outputTensor.Length; i++)
+            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+
+        return new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
     }
 
     private bool[,,] CreateTubeMask(int batchSize)
@@ -491,6 +522,13 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         int height = reconstructed.Shape[2];
         int width = reconstructed.Shape[3];
 
+        // Handle both 4D [B,C,H,W] and 5D [B,T,C,H,W] original tensors
+        bool is5D = original.Rank == 5;
+        int origChannels = is5D ? original.Shape[2] : original.Shape[1];
+        int origHeight = is5D ? original.Shape[3] : original.Shape[2];
+        int origWidth = is5D ? original.Shape[4] : original.Shape[3];
+        int numFrames = is5D ? original.Shape[1] : 1;
+
         for (int b = 0; b < batchSize; b++)
         {
             for (int h = 0; h < height; h++)
@@ -505,7 +543,27 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
                     {
                         for (int c = 0; c < channels; c++)
                         {
-                            T diff = NumOps.Subtract(reconstructed[b, c, h, w], original[b, 0, c, h, w]);
+                            // Map reconstructed position to original position
+                            int origH = h % origHeight;
+                            int origW = w % origWidth;
+                            int origC = c % origChannels;
+
+                            // Get original value - use first frame (t=0) if 5D
+                            T origVal;
+                            if (is5D)
+                            {
+                                int idx = b * numFrames * origChannels * origHeight * origWidth +
+                                          0 * origChannels * origHeight * origWidth +
+                                          origC * origHeight * origWidth +
+                                          origH * origWidth + origW;
+                                origVal = original.Data[idx];
+                            }
+                            else
+                            {
+                                origVal = original[b, origC, origH, origW];
+                            }
+
+                            T diff = NumOps.Subtract(reconstructed[b, c, h, w], origVal);
                             loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
                             count++;
                         }

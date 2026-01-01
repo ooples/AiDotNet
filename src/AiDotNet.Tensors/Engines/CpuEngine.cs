@@ -4709,6 +4709,845 @@ public class CpuEngine : IEngine
         return new Tensor<T>(kernelShape, new Vector<T>(gradKernel));
     }
 
+    #region Deformable Convolution Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> DeformableConv2D<T>(
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T> offset,
+        Tensor<T>? mask,
+        int[] stride,
+        int[] padding,
+        int[] dilation)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+        if (offset == null) throw new ArgumentNullException(nameof(offset));
+        if (input.Rank != 4) throw new ArgumentException($"DeformableConv2D requires 4D input tensor. Got rank {input.Rank}.", nameof(input));
+        if (kernel.Rank != 4) throw new ArgumentException($"DeformableConv2D requires 4D kernel tensor. Got rank {kernel.Rank}.", nameof(kernel));
+        if (stride == null || stride.Length != 2) throw new ArgumentException("Stride must be array of 2 elements.", nameof(stride));
+        if (padding == null || padding.Length != 2) throw new ArgumentException("Padding must be array of 2 elements.", nameof(padding));
+        if (dilation == null || dilation.Length != 2) throw new ArgumentException("Dilation must be array of 2 elements.", nameof(dilation));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        int outChannels = kernel.Shape[0];
+        int kernelHeight = kernel.Shape[2];
+        int kernelWidth = kernel.Shape[3];
+
+        int strideH = stride[0], strideW = stride[1];
+        int padH = padding[0], padW = padding[1];
+        int dilationH = dilation[0], dilationW = dilation[1];
+
+        int effectiveKernelH = dilationH * (kernelHeight - 1) + 1;
+        int effectiveKernelW = dilationW * (kernelWidth - 1) + 1;
+
+        int outputHeight = (height + 2 * padH - effectiveKernelH) / strideH + 1;
+        int outputWidth = (width + 2 * padW - effectiveKernelW) / strideW + 1;
+
+        int numKernelPositions = kernelHeight * kernelWidth;
+
+        // Validate offset shape: [batch, 2*kernel_h*kernel_w, out_h, out_w]
+        if (offset.Shape[1] != 2 * numKernelPositions)
+            throw new ArgumentException($"Offset channels must be 2 * kernel_h * kernel_w = {2 * numKernelPositions}. Got {offset.Shape[1]}.", nameof(offset));
+
+        // Validate mask shape if provided: [batch, kernel_h*kernel_w, out_h, out_w]
+        if (mask != null && mask.Shape[1] != numKernelPositions)
+            throw new ArgumentException($"Mask channels must be kernel_h * kernel_w = {numKernelPositions}. Got {mask.Shape[1]}.", nameof(mask));
+
+        var result = new Tensor<T>([batch, outChannels, outputHeight, outputWidth]);
+        var inputData = input.Data;
+        var kernelData = kernel.Data;
+        var offsetData = offset.Data;
+        var maskData = mask?.Data;
+        var outputData = result.Data;
+
+        // Parallel over batch * outChannels for maximum parallelism
+        Parallel.For(0, batch * outChannels, idx =>
+        {
+            int b = idx / outChannels;
+            int oc = idx % outChannels;
+
+            for (int oh = 0; oh < outputHeight; oh++)
+            {
+                for (int ow = 0; ow < outputWidth; ow++)
+                {
+                    T sum = numOps.Zero;
+
+                    for (int ic = 0; ic < inChannels; ic++)
+                    {
+                        for (int kh = 0; kh < kernelHeight; kh++)
+                        {
+                            for (int kw = 0; kw < kernelWidth; kw++)
+                            {
+                                int kernelPosIdx = kh * kernelWidth + kw;
+
+                                // Get offsets for this kernel position
+                                int offsetYIdx = ((b * (2 * numKernelPositions) + kernelPosIdx) * outputHeight + oh) * outputWidth + ow;
+                                int offsetXIdx = ((b * (2 * numKernelPositions) + numKernelPositions + kernelPosIdx) * outputHeight + oh) * outputWidth + ow;
+
+                                double offsetY = numOps.ToDouble(offsetData[offsetYIdx]);
+                                double offsetX = numOps.ToDouble(offsetData[offsetXIdx]);
+
+                                // Base sampling position + learned offset
+                                double sampledH = oh * strideH - padH + kh * dilationH + offsetY;
+                                double sampledW = ow * strideW - padW + kw * dilationW + offsetX;
+
+                                // Bilinear interpolation
+                                T sampledValue = BilinearSample(inputData, b, ic, inChannels, height, width, sampledH, sampledW, numOps);
+
+                                // Apply modulation mask (DCNv2)
+                                if (maskData != null)
+                                {
+                                    int maskIdx = ((b * numKernelPositions + kernelPosIdx) * outputHeight + oh) * outputWidth + ow;
+                                    sampledValue = numOps.Multiply(sampledValue, maskData[maskIdx]);
+                                }
+
+                                // Multiply by kernel weight
+                                int kernelIdx = ((oc * inChannels + ic) * kernelHeight + kh) * kernelWidth + kw;
+                                sum = numOps.Add(sum, numOps.Multiply(sampledValue, kernelData[kernelIdx]));
+                            }
+                        }
+                    }
+
+                    int outputIdx = ((b * outChannels + oc) * outputHeight + oh) * outputWidth + ow;
+                    outputData[outputIdx] = sum;
+                }
+            }
+        });
+
+        return result;
+    }
+
+    /// <summary>
+    /// Performs bilinear sampling at a fractional position.
+    /// </summary>
+    private static T BilinearSample<T>(
+        T[] data,
+        int batch,
+        int channel,
+        int totalChannels,
+        int height,
+        int width,
+        double h,
+        double w,
+        INumericOperations<T> numOps)
+    {
+        // Out of bounds check
+        if (h < -1 || h > height || w < -1 || w > width)
+            return numOps.Zero;
+
+        int h0 = (int)Math.Floor(h);
+        int h1 = h0 + 1;
+        int w0 = (int)Math.Floor(w);
+        int w1 = w0 + 1;
+
+        double lh = h - h0; // Lerp factor for height
+        double lw = w - w0; // Lerp factor for width
+
+        T v00 = GetPixelValue(data, batch, channel, totalChannels, height, width, h0, w0, numOps);
+        T v01 = GetPixelValue(data, batch, channel, totalChannels, height, width, h0, w1, numOps);
+        T v10 = GetPixelValue(data, batch, channel, totalChannels, height, width, h1, w0, numOps);
+        T v11 = GetPixelValue(data, batch, channel, totalChannels, height, width, h1, w1, numOps);
+
+        // Bilinear interpolation: (1-lh)*(1-lw)*v00 + (1-lh)*lw*v01 + lh*(1-lw)*v10 + lh*lw*v11
+        double w00 = (1 - lh) * (1 - lw);
+        double w01 = (1 - lh) * lw;
+        double w10 = lh * (1 - lw);
+        double w11 = lh * lw;
+
+        T result = numOps.Multiply(v00, numOps.FromDouble(w00));
+        result = numOps.Add(result, numOps.Multiply(v01, numOps.FromDouble(w01)));
+        result = numOps.Add(result, numOps.Multiply(v10, numOps.FromDouble(w10)));
+        result = numOps.Add(result, numOps.Multiply(v11, numOps.FromDouble(w11)));
+
+        return result;
+    }
+
+    /// <summary>
+    /// Gets a pixel value with boundary checking (returns zero for out-of-bounds).
+    /// </summary>
+    private static T GetPixelValue<T>(
+        T[] data,
+        int batch,
+        int channel,
+        int totalChannels,
+        int height,
+        int width,
+        int h,
+        int w,
+        INumericOperations<T> numOps)
+    {
+        if (h < 0 || h >= height || w < 0 || w >= width)
+            return numOps.Zero;
+
+        int idx = ((batch * totalChannels + channel) * height + h) * width + w;
+        return data[idx];
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> DeformableConv2DBackwardInput<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T> offset,
+        Tensor<T>? mask,
+        int[] inputShape,
+        int[] stride,
+        int[] padding,
+        int[] dilation)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+        if (offset == null) throw new ArgumentNullException(nameof(offset));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = inputShape[0];
+        int inChannels = inputShape[1];
+        int height = inputShape[2];
+        int width = inputShape[3];
+
+        int outChannels = kernel.Shape[0];
+        int kernelHeight = kernel.Shape[2];
+        int kernelWidth = kernel.Shape[3];
+
+        int strideH = stride[0], strideW = stride[1];
+        int padH = padding[0], padW = padding[1];
+        int dilationH = dilation[0], dilationW = dilation[1];
+
+        int outputHeight = gradOutput.Shape[2];
+        int outputWidth = gradOutput.Shape[3];
+        int numKernelPositions = kernelHeight * kernelWidth;
+
+        var gradInput = new Tensor<T>(inputShape);
+        var gradInputData = gradInput.Data;
+        var gradOutputData = gradOutput.Data;
+        var kernelData = kernel.Data;
+        var offsetData = offset.Data;
+        var maskData = mask?.Data;
+
+        // Use a lock array to avoid race conditions during atomic adds
+        var locks = new object[batch * inChannels * height * width];
+        for (int i = 0; i < locks.Length; i++) locks[i] = new object();
+
+        Parallel.For(0, batch * outChannels, idx =>
+        {
+            int b = idx / outChannels;
+            int oc = idx % outChannels;
+
+            for (int oh = 0; oh < outputHeight; oh++)
+            {
+                for (int ow = 0; ow < outputWidth; ow++)
+                {
+                    int gradOutIdx = ((b * outChannels + oc) * outputHeight + oh) * outputWidth + ow;
+                    T gradOutVal = gradOutputData[gradOutIdx];
+
+                    for (int ic = 0; ic < inChannels; ic++)
+                    {
+                        for (int kh = 0; kh < kernelHeight; kh++)
+                        {
+                            for (int kw = 0; kw < kernelWidth; kw++)
+                            {
+                                int kernelPosIdx = kh * kernelWidth + kw;
+                                int kernelIdx = ((oc * inChannels + ic) * kernelHeight + kh) * kernelWidth + kw;
+
+                                // Get offsets
+                                int offsetYIdx = ((b * (2 * numKernelPositions) + kernelPosIdx) * outputHeight + oh) * outputWidth + ow;
+                                int offsetXIdx = ((b * (2 * numKernelPositions) + numKernelPositions + kernelPosIdx) * outputHeight + oh) * outputWidth + ow;
+
+                                double offsetY = numOps.ToDouble(offsetData[offsetYIdx]);
+                                double offsetX = numOps.ToDouble(offsetData[offsetXIdx]);
+
+                                double sampledH = oh * strideH - padH + kh * dilationH + offsetY;
+                                double sampledW = ow * strideW - padW + kw * dilationW + offsetX;
+
+                                // Get modulation mask
+                                T modulation = numOps.One;
+                                if (maskData != null)
+                                {
+                                    int maskIdx = ((b * numKernelPositions + kernelPosIdx) * outputHeight + oh) * outputWidth + ow;
+                                    modulation = maskData[maskIdx];
+                                }
+
+                                // Gradient multiplied by kernel weight and modulation
+                                T gradVal = numOps.Multiply(numOps.Multiply(gradOutVal, kernelData[kernelIdx]), modulation);
+
+                                // Distribute gradient to the 4 neighboring pixels using bilinear weights
+                                BilinearBackwardInput(gradInputData, gradVal, b, ic, inChannels, height, width, sampledH, sampledW, numOps, locks);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        return gradInput;
+    }
+
+    /// <summary>
+    /// Distributes gradient to input using bilinear interpolation weights.
+    /// </summary>
+    private static void BilinearBackwardInput<T>(
+        T[] gradData,
+        T gradVal,
+        int batch,
+        int channel,
+        int totalChannels,
+        int height,
+        int width,
+        double h,
+        double w,
+        INumericOperations<T> numOps,
+        object[] locks)
+    {
+        if (h <= -1 || h >= height || w <= -1 || w >= width)
+            return;
+
+        int h0 = (int)Math.Floor(h);
+        int h1 = h0 + 1;
+        int w0 = (int)Math.Floor(w);
+        int w1 = w0 + 1;
+
+        double lh = h - h0;
+        double lw = w - w0;
+
+        double w00 = (1 - lh) * (1 - lw);
+        double w01 = (1 - lh) * lw;
+        double w10 = lh * (1 - lw);
+        double w11 = lh * lw;
+
+        // Add gradient contributions to each of the 4 corners
+        AddGradientToPixel(gradData, gradVal, batch, channel, totalChannels, height, width, h0, w0, w00, numOps, locks);
+        AddGradientToPixel(gradData, gradVal, batch, channel, totalChannels, height, width, h0, w1, w01, numOps, locks);
+        AddGradientToPixel(gradData, gradVal, batch, channel, totalChannels, height, width, h1, w0, w10, numOps, locks);
+        AddGradientToPixel(gradData, gradVal, batch, channel, totalChannels, height, width, h1, w1, w11, numOps, locks);
+    }
+
+    /// <summary>
+    /// Atomically adds gradient to a pixel position with boundary checking.
+    /// </summary>
+    private static void AddGradientToPixel<T>(
+        T[] gradData,
+        T gradVal,
+        int batch,
+        int channel,
+        int totalChannels,
+        int height,
+        int width,
+        int h,
+        int w,
+        double weight,
+        INumericOperations<T> numOps,
+        object[] locks)
+    {
+        if (h < 0 || h >= height || w < 0 || w >= width || Math.Abs(weight) < 1e-10)
+            return;
+
+        int idx = ((batch * totalChannels + channel) * height + h) * width + w;
+        T contrib = numOps.Multiply(gradVal, numOps.FromDouble(weight));
+
+        lock (locks[idx])
+        {
+            gradData[idx] = numOps.Add(gradData[idx], contrib);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> DeformableConv2DBackwardKernel<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> input,
+        Tensor<T> offset,
+        Tensor<T>? mask,
+        int[] kernelShape,
+        int[] stride,
+        int[] padding,
+        int[] dilation)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (offset == null) throw new ArgumentNullException(nameof(offset));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        int outChannels = kernelShape[0];
+        int kernelHeight = kernelShape[2];
+        int kernelWidth = kernelShape[3];
+
+        int strideH = stride[0], strideW = stride[1];
+        int padH = padding[0], padW = padding[1];
+        int dilationH = dilation[0], dilationW = dilation[1];
+
+        int outputHeight = gradOutput.Shape[2];
+        int outputWidth = gradOutput.Shape[3];
+        int numKernelPositions = kernelHeight * kernelWidth;
+
+        var gradKernel = new Tensor<T>(kernelShape);
+        var gradKernelData = gradKernel.Data;
+        var gradOutputData = gradOutput.Data;
+        var inputData = input.Data;
+        var offsetData = offset.Data;
+        var maskData = mask?.Data;
+
+        // Use locks for atomic operations on kernel gradients
+        var locks = new object[outChannels * inChannels * kernelHeight * kernelWidth];
+        for (int i = 0; i < locks.Length; i++) locks[i] = new object();
+
+        Parallel.For(0, batch, b =>
+        {
+            for (int oc = 0; oc < outChannels; oc++)
+            {
+                for (int oh = 0; oh < outputHeight; oh++)
+                {
+                    for (int ow = 0; ow < outputWidth; ow++)
+                    {
+                        int gradOutIdx = ((b * outChannels + oc) * outputHeight + oh) * outputWidth + ow;
+                        T gradOutVal = gradOutputData[gradOutIdx];
+
+                        for (int ic = 0; ic < inChannels; ic++)
+                        {
+                            for (int kh = 0; kh < kernelHeight; kh++)
+                            {
+                                for (int kw = 0; kw < kernelWidth; kw++)
+                                {
+                                    int kernelPosIdx = kh * kernelWidth + kw;
+                                    int kernelIdx = ((oc * inChannels + ic) * kernelHeight + kh) * kernelWidth + kw;
+
+                                    // Get offsets
+                                    int offsetYIdx = ((b * (2 * numKernelPositions) + kernelPosIdx) * outputHeight + oh) * outputWidth + ow;
+                                    int offsetXIdx = ((b * (2 * numKernelPositions) + numKernelPositions + kernelPosIdx) * outputHeight + oh) * outputWidth + ow;
+
+                                    double offsetY = numOps.ToDouble(offsetData[offsetYIdx]);
+                                    double offsetX = numOps.ToDouble(offsetData[offsetXIdx]);
+
+                                    double sampledH = oh * strideH - padH + kh * dilationH + offsetY;
+                                    double sampledW = ow * strideW - padW + kw * dilationW + offsetX;
+
+                                    // Sample input with bilinear interpolation
+                                    T sampledValue = BilinearSample(inputData, b, ic, inChannels, height, width, sampledH, sampledW, numOps);
+
+                                    // Apply modulation mask
+                                    if (maskData != null)
+                                    {
+                                        int maskIdx = ((b * numKernelPositions + kernelPosIdx) * outputHeight + oh) * outputWidth + ow;
+                                        sampledValue = numOps.Multiply(sampledValue, maskData[maskIdx]);
+                                    }
+
+                                    // gradKernel[oc, ic, kh, kw] += gradOutput * sampledValue
+                                    T contrib = numOps.Multiply(gradOutVal, sampledValue);
+
+                                    lock (locks[kernelIdx])
+                                    {
+                                        gradKernelData[kernelIdx] = numOps.Add(gradKernelData[kernelIdx], contrib);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        return gradKernel;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> DeformableConv2DBackwardOffset<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T> offset,
+        Tensor<T>? mask,
+        int[] stride,
+        int[] padding,
+        int[] dilation)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+        if (offset == null) throw new ArgumentNullException(nameof(offset));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        int outChannels = kernel.Shape[0];
+        int kernelHeight = kernel.Shape[2];
+        int kernelWidth = kernel.Shape[3];
+
+        int strideH = stride[0], strideW = stride[1];
+        int padH = padding[0], padW = padding[1];
+        int dilationH = dilation[0], dilationW = dilation[1];
+
+        int outputHeight = gradOutput.Shape[2];
+        int outputWidth = gradOutput.Shape[3];
+        int numKernelPositions = kernelHeight * kernelWidth;
+
+        var gradOffset = new Tensor<T>(offset.Shape);
+        var gradOffsetData = gradOffset.Data;
+        var gradOutputData = gradOutput.Data;
+        var inputData = input.Data;
+        var kernelData = kernel.Data;
+        var offsetData = offset.Data;
+        var maskData = mask?.Data;
+
+        Parallel.For(0, batch, b =>
+        {
+            for (int oh = 0; oh < outputHeight; oh++)
+            {
+                for (int ow = 0; ow < outputWidth; ow++)
+                {
+                    for (int kh = 0; kh < kernelHeight; kh++)
+                    {
+                        for (int kw = 0; kw < kernelWidth; kw++)
+                        {
+                            int kernelPosIdx = kh * kernelWidth + kw;
+
+                            // Get current offsets
+                            int offsetYIdx = ((b * (2 * numKernelPositions) + kernelPosIdx) * outputHeight + oh) * outputWidth + ow;
+                            int offsetXIdx = ((b * (2 * numKernelPositions) + numKernelPositions + kernelPosIdx) * outputHeight + oh) * outputWidth + ow;
+
+                            double offsetY = numOps.ToDouble(offsetData[offsetYIdx]);
+                            double offsetX = numOps.ToDouble(offsetData[offsetXIdx]);
+
+                            double sampledH = oh * strideH - padH + kh * dilationH + offsetY;
+                            double sampledW = ow * strideW - padW + kw * dilationW + offsetX;
+
+                            // Get modulation mask
+                            T modulation = numOps.One;
+                            if (maskData != null)
+                            {
+                                int maskIdx = ((b * numKernelPositions + kernelPosIdx) * outputHeight + oh) * outputWidth + ow;
+                                modulation = maskData[maskIdx];
+                            }
+
+                            // Compute gradient w.r.t. offset by chain rule through bilinear interpolation
+                            // d(output)/d(offsetY) = sum over (oc, ic) of gradOutput * kernel * d(bilinear)/d(h)
+                            // d(output)/d(offsetX) = sum over (oc, ic) of gradOutput * kernel * d(bilinear)/d(w)
+
+                            T gradOffsetY = numOps.Zero;
+                            T gradOffsetX = numOps.Zero;
+
+                            for (int oc = 0; oc < outChannels; oc++)
+                            {
+                                int gradOutIdx = ((b * outChannels + oc) * outputHeight + oh) * outputWidth + ow;
+                                T gradOutVal = gradOutputData[gradOutIdx];
+
+                                for (int ic = 0; ic < inChannels; ic++)
+                                {
+                                    int kernelIdx = ((oc * inChannels + ic) * kernelHeight + kh) * kernelWidth + kw;
+                                    T kernelWeight = kernelData[kernelIdx];
+
+                                    // Compute d(bilinear)/d(h) and d(bilinear)/d(w)
+                                    var (dH, dW) = BilinearGradient(inputData, b, ic, inChannels, height, width, sampledH, sampledW, numOps);
+
+                                    // Chain rule: gradOutput * kernel * modulation * d(bilinear)/d(offset)
+                                    T factor = numOps.Multiply(numOps.Multiply(gradOutVal, kernelWeight), modulation);
+                                    gradOffsetY = numOps.Add(gradOffsetY, numOps.Multiply(factor, dH));
+                                    gradOffsetX = numOps.Add(gradOffsetX, numOps.Multiply(factor, dW));
+                                }
+                            }
+
+                            gradOffsetData[offsetYIdx] = gradOffsetY;
+                            gradOffsetData[offsetXIdx] = gradOffsetX;
+                        }
+                    }
+                }
+            }
+        });
+
+        return gradOffset;
+    }
+
+    /// <summary>
+    /// Computes the gradient of bilinear interpolation w.r.t. sampling position.
+    /// </summary>
+    private static (T gradH, T gradW) BilinearGradient<T>(
+        T[] data,
+        int batch,
+        int channel,
+        int totalChannels,
+        int height,
+        int width,
+        double h,
+        double w,
+        INumericOperations<T> numOps)
+    {
+        // Out of bounds - no gradient
+        if (h <= -1 || h >= height || w <= -1 || w >= width)
+            return (numOps.Zero, numOps.Zero);
+
+        int h0 = (int)Math.Floor(h);
+        int h1 = h0 + 1;
+        int w0 = (int)Math.Floor(w);
+        int w1 = w0 + 1;
+
+        double lh = h - h0;
+        double lw = w - w0;
+
+        T v00 = GetPixelValue(data, batch, channel, totalChannels, height, width, h0, w0, numOps);
+        T v01 = GetPixelValue(data, batch, channel, totalChannels, height, width, h0, w1, numOps);
+        T v10 = GetPixelValue(data, batch, channel, totalChannels, height, width, h1, w0, numOps);
+        T v11 = GetPixelValue(data, batch, channel, totalChannels, height, width, h1, w1, numOps);
+
+        // d/dh: derivative of bilinear w.r.t. h
+        // output = (1-lh)*(1-lw)*v00 + (1-lh)*lw*v01 + lh*(1-lw)*v10 + lh*lw*v11
+        // d/dlh = -(1-lw)*v00 - lw*v01 + (1-lw)*v10 + lw*v11
+        //       = (1-lw)*(v10 - v00) + lw*(v11 - v01)
+        T dH = numOps.Add(
+            numOps.Multiply(numOps.FromDouble(1 - lw), numOps.Subtract(v10, v00)),
+            numOps.Multiply(numOps.FromDouble(lw), numOps.Subtract(v11, v01)));
+
+        // d/dw: derivative of bilinear w.r.t. w
+        // d/dlw = -(1-lh)*v00 + (1-lh)*v01 - lh*v10 + lh*v11
+        //       = (1-lh)*(v01 - v00) + lh*(v11 - v10)
+        T dW = numOps.Add(
+            numOps.Multiply(numOps.FromDouble(1 - lh), numOps.Subtract(v01, v00)),
+            numOps.Multiply(numOps.FromDouble(lh), numOps.Subtract(v11, v10)));
+
+        return (dH, dW);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> DeformableConv2DBackwardMask<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T> offset,
+        Tensor<T>? mask,
+        int[] stride,
+        int[] padding,
+        int[] dilation)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+        if (offset == null) throw new ArgumentNullException(nameof(offset));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        int outChannels = kernel.Shape[0];
+        int kernelHeight = kernel.Shape[2];
+        int kernelWidth = kernel.Shape[3];
+
+        int strideH = stride[0], strideW = stride[1];
+        int padH = padding[0], padW = padding[1];
+        int dilationH = dilation[0], dilationW = dilation[1];
+
+        int outputHeight = gradOutput.Shape[2];
+        int outputWidth = gradOutput.Shape[3];
+        int numKernelPositions = kernelHeight * kernelWidth;
+
+        // Mask shape: [batch, kernel_h*kernel_w, out_h, out_w]
+        var gradMask = new Tensor<T>([batch, numKernelPositions, outputHeight, outputWidth]);
+        var gradMaskData = gradMask.Data;
+        var gradOutputData = gradOutput.Data;
+        var inputData = input.Data;
+        var kernelData = kernel.Data;
+        var offsetData = offset.Data;
+
+        Parallel.For(0, batch, b =>
+        {
+            for (int oh = 0; oh < outputHeight; oh++)
+            {
+                for (int ow = 0; ow < outputWidth; ow++)
+                {
+                    for (int kh = 0; kh < kernelHeight; kh++)
+                    {
+                        for (int kw = 0; kw < kernelWidth; kw++)
+                        {
+                            int kernelPosIdx = kh * kernelWidth + kw;
+                            int maskIdx = ((b * numKernelPositions + kernelPosIdx) * outputHeight + oh) * outputWidth + ow;
+
+                            // Get offsets
+                            int offsetYIdx = ((b * (2 * numKernelPositions) + kernelPosIdx) * outputHeight + oh) * outputWidth + ow;
+                            int offsetXIdx = ((b * (2 * numKernelPositions) + numKernelPositions + kernelPosIdx) * outputHeight + oh) * outputWidth + ow;
+
+                            double offsetY = numOps.ToDouble(offsetData[offsetYIdx]);
+                            double offsetX = numOps.ToDouble(offsetData[offsetXIdx]);
+
+                            double sampledH = oh * strideH - padH + kh * dilationH + offsetY;
+                            double sampledW = ow * strideW - padW + kw * dilationW + offsetX;
+
+                            // d(output)/d(mask[b,k,oh,ow]) = sum over (oc, ic) of gradOutput * kernel * sampledValue
+                            T gradMaskVal = numOps.Zero;
+
+                            for (int oc = 0; oc < outChannels; oc++)
+                            {
+                                int gradOutIdx = ((b * outChannels + oc) * outputHeight + oh) * outputWidth + ow;
+                                T gradOutVal = gradOutputData[gradOutIdx];
+
+                                for (int ic = 0; ic < inChannels; ic++)
+                                {
+                                    int kernelIdx = ((oc * inChannels + ic) * kernelHeight + kh) * kernelWidth + kw;
+                                    T kernelWeight = kernelData[kernelIdx];
+
+                                    // Sample input
+                                    T sampledValue = BilinearSample(inputData, b, ic, inChannels, height, width, sampledH, sampledW, numOps);
+
+                                    gradMaskVal = numOps.Add(gradMaskVal, numOps.Multiply(numOps.Multiply(gradOutVal, kernelWeight), sampledValue));
+                                }
+                            }
+
+                            gradMaskData[maskIdx] = gradMaskVal;
+                        }
+                    }
+                }
+            }
+        });
+
+        return gradMask;
+    }
+
+    #endregion
+
+    #region Grid Sample Backward Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> GridSampleBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> grid, int[] inputShape)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (grid == null) throw new ArgumentNullException(nameof(grid));
+        if (inputShape == null || inputShape.Length != 4) throw new ArgumentException("inputShape must be array of 4 elements.", nameof(inputShape));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = inputShape[0];
+        int channels = inputShape[1];
+        int height = inputShape[2];
+        int width = inputShape[3];
+
+        int outHeight = grid.Shape[1];
+        int outWidth = grid.Shape[2];
+
+        var gradInput = new Tensor<T>(inputShape);
+        var gradInputData = gradInput.Data;
+        var gradOutputData = gradOutput.Data;
+        var gridData = grid.Data;
+
+        // Use locks for atomic addition
+        var locks = new object[batch * channels * height * width];
+        for (int i = 0; i < locks.Length; i++) locks[i] = new object();
+
+        Parallel.For(0, batch * channels, idx =>
+        {
+            int b = idx / channels;
+            int c = idx % channels;
+
+            for (int oh = 0; oh < outHeight; oh++)
+            {
+                for (int ow = 0; ow < outWidth; ow++)
+                {
+                    int gradOutIdx = ((b * channels + c) * outHeight + oh) * outWidth + ow;
+                    T gradVal = gradOutputData[gradOutIdx];
+
+                    // Get normalized grid coordinates
+                    int gridBaseIdx = ((b * outHeight + oh) * outWidth + ow) * 2;
+                    double gx = numOps.ToDouble(gridData[gridBaseIdx]);
+                    double gy = numOps.ToDouble(gridData[gridBaseIdx + 1]);
+
+                    // Convert to pixel coordinates
+                    double h = (gy + 1) / 2 * (height - 1);
+                    double w = (gx + 1) / 2 * (width - 1);
+
+                    // Distribute gradient using bilinear weights
+                    BilinearBackwardInput(gradInputData, gradVal, b, c, channels, height, width, h, w, numOps, locks);
+                }
+            }
+        });
+
+        return gradInput;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> GridSampleBackwardGrid<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> grid)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (grid == null) throw new ArgumentNullException(nameof(grid));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        int outHeight = grid.Shape[1];
+        int outWidth = grid.Shape[2];
+
+        var gradGrid = new Tensor<T>(grid.Shape);
+        var gradGridData = gradGrid.Data;
+        var gradOutputData = gradOutput.Data;
+        var inputData = input.Data;
+        var gridData = grid.Data;
+
+        Parallel.For(0, batch, b =>
+        {
+            for (int oh = 0; oh < outHeight; oh++)
+            {
+                for (int ow = 0; ow < outWidth; ow++)
+                {
+                    int gridBaseIdx = ((b * outHeight + oh) * outWidth + ow) * 2;
+                    double gx = numOps.ToDouble(gridData[gridBaseIdx]);
+                    double gy = numOps.ToDouble(gridData[gridBaseIdx + 1]);
+
+                    // Convert to pixel coordinates
+                    double h = (gy + 1) / 2 * (height - 1);
+                    double w = (gx + 1) / 2 * (width - 1);
+
+                    // Compute d(output)/d(gx) and d(output)/d(gy) by summing over all channels
+                    T gradGx = numOps.Zero;
+                    T gradGy = numOps.Zero;
+
+                    for (int c = 0; c < channels; c++)
+                    {
+                        int gradOutIdx = ((b * channels + c) * outHeight + oh) * outWidth + ow;
+                        T gradOutVal = gradOutputData[gradOutIdx];
+
+                        // Get gradient of bilinear sampling w.r.t. h and w
+                        var (dH, dW) = BilinearGradient(inputData, b, c, channels, height, width, h, w, numOps);
+
+                        // Chain rule: d/dgx = d/dw * dw/dgx where dw/dgx = (width-1)/2
+                        // Chain rule: d/dgy = d/dh * dh/dgy where dh/dgy = (height-1)/2
+                        T scaledDW = numOps.Multiply(dW, numOps.FromDouble((width - 1) / 2.0));
+                        T scaledDH = numOps.Multiply(dH, numOps.FromDouble((height - 1) / 2.0));
+
+                        gradGx = numOps.Add(gradGx, numOps.Multiply(gradOutVal, scaledDW));
+                        gradGy = numOps.Add(gradGy, numOps.Multiply(gradOutVal, scaledDH));
+                    }
+
+                    gradGridData[gridBaseIdx] = gradGx;
+                    gradGridData[gridBaseIdx + 1] = gradGy;
+                }
+            }
+        });
+
+        return gradGrid;
+    }
+
+    #endregion
+
     #region 3D Convolution and Pooling Operations
 
     /// <inheritdoc/>

@@ -127,12 +127,56 @@ public class FLAVR<T> : NeuralNetworkBase<T>
         var results = new List<Tensor<T>>();
         var stacked = StackFrames([frame1, frame2]);
 
+        // Get the model's mid-point interpolation
+        var midInterpolated = _useNativeMode ? Forward(stacked) : PredictOnnx(stacked);
+
         for (int i = 0; i < numInterpolations; i++)
         {
-            var interpolated = _useNativeMode ? Forward(stacked) : PredictOnnx(stacked);
+            // Compute temporal position t ∈ (0, 1)
+            double t = (i + 1.0) / (numInterpolations + 1.0);
+
+            // Blend between frames based on temporal position
+            // t < 0.5: blend between frame1 and midInterpolated
+            // t > 0.5: blend between midInterpolated and frame2
+            Tensor<T> interpolated;
+            if (Math.Abs(t - 0.5) < 1e-6)
+            {
+                // At midpoint, use the model output directly
+                interpolated = midInterpolated;
+            }
+            else if (t < 0.5)
+            {
+                // Blend frame1 toward midInterpolated
+                double blendFactor = t * 2.0; // 0 to 1 as t goes from 0 to 0.5
+                interpolated = BlendFrames(frame1, midInterpolated, blendFactor);
+            }
+            else
+            {
+                // Blend midInterpolated toward frame2
+                double blendFactor = (t - 0.5) * 2.0; // 0 to 1 as t goes from 0.5 to 1
+                interpolated = BlendFrames(midInterpolated, frame2, blendFactor);
+            }
             results.Add(interpolated);
         }
         return results;
+    }
+
+    /// <summary>
+    /// Blends two frames together with a given factor.
+    /// </summary>
+    private Tensor<T> BlendFrames(Tensor<T> frameA, Tensor<T> frameB, double blendFactor)
+    {
+        var result = new Tensor<T>(frameA.Shape);
+        T factorA = NumOps.FromDouble(1.0 - blendFactor);
+        T factorB = NumOps.FromDouble(blendFactor);
+
+        for (int i = 0; i < frameA.Length; i++)
+        {
+            result.Data[i] = NumOps.Add(
+                NumOps.Multiply(frameA.Data[i], factorA),
+                NumOps.Multiply(frameB.Data[i], factorB));
+        }
+        return result;
     }
 
     /// <summary>

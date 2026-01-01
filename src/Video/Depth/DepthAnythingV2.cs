@@ -3,6 +3,8 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using Microsoft.ML.OnnxRuntime;
+using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.Video.Depth;
 
@@ -65,6 +67,7 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
     private readonly int _numEncoderBlocks;
     private readonly bool _useNativeMode;
     private readonly string? _onnxModelPath;
+    private readonly InferenceSession? _onnxSession;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     #endregion
@@ -171,6 +174,11 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
         ModelSize modelSize = ModelSize.Base)
         : base(architecture, new ScaleInvariantDepthLoss<T>())
     {
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"Depth Anything V2 ONNX model not found: {onnxModelPath}");
+
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
@@ -196,6 +204,15 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
             _ => 12
         };
 
+        try
+        {
+            _onnxSession = new InferenceSession(onnxModelPath);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to load Depth Anything V2 ONNX model: {ex.Message}", ex);
+        }
+
         InitializeLayers();
     }
 
@@ -216,8 +233,16 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
             image = AddBatchDimension(image);
         }
 
-        var features = EncodeImage(image);
-        var depth = DecodeDepth(features);
+        Tensor<T> depth;
+        if (_useNativeMode)
+        {
+            var features = EncodeImage(image);
+            depth = DecodeDepth(features);
+        }
+        else
+        {
+            depth = PredictOnnx(image);
+        }
 
         if (!hasBatch)
         {
@@ -225,6 +250,43 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
         }
 
         return depth;
+    }
+
+    /// <summary>
+    /// Performs ONNX inference for depth estimation.
+    /// </summary>
+    private Tensor<T> PredictOnnx(Tensor<T> input)
+    {
+        if (_onnxSession is null)
+            throw new InvalidOperationException("ONNX session is not initialized.");
+
+        // Convert input tensor to float array
+        var inputData = new float[input.Length];
+        for (int i = 0; i < input.Length; i++)
+        {
+            inputData[i] = Convert.ToSingle(input.Data[i]);
+        }
+
+        // Create ONNX input tensor
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var inputMeta = _onnxSession.InputMetadata;
+        string inputName = inputMeta.Keys.First();
+
+        var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
+
+        // Run inference
+        using var results = _onnxSession.Run(inputs);
+        var outputTensor = results.First().AsTensor<float>();
+
+        // Convert output to Tensor<T>
+        var outputShape = outputTensor.Dimensions.ToArray();
+        var outputData = new T[outputTensor.Length];
+        for (int i = 0; i < outputTensor.Length; i++)
+        {
+            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        }
+
+        return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
 
     /// <summary>
@@ -306,15 +368,6 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
 
     private Tensor<T> EncodeImage(Tensor<T> image)
     {
-        if (!_useNativeMode)
-        {
-            // ONNX mode placeholder
-            int batchSize = image.Shape[0];
-            int featH = _height / _patchSize;
-            int featW = _width / _patchSize;
-            return new Tensor<T>([batchSize, _numFeatures, featH, featW]);
-        }
-
         // Apply patch embedding (layer 0)
         var features = Layers[0].Forward(image);
         features = ApplyGELU(features);
@@ -332,13 +385,6 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
 
     private Tensor<T> DecodeDepth(Tensor<T> features)
     {
-        if (!_useNativeMode)
-        {
-            // ONNX mode placeholder
-            int batchSize = features.Shape[0];
-            return new Tensor<T>([batchSize, 1, _height, _width]);
-        }
-
         // Apply decoder blocks
         var decoded = features;
         int decoderStartIdx = 1 + _numEncoderBlocks;
@@ -514,6 +560,7 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
             { "InputChannels", _channels },
             { "ModelSize", _modelSize.ToString() },
             { "NumFeatures", _numFeatures },
+            { "PatchSize", _patchSize },
             { "UseNativeMode", _useNativeMode },
             { "NumLayers", Layers.Count }
         };

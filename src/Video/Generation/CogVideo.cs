@@ -333,16 +333,64 @@ public class CogVideo<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> PredictNoise(Tensor<T> input, Tensor<T> textEmbedding, double timestep)
     {
-        // Combine input with timestep embedding (simplified)
-        var result = input;
+        // Create timestep embedding
+        var timestepEmbed = CreateTimestepEmbedding(timestep);
+
+        // Combine input with text embedding and timestep embedding
+        var conditioned = CombineWithCondition(input, textEmbedding, timestepEmbed);
 
         if (_useNativeMode)
         {
-            result = Forward(result);
+            return Forward(conditioned);
         }
         else
         {
-            result = PredictOnnx(result);
+            return PredictOnnx(conditioned);
+        }
+    }
+
+    /// <summary>
+    /// Creates a timestep embedding using sinusoidal encoding.
+    /// </summary>
+    private Tensor<T> CreateTimestepEmbedding(double timestep)
+    {
+        // Use sinusoidal position encoding for timestep
+        int embedDim = _latentChannels;
+        var embedding = new T[embedDim];
+
+        for (int i = 0; i < embedDim / 2; i++)
+        {
+            double freq = Math.Exp(-Math.Log(10000.0) * i / (embedDim / 2));
+            embedding[i] = NumOps.FromDouble(Math.Sin(timestep * freq));
+            embedding[i + embedDim / 2] = NumOps.FromDouble(Math.Cos(timestep * freq));
+        }
+
+        return new Tensor<T>([1, embedDim], new Vector<T>(embedding));
+    }
+
+    /// <summary>
+    /// Combines input with text and timestep conditioning.
+    /// </summary>
+    private Tensor<T> CombineWithCondition(Tensor<T> input, Tensor<T> textEmbedding, Tensor<T> timestepEmbed)
+    {
+        // Scale the input by the timestep embedding and modulate by text
+        var result = new Tensor<T>(input.Shape);
+
+        // Get timestep scale factor (average of timestep embedding)
+        double timestepScale = 0.0;
+        for (int i = 0; i < timestepEmbed.Length; i++)
+        {
+            timestepScale += NumOps.ToDouble(timestepEmbed.Data[i]);
+        }
+        timestepScale = 1.0 + timestepScale / timestepEmbed.Length;
+
+        // Apply text conditioning modulation
+        int textLen = textEmbedding.Length;
+        for (int i = 0; i < input.Length; i++)
+        {
+            double val = NumOps.ToDouble(input.Data[i]);
+            double textMod = textLen > 0 ? NumOps.ToDouble(textEmbedding.Data[i % textLen]) : 0.0;
+            result.Data[i] = NumOps.FromDouble(val * timestepScale + textMod * 0.1);
         }
 
         return result;
@@ -354,7 +402,8 @@ public class CogVideo<T> : NeuralNetworkBase<T>
     private Tensor<T> DenoisingStep(Tensor<T> noisyLatent, Tensor<T> noisePrediction, double timestep)
     {
         // DDPM-style denoising step (simplified)
-        double alpha = Math.Sqrt(1.0 - timestep * timestep);
+        // Clamp to prevent division by zero when timestep == 1.0
+        double alpha = Math.Sqrt(Math.Max(1e-8, 1.0 - timestep * timestep));
         double sigma = timestep;
 
         var resultData = new T[noisyLatent.Length];

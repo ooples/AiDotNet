@@ -34,10 +34,10 @@ public class E2FGVI<T> : NeuralNetworkBase<T>
 {
     #region Fields
 
-    private readonly int _height;
-    private readonly int _width;
-    private readonly int _channels;
-    private readonly int _numFeatures;
+    private int _height;
+    private int _width;
+    private int _channels;
+    private int _numFeatures;
 
     // Flow estimation network
     private readonly List<ConvolutionalLayer<T>> _flowNet;
@@ -631,7 +631,10 @@ public class E2FGVI<T> : NeuralNetworkBase<T>
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        for (int i = 0; i < 4; i++) _ = reader.ReadInt32();
+        _height = reader.ReadInt32();
+        _width = reader.ReadInt32();
+        _channels = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>

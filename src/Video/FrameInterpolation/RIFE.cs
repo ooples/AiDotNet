@@ -289,8 +289,11 @@ public class RIFE<T> : NeuralNetworkBase<T>
         var t = NumOps.FromDouble(timestep);
         var oneMinusT = NumOps.FromDouble(1.0 - timestep);
 
-        var flow_t_0 = ScaleFlow(flow_0_1, oneMinusT);
-        var flow_t_1 = ScaleFlow(flow_1_0, t);
+        // Scale flows correctly for interpolation at time t:
+        // - frame1 warped toward t position uses flow_0_1 scaled by t
+        // - frame2 warped toward t position uses flow_1_0 scaled by (1-t)
+        var flow_t_0 = ScaleFlow(flow_0_1, t);
+        var flow_t_1 = ScaleFlow(flow_1_0, oneMinusT);
 
         var frame1_warped = WarpImage(frame1, flow_t_0);
         var frame2_warped = WarpImage(frame2, flow_t_1);
@@ -552,6 +555,22 @@ public class RIFE<T> : NeuralNetworkBase<T>
 
         // Update flow decoder layers
         foreach (var layer in _flowDecoder)
+        {
+            var layerParams = layer.GetParameters();
+            if (offset + layerParams.Length <= parameters.Length)
+            {
+                var newParams = new Vector<T>(layerParams.Length);
+                for (int i = 0; i < layerParams.Length; i++)
+                {
+                    newParams[i] = parameters[offset + i];
+                }
+                layer.SetParameters(newParams);
+                offset += layerParams.Length;
+            }
+        }
+
+        // Update context encoder layers
+        foreach (var layer in _contextEncoder)
         {
             var layerParams = layer.GetParameters();
             if (offset + layerParams.Length <= parameters.Length)

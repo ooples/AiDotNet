@@ -65,7 +65,7 @@ public class PixelShuffleLayer<T> : LayerBase<T>
     public int UpscaleFactor => _upscaleFactor;
 
     /// <inheritdoc />
-    public override bool SupportsTraining => false;
+    public override bool SupportsTraining => true;
 
     /// <inheritdoc />
     public override bool SupportsJitCompilation => true;
@@ -168,6 +168,13 @@ public class PixelShuffleLayer<T> : LayerBase<T>
     /// </summary>
     private static void ValidateInputShape(int[] inputShape, int upscaleFactor)
     {
+        // Validate upscaleFactor to prevent division by zero and invalid shapes
+        if (upscaleFactor < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(upscaleFactor),
+                $"upscaleFactor must be at least 1. Got: {upscaleFactor}");
+        }
+
         if (inputShape.Length < 3)
         {
             throw new ArgumentException(

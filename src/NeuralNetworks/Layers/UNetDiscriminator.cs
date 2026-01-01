@@ -508,7 +508,9 @@ internal class UNetConvBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
     private readonly bool _downsample;
 
     private Tensor<T>? _lastInput;
-    private Tensor<T>? _conv1Output;
+    private Tensor<T>? _conv1Output;      // After LeakyReLU (input to conv2)
+    private Tensor<T>? _conv1RawOutput;   // Before LeakyReLU (for backward)
+    private Tensor<T>? _conv2RawOutput;   // Before LeakyReLU (for backward)
 
     public UNetConvBlock(int inChannels, int outChannels, int height, int width, bool downsample)
         : base(
@@ -553,25 +555,28 @@ internal class UNetConvBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
     {
         _lastInput = input;
 
-        var x = _conv1.Forward(input);
-        x = ApplyLeakyReLU(x);
-        _conv1Output = x;
+        // Conv1 + LeakyReLU
+        _conv1RawOutput = _conv1.Forward(input);
+        _conv1Output = ApplyLeakyReLU(_conv1RawOutput);
 
-        x = _conv2.Forward(x);
-        x = ApplyLeakyReLU(x);
+        // Conv2 + LeakyReLU
+        _conv2RawOutput = _conv2.Forward(_conv1Output);
+        var output = ApplyLeakyReLU(_conv2RawOutput);
 
-        return x;
+        return output;
     }
 
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _conv1Output == null)
+        if (_lastInput == null || _conv1Output == null || _conv1RawOutput == null || _conv2RawOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var grad = BackwardLeakyReLU(_conv2.Forward(_conv1Output), outputGradient);
+        // Backward through LeakyReLU after conv2 (use cached raw output)
+        var grad = BackwardLeakyReLU(_conv2RawOutput, outputGradient);
         grad = _conv2.Backward(grad);
 
-        grad = BackwardLeakyReLU(_conv1.Forward(_lastInput), grad);
+        // Backward through LeakyReLU after conv1 (use cached raw output)
+        grad = BackwardLeakyReLU(_conv1RawOutput, grad);
         grad = _conv1.Backward(grad);
 
         return grad;
@@ -626,6 +631,8 @@ internal class UNetConvBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
     {
         _lastInput = null;
         _conv1Output = null;
+        _conv1RawOutput = null;
+        _conv2RawOutput = null;
         _conv1.ResetState();
         _conv2.ResetState();
     }
