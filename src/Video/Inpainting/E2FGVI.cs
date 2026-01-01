@@ -144,8 +144,21 @@ public class E2FGVI<T> : NeuralNetworkBase<T>
     /// <param name="frames">Input video frames.</param>
     /// <param name="masks">Binary masks indicating regions to fill (1 = fill, 0 = keep).</param>
     /// <returns>Inpainted video frames.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when frames or masks is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when frames and masks have different counts or are empty.</exception>
     public List<Tensor<T>> Inpaint(List<Tensor<T>> frames, List<Tensor<T>> masks)
     {
+        if (frames == null)
+            throw new ArgumentNullException(nameof(frames), "Frames list cannot be null.");
+        if (masks == null)
+            throw new ArgumentNullException(nameof(masks), "Masks list cannot be null.");
+        if (frames.Count == 0)
+            throw new ArgumentException("Frames list cannot be empty.", nameof(frames));
+        if (masks.Count == 0)
+            throw new ArgumentException("Masks list cannot be empty.", nameof(masks));
+        if (frames.Count != masks.Count)
+            throw new ArgumentException($"Frames count ({frames.Count}) must match masks count ({masks.Count}).", nameof(masks));
+
         var results = new List<Tensor<T>>();
 
         // First pass: estimate flows between all frames
@@ -193,12 +206,196 @@ public class E2FGVI<T> : NeuralNetworkBase<T>
         return Inpaint(frames, corruptionMasks);
     }
 
-    public override Tensor<T> Predict(Tensor<T> input) => input;
+    /// <summary>
+    /// Predicts the inpainted output for a single masked frame.
+    /// </summary>
+    /// <param name="input">Input tensor containing frame and mask concatenated [B, C+1, H, W].</param>
+    /// <returns>Inpainted frame.</returns>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        // Ensure 4D input
+        bool hasBatch = input.Rank == 4;
+        if (!hasBatch)
+        {
+            input = AddBatchDimension(input);
+        }
 
+        // Encode input (frame + mask)
+        var features = input;
+        foreach (var layer in _encoder)
+        {
+            features = layer.Forward(features);
+            features = ApplyReLU(features);
+        }
+
+        // Self-propagation (no neighbors)
+        foreach (var layer in _propagation)
+        {
+            // Duplicate features for self-propagation
+            var selfProp = ConcatenateChannels(features, features);
+            selfProp = layer.Forward(selfProp);
+            features = ApplyReLU(selfProp);
+        }
+
+        // Transform for content hallucination
+        var transformed = features;
+        foreach (var layer in _transformer)
+        {
+            var residual = transformed;
+            transformed = layer.Forward(transformed);
+            transformed = ApplyReLU(transformed);
+            transformed = AddTensors(transformed, residual);
+        }
+
+        // Decode
+        var decoded = transformed;
+        foreach (var layer in _decoder)
+        {
+            decoded = Upsample2x(decoded);
+            decoded = layer.Forward(decoded);
+            decoded = ApplyReLU(decoded);
+        }
+
+        while (decoded.Shape[2] < _height || decoded.Shape[3] < _width)
+            decoded = Upsample2x(decoded);
+
+        var output = _outputHead.Forward(decoded);
+        output = ApplySigmoid(output);
+
+        if (!hasBatch)
+        {
+            output = RemoveBatchDimension(output);
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Trains the model on a masked frame and its ground truth.
+    /// </summary>
+    /// <param name="input">Input tensor containing masked frame [B, C, H, W].</param>
+    /// <param name="expectedOutput">Ground truth unmasked frame [B, C, H, W].</param>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Ensure 4D input
+        bool hasBatch = input.Rank == 4;
+        if (!hasBatch)
+        {
+            input = AddBatchDimension(input);
+            expectedOutput = AddBatchDimension(expectedOutput);
+        }
+
+        // Create a synthetic mask (non-zero differences indicate masked regions)
+        var mask = CreateMaskFromDifference(input, expectedOutput);
+
+        // Forward pass with mask
+        var maskedInput = ConcatenateChannels(input, mask);
+        var prediction = Predict(maskedInput);
+
+        // Ensure prediction matches expected shape
+        if (prediction.Rank != expectedOutput.Rank)
+        {
+            prediction = hasBatch ? prediction : AddBatchDimension(prediction);
+        }
+
+        // Compute MSE loss
+        T loss = NumOps.Zero;
+        for (int i = 0; i < expectedOutput.Length; i++)
+        {
+            T diff = NumOps.Subtract(prediction.Data[i], expectedOutput.Data[i]);
+            loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
+        }
+        loss = NumOps.Divide(loss, NumOps.FromDouble(expectedOutput.Length));
+        LastLoss = loss;
+
+        // Compute gradient: d(MSE)/d(pred) = 2 * (pred - target) / N
+        var gradient = new Tensor<T>(prediction.Shape);
+        T scale = NumOps.FromDouble(2.0 / expectedOutput.Length);
+        for (int i = 0; i < expectedOutput.Length; i++)
+        {
+            T diff = NumOps.Subtract(prediction.Data[i], expectedOutput.Data[i]);
+            gradient.Data[i] = NumOps.Multiply(diff, scale);
+        }
+
+        // Backpropagate
+        BackpropagateGradient(gradient);
+
+        // Update parameters
         T lr = NumOps.FromDouble(0.0001);
         foreach (var layer in Layers) layer.UpdateParameters(lr);
+    }
+
+    /// <summary>
+    /// Creates a mask based on differences between input and expected output.
+    /// </summary>
+    private Tensor<T> CreateMaskFromDifference(Tensor<T> input, Tensor<T> expected)
+    {
+        int batchSize = input.Shape[0];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        var mask = new Tensor<T>([batchSize, 1, height, width]);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < height; h++)
+            {
+                for (int w = 0; w < width; w++)
+                {
+                    double diff = 0;
+                    int channels = input.Shape[1];
+                    for (int c = 0; c < channels; c++)
+                    {
+                        double d = Math.Abs(Convert.ToDouble(input[b, c, h, w]) - Convert.ToDouble(expected[b, c, h, w]));
+                        diff = Math.Max(diff, d);
+                    }
+                    // Threshold to create binary mask
+                    mask[b, 0, h, w] = NumOps.FromDouble(diff > 0.01 ? 1.0 : 0.0);
+                }
+            }
+        }
+
+        return mask;
+    }
+
+    /// <summary>
+    /// Backpropagates the gradient through all network layers.
+    /// </summary>
+    private void BackpropagateGradient(Tensor<T> gradient)
+    {
+        // Backpropagate through output head
+        gradient = _outputHead.Backward(gradient);
+
+        // Backpropagate through decoder
+        for (int i = _decoder.Count - 1; i >= 0; i--)
+        {
+            gradient = _decoder[i].Backward(gradient);
+        }
+
+        // Backpropagate through transformer
+        for (int i = _transformer.Count - 1; i >= 0; i--)
+        {
+            gradient = _transformer[i].Backward(gradient);
+        }
+
+        // Backpropagate through propagation layers
+        for (int i = _propagation.Count - 1; i >= 0; i--)
+        {
+            gradient = _propagation[i].Backward(gradient);
+        }
+
+        // Backpropagate through encoder
+        for (int i = _encoder.Count - 1; i >= 0; i--)
+        {
+            gradient = _encoder[i].Backward(gradient);
+        }
+
+        // Backpropagate through flow network
+        _flowHead.Backward(gradient);
+        for (int i = _flowNet.Count - 1; i >= 0; i--)
+        {
+            gradient = _flowNet[i].Backward(gradient);
+        }
     }
 
     #endregion

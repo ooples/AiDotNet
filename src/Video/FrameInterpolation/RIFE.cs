@@ -38,11 +38,11 @@ public class RIFE<T> : NeuralNetworkBase<T>
 {
     #region Fields
 
-    private readonly int _height;
-    private readonly int _width;
-    private readonly int _channels;
-    private readonly int _numFeatures;
-    private readonly int _numFlowBlocks;
+    private int _height;
+    private int _width;
+    private int _channels;
+    private int _numFeatures;
+    private int _numFlowBlocks;
 
     // IFNet components - coarse to fine flow estimation
     private readonly List<ConvolutionalLayer<T>> _encoder;
@@ -668,11 +668,11 @@ public class RIFE<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // height
-        _ = reader.ReadInt32(); // width
-        _ = reader.ReadInt32(); // channels
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // numFlowBlocks
+        _height = reader.ReadInt32();
+        _width = reader.ReadInt32();
+        _channels = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _numFlowBlocks = reader.ReadInt32();
     }
 
     /// <inheritdoc/>

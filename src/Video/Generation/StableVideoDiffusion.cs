@@ -980,19 +980,43 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
 
     private void BackwardPass(Tensor<T> gradient)
     {
+        // Backpropagate through noise predictor
         gradient = _noisePredictor.Backward(gradient);
 
+        // Backpropagate through up blocks (decoder path)
         for (int i = _upBlocks.Count - 1; i >= 0; i--)
         {
             gradient = _upBlocks[i].Backward(gradient);
         }
 
+        // Backpropagate through middle block
         gradient = _middleBlock.Backward(gradient);
 
+        // Backpropagate through down blocks (encoder path)
         for (int i = _downBlocks.Count - 1; i >= 0; i--)
         {
             gradient = _downBlocks[i].Backward(gradient);
         }
+
+        // Backpropagate through temporal attention layers
+        for (int i = _temporalAttention.Count - 1; i >= 0; i--)
+        {
+            gradient = _temporalAttention[i].Backward(gradient);
+        }
+
+        // Backpropagate through VAE encoder (when training end-to-end)
+        for (int i = _vaeEncoder.Count - 1; i >= 0; i--)
+        {
+            gradient = _vaeEncoder[i].Backward(gradient);
+        }
+
+        // Backpropagate through conditioning components
+        // Note: These create auxiliary gradients for their respective inputs
+        // In a full implementation, gradients would be accumulated for each conditioning path
+        _timeEmbedding.Backward(gradient);
+        _textProjection.Backward(gradient);
+        _textEncoder.Backward(gradient);
+        _imageConditioner.Backward(gradient);
     }
 
     #endregion

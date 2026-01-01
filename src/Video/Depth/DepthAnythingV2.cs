@@ -58,15 +58,15 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
 
     #region Fields
 
-    private readonly int _height;
-    private readonly int _width;
-    private readonly int _channels;
-    private readonly ModelSize _modelSize;
-    private readonly int _numFeatures;
-    private readonly int _patchSize;
-    private readonly int _numEncoderBlocks;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
+    private int _height;
+    private int _width;
+    private int _channels;
+    private ModelSize _modelSize;
+    private int _numFeatures;
+    private int _patchSize;
+    private int _numEncoderBlocks;
+    private bool _useNativeMode;
+    private string? _onnxModelPath;
     private readonly InferenceSession? _onnxSession;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
@@ -418,26 +418,37 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
         int channels = input.Shape[1];
         int height = input.Shape[2];
         int width = input.Shape[3];
+        int outHeight = height * 2;
+        int outWidth = width * 2;
 
-        var output = new Tensor<T>([batchSize, channels, height * 2, width * 2]);
+        var output = new Tensor<T>([batchSize, channels, outHeight, outWidth]);
+        var inputData = input.Data;
+        var outputData = output.Data;
 
-        for (int b = 0; b < batchSize; b++)
+        // Parallel nearest-neighbor upsampling for efficiency
+        Parallel.For(0, batchSize * channels, idx =>
         {
-            for (int c = 0; c < channels; c++)
+            int b = idx / channels;
+            int c = idx % channels;
+            int inBaseIdx = (b * channels + c) * height * width;
+            int outBaseIdx = (b * channels + c) * outHeight * outWidth;
+
+            for (int h = 0; h < height; h++)
             {
-                for (int h = 0; h < height; h++)
+                int outH = h * 2;
+                for (int w = 0; w < width; w++)
                 {
-                    for (int w = 0; w < width; w++)
-                    {
-                        T val = input[b, c, h, w];
-                        output[b, c, h * 2, w * 2] = val;
-                        output[b, c, h * 2, w * 2 + 1] = val;
-                        output[b, c, h * 2 + 1, w * 2] = val;
-                        output[b, c, h * 2 + 1, w * 2 + 1] = val;
-                    }
+                    int outW = w * 2;
+                    T val = inputData[inBaseIdx + h * width + w];
+                    
+                    // Write 2x2 block
+                    outputData[outBaseIdx + outH * outWidth + outW] = val;
+                    outputData[outBaseIdx + outH * outWidth + outW + 1] = val;
+                    outputData[outBaseIdx + (outH + 1) * outWidth + outW] = val;
+                    outputData[outBaseIdx + (outH + 1) * outWidth + outW + 1] = val;
                 }
             }
-        }
+        });
 
         return output;
     }
@@ -460,6 +471,31 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
             double x = Convert.ToDouble(v);
             double sigmoid = 1.0 / (1.0 + Math.Exp(-x));
             return NumOps.FromDouble(sigmoid);
+        });
+    }
+
+    private Tensor<T> ApplyGELUGradient(Tensor<T> gradient, Tensor<T> input)
+    {
+        return gradient.Transform((g, idx) =>
+        {
+            double x = Convert.ToDouble(input.Data[idx]);
+            double c = Math.Sqrt(2.0 / Math.PI);
+            double inner = c * (x + 0.044715 * x * x * x);
+            double tanh_inner = Math.Tanh(inner);
+            double sech2 = 1.0 - tanh_inner * tanh_inner;
+            double d_inner = c * (1.0 + 3.0 * 0.044715 * x * x);
+            double grad = 0.5 * (1.0 + tanh_inner) + 0.5 * x * sech2 * d_inner;
+            return NumOps.Multiply(g, NumOps.FromDouble(grad));
+        });
+    }
+
+    private Tensor<T> ApplySigmoidGradient(Tensor<T> gradient, Tensor<T> output)
+    {
+        return gradient.Transform((g, idx) =>
+        {
+            double s = Convert.ToDouble(output.Data[idx]);
+            double grad = s * (1.0 - s);
+            return NumOps.Multiply(g, NumOps.FromDouble(grad));
         });
     }
 
@@ -587,12 +623,13 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadBoolean();
-        _ = reader.ReadString();
+        _height = reader.ReadInt32();
+        _width = reader.ReadInt32();
+        _channels = reader.ReadInt32();
+        _modelSize = (ModelSize)reader.ReadInt32();
+        _useNativeMode = reader.ReadBoolean();
+        _onnxModelPath = reader.ReadString();
+        if (string.IsNullOrEmpty(_onnxModelPath)) _onnxModelPath = null;
     }
 
     /// <inheritdoc/>
@@ -606,6 +643,23 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
         {
             return new DepthAnythingV2<T>(Architecture, _onnxModelPath!, _modelSize);
         }
+    }
+
+    #endregion
+
+    #region IDisposable
+
+    /// <summary>
+    /// Disposes of managed resources, including the ONNX inference session.
+    /// </summary>
+    /// <param name="disposing">True if disposing, false if finalizing.</param>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _onnxSession?.Dispose();
+        }
+        base.Dispose(disposing);
     }
 
     #endregion

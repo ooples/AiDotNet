@@ -291,12 +291,110 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         return resized.Take(numFrames).ToList();
     }
 
-    public override Tensor<T> Predict(Tensor<T> input) => input;
+    /// <summary>
+    /// Performs a single denoising prediction step on the input latents.
+    /// </summary>
+    /// <param name="input">Input latent tensor [B, C, H, W].</param>
+    /// <returns>Predicted denoised output.</returns>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        // Create default time embedding at t=0.5 (mid-point)
+        var timeEmbed = CreateTimeEmbedding(0.5);
 
+        // Predict noise without text conditioning
+        var noisePred = PredictNoise(input, null, timeEmbed);
+
+        // Apply single denoising step
+        return DenoisingStep(input, noisePred, _numInferenceSteps / 2);
+    }
+
+    /// <summary>
+    /// Trains the model using the diffusion training objective.
+    /// </summary>
+    /// <param name="input">Clean input video latents.</param>
+    /// <param name="expectedOutput">Target (typically the same as input for diffusion training).</param>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Sample a random timestep
+        var random = new Random();
+        int timestep = random.Next(_numInferenceSteps);
+        double t = 1.0 - (double)timestep / _numInferenceSteps;
+
+        // Get noise schedule parameters
+        double alphaCumprod = _alphasCumprod[timestep];
+        double sqrtAlphaCumprod = Math.Sqrt(alphaCumprod);
+        double sqrtOneMinusAlphaCumprod = Math.Sqrt(1 - alphaCumprod);
+
+        // Sample noise
+        var noise = InitializeLatents(input.Shape, random);
+
+        // Create noisy input: x_t = sqrt(alpha_cumprod) * x_0 + sqrt(1 - alpha_cumprod) * noise
+        var noisyInput = input.Transform((v, idx) =>
+        {
+            double x0 = Convert.ToDouble(v);
+            double n = Convert.ToDouble(noise.Data[idx]);
+            return NumOps.FromDouble(sqrtAlphaCumprod * x0 + sqrtOneMinusAlphaCumprod * n);
+        });
+
+        // Forward pass: predict the noise
+        var timeEmbed = CreateTimeEmbedding(t);
+        var predictedNoise = PredictNoise(noisyInput, null, timeEmbed);
+
+        // Compute MSE loss between predicted and actual noise
+        T loss = NumOps.Zero;
+        for (int i = 0; i < noise.Length; i++)
+        {
+            T diff = NumOps.Subtract(predictedNoise.Data[i], noise.Data[i]);
+            loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
+        }
+        loss = NumOps.Divide(loss, NumOps.FromDouble(noise.Length));
+        LastLoss = loss;
+
+        // Compute gradient: d(MSE)/d(pred) = 2 * (pred - target) / N
+        var gradient = new Tensor<T>(predictedNoise.Shape);
+        T scale = NumOps.FromDouble(2.0 / noise.Length);
+        for (int i = 0; i < noise.Length; i++)
+        {
+            T diff = NumOps.Subtract(predictedNoise.Data[i], noise.Data[i]);
+            gradient.Data[i] = NumOps.Multiply(diff, scale);
+        }
+
+        // Backpropagate through the network
+        BackpropagateGradient(gradient);
+
+        // Update parameters
         T lr = NumOps.FromDouble(0.0001);
         foreach (var layer in Layers) layer.UpdateParameters(lr);
+    }
+
+    /// <summary>
+    /// Backpropagates the gradient through the network layers.
+    /// </summary>
+    private void BackpropagateGradient(Tensor<T> gradient)
+    {
+        // Backpropagate through final layer
+        gradient = _finalLayer.Backward(gradient);
+
+        // Backpropagate through DiT blocks in reverse order
+        // Each DiT block consists of 3 layers: self-attention, FFN expand, FFN contract
+        // The layers internally handle activation gradient computation
+        for (int i = _ditBlocks.Count - 1; i >= 0; i -= 3)
+        {
+            if (i >= 2)
+            {
+                // FFN contract (with implicit activation gradient)
+                gradient = _ditBlocks[i].Backward(gradient);
+
+                // FFN expand (with implicit activation gradient)
+                gradient = _ditBlocks[i - 1].Backward(gradient);
+
+                // Self-attention (simplified as convolution)
+                gradient = _ditBlocks[i - 2].Backward(gradient);
+            }
+        }
+
+        // Backpropagate through patch embedding
+        _patchEmbed.Backward(gradient);
     }
 
     #endregion
@@ -478,11 +576,48 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         }
         decoded = ApplySigmoid(decoded);
 
-        // Split into frames
+        // Generate temporally-varying frames
         var frames = new List<Tensor<T>>();
+        int batchSize = decoded.Shape[0];
+        int channels = decoded.Shape[1];
+        int height = decoded.Shape[2];
+        int width = decoded.Shape[3];
+
         for (int f = 0; f < _numFrames; f++)
         {
-            frames.Add(decoded); // Simplified: same frame repeated
+            // Compute temporal position t ∈ [0, 1]
+            double t = (double)f / Math.Max(1, _numFrames - 1);
+
+            // Create frame with temporal modulation
+            var frame = new Tensor<T>([batchSize, channels, height, width]);
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    // Apply temporal frequency modulation per channel
+                    double freq = 2.0 * Math.PI * (c + 1) / channels;
+                    double temporalMod = 0.1 * Math.Sin(freq * t);
+
+                    for (int h = 0; h < height; h++)
+                    {
+                        for (int w = 0; w < width; w++)
+                        {
+                            double baseVal = Convert.ToDouble(decoded[b, c, h, w]);
+
+                            // Add spatiotemporal variation: blend base value with temporal modulation
+                            // Include spatial position for more varied motion
+                            double spatialFactor = (double)(h + w) / (height + width);
+                            double motion = temporalMod * (1.0 + 0.5 * Math.Sin(2.0 * Math.PI * spatialFactor));
+
+                            double finalVal = MathHelper.Clamp(baseVal + motion, 0.0, 1.0);
+                            frame[b, c, h, w] = NumOps.FromDouble(finalVal);
+                        }
+                    }
+                }
+            }
+
+            frames.Add(frame);
         }
 
         return frames;

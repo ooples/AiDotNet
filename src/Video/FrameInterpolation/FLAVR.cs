@@ -50,9 +50,9 @@ public class FLAVR<T> : NeuralNetworkBase<T>
     private readonly string? _onnxModelPath;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ILossFunction<T> _lossFunction;
-    private readonly int _numFeatures;
-    private readonly int _numInputFrames;
-    private readonly int _numOutputFrames;
+    private int _numFeatures;
+    private int _numInputFrames;
+    private int _numOutputFrames;
     private readonly int _imageSize;
 
     #endregion
@@ -319,7 +319,9 @@ public class FLAVR<T> : NeuralNetworkBase<T>
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        for (int i = 0; i < 3; i++) _ = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _numInputFrames = reader.ReadInt32();
+        _numOutputFrames = reader.ReadInt32();
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>

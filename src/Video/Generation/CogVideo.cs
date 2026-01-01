@@ -403,7 +403,7 @@ public class CogVideo<T> : NeuralNetworkBase<T>
     {
         // DDPM-style denoising step (simplified)
         // Clamp to prevent division by zero when timestep == 1.0
-        double alpha = Math.Sqrt(Math.Max(1e-8, 1.0 - timestep * timestep));
+        double alpha = Math.Sqrt(MathHelper.Clamp(1.0 - timestep * timestep, 1e-8, double.MaxValue));
         double sigma = timestep;
 
         var resultData = new T[noisyLatent.Length];

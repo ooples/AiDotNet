@@ -42,17 +42,17 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
 {
     #region Fields
 
-    private readonly int _height;
-    private readonly int _width;
-    private readonly int _channels;
-    private readonly int _numFrames;
-    private readonly int _numClasses;
-    private readonly int _numFeatures;
+    private int _height;
+    private int _width;
+    private int _channels;
+    private int _numFrames;
+    private int _numClasses;
+    private int _numFeatures;
     private readonly int _patchSize;
     private readonly int _tubeletSize;
-    private readonly double _maskRatio;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
+    private double _maskRatio;
+    private bool _useNativeMode;
+    private string? _onnxModelPath;
     private readonly InferenceSession? _onnxSession;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
@@ -781,15 +781,16 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadDouble();
-        _ = reader.ReadBoolean();
-        _ = reader.ReadString();
+        _height = reader.ReadInt32();
+        _width = reader.ReadInt32();
+        _channels = reader.ReadInt32();
+        _numFrames = reader.ReadInt32();
+        _numClasses = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _maskRatio = reader.ReadDouble();
+        _useNativeMode = reader.ReadBoolean();
+        _onnxModelPath = reader.ReadString();
+        if (string.IsNullOrEmpty(_onnxModelPath)) _onnxModelPath = null;
     }
 
     /// <inheritdoc/>

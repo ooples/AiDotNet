@@ -4738,12 +4738,23 @@ public class CpuEngine : IEngine
         int width = input.Shape[3];
 
         int outChannels = kernel.Shape[0];
+        int kernelInChannels = kernel.Shape[1];
         int kernelHeight = kernel.Shape[2];
         int kernelWidth = kernel.Shape[3];
+
+        // Validate input/kernel channel compatibility
+        if (inChannels != kernelInChannels)
+            throw new ArgumentException($"Input channels ({inChannels}) must match kernel in_channels ({kernelInChannels}).", nameof(kernel));
 
         int strideH = stride[0], strideW = stride[1];
         int padH = padding[0], padW = padding[1];
         int dilationH = dilation[0], dilationW = dilation[1];
+
+        // Validate stride and dilation are positive
+        if (strideH <= 0 || strideW <= 0)
+            throw new ArgumentException("Stride elements must be positive.", nameof(stride));
+        if (dilationH <= 0 || dilationW <= 0)
+            throw new ArgumentException("Dilation elements must be positive.", nameof(dilation));
 
         int effectiveKernelH = dilationH * (kernelHeight - 1) + 1;
         int effectiveKernelW = dilationW * (kernelWidth - 1) + 1;
@@ -4751,15 +4762,35 @@ public class CpuEngine : IEngine
         int outputHeight = (height + 2 * padH - effectiveKernelH) / strideH + 1;
         int outputWidth = (width + 2 * padW - effectiveKernelW) / strideW + 1;
 
+        // Validate output dimensions are positive
+        if (outputHeight <= 0 || outputWidth <= 0)
+            throw new ArgumentException(
+                $"Invalid deformable conv parameters: output size would be {outputHeight}x{outputWidth} " +
+                $"for input {height}x{width}, kernel {kernelHeight}x{kernelWidth}, " +
+                $"stride=({strideH},{strideW}), padding=({padH},{padW}), dilation=({dilationH},{dilationW}).");
+
         int numKernelPositions = kernelHeight * kernelWidth;
 
         // Validate offset shape: [batch, 2*kernel_h*kernel_w, out_h, out_w]
-        if (offset.Shape[1] != 2 * numKernelPositions)
-            throw new ArgumentException($"Offset channels must be 2 * kernel_h * kernel_w = {2 * numKernelPositions}. Got {offset.Shape[1]}.", nameof(offset));
+        if (offset.Rank != 4)
+            throw new ArgumentException($"Offset tensor must be 4D. Got rank {offset.Rank}.", nameof(offset));
+        if (offset.Shape[0] != batch || offset.Shape[1] != 2 * numKernelPositions ||
+            offset.Shape[2] != outputHeight || offset.Shape[3] != outputWidth)
+            throw new ArgumentException(
+                $"Offset tensor must have shape [{batch}, {2 * numKernelPositions}, {outputHeight}, {outputWidth}]. " +
+                $"Got [{string.Join(",", offset.Shape)}].", nameof(offset));
 
         // Validate mask shape if provided: [batch, kernel_h*kernel_w, out_h, out_w]
-        if (mask != null && mask.Shape[1] != numKernelPositions)
-            throw new ArgumentException($"Mask channels must be kernel_h * kernel_w = {numKernelPositions}. Got {mask.Shape[1]}.", nameof(mask));
+        if (mask != null)
+        {
+            if (mask.Rank != 4)
+                throw new ArgumentException($"Mask tensor must be 4D. Got rank {mask.Rank}.", nameof(mask));
+            if (mask.Shape[0] != batch || mask.Shape[1] != numKernelPositions ||
+                mask.Shape[2] != outputHeight || mask.Shape[3] != outputWidth)
+                throw new ArgumentException(
+                    $"Mask tensor must have shape [{batch}, {numKernelPositions}, {outputHeight}, {outputWidth}]. " +
+                    $"Got [{string.Join(",", mask.Shape)}].", nameof(mask));
+        }
 
         var result = new Tensor<T>([batch, outChannels, outputHeight, outputWidth]);
         var inputData = input.Data;
@@ -5323,6 +5354,141 @@ public class CpuEngine : IEngine
         return (dH, dW);
     }
 
+    /// <summary>
+    /// Distributes gradient to input using bilinear interpolation weights (NHWC layout).
+    /// </summary>
+    private static void BilinearBackwardInputNHWC<T>(
+        T[] gradData,
+        T gradVal,
+        int batch,
+        int channel,
+        int height,
+        int width,
+        int channels,
+        double h,
+        double w,
+        INumericOperations<T> numOps,
+        object[] locks)
+    {
+        if (h <= -1 || h >= height || w <= -1 || w >= width)
+            return;
+
+        int h0 = (int)Math.Floor(h);
+        int h1 = h0 + 1;
+        int w0 = (int)Math.Floor(w);
+        int w1 = w0 + 1;
+
+        double lh = h - h0;
+        double lw = w - w0;
+
+        double w00 = (1 - lh) * (1 - lw);
+        double w01 = (1 - lh) * lw;
+        double w10 = lh * (1 - lw);
+        double w11 = lh * lw;
+
+        // Add gradient contributions to each of the 4 corners (NHWC layout)
+        AddGradientToPixelNHWC(gradData, gradVal, batch, channel, height, width, channels, h0, w0, w00, numOps, locks);
+        AddGradientToPixelNHWC(gradData, gradVal, batch, channel, height, width, channels, h0, w1, w01, numOps, locks);
+        AddGradientToPixelNHWC(gradData, gradVal, batch, channel, height, width, channels, h1, w0, w10, numOps, locks);
+        AddGradientToPixelNHWC(gradData, gradVal, batch, channel, height, width, channels, h1, w1, w11, numOps, locks);
+    }
+
+    /// <summary>
+    /// Atomically adds gradient to a pixel position with boundary checking (NHWC layout).
+    /// </summary>
+    private static void AddGradientToPixelNHWC<T>(
+        T[] gradData,
+        T gradVal,
+        int batch,
+        int channel,
+        int height,
+        int width,
+        int channels,
+        int h,
+        int w,
+        double weight,
+        INumericOperations<T> numOps,
+        object[] locks)
+    {
+        if (h < 0 || h >= height || w < 0 || w >= width || Math.Abs(weight) < 1e-10)
+            return;
+
+        // NHWC index: [batch, h, w, channel]
+        int idx = ((batch * height + h) * width + w) * channels + channel;
+        T contrib = numOps.Multiply(gradVal, numOps.FromDouble(weight));
+
+        lock (locks[idx])
+        {
+            gradData[idx] = numOps.Add(gradData[idx], contrib);
+        }
+    }
+
+    /// <summary>
+    /// Gets a pixel value with boundary checking for NHWC layout (returns zero for out-of-bounds).
+    /// </summary>
+    private static T GetPixelValueNHWC<T>(
+        T[] data,
+        int batch,
+        int channel,
+        int height,
+        int width,
+        int channels,
+        int h,
+        int w,
+        INumericOperations<T> numOps)
+    {
+        if (h < 0 || h >= height || w < 0 || w >= width)
+            return numOps.Zero;
+
+        // NHWC index: [batch, h, w, channel]
+        int idx = ((batch * height + h) * width + w) * channels + channel;
+        return data[idx];
+    }
+
+    /// <summary>
+    /// Computes the gradient of bilinear interpolation w.r.t. sampling position (NHWC layout).
+    /// </summary>
+    private static (T gradH, T gradW) BilinearGradientNHWC<T>(
+        T[] data,
+        int batch,
+        int channel,
+        int height,
+        int width,
+        int channels,
+        double h,
+        double w,
+        INumericOperations<T> numOps)
+    {
+        // Out of bounds - no gradient
+        if (h <= -1 || h >= height || w <= -1 || w >= width)
+            return (numOps.Zero, numOps.Zero);
+
+        int h0 = (int)Math.Floor(h);
+        int h1 = h0 + 1;
+        int w0 = (int)Math.Floor(w);
+        int w1 = w0 + 1;
+
+        double lh = h - h0;
+        double lw = w - w0;
+
+        T v00 = GetPixelValueNHWC(data, batch, channel, height, width, channels, h0, w0, numOps);
+        T v01 = GetPixelValueNHWC(data, batch, channel, height, width, channels, h0, w1, numOps);
+        T v10 = GetPixelValueNHWC(data, batch, channel, height, width, channels, h1, w0, numOps);
+        T v11 = GetPixelValueNHWC(data, batch, channel, height, width, channels, h1, w1, numOps);
+
+        // d/dh: derivative of bilinear w.r.t. h
+        T dH = numOps.Add(
+            numOps.Multiply(numOps.FromDouble(1 - lw), numOps.Subtract(v10, v00)),
+            numOps.Multiply(numOps.FromDouble(lw), numOps.Subtract(v11, v01)));
+
+        // d/dw: derivative of bilinear w.r.t. w
+        T dW = numOps.Add(
+            numOps.Multiply(numOps.FromDouble(1 - lh), numOps.Subtract(v01, v00)),
+            numOps.Multiply(numOps.FromDouble(lh), numOps.Subtract(v11, v10)));
+
+        return (dH, dW);
+    }
+
     /// <inheritdoc/>
     public Tensor<T> DeformableConv2DBackwardMask<T>(
         Tensor<T> gradOutput,
@@ -5432,10 +5598,11 @@ public class CpuEngine : IEngine
 
         var numOps = MathHelper.GetNumericOperations<T>();
 
+        // NHWC layout: [batch, height, width, channels]
         int batch = inputShape[0];
-        int channels = inputShape[1];
-        int height = inputShape[2];
-        int width = inputShape[3];
+        int height = inputShape[1];
+        int width = inputShape[2];
+        int channels = inputShape[3];
 
         int outHeight = grid.Shape[1];
         int outWidth = grid.Shape[2];
@@ -5445,33 +5612,34 @@ public class CpuEngine : IEngine
         var gradOutputData = gradOutput.Data;
         var gridData = grid.Data;
 
-        // Use locks for atomic addition
-        var locks = new object[batch * channels * height * width];
+        // Use locks for atomic addition - NHWC layout
+        var locks = new object[batch * height * width * channels];
         for (int i = 0; i < locks.Length; i++) locks[i] = new object();
 
-        Parallel.For(0, batch * channels, idx =>
+        Parallel.For(0, batch, b =>
         {
-            int b = idx / channels;
-            int c = idx % channels;
-
             for (int oh = 0; oh < outHeight; oh++)
             {
                 for (int ow = 0; ow < outWidth; ow++)
                 {
-                    int gradOutIdx = ((b * channels + c) * outHeight + oh) * outWidth + ow;
-                    T gradVal = gradOutputData[gradOutIdx];
-
                     // Get normalized grid coordinates
                     int gridBaseIdx = ((b * outHeight + oh) * outWidth + ow) * 2;
                     double gx = numOps.ToDouble(gridData[gridBaseIdx]);
                     double gy = numOps.ToDouble(gridData[gridBaseIdx + 1]);
 
                     // Convert to pixel coordinates
-                    double h = (gy + 1) / 2 * (height - 1);
-                    double w = (gx + 1) / 2 * (width - 1);
+                    double srcH = (gy + 1) / 2 * (height - 1);
+                    double srcW = (gx + 1) / 2 * (width - 1);
 
-                    // Distribute gradient using bilinear weights
-                    BilinearBackwardInput(gradInputData, gradVal, b, c, channels, height, width, h, w, numOps, locks);
+                    // Distribute gradient for all channels using NHWC bilinear weights
+                    for (int c = 0; c < channels; c++)
+                    {
+                        // NHWC gradOutput index: [b, oh, ow, c]
+                        int gradOutIdx = ((b * outHeight + oh) * outWidth + ow) * channels + c;
+                        T gradVal = gradOutputData[gradOutIdx];
+
+                        BilinearBackwardInputNHWC(gradInputData, gradVal, b, c, height, width, channels, srcH, srcW, numOps, locks);
+                    }
                 }
             }
         });
@@ -5488,10 +5656,11 @@ public class CpuEngine : IEngine
 
         var numOps = MathHelper.GetNumericOperations<T>();
 
+        // NHWC layout: [batch, height, width, channels]
         int batch = input.Shape[0];
-        int channels = input.Shape[1];
-        int height = input.Shape[2];
-        int width = input.Shape[3];
+        int height = input.Shape[1];
+        int width = input.Shape[2];
+        int channels = input.Shape[3];
 
         int outHeight = grid.Shape[1];
         int outWidth = grid.Shape[2];
@@ -5513,8 +5682,8 @@ public class CpuEngine : IEngine
                     double gy = numOps.ToDouble(gridData[gridBaseIdx + 1]);
 
                     // Convert to pixel coordinates
-                    double h = (gy + 1) / 2 * (height - 1);
-                    double w = (gx + 1) / 2 * (width - 1);
+                    double srcH = (gy + 1) / 2 * (height - 1);
+                    double srcW = (gx + 1) / 2 * (width - 1);
 
                     // Compute d(output)/d(gx) and d(output)/d(gy) by summing over all channels
                     T gradGx = numOps.Zero;
@@ -5522,11 +5691,12 @@ public class CpuEngine : IEngine
 
                     for (int c = 0; c < channels; c++)
                     {
-                        int gradOutIdx = ((b * channels + c) * outHeight + oh) * outWidth + ow;
+                        // NHWC gradOutput index: [b, oh, ow, c]
+                        int gradOutIdx = ((b * outHeight + oh) * outWidth + ow) * channels + c;
                         T gradOutVal = gradOutputData[gradOutIdx];
 
-                        // Get gradient of bilinear sampling w.r.t. h and w
-                        var (dH, dW) = BilinearGradient(inputData, b, c, channels, height, width, h, w, numOps);
+                        // Get gradient of bilinear sampling w.r.t. h and w using NHWC layout
+                        var (dH, dW) = BilinearGradientNHWC(inputData, b, c, height, width, channels, srcH, srcW, numOps);
 
                         // Chain rule: d/dgx = d/dw * dw/dgx where dw/dgx = (width-1)/2
                         // Chain rule: d/dgy = d/dh * dh/dgy where dh/dgy = (height-1)/2

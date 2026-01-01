@@ -103,6 +103,26 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
             [inputChannels, inputHeight, inputWidth],
             [outputChannels, (inputHeight + 2 * padding - kernelSize) / stride + 1, (inputWidth + 2 * padding - kernelSize) / stride + 1])
     {
+        // Validate parameters
+        if (inputHeight <= 0) throw new ArgumentOutOfRangeException(nameof(inputHeight), "Input height must be positive.");
+        if (inputWidth <= 0) throw new ArgumentOutOfRangeException(nameof(inputWidth), "Input width must be positive.");
+        if (inputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inputChannels), "Input channels must be positive.");
+        if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels), "Output channels must be positive.");
+        if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize), "Kernel size must be positive.");
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride), "Stride must be positive.");
+        if (padding < 0) throw new ArgumentOutOfRangeException(nameof(padding), "Padding must be non-negative.");
+        if (groups < 1) throw new ArgumentOutOfRangeException(nameof(groups), "Groups must be at least 1.");
+        if (deformGroups < 1) throw new ArgumentOutOfRangeException(nameof(deformGroups), "Deformable groups must be at least 1.");
+        if (inputChannels % groups != 0) throw new ArgumentException($"Input channels ({inputChannels}) must be divisible by groups ({groups}).", nameof(groups));
+        
+        // Validate output dimensions are positive
+        int outputHeight = (inputHeight + 2 * padding - kernelSize) / stride + 1;
+        int outputWidth = (inputWidth + 2 * padding - kernelSize) / stride + 1;
+        if (outputHeight <= 0 || outputWidth <= 0)
+            throw new ArgumentException(
+                $"Invalid layer parameters: output size would be {outputHeight}x{outputWidth} " +
+                $"for input {inputHeight}x{inputWidth}, kernel {kernelSize}, stride {stride}, padding {padding}.");
+
         _engine = engine ?? new CpuEngine();
         _inputHeight = inputHeight;
         _inputWidth = inputWidth;
