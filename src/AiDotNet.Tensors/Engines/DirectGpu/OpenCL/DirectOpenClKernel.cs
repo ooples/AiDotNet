@@ -1,5 +1,5 @@
 // Copyright (c) AiDotNet. All rights reserved.
-// Pure P/Invoke OpenCL kernel - NO ILGPU dependency.
+// Pure P/Invoke OpenCL kernel - no managed GPU runtime dependency.
 // Works on ALL .NET versions including .NET Framework 4.6.2.
 
 using System;
@@ -8,7 +8,7 @@ using System.Runtime.InteropServices;
 namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 {
     /// <summary>
-    /// OpenCL kernel wrapper using pure P/Invoke. No ILGPU dependency.
+    /// OpenCL kernel wrapper using pure P/Invoke. No managed GPU runtime dependency.
     /// </summary>
     internal sealed class DirectOpenClKernel : IDisposable
     {

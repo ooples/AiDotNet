@@ -5724,7 +5724,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// - <b>AlwaysCpu</b>: Force CPU-only execution, never use GPU
     /// </para>
     /// <para><b>GPU Device Type Behaviors:</b>
-    /// - <b>Auto</b>: Let ILGPU select the best device (CUDA for NVIDIA, OpenCL for AMD/Intel)
+    /// - <b>Auto</b>: Use DirectGpu backend order (CUDA → OpenCL → HIP) with CPU fallback
     /// - <b>CUDA</b>: Force NVIDIA CUDA backend (throws if NVIDIA GPU not available)
     /// - <b>OpenCL</b>: Force OpenCL backend (works with NVIDIA, AMD, Intel, throws if no GPU)
     /// - <b>CPU</b>: Force CPU-only execution (equivalent to UsageLevel.AlwaysCpu)
@@ -5732,7 +5732,6 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </remarks>
     private void ApplyGpuConfiguration()
     {
-#if !NET462
         // Skip if no GPU configuration was provided (null = default = auto-detect with CPU fallback)
         if (_gpuAccelerationConfig == null)
         {
@@ -5748,6 +5747,27 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
                 // This ensures the library works out of the box on any hardware
             }
             return;
+        }
+
+        if (_gpuAccelerationConfig.UsageLevel == AiDotNet.Engines.GpuUsageLevel.AlwaysCpu)
+        {
+            AiDotNetEngine.ResetToCpu();
+            return;
+        }
+
+        if (_gpuAccelerationConfig.DeviceType == AiDotNet.Engines.GpuDeviceType.CPU)
+        {
+            AiDotNetEngine.ResetToCpu();
+            return;
+        }
+
+        if (_gpuAccelerationConfig.DeviceType == AiDotNet.Engines.GpuDeviceType.CUDA)
+        {
+            Environment.SetEnvironmentVariable("AIDOTNET_DIRECTGPU_BACKENDS", "cuda");
+        }
+        else if (_gpuAccelerationConfig.DeviceType == AiDotNet.Engines.GpuDeviceType.OpenCL)
+        {
+            Environment.SetEnvironmentVariable("AIDOTNET_DIRECTGPU_BACKENDS", "opencl");
         }
 
         // Apply configuration based on usage level
@@ -5900,40 +5920,15 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
                 throw new ArgumentException($"Unknown GPU usage level: {_gpuAccelerationConfig.UsageLevel}");
         }
 
-        // Note on DeviceType (CUDA vs OpenCL):
-        // The current ILGPU-based implementation auto-selects the best device type via GetPreferredDevice().
-        // Explicit device type selection (CUDA vs OpenCL) would require:
-        // 1. Enumerating available accelerators by type
-        // 2. Filtering by CUDA vs OpenCL vs CPU
-        // 3. Creating accelerator from filtered list
-        // 4. Passing accelerator to GpuEngine constructor
-        //
-        // This is a future enhancement. For now, GpuDeviceType.Auto is implicitly used,
-        // which lets ILGPU choose the best device (CUDA for NVIDIA, OpenCL for AMD/Intel).
-        //
-        // To add explicit device type support:
-        // - Modify GpuEngine constructor to accept optional AcceleratorType filter
-        // - Enumerate devices: context.Devices.Where(d => d.AcceleratorType == AcceleratorType.Cuda)
-        // - Create accelerator from filtered device
-        //
-        // This would allow users to force CUDA or OpenCL when multiple options are available,
-        // but adds complexity and is rarely needed since Auto already picks the fastest option.
         if (_gpuAccelerationConfig.DeviceType != AiDotNet.Engines.GpuDeviceType.Auto)
         {
-            Console.WriteLine($"[AiDotNet] Warning: Explicit device type ({_gpuAccelerationConfig.DeviceType}) is not yet implemented.");
-            Console.WriteLine("[AiDotNet] Using Auto device selection (CUDA for NVIDIA, OpenCL for AMD/Intel).");
-            Console.WriteLine("[AiDotNet] This is the recommended setting and provides optimal performance.");
+            Console.WriteLine($"[AiDotNet] DirectGpu backend order forced to {_gpuAccelerationConfig.DeviceType}.");
         }
-#else
-        // GPU acceleration is not supported in .NET Framework 4.6.2
-        // ILGPU requires .NET Standard 2.1 or higher, which is not available in net462
-        if (_gpuAccelerationConfig != null && _gpuAccelerationConfig.UsageLevel != AiDotNet.Engines.GpuUsageLevel.AlwaysCpu)
+
+        if (_gpuAccelerationConfig.DeviceIndex != 0)
         {
-            Console.WriteLine("[AiDotNet] Warning: GPU acceleration is not supported in .NET Framework 4.6.2");
-            Console.WriteLine("[AiDotNet] Using CPU execution (ILGPU requires .NET Standard 2.1+)");
-            Console.WriteLine("[AiDotNet] To use GPU acceleration, target net8.0 or higher");
+            Console.WriteLine("[AiDotNet] Warning: GPU DeviceIndex selection is not implemented for DirectGpu backends.");
         }
-#endif
     }
 
     private static (TInput X, TOutput Y, List<(int ClientId, int StartRow, int SampleCount)> ClientRanges)

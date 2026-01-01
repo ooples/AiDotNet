@@ -1,5 +1,5 @@
 // Copyright (c) AiDotNet. All rights reserved.
-// Pure P/Invoke OpenCL buffer - NO ILGPU dependency.
+// Pure P/Invoke OpenCL buffer - no managed GPU runtime dependency.
 // Works on ALL .NET versions including .NET Framework 4.6.2.
 
 using System;
@@ -8,7 +8,7 @@ using System.Runtime.InteropServices;
 namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 {
     /// <summary>
-    /// OpenCL buffer wrapper using pure P/Invoke. No ILGPU dependency.
+    /// OpenCL buffer wrapper using pure P/Invoke. No managed GPU runtime dependency.
     /// </summary>
     internal sealed class DirectOpenClBuffer : IDisposable
     {

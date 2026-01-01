@@ -1,5 +1,5 @@
 // Copyright (c) AiDotNet. All rights reserved.
-// OpenCL backend using pure P/Invoke - NO ILGPU dependency.
+// OpenCL backend using pure P/Invoke - no managed GPU runtime dependency.
 // Works on ALL .NET versions including .NET Framework 4.6.2.
 
 using System;
@@ -13,13 +13,13 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 {
     /// <summary>
     /// OpenCL backend for direct GPU access on AMD, Intel, and NVIDIA GPUs.
-    /// Uses pure P/Invoke with no ILGPU dependency.
+    /// Uses pure P/Invoke with no managed GPU runtime dependency.
     /// </summary>
     /// <remarks>
     /// <para><b>Key Features:</b></para>
     /// <list type="bullet">
     /// <item>Works on ALL .NET versions (4.6.2, 4.7.1, net8.0, etc.)</item>
-    /// <item>No ILGPU dependency - pure P/Invoke</item>
+    /// <item>No managed GPU runtime dependency - pure P/Invoke</item>
     /// <item>Double-buffered GEMM for compute/memory overlap</item>
     /// <item>Fused operations (GEMM+Bias+Activation)</item>
     /// <item>Bank-conflict-free shared memory</item>
@@ -2814,7 +2814,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
     /// <summary>
     /// OpenCL GPU buffer wrapper implementing IGpuBuffer.
-    /// Uses pure P/Invoke with no ILGPU dependency.
+    /// Uses pure P/Invoke with no managed GPU runtime dependency.
     /// </summary>
     internal sealed class DirectOpenClGpuBuffer : IGpuBuffer
     {

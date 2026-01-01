@@ -23,7 +23,11 @@
 - CLBlast copy/transpose databases ported + fast copy/transpose kernels wired.
 - CLBlast XgemmDirect kernel ported; small-size routing now uses direct kernel.
 - Bayesian tuning diagnostics + CSV/log output verified (artifacts captured in `artifacts/gpu_tuning`); long-running trials suggest adding a per-trial timeout/skip policy.
-- DirectGpuTensorEngine (IEngine adapter) added; Engine/AiDotNetEngine now prefer DirectGpu over ILGPU when available.
+- DirectGpuTensorEngine (IEngine adapter) added; Engine/AiDotNetEngine now prefer DirectGpu over CPU when available.
+- ILGPU package references removed from `src/AiDotNet.csproj` and `src/AiDotNet.Tensors/AiDotNet.Tensors.csproj`.
+- ILGPU detection removed from Engine selection; GpuEngine now wraps DirectGpuTensorEngine.
+- ILGPU-specific data structures (GpuTensorHandle/GpuMemoryPool) removed.
+- Docs/benchmarks updated to label legacy ILGPU baselines.
 
 ## Non-goals
 - Multi-node/distributed GPU execution.
@@ -126,11 +130,11 @@ DirectGpu TUNED (OpenClBackend) vs CLBlast:
 - [ ] Implement missing OpenCL kernels (elementwise, reductions, indexing, softmax, conv/pool/norm, resampling, misc).
 - [ ] Implement missing CUDA kernels (NVRTC for elementwise/reduction/indexing; custom GEMM; cuDNN/cuBLAS fallbacks).
 - [ ] Wire fallback chain and logging: DirectOpenCL -> CLBlast -> CPU; DirectCUDA -> cuBLAS/cuDNN -> CPU.
-- [ ] Replace ILGPU-specific data structures (GpuTensorHandle/GpuMemoryPool) or retire them after backend parity.
-- [ ] Update Engine selection to remove ILGPU from the runtime path once parity is verified.
-- [ ] Remove ILGPU package references in `src/AiDotNet.csproj` and `src/AiDotNet.Tensors/AiDotNet.Tensors.csproj`.
+- [x] Replace ILGPU-specific data structures (GpuTensorHandle/GpuMemoryPool) or retire them after backend parity.
+- [x] Update Engine selection to remove ILGPU from the runtime path once parity is verified.
+- [x] Remove ILGPU package references in `src/AiDotNet.csproj` and `src/AiDotNet.Tensors/AiDotNet.Tensors.csproj`.
 - [ ] Delete ILGPU engine + helpers (`GpuEngine`, ILGPU kernels) after tests/perf baselines pass.
-- [ ] Update docs/benchmarks/tests that reference ILGPU baselines or behaviors.
+- [x] Update docs/benchmarks/tests that reference ILGPU baselines or behaviors.
 - [ ] Add/expand integration tests to cover every replacement kernel family with CPU comparison.
 - [ ] Validate performance vs CLBlast/cuBLAS for target sizes and store tuning DB + CSV diagnostics.
 

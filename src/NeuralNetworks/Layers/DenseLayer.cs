@@ -982,7 +982,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Try GPU-accelerated paths in order of expected performance:
         // Priority 0: DirectGpu FUSED (~25,000+ GFLOPS) - Custom optimized kernels with fused GEMM+Bias+Activation
         // Priority 1: cuBLAS (~30,000 GFLOPS) - Direct NVIDIA library, best for NVIDIA GPUs
-        // Priority 2: ILGPU with cached weights (~52-86 GFLOPS) - Persistent GPU memory
+        // Priority 2: DirectGpu cached weights - Persistent GPU memory
         // Priority 3: Standard Engine.TensorMatMul (CPU/GPU fallback)
 
         Tensor<T>? result = null;
@@ -1005,12 +1005,11 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
             Tensor<T>? matmul = null;
 #if !NET462
-            // Priority 1: Try cuBLAS (uses NVIDIA's hand-tuned kernels)
+            // Priority 1: Try cuBLAS (uses NVIDIA's hand-tuned kernels)        
             matmul = TryTensorMatMulWithCuBlas(flattenedInput, weightsTransposed);
-
-            // Priority 2: Fall back to ILGPU with cached weights if cuBLAS unavailable
-            matmul ??= TryTensorMatMulWithCachedWeights(flattenedInput, weightsTransposed);
 #endif
+            // Priority 2: Fall back to DirectGpu cached weights if cuBLAS unavailable
+            matmul ??= TryTensorMatMulWithCachedWeights(flattenedInput, weightsTransposed);
             // Priority 3: Fall back to standard mat mul if all GPU paths failed
             matmul ??= Engine.TensorMatMul(flattenedInput, weightsTransposed);
 

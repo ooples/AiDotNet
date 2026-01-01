@@ -1,5 +1,5 @@
 // Copyright (c) AiDotNet. All rights reserved.
-// Pure P/Invoke OpenCL bindings - NO ILGPU dependency.
+// Pure P/Invoke OpenCL bindings - no managed GPU runtime dependency.
 // Works on ALL .NET versions including .NET Framework 4.6.2.
 
 using System;
@@ -8,7 +8,7 @@ using System.Runtime.InteropServices;
 namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 {
     /// <summary>
-    /// Pure P/Invoke bindings for OpenCL. No dependencies on ILGPU.
+    /// Pure P/Invoke bindings for OpenCL. No managed GPU runtime dependencies.
     /// This allows DirectGpu to work on .NET Framework 4.6.2+.
     /// </summary>
     internal static class OpenClNativeBindings

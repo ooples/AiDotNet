@@ -7,25 +7,32 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.Tensors.Benchmarks;
 
 /// <summary>
-/// Benchmark comparing cuBLAS GEMM vs ILGPU for matrix multiplication.
-/// Target: ~30,000 GFLOPS for cuBLAS vs ~52-86 GFLOPS for ILGPU.
+/// Benchmark comparing cuBLAS GEMM vs DirectGpu for matrix multiplication.
+/// Target: ~30,000 GFLOPS for cuBLAS vs legacy ~52-86 GFLOPS (ILGPU baseline).
 /// </summary>
 public static class CuBlasGemmBenchmark
 {
     public static void Run()
     {
-        Console.WriteLine("=== cuBLAS vs ILGPU GEMM Benchmark ===");
+        Console.WriteLine("=== cuBLAS vs DirectGpu GEMM Benchmark ===");
         Console.WriteLine();
 
         // Check availability
+        using var directEngine = new DirectGpuTensorEngine();
         Console.WriteLine($"cuBLAS Available: {CuBlasMatMul.IsAvailable}");
-        Console.WriteLine($"ILGPU Engine: {Engine.Default.Name}");
+        Console.WriteLine($"DirectGpu Engine: {directEngine.Name}");
+        Console.WriteLine($"DirectGpu Available: {directEngine.SupportsGpu}");
         Console.WriteLine();
 
         if (!CuBlasMatMul.IsAvailable)
         {
             Console.WriteLine("cuBLAS not available - NVIDIA drivers may not be installed.");
-            Console.WriteLine("Will only run ILGPU benchmarks.");
+            Console.WriteLine("Will only run DirectGpu benchmarks if available.");
+            Console.WriteLine();
+        }
+        else if (!directEngine.SupportsGpu)
+        {
+            Console.WriteLine("DirectGpu not available - will only run cuBLAS benchmarks.");
             Console.WriteLine();
         }
 
@@ -33,20 +40,20 @@ public static class CuBlasGemmBenchmark
         int[] sizes = { 256, 512, 1024, 2048, 4096 };
 
         Console.WriteLine("Matrix Multiplication (C = A × B, square matrices):");
-        Console.WriteLine("Size       |  cuBLAS (GFLOPS)  |  ILGPU (GFLOPS)  |  Speedup");
+        Console.WriteLine("Size       |  cuBLAS (GFLOPS)  |  DirectGpu (GFLOPS)  |  Speedup");
         Console.WriteLine(new string('-', 65));
 
         foreach (int size in sizes)
         {
-            BenchmarkSize(size);
+            BenchmarkSize(directEngine, size);
         }
 
         Console.WriteLine();
         Console.WriteLine("DenseLayer-style operation (batch=64, in=768, out=3072):");
-        BenchmarkDenseLayerStyle();
+        BenchmarkDenseLayerStyle(directEngine);
     }
 
-    private static void BenchmarkSize(int size)
+    private static void BenchmarkSize(DirectGpuTensorEngine directEngine, int size)
     {
         int m = size, k = size, n = size;
 
@@ -63,15 +70,15 @@ public static class CuBlasGemmBenchmark
         // Benchmark cuBLAS
         double cublasGflops = BenchmarkCublas(A, m, k, B, k, n, flops);
 
-        // Benchmark ILGPU
-        double ilgpuGflops = BenchmarkIlgpu(A, m, k, B, n, flops);
+        // Benchmark DirectGpu
+        double directGpuGflops = BenchmarkDirectGpu(directEngine, A, m, k, B, n, flops);
 
         // Calculate speedup
-        string speedup = (cublasGflops > 0 && ilgpuGflops > 0)
-            ? $"{cublasGflops / ilgpuGflops:F1}x"
+        string speedup = (cublasGflops > 0 && directGpuGflops > 0)
+            ? $"{cublasGflops / directGpuGflops:F1}x"
             : "N/A";
 
-        Console.WriteLine($"{size,5}x{size,-4} |  {cublasGflops,12:F1}     |  {ilgpuGflops,12:F1}    |  {speedup}");
+        Console.WriteLine($"{size,5}x{size,-4} |  {cublasGflops,12:F1}     |  {directGpuGflops,12:F1}    |  {speedup}");
     }
 
     private static double BenchmarkCublas(float[] A, int m, int k, float[] B, int kB, int n, double flops)
@@ -108,10 +115,13 @@ public static class CuBlasGemmBenchmark
         }
     }
 
-    private static double BenchmarkIlgpu(float[] A, int m, int k, float[] B, int n, double flops)
+    private static double BenchmarkDirectGpu(DirectGpuTensorEngine directEngine, float[] A, int m, int k, float[] B, int n, double flops)
     {
         try
         {
+            if (!directEngine.SupportsGpu)
+                return 0;
+
             // Create tensors (Tensor constructor takes Vector<T>, not float[])
             var tensorA = new Tensor<float>(new int[] { m, k }, new Vector<float>(A));
             var tensorB = new Tensor<float>(new int[] { k, n }, new Vector<float>(B));
@@ -119,7 +129,7 @@ public static class CuBlasGemmBenchmark
             // Warmup
             for (int i = 0; i < 3; i++)
             {
-                var result = Engine.Default.TensorMatMul(tensorA, tensorB);
+                var result = directEngine.TensorMatMul(tensorA, tensorB);
             }
 
             // Benchmark
@@ -127,7 +137,7 @@ public static class CuBlasGemmBenchmark
             var sw = Stopwatch.StartNew();
             for (int i = 0; i < iterations; i++)
             {
-                Engine.Default.TensorMatMul(tensorA, tensorB);
+                directEngine.TensorMatMul(tensorA, tensorB);
             }
             sw.Stop();
 
@@ -136,12 +146,12 @@ public static class CuBlasGemmBenchmark
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"ILGPU error: {ex.Message}");
+            Console.WriteLine($"DirectGpu error: {ex.Message}");
             return 0;
         }
     }
 
-    private static void BenchmarkDenseLayerStyle()
+    private static void BenchmarkDenseLayerStyle(DirectGpuTensorEngine directEngine)
     {
         // Typical transformer layer dimensions
         int batch = 64;
@@ -194,41 +204,46 @@ public static class CuBlasGemmBenchmark
             }
         }
 
-        // ILGPU benchmark
-        double ilgpuGflops = 0;
+        // DirectGpu benchmark
+        double directGpuGflops = 0;
         try
         {
+            if (!directEngine.SupportsGpu)
+            {
+                throw new InvalidOperationException("DirectGpu not available.");
+            }
+
             var tensorInput = new Tensor<float>(new int[] { batch, inputSize }, new Vector<float>(input));
             var tensorWeightsT = new Tensor<float>(new int[] { inputSize, outputSize }, new Vector<float>(weightsT));
 
             // Warmup
             for (int i = 0; i < 3; i++)
             {
-                Engine.Default.TensorMatMul(tensorInput, tensorWeightsT);
+                directEngine.TensorMatMul(tensorInput, tensorWeightsT);
             }
 
             const int iterations = 50;
             var sw = Stopwatch.StartNew();
             for (int i = 0; i < iterations; i++)
             {
-                Engine.Default.TensorMatMul(tensorInput, tensorWeightsT);
+                directEngine.TensorMatMul(tensorInput, tensorWeightsT);
             }
             sw.Stop();
 
             double seconds = sw.Elapsed.TotalSeconds / iterations;
-            ilgpuGflops = (flops / seconds) / 1e9;
+            directGpuGflops = (flops / seconds) / 1e9;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"ILGPU error: {ex.Message}");
+            Console.WriteLine($"DirectGpu error: {ex.Message}");
         }
 
-        string speedup = (cublasGflops > 0 && ilgpuGflops > 0)
-            ? $"{cublasGflops / ilgpuGflops:F1}x"
+        string speedup = (cublasGflops > 0 && directGpuGflops > 0)
+            ? $"{cublasGflops / directGpuGflops:F1}x"
             : "N/A";
 
         Console.WriteLine($"cuBLAS: {cublasGflops:F1} GFLOPS");
-        Console.WriteLine($"ILGPU:  {ilgpuGflops:F1} GFLOPS");
+        Console.WriteLine($"DirectGpu:  {directGpuGflops:F1} GFLOPS");
         Console.WriteLine($"Speedup: {speedup}");
 
         // Performance analysis
@@ -236,7 +251,7 @@ public static class CuBlasGemmBenchmark
         Console.WriteLine("Performance Analysis:");
         Console.WriteLine($"  Target: ~30,000 GFLOPS (cuBLAS theoretical)");
         Console.WriteLine($"  PyTorch/TorchSharp baseline: ~10,000 GFLOPS");
-        Console.WriteLine($"  Current ILGPU ceiling: ~52-86 GFLOPS");
+        Console.WriteLine("  Legacy ILGPU ceiling: ~52-86 GFLOPS");
 
         if (cublasGflops > 1000)
         {

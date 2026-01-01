@@ -4,7 +4,7 @@
 - Date: 2025-12-28
 - Benchmarks: `AiDotNetBenchmarkTests/TensorFlowComparisonBenchmarks.cs`, `AiDotNetBenchmarkTests/TorchSharpComparisonBenchmarks.cs`
 - Environment: AMD Ryzen 7 4800H, Windows 11, .NET 8.0.22
-- GPU: ILGPU reported gfx902 during AiDotNet runs
+- GPU: legacy ILGPU reported gfx902 during AiDotNet runs (report reflects legacy path)
 - TorchSharp device: CPU (torch.cuda.is_available() returned false with TorchSharp-cuda-windows)
 - Results: `AiDotNetBenchmarkTests/BenchmarkDotNet.Artifacts/results/AiDotNetBenchmarkTests.TorchSharpComparisonBenchmarks-report-github.md`
 

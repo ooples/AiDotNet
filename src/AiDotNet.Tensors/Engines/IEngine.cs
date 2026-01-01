@@ -1288,7 +1288,7 @@ public interface IEngine
     /// Tanh activation function: tanh(x) = (e^x - e^-x) / (e^x + e^-x).
     /// Commonly used in hidden layers of neural networks.
     /// CPU implementation uses TensorPrimitives for SIMD optimization (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float).
-    /// GPU implementation uses ILGPU kernels.
+    /// GPU implementation uses DirectGpu backends.
     /// </para>
     /// </remarks>
     Vector<T> Tanh<T>(Vector<T> vector);
@@ -1304,7 +1304,7 @@ public interface IEngine
     /// Sigmoid activation function: ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢(x) = 1 / (1 + e^-x).
     /// Commonly used for binary classification and gate functions in LSTMs/GRUs.
     /// CPU implementation uses TensorPrimitives for SIMD optimization (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float).
-    /// GPU implementation uses ILGPU kernels.
+    /// GPU implementation uses DirectGpu backends.
     /// </para>
     /// </remarks>
     Vector<T> Sigmoid<T>(Vector<T> vector);
@@ -1320,7 +1320,7 @@ public interface IEngine
     /// ReLU activation function: ReLU(x) = max(0, x).
     /// Most commonly used activation in modern deep learning.
     /// CPU implementation uses TensorPrimitives for SIMD optimization.
-    /// GPU implementation uses ILGPU kernels.
+    /// GPU implementation uses DirectGpu backends.
     /// </para>
     /// </remarks>
     Vector<T> ReLU<T>(Vector<T> vector);
@@ -1335,7 +1335,7 @@ public interface IEngine
     /// <para>
     /// Tensor version of Tanh for multi-dimensional data.
     /// CPU implementation uses TensorPrimitives for SIMD optimization.
-    /// GPU implementation uses ILGPU kernels.
+    /// GPU implementation uses DirectGpu backends.
     /// </para>
     /// </remarks>
     Tensor<T> Tanh<T>(Tensor<T> tensor);
@@ -1350,7 +1350,7 @@ public interface IEngine
     /// <para>
     /// Tensor version of Sigmoid for multi-dimensional data.
     /// CPU implementation uses TensorPrimitives for SIMD optimization.
-    /// GPU implementation uses ILGPU kernels.
+    /// GPU implementation uses DirectGpu backends.
     /// </para>
     /// </remarks>
     Tensor<T> Sigmoid<T>(Tensor<T> tensor);
@@ -1365,7 +1365,7 @@ public interface IEngine
     /// <para>
     /// Tensor version of ReLU for multi-dimensional data.
     /// CPU implementation uses TensorPrimitives for SIMD optimization.
-    /// GPU implementation uses ILGPU kernels.
+    /// GPU implementation uses DirectGpu backends.
     /// </para>
     /// </remarks>
     Tensor<T> ReLU<T>(Tensor<T> tensor);

@@ -5,7 +5,7 @@ namespace AiDotNet.Engines;
 /// </summary>
 /// <remarks>
 /// <para><b>For Beginners:</b> Different GPU types work with different graphics cards:
-/// - **Auto**: Automatically select best available (CUDA → OpenCL → CPU)
+/// - **Auto**: Automatically select best available (CUDA → OpenCL → HIP → CPU)
 /// - **CUDA**: NVIDIA GPUs only (GeForce, RTX, Quadro, Tesla, A100, H100)
 /// - **OpenCL**: Cross-platform (AMD, Intel, NVIDIA, Apple)
 /// - **CPU**: Force CPU-only execution (no GPU)
@@ -14,7 +14,7 @@ namespace AiDotNet.Engines;
 public enum GpuDeviceType
 {
     /// <summary>
-    /// Automatically select best available GPU (CUDA → OpenCL → CPU).
+    /// Automatically select best available GPU (CUDA → OpenCL → HIP → CPU).
     /// </summary>
     Auto,
 
@@ -99,7 +99,7 @@ public class GpuAccelerationConfig
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> Specifies which type of GPU to use:
-    /// - **Auto**: Automatically select best available (CUDA → OpenCL → CPU)
+    /// - **Auto**: Automatically select best available (CUDA → OpenCL → HIP → CPU)
     /// - **CUDA**: Force NVIDIA CUDA (fails if not available)
     /// - **OpenCL**: Force OpenCL (AMD/Intel/NVIDIA GPUs)
     /// - **CPU**: Force CPU execution (disable GPU)

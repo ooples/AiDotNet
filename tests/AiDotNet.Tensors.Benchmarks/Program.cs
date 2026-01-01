@@ -30,7 +30,7 @@ class Program
         }
 
 #if !NET462
-        // Run cuBLAS vs ILGPU GEMM benchmark
+        // Run cuBLAS vs DirectGpu GEMM benchmark
         if (args[0] == "--cublas")
         {
             CuBlasGemmBenchmark.Run();
@@ -64,7 +64,7 @@ class Program
         Console.WriteLine("  --full     : Run full BenchmarkDotNet suite (trigonometric)");
         Console.WriteLine("  --linalg   : Run linear algebra benchmarks vs MathNet.Numerics");
 #if !NET462
-        Console.WriteLine("  --cublas   : Run cuBLAS vs ILGPU GEMM benchmark");
+        Console.WriteLine("  --cublas   : Run cuBLAS vs DirectGpu GEMM benchmark");
         Console.WriteLine("  --opencl   : Run OpenCL GEMM benchmark (AMD/Intel GPUs)");
         Console.WriteLine("  --clblast  : Run CLBlast vs AiDotNet OpenCL comparison (AMD/Intel)");
         Console.WriteLine("  --directgpu: Run DirectGpu comprehensive benchmark (all 10 optimizations)");

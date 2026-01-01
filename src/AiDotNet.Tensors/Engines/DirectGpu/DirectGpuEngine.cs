@@ -78,6 +78,16 @@ public sealed class DirectGpuEngine : IDisposable
     public double GlobalMemoryGB => (_backend?.GlobalMemoryBytes ?? 0) / (1024.0 * 1024 * 1024);
 
     /// <summary>
+    /// Gets global memory in bytes.
+    /// </summary>
+    public long GlobalMemoryBytes => _backend?.GlobalMemoryBytes ?? 0;
+
+    /// <summary>
+    /// Gets local (shared) memory per workgroup in bytes.
+    /// </summary>
+    public long LocalMemoryBytes => _backend?.LocalMemoryBytes ?? 0;
+
+    /// <summary>
     /// Initializes the DirectGpuEngine, automatically selecting the best available backend.
     /// </summary>
     /// <remarks>

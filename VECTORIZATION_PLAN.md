@@ -318,13 +318,13 @@ For each vectorized layer:
 - All vectorizations must maintain .NET Framework 4.6.2 compatibility
 - Do NOT use TensorPrimitives (not available in net462)
 - Use IEngine methods which abstract CPU/GPU execution
-- GPU acceleration via ILGPU kernels is already implemented for core tensor ops
+- GPU acceleration was implemented via ILGPU kernels; DirectGpu backends are replacing them for core tensor ops
 
 ---
 
 ## NEW IENGINE OPERATIONS ✅ IMPLEMENTED
 
-The following operations have been added to IEngine with CPU and GPU (ILGPU) implementations:
+The following operations have been added to IEngine with CPU and GPU (legacy ILGPU) implementations:
 
 ### 1. PairwiseDistance / CDist
 **Needed by:** DGCNN.cs (k-NN computation), PointNet++.cs (ball query)
@@ -504,15 +504,15 @@ The codebase has extensive use of `.Sort()`, `.OrderBy()`, and `.Take()` pattern
 
 ### Completed
 - [x] PositionalEncodingLayer.cs vectorized with TensorSin/TensorCos/TensorOuter
-- [x] ILGPU GPU kernels for Floor/Ceiling/Frac/Sin/Cos/TrilinearInterpolate
-- [x] ILGPU GPU kernels for TopK (production-ready, per-slice selection algorithm)
-- [x] ILGPU GPU kernels for ArgSort (production-ready, insertion sort per slice)
-- [x] ILGPU GPU kernels for Gather (production-ready, parallel indexed reads)
-- [x] ILGPU GPU kernels for Scatter (production-ready, copy + indexed writes)
-- [x] ILGPU GPU kernels for ScatterAdd (production-ready, uses Atomic.Add)
-- [x] ILGPU GPU kernels for TensorCosh/TensorSinh
-- [x] ILGPU GPU kernels for TensorOuter
-- [x] ILGPU GPU kernels for PairwiseDistanceSquared/PairwiseDistance
+- [x] Legacy ILGPU kernels for Floor/Ceiling/Frac/Sin/Cos/TrilinearInterpolate
+- [x] Legacy ILGPU kernels for TopK (production-ready, per-slice selection algorithm)
+- [x] Legacy ILGPU kernels for ArgSort (production-ready, insertion sort per slice)
+- [x] Legacy ILGPU kernels for Gather (production-ready, parallel indexed reads)
+- [x] Legacy ILGPU kernels for Scatter (production-ready, copy + indexed writes)
+- [x] Legacy ILGPU kernels for ScatterAdd (production-ready, uses Atomic.Add)
+- [x] Legacy ILGPU kernels for TensorCosh/TensorSinh
+- [x] Legacy ILGPU kernels for TensorOuter
+- [x] Legacy ILGPU kernels for PairwiseDistanceSquared/PairwiseDistance
 - [x] SpikingLayer.cs surrogate gradient vectorized with TensorCosh
 - [x] DGCNN.cs k-NN vectorized with PairwiseDistanceSquared + TopK
 
@@ -528,6 +528,6 @@ The codebase has extensive use of `.Sort()`, `.OrderBy()`, and `.Take()` pattern
 - [x] GenerativeAdversarialNetwork.cs gradient penalty vectorized with ReduceSum
 
 ### No Longer Blocked
-- [x] TopK operation - NOW AVAILABLE with ILGPU GPU kernel
-- [x] PairwiseDistance operation - NOW AVAILABLE with ILGPU GPU kernel
+- [x] TopK operation - previously available with ILGPU GPU kernel (needs DirectGpu parity)
+- [x] PairwiseDistance operation - previously available with ILGPU GPU kernel (needs DirectGpu parity)
 - [x] TensorWhere/Select operation - Already exists in IEngine

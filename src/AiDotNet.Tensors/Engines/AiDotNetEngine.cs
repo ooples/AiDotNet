@@ -85,14 +85,13 @@ public static class AiDotNetEngine
         }
     }
 
-#if !NET462
     /// <summary>
-    /// Automatically detects and configures GPU acceleration if available.
+    /// Automatically detects and configures GPU acceleration if available.     
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This method attempts to initialize GPU acceleration. If successful, the Current
-    /// engine is switched to GpuEngine. If GPU is not available or initialization fails,
+    /// This method attempts to initialize DirectGpu acceleration. If successful, the Current
+    /// engine is switched to DirectGpuTensorEngine. If GPU is not available or initialization fails,
     /// the engine remains on CpuEngine.
     /// </para>
     /// <para><b>For Beginners:</b> Call this once at application startup for automatic optimization.
@@ -127,12 +126,11 @@ public static class AiDotNetEngine
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[AiDotNet] Failed to initialize GPU: {ex.Message}");
+            Console.WriteLine($"[AiDotNet] Failed to initialize DirectGpu: {ex.Message}");
             Console.WriteLine("[AiDotNet] Falling back to CPU");
             return false;
         }
     }
-#endif
 
     /// <summary>
     /// Resets the engine to the default CPU engine.

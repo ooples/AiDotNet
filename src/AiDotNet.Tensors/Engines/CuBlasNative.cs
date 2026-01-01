@@ -60,12 +60,12 @@ public enum CudaResult
 
 /// <summary>
 /// Direct P/Invoke bindings for CUDA Driver API and cuBLAS.
-/// Bypasses ILGPU to achieve peak GPU performance (~30,000 GFLOPS).
+/// Provides an explicit cuBLAS path for peak GPU performance (~30,000 GFLOPS).
 /// </summary>
 /// <remarks>
 /// <para><b>Why Direct P/Invoke?</b></para>
 /// <para>
-/// ILGPU's auto-grouped kernels are limited to ~52-86 GFLOPS for GEMM.
+/// Legacy ILGPU kernels were limited to ~52-86 GFLOPS for GEMM.
 /// cuBLAS achieves ~30,000 GFLOPS through:
 /// - Hand-tuned PTX/SASS assembly for each GPU architecture
 /// - Tensor core utilization (WMMA instructions)

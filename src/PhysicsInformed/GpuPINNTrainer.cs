@@ -321,10 +321,10 @@ public class GpuPINNTrainer<T>
     /// <returns>Memory usage info or null if GPU not in use.</returns>
     /// <remarks>
     /// <para>
-    /// <b>Limitations:</b> ILGPU does not provide a standard API to query current memory usage.
+    /// <b>Limitations:</b> DirectGpu backends do not provide a standard API to query current memory usage.
     /// The returned <see cref="PINNGpuMemoryInfo.TotalMemoryBytes"/> reflects the total GPU memory,
     /// but <see cref="PINNGpuMemoryInfo.UsedMemoryBytes"/> and <see cref="PINNGpuMemoryInfo.AvailableMemoryBytes"/>
-    /// cannot be accurately tracked through ILGPU.
+    /// cannot be accurately tracked through the DirectGpu backend.
     /// </para>
     /// <para>
     /// For accurate memory profiling, use external tools like NVIDIA's nvidia-smi,
@@ -338,13 +338,13 @@ public class GpuPINNTrainer<T>
             return null;
         }
 
-        // ILGPU doesn't expose a public API for querying current memory usage.
+        // DirectGpu backends do not expose a public API for querying current memory usage.
         // We can only report that GPU is in use; for detailed memory stats,
         // users should use external profiling tools (nvidia-smi, nvml, etc.)
         // Return a minimal info struct indicating GPU is active but memory stats unavailable.
         return new PINNGpuMemoryInfo
         {
-            TotalMemoryBytes = -1, // -1 indicates "unknown" - ILGPU doesn't expose this via IEngine
+            TotalMemoryBytes = -1, // -1 indicates "unknown" - DirectGpu does not expose this via IEngine
             UsedMemoryBytes = -1,  // -1 indicates "not available"
             AvailableMemoryBytes = -1
         };
@@ -431,7 +431,7 @@ public class GpuTrainingHistory<T> : TrainingHistory<T>
 /// <remarks>
 /// <para>
 /// <b>Note:</b> A value of -1 for any property indicates that the information
-/// is not available through the current GPU backend (ILGPU).
+/// is not available through the current GPU backend.
 /// </para>
 /// <para>
 /// For accurate memory profiling, use external tools such as:

@@ -1,11 +1,12 @@
-# PR676 ILGPU Kernel Audit
+# PR676 Legacy ILGPU Kernel Audit
 
 ## Scope
-This inventory captures operations currently accelerated by ILGPU in `GpuEngine` and maps them to the direct backends that must replace them (DirectOpenClBackend + DirectCudaBackend).
+This inventory captures operations previously accelerated by ILGPU in the legacy `GpuEngine` and maps them to the direct backends that must replace them (DirectOpenClBackend + DirectCudaBackend).
 
 ## Notes
 - Direct GPU path is float32-first. Double/other types are converted via INumericOperations.
 - CUDA path uses custom kernels as primary, cuBLAS for GEMM fallback, and cuDNN for conv/pool/norm fallback.
+- ILGPU has been removed; this audit is retained for parity tracking.
 
 ## Progress
 - CUDA/OpenCL elementwise + unary kernels expanded (add/sub/mul/div/min/max, abs/exp/log/log2/exp2/exp10/expm1/log1p/sqrt/sign, power-scalar).

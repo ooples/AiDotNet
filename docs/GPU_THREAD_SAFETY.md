@@ -4,6 +4,8 @@
 
 This document describes the thread safety implementation for AiDotNet's GPU acceleration (Phase B: US-GPU-019).
 
+> Note: ILGPU/GpuEngine has been removed. The details below describe legacy behavior and should be refreshed for DirectGpu backends.
+
 ## Thread Safety Guarantees
 
 **GpuEngine is fully thread-safe for concurrent operations**:
@@ -43,7 +45,7 @@ private readonly object _gpuLock = new object();
 ```
 
 **Why locking?**
-- ILGPU accelerator is **not thread-safe**
+- Legacy ILGPU accelerator was **not thread-safe**
 - Concurrent kernel launches can corrupt GPU state
 - Lock ensures only one kernel executes at a time
 
@@ -59,7 +61,7 @@ lock (_gpuLock)
 
 ### 3. Memory Pool Thread Safety
 
-The `GpuMemoryPool<T>` class is already thread-safe:
+The legacy `GpuMemoryPool<T>` class was thread-safe:
 
 ```csharp
 // Thread-safe collections
@@ -297,7 +299,7 @@ lock (_gpuLock)
 
 1. **Multi-stream execution**:
    - Use CUDA streams for true concurrent kernel execution
-   - Requires ILGPU stream support
+   - Requires legacy ILGPU stream support
    - Would enable parallel execution of independent operations
 
 2. **Lock-free fast path**:
@@ -317,7 +319,7 @@ lock (_gpuLock)
 
 ## References
 
-- **ILGPU Threading Model**: https://github.com/m4rs-mt/ILGPU/wiki/FAQ#is-ilgpu-thread-safe
+- **Legacy ILGPU Threading Model**: https://github.com/m4rs-mt/ILGPU/wiki/FAQ#is-ilgpu-thread-safe
 - **.NET Thread Safety**: https://learn.microsoft.com/en-us/dotnet/standard/threading/
 - **Volatile Keyword**: https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/keywords/volatile
 - **ConcurrentBag**: https://learn.microsoft.com/en-us/dotnet/api/system.collections.concurrent.concurrentbag-1

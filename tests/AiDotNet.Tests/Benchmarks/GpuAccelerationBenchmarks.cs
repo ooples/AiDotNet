@@ -338,8 +338,8 @@ public class GpuAccelerationBenchmarks
 ///
 /// COMPARISON TO PYTORCH/TENSORFLOW:
 /// While direct benchmarking against PyTorch/TensorFlow requires Python interop,
-/// our GPU kernels use ILGPU which provides similar performance characteristics:
-/// - cuBLAS-equivalent matrix operations (via ILGPU optimizations)
+/// our GPU kernels use DirectGpu backends which provide similar performance characteristics:
+/// - cuBLAS-equivalent matrix operations (via DirectGpu optimizations)
 /// - cuDNN-equivalent convolution patterns
 /// - Expected to be within 2-3x of PyTorch/TensorFlow for equivalent operations
 ///

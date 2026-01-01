@@ -152,7 +152,7 @@ public sealed class GemmBenchmark
         sb.AppendLine("║                    DirectGpu GEMM Performance Report                         ║");
         sb.AppendLine("╠══════════════════════════════════════════════════════════════════════════════╣");
         sb.AppendLine($"║ Target: {_targetGFlops:N0} GFLOPS ({_targetGFlops / 1000:F1} TFLOPS)");
-        sb.AppendLine($"║ Comparison: CLBlast ~2,500 GFLOPS, ILGPU ~52-86 GFLOPS");
+        sb.AppendLine($"║ Comparison: CLBlast ~2,500 GFLOPS, legacy ILGPU ~52-86 GFLOPS");
         sb.AppendLine("╠══════════════════════════════════════════════════════════════════════════════╣");
         sb.AppendLine("║  M      N      K     Time(ms)   GFLOPS   TFLOPS  Status                      ║");
         sb.AppendLine("╠══════════════════════════════════════════════════════════════════════════════╣");
@@ -178,7 +178,7 @@ public sealed class GemmBenchmark
         double ilgpuSpeedup = maxGFlops / 86.0;
 
         sb.AppendLine($"║ vs CLBlast:  {clblastSpeedup,5:F1}x faster");
-        sb.AppendLine($"║ vs ILGPU:    {ilgpuSpeedup,5:F1}x faster");
+        sb.AppendLine($"║ vs legacy ILGPU: {ilgpuSpeedup,5:F1}x faster");
         sb.AppendLine("╚══════════════════════════════════════════════════════════════════════════════╝");
 
         return sb.ToString();
@@ -222,7 +222,7 @@ public sealed class GemmBenchmark
         {
             Console.WriteLine();
             Console.WriteLine($"vs CLBlast (2,500 GFLOPS): {result.GFlops / 2500:F1}x faster");
-            Console.WriteLine($"vs ILGPU (86 GFLOPS):      {result.GFlops / 86:F1}x faster");
+            Console.WriteLine($"vs legacy ILGPU (86 GFLOPS): {result.GFlops / 86:F1}x faster");
         }
     }
 }

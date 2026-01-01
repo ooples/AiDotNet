@@ -25,7 +25,7 @@ dotnet run -c Release -f net8.0 -- --filter *TensorFlowComparison*
 
 Latest run (2025-12-28, short-run config: IterationCount=5, WarmupCount=3, LaunchCount=1):
 - Host: AMD Ryzen 7 4800H, Windows 11, .NET 8.0.22
-- GPU: ILGPU reported gfx902 during AiDotNet runs
+- GPU: legacy ILGPU reported gfx902 during AiDotNet runs (DirectGpu now replaces this path)
 - TensorFlow.NET logs indicated oneDNN CPU backend active
 
 Mean time (ms):
@@ -56,7 +56,7 @@ dotnet run -c Release -f net8.0 -- --filter *TorchSharpComparison*
 
 Latest run (2025-12-28, short-run config: IterationCount=5, WarmupCount=3, LaunchCount=1):
 - Host: AMD Ryzen 7 4800H, Windows 11, .NET 8.0.22
-- GPU: ILGPU reported gfx902 during AiDotNet runs
+- GPU: legacy ILGPU reported gfx902 during AiDotNet runs (DirectGpu now replaces this path)
 - TorchSharp device: CPU (torch.cuda.is_available() returned false with TorchSharp-cuda-windows)
 
 Mean time (ms):
@@ -86,7 +86,7 @@ Notes:
 
 ## Comparison notes vs PyTorch/TensorFlow
 
-AiDotNet uses ILGPU kernels rather than vendor-tuned cuBLAS/cuDNN. Expected relative performance:
+AiDotNet now uses DirectGpu backends; the legacy ILGPU kernels had the following relative performance expectations:
 - GEMM: roughly 0.5x to 0.8x of cuBLAS on comparable hardware
 - Conv2D: roughly 0.3x to 0.6x of cuDNN on comparable hardware
 - Pooling: roughly 0.5x to 0.9x of cuDNN on comparable hardware
