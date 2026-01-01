@@ -65,6 +65,15 @@
    - Update GPU docs and benchmarks to include CUDA path.
    - Capture tuning runs and performance deltas.
 
+## 100% Confidence Checklist
+- Build a kernel parity matrix mapping ILGPU ops to DirectOpenCL/DirectCUDA/cuDNN/CLBlast/CPU and track per-op test coverage.
+- Implement missing kernels per matrix (elementwise, reductions, softmax variants, indexing, conv/pool/norm, sparse) on OpenCL/CUDA or via fallback.
+- Wire explicit fallback chain logging + failure recording (tuning DB logs failed configs; overwrite only when global best improves).
+- Add integration tests that compare GPU outputs to CPU for every kernel family with deterministic seeds and tolerance targets.
+- Validate performance vs CLBlast/cuBLAS across target sizes; run offline tuning on RX 5500 XT and store best configs + CSV diagnostics.
+- Remove ILGPU packages/types only after parity + tests + perf baselines pass; update Engine.Default to DirectGpu-first.
+- Document CI/manual GPU validation steps (AMD + NVIDIA) and required env vars for tuning/diagnostics.
+
 ## Open Questions
 - Scope of kernels beyond GEMM (convs, activations, etc.)?
 - Required OS/driver baseline for CUDA on target machines?
