@@ -62,9 +62,10 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
     #region Native Mode Fields
 
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ILossFunction<T> _lossFunction;
-    private readonly IActivationFunction<T> _probabilityActivation;
+    // Training components - private set to allow deserialization restoration
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private ILossFunction<T> _lossFunction;
+    private IActivationFunction<T> _probabilityActivation;
 
     // Configuration fields - mutable to support deserialization
     private int _numClasses;
@@ -88,12 +89,12 @@ public class SlowFast<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Custom fast pathway layers provided by user (null = use default).
     /// </summary>
-    private readonly IReadOnlyList<ILayer<T>>? _customFastLayers;
+    private IReadOnlyList<ILayer<T>>? _customFastLayers;
 
     /// <summary>
     /// Custom fusion layers provided by user (null = use default).
     /// </summary>
-    private readonly IReadOnlyList<ILayer<T>>? _customFusionLayers;
+    private IReadOnlyList<ILayer<T>>? _customFusionLayers;
 
     #endregion
 
@@ -615,6 +616,15 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         }
     }
 
+    /// <summary>
+    /// Gets metadata about this model for serialization.
+    /// </summary>
+    /// <remarks>
+    /// Serializes model architecture configuration, layer weights, and training component types
+    /// (optimizer, loss function, probability activation). After deserialization, training components
+    /// are recreated from their type names using reflection. Custom layer definitions are NOT preserved -
+    /// default LayerHelper layers are used unless custom layers are re-provided after deserialization.
+    /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         ModelType = ModelType.VideoActionRecognition,
@@ -630,28 +640,122 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         ModelData = _useNativeMode ? this.Serialize() : []
     };
 
+    /// <summary>
+    /// Serializes SlowFast-specific configuration data including training component types.
+    /// </summary>
+    /// <remarks>
+    /// Serializes configuration parameters and type names for training components
+    /// (optimizer, loss function, probability activation). Custom layer definitions
+    /// are NOT serialized - after deserialization, default LayerHelper layers are used
+    /// unless custom layers are re-provided.
+    /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Serialization is not supported in ONNX mode.");
+
+        // Configuration parameters
         writer.Write(_numClasses);
         writer.Write(_slowFrames);
         writer.Write(_fastFrames);
         writer.Write(_slowChannels);
         writer.Write(_fastChannels);
         writer.Write(_alpha);
+        writer.Write(_imageSize);
+
+        // Training component type names for restoration
+        writer.Write(_lossFunction.GetType().AssemblyQualifiedName ?? typeof(CrossEntropyLoss<T>).AssemblyQualifiedName!);
+        writer.Write(_probabilityActivation.GetType().AssemblyQualifiedName ?? typeof(SoftmaxActivation<T>).AssemblyQualifiedName!);
+
+        // Optimizer type (can be null for ONNX mode or after certain operations)
+        bool hasOptimizer = _optimizer != null;
+        writer.Write(hasOptimizer);
+        if (hasOptimizer)
+        {
+            writer.Write(_optimizer!.GetType().AssemblyQualifiedName ?? typeof(AdamOptimizer<T, Tensor<T>, Tensor<T>>).AssemblyQualifiedName!);
+        }
     }
 
+    /// <summary>
+    /// Deserializes SlowFast-specific configuration data and reinitializes layers.
+    /// </summary>
+    /// <remarks>
+    /// Restores configuration parameters and recreates training components from serialized type names.
+    /// Custom layer definitions are NOT restored - default LayerHelper layers are used after deserialization.
+    /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
 
-        // Restore serialized configuration values
+        // Restore configuration values
         _numClasses = reader.ReadInt32();
         _slowFrames = reader.ReadInt32();
         _fastFrames = reader.ReadInt32();
         _slowChannels = reader.ReadInt32();
         _fastChannels = reader.ReadInt32();
         _alpha = reader.ReadInt32();
+        _imageSize = reader.ReadInt32();
+
+        // Restore training component types
+        string lossFunctionTypeName = reader.ReadString();
+        string probabilityActivationTypeName = reader.ReadString();
+
+        // Recreate loss function from type name
+        var lossFunctionType = Type.GetType(lossFunctionTypeName);
+        if (lossFunctionType != null)
+        {
+            _lossFunction = (ILossFunction<T>?)Activator.CreateInstance(lossFunctionType) ?? new CrossEntropyLoss<T>();
+        }
+        else
+        {
+            _lossFunction = new CrossEntropyLoss<T>();
+        }
+
+        // Recreate probability activation from type name
+        var activationType = Type.GetType(probabilityActivationTypeName);
+        if (activationType != null)
+        {
+            _probabilityActivation = (IActivationFunction<T>?)Activator.CreateInstance(activationType) ?? new SoftmaxActivation<T>();
+        }
+        else
+        {
+            _probabilityActivation = new SoftmaxActivation<T>();
+        }
+
+        // Restore optimizer if it was serialized
+        bool hasOptimizer = reader.ReadBoolean();
+        if (hasOptimizer)
+        {
+            string optimizerTypeName = reader.ReadString();
+            var optimizerType = Type.GetType(optimizerTypeName);
+
+            // Optimizer requires 'this' network instance, so we need to handle construction specially
+            if (optimizerType != null)
+            {
+                // Try to find constructor that takes IFullModel parameter (used by optimizers)
+                var constructor = optimizerType.GetConstructor([typeof(IFullModel<T, Tensor<T>, Tensor<T>>)]);
+                if (constructor != null)
+                {
+                    _optimizer = (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)constructor.Invoke([this]);
+                }
+                else
+                {
+                    // Fall back to default Adam optimizer
+                    _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+                }
+            }
+            else
+            {
+                _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            }
+        }
+        else
+        {
+            _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        }
+
+        // Clear custom layer references (not serialized)
+        _customFastLayers = null;
+        _customFusionLayers = null;
 
         // Reinitialize layers with restored configuration
         ClearLayers();
