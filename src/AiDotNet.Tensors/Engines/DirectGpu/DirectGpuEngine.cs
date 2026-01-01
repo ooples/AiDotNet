@@ -33,6 +33,8 @@ public sealed class DirectGpuEngine : IDisposable
     private readonly KernelFusionManager _fusionManager;
     private readonly bool _isAvailable;
     private bool _disposed;
+    private const string BackendOrderEnvVar = "AIDOTNET_DIRECTGPU_BACKENDS";
+    private static readonly string[] DefaultBackendOrder = new[] { "cuda", "opencl", "hip" };
 
     /// <summary>
     /// Gets whether the direct GPU engine is available.
@@ -91,10 +93,100 @@ public sealed class DirectGpuEngine : IDisposable
 
         Console.WriteLine("[DirectGpuEngine] Initializing GPU backends...");
 
-        // Try backends in order of preference for maximum performance
-        // CUDA is preferred on NVIDIA, OpenCL is the default cross-vendor path.
+        var backendOrder = GetBackendOrderFromEnv();
+        if (backendOrder.Count == 0)
+        {
+            Console.WriteLine($"[DirectGpuEngine] Direct GPU backends disabled via {BackendOrderEnvVar}.");
+            _isAvailable = false;
+            return;
+        }
 
-        // 1. Try CUDA first on NVIDIA GPUs (requires NVRTC)
+        Console.WriteLine($"[DirectGpuEngine] Backend order: {string.Join(", ", backendOrder)}");
+        foreach (var backendName in backendOrder)
+        {
+            var backend = TryCreateBackend(backendName);
+            if (backend != null)
+            {
+                _backend = backend;
+                _isAvailable = true;
+                return;
+            }
+        }
+
+        Console.WriteLine("[DirectGpuEngine] No GPU backends available. Falling back to CPU.");
+        _isAvailable = false;
+    }
+
+    private static IReadOnlyList<string> GetBackendOrderFromEnv()
+    {
+        string? env = Environment.GetEnvironmentVariable(BackendOrderEnvVar);
+        if (string.IsNullOrWhiteSpace(env))
+            return DefaultBackendOrder;
+
+        var tokens = env.Split(new[] { ',', ';', ' ', '|' }, StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length == 0)
+            return DefaultBackendOrder;
+
+        foreach (var token in tokens)
+        {
+            var normalized = token.Trim().ToLowerInvariant();
+            if (normalized is "none" or "disable" or "disabled")
+                return Array.Empty<string>();
+        }
+
+        var result = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var token in tokens)
+        {
+            var normalized = token.Trim().ToLowerInvariant();
+            switch (normalized)
+            {
+                case "auto":
+                case "default":
+                    continue;
+                case "cuda":
+                case "nvidia":
+                case "nv":
+                    AddBackend(result, seen, "cuda");
+                    break;
+                case "opencl":
+                case "ocl":
+                    AddBackend(result, seen, "opencl");
+                    break;
+                case "hip":
+                case "rocm":
+                    AddBackend(result, seen, "hip");
+                    break;
+                case "":
+                    break;
+                default:
+                    Console.WriteLine($"[DirectGpuEngine] Unknown backend token '{token}' in {BackendOrderEnvVar}. Expected: cuda, opencl, hip, auto, none.");
+                    break;
+            }
+        }
+
+        return result.Count > 0 ? result : DefaultBackendOrder;
+    }
+
+    private static void AddBackend(List<string> backends, HashSet<string> seen, string name)
+    {
+        if (seen.Add(name))
+            backends.Add(name);
+    }
+
+    private static IDirectGpuBackend? TryCreateBackend(string backendName)
+    {
+        return backendName.ToLowerInvariant() switch
+        {
+            "cuda" => TryCreateCudaBackend(),
+            "opencl" => TryCreateOpenClBackend(),
+            "hip" => TryCreateHipBackend(),
+            _ => null
+        };
+    }
+
+    private static IDirectGpuBackend? TryCreateCudaBackend()
+    {
         try
         {
             Console.WriteLine("[DirectGpuEngine] Checking CUDA availability...");
@@ -106,11 +198,9 @@ public sealed class DirectGpuEngine : IDisposable
 
                 if (cudaBackend.IsAvailable)
                 {
-                    _backend = cudaBackend;
-                    _isAvailable = true;
                     Console.WriteLine($"[DirectGpuEngine] SUCCESS: Using CUDA backend on {cudaBackend.DeviceName}");
                     System.Diagnostics.Debug.WriteLine($"DirectGpuEngine: Using CUDA backend on {cudaBackend.DeviceName}");
-                    return;
+                    return cudaBackend;
                 }
                 Console.WriteLine("[DirectGpuEngine] CUDA backend created but not available, disposing...");
                 cudaBackend.Dispose();
@@ -130,8 +220,11 @@ public sealed class DirectGpuEngine : IDisposable
             System.Diagnostics.Debug.WriteLine($"CUDA backend initialization failed: {ex.Message}");
         }
 
-        // 2. Try OpenCL (works on AMD, Intel, and NVIDIA)
-        // Our optimized kernels with double buffering, KREG, and vectorized loads are in OpenCL
+        return null;
+    }
+
+    private static IDirectGpuBackend? TryCreateOpenClBackend()
+    {
         try
         {
             Console.WriteLine("[DirectGpuEngine] Checking OpenCL availability...");
@@ -143,11 +236,9 @@ public sealed class DirectGpuEngine : IDisposable
 
             if (openClBackend.IsAvailable)
             {
-                _backend = openClBackend;
-                _isAvailable = true;
                 Console.WriteLine($"[DirectGpuEngine] SUCCESS: Using OpenCL backend on {openClBackend.DeviceName}");
                 System.Diagnostics.Debug.WriteLine($"DirectGpuEngine: Using OpenCL backend on {openClBackend.DeviceName}");
-                return;
+                return openClBackend;
             }
             Console.WriteLine("[DirectGpuEngine] OpenCL backend created but not available, disposing...");
             openClBackend.Dispose();
@@ -162,8 +253,11 @@ public sealed class DirectGpuEngine : IDisposable
             System.Diagnostics.Debug.WriteLine($"OpenCL backend initialization failed: {ex.Message}");
         }
 
-        // 3. Try HIP backend for AMD GPUs (experimental)
-        // HIP provides MFMA support on MI100/200/300 GPUs
+        return null;
+    }
+
+    private static IDirectGpuBackend? TryCreateHipBackend()
+    {
         try
         {
             Console.WriteLine("[DirectGpuEngine] Checking HIP availability...");
@@ -173,11 +267,9 @@ public sealed class DirectGpuEngine : IDisposable
                 var hipBackend = new HipBackend();
                 if (hipBackend.IsAvailable)
                 {
-                    _backend = hipBackend;
-                    _isAvailable = true;
                     Console.WriteLine($"[DirectGpuEngine] SUCCESS: Using HIP backend with {hipBackend.Architecture} architecture");
                     System.Diagnostics.Debug.WriteLine($"DirectGpuEngine: Using HIP backend with {hipBackend.Architecture} architecture");
-                    return;
+                    return hipBackend;
                 }
                 Console.WriteLine("[DirectGpuEngine] HIP backend created but not available, disposing...");
                 hipBackend.Dispose();
@@ -193,8 +285,7 @@ public sealed class DirectGpuEngine : IDisposable
             System.Diagnostics.Debug.WriteLine($"HIP backend initialization failed: {ex.Message}");
         }
 
-        Console.WriteLine("[DirectGpuEngine] No GPU backends available. Falling back to CPU.");
-        _isAvailable = false;
+        return null;
     }
 
     #region Type Conversion (Generic T → float → T)
