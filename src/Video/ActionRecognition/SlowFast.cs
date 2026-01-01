@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
@@ -63,6 +64,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ILossFunction<T> _lossFunction;
+    private readonly IActivationFunction<T> _probabilityActivation;
 
     // Configuration fields - mutable to support deserialization
     private int _numClasses;
@@ -83,6 +85,16 @@ public class SlowFast<T> : NeuralNetworkBase<T>
     /// </summary>
     private readonly List<ILayer<T>> _fusionLayers = [];
 
+    /// <summary>
+    /// Custom fast pathway layers provided by user (null = use default).
+    /// </summary>
+    private readonly IReadOnlyList<ILayer<T>>? _customFastLayers;
+
+    /// <summary>
+    /// Custom fusion layers provided by user (null = use default).
+    /// </summary>
+    private readonly IReadOnlyList<ILayer<T>>? _customFusionLayers;
+
     #endregion
 
     #region Properties
@@ -101,11 +113,26 @@ public class SlowFast<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Creates a SlowFast model using native layers for training and inference.
     /// </summary>
+    /// <param name="architecture">The network architecture configuration. If Architecture.Layers is provided,
+    /// it will be used as the slow pathway and customFastLayers/customFusionLayers must also be provided.</param>
+    /// <param name="numClasses">Number of action classes (default: 400 for Kinetics-400).</param>
+    /// <param name="optimizer">Optimizer for training (default: Adam).</param>
+    /// <param name="lossFunction">Loss function for training (default: CrossEntropy).</param>
+    /// <param name="probabilityActivation">Activation for converting logits to probabilities (default: Softmax).</param>
+    /// <param name="customFastLayers">Custom fast pathway layers (required if Architecture.Layers is provided).</param>
+    /// <param name="customFusionLayers">Custom fusion layers (required if Architecture.Layers is provided).</param>
+    /// <param name="slowFrames">Number of frames for slow pathway (default: 4).</param>
+    /// <param name="slowChannels">Base channels for slow pathway (default: 64).</param>
+    /// <param name="fastChannels">Base channels for fast pathway (default: 8).</param>
+    /// <param name="alpha">Frame rate ratio between fast and slow pathways (default: 8).</param>
     public SlowFast(
         NeuralNetworkArchitecture<T> architecture,
         int numClasses = 400,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
+        IActivationFunction<T>? probabilityActivation = null,
+        IReadOnlyList<ILayer<T>>? customFastLayers = null,
+        IReadOnlyList<ILayer<T>>? customFusionLayers = null,
         int slowFrames = 4,
         int slowChannels = 64,
         int fastChannels = 8,
@@ -123,6 +150,22 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         if (alpha < 1)
             throw new ArgumentOutOfRangeException(nameof(alpha), "Alpha must be at least 1.");
 
+        // Validate custom layer consistency - if any custom layers provided, all three pathways must be specified
+        bool hasCustomSlowLayers = architecture.Layers != null && architecture.Layers.Count > 0;
+        bool hasCustomFastLayers = customFastLayers != null && customFastLayers.Count > 0;
+        bool hasCustomFusionLayers = customFusionLayers != null && customFusionLayers.Count > 0;
+
+        if (hasCustomSlowLayers || hasCustomFastLayers || hasCustomFusionLayers)
+        {
+            if (!hasCustomSlowLayers || !hasCustomFastLayers || !hasCustomFusionLayers)
+            {
+                throw new ArgumentException(
+                    "SlowFast requires all three pathway layer sets when customizing. " +
+                    "Provide Architecture.Layers (slow pathway), customFastLayers, and customFusionLayers together, " +
+                    "or leave all null to use default initialization.");
+            }
+        }
+
         _useNativeMode = true;
         _numClasses = numClasses;
         _slowFrames = slowFrames;
@@ -134,6 +177,9 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
         _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _probabilityActivation = probabilityActivation ?? new SoftmaxActivation<T>();
+        _customFastLayers = customFastLayers;
+        _customFusionLayers = customFusionLayers;
 
         InitializeLayers();
     }
@@ -144,6 +190,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
     /// <param name="architecture">The network architecture configuration.</param>
     /// <param name="onnxModelPath">Path to the pretrained ONNX model file.</param>
     /// <param name="numClasses">Number of action classes (default: 400 for Kinetics-400).</param>
+    /// <param name="probabilityActivation">Activation for converting logits to probabilities (default: Softmax).</param>
     /// <param name="slowFrames">Number of frames for slow pathway (default: 4).</param>
     /// <param name="slowChannels">Base channels for slow pathway (default: 64).</param>
     /// <param name="fastChannels">Base channels for fast pathway (default: 8).</param>
@@ -152,6 +199,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         int numClasses = 400,
+        IActivationFunction<T>? probabilityActivation = null,
         int slowFrames = 4,
         int slowChannels = 64,
         int fastChannels = 8,
@@ -183,6 +231,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         _alpha = alpha;
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
         _lossFunction = new CrossEntropyLoss<T>();
+        _probabilityActivation = probabilityActivation ?? new SoftmaxActivation<T>();
 
         try
         {
@@ -214,10 +263,13 @@ public class SlowFast<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets top-K predictions with probabilities.
     /// </summary>
+    /// <param name="videoFrames">Input video frames tensor.</param>
+    /// <param name="topK">Number of top predictions to return (default: 5).</param>
+    /// <returns>List of (ClassIndex, Probability) tuples sorted by probability descending.</returns>
     public List<(int ClassIndex, double Probability)> GetTopKPredictions(Tensor<T> videoFrames, int topK = 5)
     {
         var logits = Classify(videoFrames);
-        var probabilities = Softmax(logits);
+        var probabilities = _probabilityActivation.Activate(logits);
 
         var results = new List<(int, double)>();
         for (int i = 0; i < probabilities.Length; i++)
@@ -372,32 +424,6 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
 
-    private Tensor<T> Softmax(Tensor<T> logits)
-    {
-        var result = new Tensor<T>(logits.Shape);
-        double maxVal = double.MinValue;
-
-        for (int i = 0; i < logits.Length; i++)
-        {
-            double val = Convert.ToDouble(logits.Data[i]);
-            if (val > maxVal) maxVal = val;
-        }
-
-        double sum = 0;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            sum += Math.Exp(Convert.ToDouble(logits.Data[i]) - maxVal);
-        }
-
-        for (int i = 0; i < logits.Length; i++)
-        {
-            double prob = Math.Exp(Convert.ToDouble(logits.Data[i]) - maxVal) / sum;
-            result.Data[i] = NumOps.FromDouble(prob);
-        }
-
-        return result;
-    }
-
     public override Tensor<T> Predict(Tensor<T> input) => Classify(input);
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
@@ -500,12 +526,19 @@ public class SlowFast<T> : NeuralNetworkBase<T>
             return;
         }
 
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        // Check if custom layers are provided (validation already done in constructor)
+        bool hasCustomLayers = Architecture.Layers != null && Architecture.Layers.Count > 0;
+
+        if (hasCustomLayers && Architecture.Layers != null && _customFastLayers != null && _customFusionLayers != null)
         {
+            // Use custom layers for all three pathways
             Layers.AddRange(Architecture.Layers);
+            _fastLayers.AddRange(_customFastLayers);
+            _fusionLayers.AddRange(_customFusionLayers);
         }
         else
         {
+            // Use default LayerHelper initialization
             int inputChannels = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
             int inputHeight = Architecture.InputHeight > 0 ? Architecture.InputHeight : 224;
             int inputWidth = Architecture.InputWidth > 0 ? Architecture.InputWidth : 224;
@@ -628,7 +661,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new SlowFast<T>(Architecture, _numClasses, _optimizer, _lossFunction, _slowFrames, _slowChannels, _fastChannels, _alpha);
+        new SlowFast<T>(Architecture, _numClasses, _optimizer, _lossFunction, _probabilityActivation, _customFastLayers, _customFusionLayers, _slowFrames, _slowChannels, _fastChannels, _alpha);
 
     #endregion
 }
