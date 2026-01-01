@@ -31,9 +31,11 @@ class Program
             Console.WriteLine("9. Extended GEMM Tuning (GPU Optimization)");
             Console.WriteLine("   Usage: AiDotNetTestConsole.exe 9 [trials] [--diag]");
             Console.WriteLine("   Example: AiDotNetTestConsole.exe 9 100 --diag");
+            Console.WriteLine("10. Comprehensive GEMM A/B Testing (All Sizes & Variants)");
+            Console.WriteLine("   Tests CLBlast vs XOR Swizzle vs RDNA1 Opt across all sizes");
             Console.WriteLine("0. Exit");
             Console.WriteLine();
-            Console.Write("Select an example to run (0-9): ");
+            Console.Write("Select an example to run (0-10): ");
 
             int.TryParse(Console.ReadLine(), out choice);
         }
@@ -92,8 +94,11 @@ class Program
                                                     a.Equals("--diag", StringComparison.OrdinalIgnoreCase));
                     GemmTuningTest.Run(trials, enableDiag);
                     break;
+                case 10:
+                    ComprehensiveGemmAbTest.Run();
+                    break;
                 default:
-                    Console.WriteLine("Invalid choice. Please select a number between 0 and 9.");
+                    Console.WriteLine("Invalid choice. Please select a number between 0 and 10.");
                     break;
             }
         }

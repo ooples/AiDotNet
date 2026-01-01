@@ -100,7 +100,20 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 IsAvailable = true;
                 DeviceName = _context.DeviceName;
                 DeviceVendor = _context.DeviceVendor;
-                ComputeUnits = (int)_context.MaxComputeUnits;
+
+                // Get CU count from OpenCL, with environment variable override
+                int detectedCUs = (int)_context.MaxComputeUnits;
+                string? envCUs = Environment.GetEnvironmentVariable("AIDOTNET_GPU_COMPUTE_UNITS");
+                if (int.TryParse(envCUs, out int overrideCUs) && overrideCUs > 0 && overrideCUs <= 256)
+                {
+                    Console.WriteLine($"[OpenClBackend] CU override: {detectedCUs} -> {overrideCUs} (via AIDOTNET_GPU_COMPUTE_UNITS)");
+                    ComputeUnits = overrideCUs;
+                }
+                else
+                {
+                    ComputeUnits = detectedCUs;
+                }
+
                 GlobalMemoryBytes = (long)_context.GlobalMemSize;
                 LocalMemoryBytes = (long)_context.LocalMemSize;
 

@@ -38,15 +38,17 @@ internal sealed class DynamicGemmKernel : IDisposable
     /// 1 = XOR swizzling (eliminates LDS bank conflicts)
     /// 2 = RDNA1 optimized (XOR swizzle + Wave32 hints)
     /// 3 = A/B testing mode (runs both and compares)
+    /// 4 = Adaptive mode (selects best variant per size based on A/B test results)
     /// </summary>
     public static int KernelVariant { get; set; } = GetKernelVariant();
 
     /// <summary>
     /// Default minimum matrix dimension for XOR swizzle variants (1 and 2).
     /// For smaller matrices, falls back to CLBlast baseline (variant 0) due to correctness issues.
+    /// A/B testing showed correctness issues for XOR/RDNA1 variants below 448.
     /// Can be overridden via AIDOTNET_GEMM_MIN_SWIZZLE_SIZE environment variable.
     /// </summary>
-    public const int DefaultMinSwizzleSize = 512;
+    public const int DefaultMinSwizzleSize = 448;
 
     /// <summary>
     /// Minimum matrix dimension for XOR swizzle variants.
@@ -80,9 +82,9 @@ internal sealed class DynamicGemmKernel : IDisposable
     private static int GetKernelVariant()
     {
         string? envVar = Environment.GetEnvironmentVariable("AIDOTNET_GEMM_VARIANT");
-        if (int.TryParse(envVar, out int variant) && variant >= 0 && variant <= 3)
+        if (int.TryParse(envVar, out int variant) && variant >= 0 && variant <= 4)
             return variant;
-        return 0; // Default to original CLBlast baseline
+        return 4; // Default to adaptive mode (selects best variant per size)
     }
 
     /// <summary>
@@ -142,6 +144,12 @@ internal sealed class DynamicGemmKernel : IDisposable
     /// <returns>The effective kernel variant to use</returns>
     public static int GetEffectiveVariant(int M, int N, int K)
     {
+        // Adaptive mode (variant 4): Select best variant based on A/B test results
+        if (KernelVariant == 4)
+        {
+            return GetAdaptiveVariant(M, N, K);
+        }
+
         // XOR swizzle variants (1 and 2) have correctness issues for small matrices
         // Fall back to CLBlast baseline (variant 0) for sizes < MinSwizzleSize
         if (KernelVariant is 1 or 2)
@@ -156,6 +164,30 @@ internal sealed class DynamicGemmKernel : IDisposable
             }
         }
         return KernelVariant;
+    }
+
+    /// <summary>
+    /// Selects the optimal kernel variant based on matrix size using A/B test results.
+    /// This provides automatic performance optimization without manual tuning.
+    /// </summary>
+    /// <remarks>
+    /// A/B test results on AMD RX 5500 XT (RDNA1, 22 CUs) show run-to-run variance.
+    /// Simplified strategy: CLBlast below MinSwizzleSize, XOR Swizzle above.
+    /// XOR Swizzle eliminates LDS bank conflicts and is generally competitive
+    /// or better for larger matrices where bank conflict overhead matters more.
+    /// </remarks>
+    private static int GetAdaptiveVariant(int M, int N, int K)
+    {
+        int minDim = Math.Min(Math.Min(M, N), K);
+
+        // Below MinSwizzleSize (448): CLBlast only (correctness issues with XOR variants)
+        if (minDim < MinSwizzleSize)
+        {
+            return 0; // CLBlast baseline
+        }
+
+        // For sizes >= 448: Use XOR Swizzle (eliminates bank conflicts, competitive performance)
+        return 1; // XOR Swizzle
     }
 
     /// <summary>
