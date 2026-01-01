@@ -6943,19 +6943,23 @@ public static class LayerHelper<T>
         int inputWidth = 854,
         int numFeatures = 256)
     {
+        // Helper to compute convolution output size: (input + 2*padding - kernel) / stride + 1
+        static int ConvOutSize(int input, int kernel, int stride, int padding) =>
+            (input + 2 * padding - kernel) / stride + 1;
+
         int h = inputHeight;
         int w = inputWidth;
 
         // Image encoder (ResNet-like backbone)
         yield return new ConvolutionalLayer<T>(inputChannels, h, w, 64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
+        h = ConvOutSize(h, 7, 2, 3); w = ConvOutSize(w, 7, 2, 3);
         yield return new ConvolutionalLayer<T>(64, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new ConvolutionalLayer<T>(64, h, w, 128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
+        h = ConvOutSize(h, 3, 2, 1); w = ConvOutSize(w, 3, 2, 1);
         yield return new ConvolutionalLayer<T>(128, h, w, 256, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
+        h = ConvOutSize(h, 3, 2, 1); w = ConvOutSize(w, 3, 2, 1);
         yield return new ConvolutionalLayer<T>(256, h, w, numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
+        h = ConvOutSize(h, 3, 2, 1); w = ConvOutSize(w, 3, 2, 1);
 
         // Object encoder (processes mask with image features)
         // Note: This takes numFeatures + 1 channels (features + mask)
@@ -7014,18 +7018,22 @@ public static class LayerHelper<T>
         int inputWidth = 854,
         int numFeatures = 256)
     {
+        // Helper to compute convolution output size: (input + 2*padding - kernel) / stride + 1
+        static int ConvOutSize(int input, int kernel, int stride, int padding) =>
+            (input + 2 * padding - kernel) / stride + 1;
+
         int h = inputHeight;
         int w = inputWidth;
 
         // Encoder
         yield return new ConvolutionalLayer<T>(inputChannels, h, w, 64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
+        h = ConvOutSize(h, 7, 2, 3); w = ConvOutSize(w, 7, 2, 3);
         yield return new ConvolutionalLayer<T>(64, h, w, 128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
+        h = ConvOutSize(h, 3, 2, 1); w = ConvOutSize(w, 3, 2, 1);
         yield return new ConvolutionalLayer<T>(128, h, w, 256, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
+        h = ConvOutSize(h, 3, 2, 1); w = ConvOutSize(w, 3, 2, 1);
         yield return new ConvolutionalLayer<T>(256, h, w, numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
+        h = ConvOutSize(h, 3, 2, 1); w = ConvOutSize(w, 3, 2, 1);
 
         // Sensory memory network (high resolution, short-term)
         yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);

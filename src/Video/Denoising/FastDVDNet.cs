@@ -293,15 +293,20 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
         int totalChannels = c * frames.Count + 1; // frames + noise map
         var stacked = new Tensor<T>([1, totalChannels, h, w]);
 
+        // Use fixed frame size to avoid buffer overflow with batched inputs (N > 1)
+        int frameSize = c * h * w;
         int offset = 0;
         foreach (var frame in frames)
         {
-            Array.Copy(frame.Data, 0, stacked.Data, offset, frame.Data.Length);
-            offset += c * h * w;
+            // Only copy single-frame data (first batch if batched input)
+            // This handles both 3D [C,H,W] and 4D [N,C,H,W] inputs correctly
+            Array.Copy(frame.Data, 0, stacked.Data, offset, frameSize);
+            offset += frameSize;
         }
 
-        // Add noise map
-        Array.Copy(noiseMap.Data, 0, stacked.Data, offset, noiseMap.Data.Length);
+        // Add noise map (single channel, same H x W)
+        int noiseMapSize = h * w;
+        Array.Copy(noiseMap.Data, 0, stacked.Data, offset, noiseMapSize);
 
         return stacked;
     }

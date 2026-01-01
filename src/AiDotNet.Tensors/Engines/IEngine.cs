@@ -2631,10 +2631,16 @@ public interface IEngine
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
     /// <param name="input">The input tensor [batch, in_channels, height, width].</param>
     /// <param name="kernel">The convolution kernel [out_channels, in_channels, kernel_height, kernel_width].</param>
-    /// <param name="offset">The learned offset tensor [batch, 2*kernel_h*kernel_w, out_h, out_w].
-    /// Each kernel position has (dy, dx) offsets for bilinear sampling.</param>
-    /// <param name="mask">Optional modulation mask [batch, kernel_h*kernel_w, out_h, out_w].
-    /// Values in [0,1] modulate each kernel position. Null uses no modulation (DCNv1).</param>
+    /// <param name="offset">
+    /// The learned offset tensor [batch, 2*kernel_h*kernel_w*deformGroups, out_h, out_w].
+    /// Each kernel position has (dy, dx) offsets for bilinear sampling. When using multiple
+    /// deformable groups, the channel dimension is multiplied by deformGroups.
+    /// </param>
+    /// <param name="mask">
+    /// Optional modulation mask [batch, kernel_h*kernel_w*deformGroups, out_h, out_w].
+    /// Values in [0,1] modulate each kernel position. deformGroups is inferred from the
+    /// offset/mask channel counts. Null uses no modulation (DCNv1).
+    /// </param>
     /// <param name="stride">The stride [strideH, strideW] of the convolution.</param>
     /// <param name="padding">The padding [padH, padW] to add to the input.</param>
     /// <param name="dilation">The dilation [dilationH, dilationW] spacing between kernel elements.</param>

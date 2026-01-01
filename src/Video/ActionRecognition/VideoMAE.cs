@@ -224,6 +224,9 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
     /// <returns>List of (classIndex, probability) tuples.</returns>
     public List<(int ClassIndex, double Probability)> GetTopKPredictions(Tensor<T> video, int k = 5)
     {
+        if (video.Rank == 5)
+            throw new ArgumentException("GetTopKPredictions only supports single video input [T,C,H,W]. Remove batch dimension.", nameof(video));
+
         var probs = ClassifyAction(video);
         var results = new List<(int ClassIndex, double Probability)>();
 
@@ -306,8 +309,10 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         }
 
         var predicted = Predict(input);
-        var lossGradient = predicted.Transform((v, idx) =>
-            NumOps.Subtract(v, expectedOutput.Data[idx]));
+
+        // Compute loss gradient using the configured loss function
+        var gradientVector = LossFunction.CalculateDerivative(predicted.ToVector(), expectedOutput.ToVector());
+        var lossGradient = new Tensor<T>(predicted.Shape, gradientVector);
 
         BackwardPass(lossGradient);
 
@@ -454,22 +459,28 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         var patchEmbedded = PatchEmbed(video);
 
         // Apply mask (zero out masked patches)
-        int batchSize = patchEmbedded.Shape[0];
+        // Note: patchEmbedded has shape [B * numTubelets, C, H, W] while mask has shape [B, patchesH, patchesW]
+        int batchSize = video.Shape[0];
+        int numTubelets = video.Shape[1] / _tubeletSize;
         int channels = patchEmbedded.Shape[1];
         int height = patchEmbedded.Shape[2];
         int width = patchEmbedded.Shape[3];
 
-        for (int b = 0; b < Math.Min(batchSize, mask.GetLength(0)); b++)
+        for (int b = 0; b < batchSize; b++)
         {
-            for (int h = 0; h < height; h++)
+            for (int t = 0; t < numTubelets; t++)
             {
-                for (int w = 0; w < width; w++)
+                int tubeletIdx = b * numTubelets + t;
+                for (int h = 0; h < height; h++)
                 {
-                    if (mask[b % mask.GetLength(0), h % mask.GetLength(1), w % mask.GetLength(2)])
+                    for (int w = 0; w < width; w++)
                     {
-                        for (int c = 0; c < channels; c++)
+                        if (mask[b, h % mask.GetLength(1), w % mask.GetLength(2)])
                         {
-                            patchEmbedded[b, c, h, w] = NumOps.Zero;
+                            for (int c = 0; c < channels; c++)
+                            {
+                                patchEmbedded[tubeletIdx, c, h, w] = NumOps.Zero;
+                            }
                         }
                     }
                 }
@@ -548,15 +559,21 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
                             int origW = w % origWidth;
                             int origC = c % origChannels;
 
-                            // Get original value - use first frame (t=0) if 5D
+                            // Get original value - average over all frames if 5D
                             T origVal;
                             if (is5D)
                             {
-                                int idx = b * numFrames * origChannels * origHeight * origWidth +
-                                          0 * origChannels * origHeight * origWidth +
-                                          origC * origHeight * origWidth +
-                                          origH * origWidth + origW;
-                                origVal = original.Data[idx];
+                                // Average over all frames for proper temporal reconstruction loss
+                                T sum = NumOps.Zero;
+                                for (int t = 0; t < numFrames; t++)
+                                {
+                                    int idx = b * numFrames * origChannels * origHeight * origWidth +
+                                              t * origChannels * origHeight * origWidth +
+                                              origC * origHeight * origWidth +
+                                              origH * origWidth + origW;
+                                    sum = NumOps.Add(sum, original.Data[idx]);
+                                }
+                                origVal = NumOps.Divide(sum, NumOps.FromDouble(numFrames));
                             }
                             else
                             {
