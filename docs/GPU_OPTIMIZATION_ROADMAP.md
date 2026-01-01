@@ -7,7 +7,7 @@
 | GPU | AMD RX 5500 XT (gfx1012, 11 CUs) |
 | Theoretical Peak | ~5,196 GFLOPS |
 | CLBlast Performance | 2,315 GFLOPS @ 2048x2048 |
-| Our CLBlast Baseline | **1,597 GFLOPS @ 2048x2048 (69%)** |
+| Our CLBlast Baseline | **1,632 GFLOPS @ 2048x2048 (70%)** |
 | Small Matrices (256-512) | **AiDotNet is 1.4-2x FASTER than CLBlast!** |
 | DenseLayer (64x3072x768) | **AiDotNet is 1.16x FASTER than CLBlast!** |
 | Target | Match CLBlast @ 2048x2048, maintain lead on small/DenseLayer |
@@ -40,13 +40,14 @@ These optimizations should bring us from 1,000 to 2,300+ GFLOPS.
 | 1a | **Add gfx1012 to CLBlast databases** | +10% | Low | Low | **DONE** ✓ |
 | 1b | **Hybrid direct/indirect path selection** | +10% | Low | Low | **DONE** ✓ |
 | 2 | **LDS Bank Conflict Padding** (+4 stride to arrays) | +6% | Low | Low | **DONE** ✓ |
-| 3 | **VWM=4, VWN=4** (wider vectorization) | +15-25% | Low | Low | TODO |
+| 3 | **VWM=4, VWN=4** (wider vectorization) | +2% | Low | Low | **DONE** ✓ |
 | 4 | **Full K-loop Unrolling** (`#pragma unroll`) | +10% | Low | Low | TODO |
 
-**Current Performance (after Phase 1.2 - LDS Padding):**
-- 2048x2048: 1,597 GFLOPS (69% of CLBlast, up from 65%)
-- LDS bank conflict padding: +6% improvement (1502 → 1597 GFLOPS)
-- Still need ~31% more to match CLBlast at 2048x2048
+**Current Performance (after Phase 1.3 - Vectorization):**
+- 2048x2048: 1,632 GFLOPS (70% of CLBlast, up from 69%)
+- LDS bank conflict padding: +6% (1502 → 1597 GFLOPS)
+- Wider vectorization (VWM=4, VWN=4): +2% (1597 → 1632 GFLOPS)
+- Still need ~30% more to match CLBlast at 2048x2048
 
 ### Implementation Details
 
@@ -282,4 +283,5 @@ For each benchmark run, capture:
 | 2026-01-01 | Implemented hybrid direct/indirect path selection | 2048x2048: 1502 GFLOPS (65% of CLBlast) |
 | 2026-01-01 | DenseLayer-style workloads now 1.16x faster than CLBlast | Key neural network use case optimized |
 | 2026-01-01 | Implemented LDS bank conflict padding (+4 stride) | 2048x2048: 1597 GFLOPS (+6%, 69% of CLBlast) |
+| 2026-01-01 | Implemented VWM=4, VWN=4 wider vectorization | 2048x2048: 1632 GFLOPS (+2%, 70% of CLBlast) |
 
