@@ -10,7 +10,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL.Kernels
 {
     internal static class ClBlastXgemmKernel
     {
-        private const string CommonOpenCl = """
+        internal const string CommonOpenCl = """
 // =================================================================================================
 
 #if defined(cl_khr_expect_assume)
@@ -291,7 +291,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL.Kernels
 // End of the C++11 raw string literal
 """;
 
-        private const string Level3OpenCl = """
+        internal const string Level3OpenCl = """
 
 // =================================================================================================
 

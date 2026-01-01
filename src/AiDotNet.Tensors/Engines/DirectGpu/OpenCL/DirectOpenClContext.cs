@@ -36,9 +36,11 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         public IntPtr Device => _device;
 
         public string DeviceName { get; private set; } = string.Empty;
-        public string DeviceVendor { get; private set; } = string.Empty;        
+        public string DeviceVendor { get; private set; } = string.Empty;
+        public string DeviceBoardName { get; private set; } = string.Empty;
         public string DriverVersion { get; private set; } = string.Empty;
         public string OpenClVersion { get; private set; } = string.Empty;
+        public ulong DeviceType { get; private set; }
         public uint MaxComputeUnits { get; private set; }
         public ulong GlobalMemSize { get; private set; }
         public ulong LocalMemSize { get; private set; }
@@ -128,6 +130,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             // Get device info
             DeviceName = OpenClNativeBindings.GetDeviceInfoString(_device, OpenClNativeBindings.CL_DEVICE_NAME);
             DeviceVendor = OpenClNativeBindings.GetDeviceInfoString(_device, OpenClNativeBindings.CL_DEVICE_VENDOR);
+            DeviceType = OpenClNativeBindings.GetDeviceInfoULong(_device, OpenClNativeBindings.CL_DEVICE_TYPE);
             DriverVersion = OpenClNativeBindings.GetDeviceInfoString(_device, OpenClNativeBindings.CL_DEVICE_DRIVER_VERSION);
             OpenClVersion = OpenClNativeBindings.GetDeviceInfoString(_device, OpenClNativeBindings.CL_DEVICE_VERSION);
             MaxComputeUnits = OpenClNativeBindings.GetDeviceInfoUInt(_device, OpenClNativeBindings.CL_DEVICE_MAX_COMPUTE_UNITS);
@@ -153,6 +156,11 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             Extensions = OpenClNativeBindings.GetDeviceInfoString(_device, OpenClNativeBindings.CL_DEVICE_EXTENSIONS);
             SupportsFp16 = Extensions.Contains("cl_khr_fp16");
             SupportsSubgroups = Extensions.Contains("cl_khr_subgroups");
+            if (Extensions.Contains("cl_amd_device_attribute_query", StringComparison.OrdinalIgnoreCase))
+            {
+                DeviceBoardName = OpenClNativeBindings.GetDeviceInfoString(
+                    _device, OpenClNativeBindings.CL_DEVICE_BOARD_NAME_AMD);
+            }
 
             // Get clock frequency for theoretical GFLOPS calculation
             ClockFrequencyMHz = OpenClNativeBindings.GetDeviceInfoUInt(_device, OpenClNativeBindings.CL_DEVICE_MAX_CLOCK_FREQUENCY);

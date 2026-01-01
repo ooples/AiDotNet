@@ -28,6 +28,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
         #region Device Types
 
+        public const ulong CL_DEVICE_TYPE_CPU = 2;
         public const ulong CL_DEVICE_TYPE_GPU = 4;
         public const ulong CL_DEVICE_TYPE_ALL = 0xFFFFFFFF;
 
@@ -83,6 +84,7 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
         #region Device Info
 
+        public const uint CL_DEVICE_TYPE = 0x1000;
         public const uint CL_DEVICE_NAME = 0x102B;
         public const uint CL_DEVICE_VENDOR = 0x102C;
         public const uint CL_DEVICE_MAX_COMPUTE_UNITS = 0x1002;
@@ -95,6 +97,9 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         public const uint CL_DEVICE_VERSION = 0x102F;
         public const uint CL_DEVICE_EXTENSIONS = 0x1030;
         public const uint CL_DEVICE_MAX_CLOCK_FREQUENCY = 0x100C;
+        public const uint CL_DEVICE_BOARD_NAME_AMD = 0x4038;
+        public const uint CL_DEVICE_COMPUTE_CAPABILITY_MAJOR_NV = 0x4000;
+        public const uint CL_DEVICE_COMPUTE_CAPABILITY_MINOR_NV = 0x4001;
 
         #endregion
 

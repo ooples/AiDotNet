@@ -45,6 +45,13 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         private readonly object _tunedConfigLock = new();
         private bool _tuningDbResetDone;
         private readonly ILogger? _logger;
+        private readonly object _clblastLock = new();
+        private bool _clblastBaselineInitialized;
+        private GemmConfig? _clblastBaselineConfig;
+        private bool _clblastPackingKernelsReady;
+        private ClBlastPadParameters _clblastPadParams;
+        private ClBlastPadTransposeParameters _clblastPadTransposeParams;
+        private int _clblastMinIndirectSize;
 
         public bool IsAvailable { get; }
         public string BackendName => "OpenCL";
@@ -595,6 +602,308 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             }
         }
 
+        private bool TryGetClBlastBaselineConfig(out GemmConfig config)
+        {
+            config = default;
+            if (_context == null)
+                return false;
+
+            lock (_clblastLock)
+            {
+                if (_clblastBaselineInitialized)
+                {
+                    if (_clblastBaselineConfig.HasValue)
+                    {
+                        config = _clblastBaselineConfig.Value;
+                        return true;
+                    }
+
+                    return false;
+                }
+
+                _clblastBaselineInitialized = true;
+                var deviceInfo = ClBlastDeviceInfo.FromContext(_context);
+                _clblastPadParams = ClBlastPadDatabase.GetParameters(deviceInfo);
+                _clblastPadTransposeParams = ClBlastPadTransposeDatabase.GetParameters(deviceInfo);
+                _clblastMinIndirectSize = ClBlastGemmRoutineDatabase.GetXgemmMinIndirectSize(deviceInfo);
+
+                if (ClBlastXgemmDatabase.TryGetConfig(deviceInfo, out var baseline))
+                {
+                    _clblastBaselineConfig = baseline;
+                    config = baseline;
+                    return true;
+                }
+
+                return false;
+            }
+        }
+
+        private bool EnsureClBlastPackingKernels()
+        {
+            if (_context == null)
+                return false;
+
+            if (_clblastPackingKernelsReady)
+                return true;
+
+            lock (_clblastLock)
+            {
+                if (_clblastPackingKernelsReady)
+                    return true;
+
+                if (_clblastPadParams.DimX <= 0 || _clblastPadTransposeParams.Tile <= 0)
+                {
+                    var deviceInfo = ClBlastDeviceInfo.FromContext(_context);
+                    _clblastPadParams = ClBlastPadDatabase.GetParameters(deviceInfo);
+                    _clblastPadTransposeParams = ClBlastPadTransposeDatabase.GetParameters(deviceInfo);
+                }
+
+                var source = ClBlastPackingKernels.BuildSource(_clblastPadParams, _clblastPadTransposeParams);
+                var program = new DirectOpenClProgram(_context, source);
+                program.Build(OpenClBuildOptions.OptimizationFlags);
+                _programs.Add(program);
+
+                foreach (var name in ClBlastPackingKernels.GetKernelNames())
+                {
+                    _kernelCache[name] = new DirectOpenClKernel(_context, program, name);
+                }
+
+                _clblastPackingKernelsReady = true;
+                return true;
+            }
+        }
+
+        private (int globalX, int globalY) GetClBlastPadGlobal(int destOne, int destTwo)
+        {
+            int globalX = CeilToMultiple(CeilDiv(destOne, _clblastPadParams.WorkPerThreadX), _clblastPadParams.DimX);
+            int globalY = CeilToMultiple(CeilDiv(destTwo, _clblastPadParams.WorkPerThreadY), _clblastPadParams.DimY);
+            return (globalX, globalY);
+        }
+
+        private (int globalX, int globalY) GetClBlastPadTransposeGlobal(int destOne, int destTwo)
+        {
+            int globalX = CeilToMultiple(CeilDiv(destOne, _clblastPadTransposeParams.WorkPerThread), _clblastPadTransposeParams.Tile);
+            int globalY = CeilToMultiple(CeilDiv(destTwo, _clblastPadTransposeParams.WorkPerThread), _clblastPadTransposeParams.Tile);
+            return (globalX, globalY);
+        }
+
+        private static int CeilToMultiple(int value, int multiple)
+        {
+            if (multiple <= 0)
+                return value;
+
+            return ((value + multiple - 1) / multiple) * multiple;
+        }
+
+        private void ClBlastCopyMatrix(
+            IGpuBuffer src,
+            IGpuBuffer dst,
+            int srcOne,
+            int srcTwo,
+            int srcLd,
+            int srcOffset,
+            int destOne,
+            int destTwo,
+            int destLd,
+            int destOffset,
+            bool pad)
+        {
+            string kernelName = pad ? "CopyPadMatrix" : "CopyMatrix";
+            var kernel = _kernelCache[kernelName];
+            kernel.SetArg(0, srcOne);
+            kernel.SetArg(1, srcTwo);
+            kernel.SetArg(2, srcLd);
+            kernel.SetArg(3, srcOffset);
+            kernel.SetArg(4, ((DirectOpenClGpuBuffer)src).Buffer.Handle);
+            kernel.SetArg(5, destOne);
+            kernel.SetArg(6, destTwo);
+            kernel.SetArg(7, destLd);
+            kernel.SetArg(8, destOffset);
+            kernel.SetArg(9, ((DirectOpenClGpuBuffer)dst).Buffer.Handle);
+            kernel.SetArg(10, 1.0f);
+            if (pad)
+            {
+                kernel.SetArg(11, 0);
+            }
+            else
+            {
+                kernel.SetArg(11, 0);
+                kernel.SetArg(12, 0);
+                kernel.SetArg(13, 0);
+            }
+
+            var (globalX, globalY) = GetClBlastPadGlobal(destOne, destTwo);
+            kernel.Execute2D(globalX, globalY, _clblastPadParams.DimX, _clblastPadParams.DimY);
+        }
+
+        private void ClBlastTransposeMatrix(
+            IGpuBuffer src,
+            IGpuBuffer dst,
+            int srcOne,
+            int srcTwo,
+            int srcLd,
+            int srcOffset,
+            int destOne,
+            int destTwo,
+            int destLd,
+            int destOffset,
+            bool pad)
+        {
+            string kernelName = pad ? "TransposePadMatrix" : "TransposeMatrix";
+            var kernel = _kernelCache[kernelName];
+            kernel.SetArg(0, srcOne);
+            kernel.SetArg(1, srcTwo);
+            kernel.SetArg(2, srcLd);
+            kernel.SetArg(3, srcOffset);
+            kernel.SetArg(4, ((DirectOpenClGpuBuffer)src).Buffer.Handle);
+            kernel.SetArg(5, destOne);
+            kernel.SetArg(6, destTwo);
+            kernel.SetArg(7, destLd);
+            kernel.SetArg(8, destOffset);
+            kernel.SetArg(9, ((DirectOpenClGpuBuffer)dst).Buffer.Handle);
+            kernel.SetArg(10, 1.0f);
+            if (pad)
+            {
+                kernel.SetArg(11, 0);
+            }
+            else
+            {
+                kernel.SetArg(11, 0);
+                kernel.SetArg(12, 0);
+                kernel.SetArg(13, 0);
+            }
+
+            var (globalX, globalY) = GetClBlastPadTransposeGlobal(destOne, destTwo);
+            int tile = _clblastPadTransposeParams.Tile;
+            kernel.Execute2D(globalX, globalY, tile, tile);
+        }
+
+        private bool TryExecuteClBlastBaselineGemm(
+            IGpuBuffer A,
+            IGpuBuffer B,
+            IGpuBuffer C,
+            int M,
+            int N,
+            int K,
+            float alpha,
+            float beta,
+            GemmConfig config)
+        {
+            if (_dynamicGemm == null)
+                return false;
+
+            if (!EnsureClBlastPackingKernels())
+                return false;
+
+            if (_clblastMinIndirectSize > 0)
+            {
+                long mkn = (long)M * N * K;
+                long threshold = (long)_clblastMinIndirectSize * _clblastMinIndirectSize * _clblastMinIndirectSize;
+                if (mkn < threshold)
+                    return false;
+            }
+
+            int kReg = config.KReg > 0 ? config.KReg : 1;
+            int kUnit = config.TileK * kReg;
+            if (config.TileM <= 0 || config.TileN <= 0 || kUnit <= 0)
+                return false;
+
+            bool kernel1 = IsClBlastBaselineKernel1(config);
+            int mCeiled = CeilDiv(M, kernel1 ? config.TileN : config.TileM) * (kernel1 ? config.TileN : config.TileM);
+            int nCeiled = CeilDiv(N, kernel1 ? config.TileM : config.TileN) * (kernel1 ? config.TileM : config.TileN);
+            int kCeiled = CeilDiv(K, kUnit) * kUnit;
+
+            int aOne = K;
+            int aTwo = M;
+            int bOne = N;
+            int bTwo = K;
+            int cOne = N;
+            int cTwo = M;
+
+            int aOneI = kernel1 ? kCeiled : mCeiled;
+            int aTwoI = kernel1 ? mCeiled : kCeiled;
+            int bOneI = nCeiled;
+            int bTwoI = kCeiled;
+            int cOneI = kernel1 ? nCeiled : mCeiled;
+            int cTwoI = kernel1 ? mCeiled : nCeiled;
+
+            bool aDoTranspose = !kernel1;
+            bool bDoTranspose = false;
+            bool cDoTranspose = !kernel1;
+
+            bool aNoTemp = aOne == aOneI && aTwo == aTwoI && !aDoTranspose;
+            bool bNoTemp = bOne == bOneI && bTwo == bTwoI && !bDoTranspose;
+            bool cNoTemp = cOne == cOneI && cTwo == cTwoI && !cDoTranspose;
+
+            long aSize = (long)aOneI * aTwoI;
+            long bSize = (long)bOneI * bTwoI;
+            long cSize = (long)cOneI * cTwoI;
+            if (aSize > int.MaxValue || bSize > int.MaxValue || cSize > int.MaxValue)
+                return false;
+
+            IGpuBuffer? aTemp = null;
+            IGpuBuffer? bTemp = null;
+            IGpuBuffer? cTemp = null;
+            IGpuBuffer aBuf = A;
+            IGpuBuffer bBuf = B;
+            IGpuBuffer cBuf = C;
+
+            try
+            {
+                if (!aNoTemp)
+                {
+                    aTemp = AllocateBuffer((int)aSize);
+                    aBuf = aTemp;
+                    if (aDoTranspose)
+                        ClBlastTransposeMatrix(A, aBuf, aOne, aTwo, aOne, 0, aOneI, aTwoI, aOneI, 0, true);
+                    else
+                        ClBlastCopyMatrix(A, aBuf, aOne, aTwo, aOne, 0, aOneI, aTwoI, aOneI, 0, true);
+                }
+
+                if (!bNoTemp)
+                {
+                    bTemp = AllocateBuffer((int)bSize);
+                    bBuf = bTemp;
+                    if (bDoTranspose)
+                        ClBlastTransposeMatrix(B, bBuf, bOne, bTwo, bOne, 0, bOneI, bTwoI, bOneI, 0, true);
+                    else
+                        ClBlastCopyMatrix(B, bBuf, bOne, bTwo, bOne, 0, bOneI, bTwoI, bOneI, 0, true);
+                }
+
+                if (!cNoTemp)
+                {
+                    cTemp = AllocateBuffer((int)cSize);
+                    cBuf = cTemp;
+                    if (beta != 0.0f)
+                    {
+                        if (cDoTranspose)
+                            ClBlastTransposeMatrix(C, cBuf, cOne, cTwo, cOne, 0, cOneI, cTwoI, cOneI, 0, true);
+                        else
+                            ClBlastCopyMatrix(C, cBuf, cOne, cTwo, cOne, 0, cOneI, cTwoI, cOneI, 0, true);
+                    }
+                }
+
+                if (!TryExecuteDynamicGemm(aBuf, bBuf, cBuf, mCeiled, nCeiled, kCeiled, alpha, beta, config))
+                    return false;
+
+                if (!cNoTemp)
+                {
+                    if (cDoTranspose)
+                        ClBlastTransposeMatrix(cBuf, C, cOneI, cTwoI, cOneI, 0, cOne, cTwo, cOne, 0, false);
+                    else
+                        ClBlastCopyMatrix(cBuf, C, cOneI, cTwoI, cOneI, 0, cOne, cTwo, cOne, 0, false);
+                }
+
+                return true;
+            }
+            finally
+            {
+                cTemp?.Dispose();
+                bTemp?.Dispose();
+                aTemp?.Dispose();
+            }
+        }
+
         private static int CeilDiv(int value, int divisor)
         {
             return (value + divisor - 1) / divisor;
@@ -658,6 +967,9 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
         private bool TryExecutePackedDynamicGemm(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha, float beta, GemmConfig config)
         {
+            if (IsClBlastBaselineKernel(config))
+                return TryExecuteClBlastBaselineGemm(A, B, C, M, N, K, alpha, beta, config);
+
             int kReg = config.KReg > 0 ? config.KReg : 1;
             int kUnit = config.TileK * kReg;
             if (config.TileM <= 0 || config.TileN <= 0 || kUnit <= 0)
@@ -724,6 +1036,17 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 config.KernelName.StartsWith("clblast_baseline_k0", StringComparison.OrdinalIgnoreCase);
         }
 
+        private static bool IsClBlastBaselineKernel1(GemmConfig config)
+        {
+            return !string.IsNullOrWhiteSpace(config.KernelName) &&
+                config.KernelName.StartsWith("clblast_baseline_k1", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsClBlastBaselineKernel(GemmConfig config)
+        {
+            return IsClBlastBaselineKernel0(config) || IsClBlastBaselineKernel1(config);
+        }
+
         private bool TryExecuteDynamicGemm(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha, float beta, GemmConfig config)
         {
             if (_dynamicGemm == null)
@@ -763,6 +1086,14 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             var bufferA = ((DirectOpenClGpuBuffer)A).Buffer;
             var bufferB = ((DirectOpenClGpuBuffer)B).Buffer;
             var bufferC = ((DirectOpenClGpuBuffer)C).Buffer;
+
+            bool offlineEnabled = TryGetOfflineTuningMode(out _);
+            if (!offlineEnabled && _dynamicGemm != null && M >= 128 && N >= 128 && K >= 64 &&
+                TryGetClBlastBaselineConfig(out var baselineConfig))
+            {
+                if (TryExecuteClBlastBaselineGemm(A, B, C, M, N, K, alpha, beta, baselineConfig))
+                    return;
+            }
 
             if (_dynamicGemm != null && M >= 128 && N >= 128 && K >= 64 &&
                 TryGetTunedConfig(M, N, K, out var tunedConfig))

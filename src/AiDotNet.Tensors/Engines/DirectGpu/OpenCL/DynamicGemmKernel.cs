@@ -222,13 +222,34 @@ internal sealed class DynamicGemmKernel : IDisposable
         int mwi = MWG / MDIMC;
         int nwi = NWG / NDIMC;
 
-        // Check local memory
-        // For high-occupancy double-buffered kernel (MWI*NWI <= 16), we need 2x local memory
-        bool isHighOccupancy = config.UseDoubleBuffering && (mwi * nwi <= 16);
-        int bufferMultiplier = isHighOccupancy ? 2 : 1;  // Double buffer needs 2x LDS
-        int ldsBytes = bufferMultiplier * (KWG * (MWG + 1) + KWG * (NWG + 1)) * sizeof(float);
-        if (ldsBytes > 65536)
-            return $"Local memory {ldsBytes / 1024.0:F1} KB exceeds 64 KB limit (double-buffered: {isHighOccupancy})";
+        bool isClBlastBaseline = TryGetClBlastBaselineKernel(config, out _);
+        if (isClBlastBaseline)
+        {
+            int vwm = config.VectorWidthM > 0 ? config.VectorWidthM : 1;
+            int vwn = config.VectorWidthN > 0 ? config.VectorWidthN : 1;
+            if (vwm < 1) vwm = 1;
+            if (vwn < 1) vwn = 1;
+
+            int localFloats = 0;
+            if (config.CacheA && MWG / vwm > 0)
+                localFloats += KWG * (MWG / vwm);
+            if (config.CacheB && NWG / vwn > 0)
+                localFloats += KWG * (NWG / vwn);
+
+            int ldsBytes = localFloats * sizeof(float);
+            if (ldsBytes > 65536)
+                return $"Local memory {ldsBytes / 1024.0:F1} KB exceeds 64 KB limit (CLBlast)";
+        }
+        else
+        {
+            // Check local memory
+            // For high-occupancy double-buffered kernel (MWI*NWI <= 16), we need 2x local memory
+            bool isHighOccupancy = config.UseDoubleBuffering && (mwi * nwi <= 16);
+            int bufferMultiplier = isHighOccupancy ? 2 : 1;  // Double buffer needs 2x LDS
+            int ldsBytes = bufferMultiplier * (KWG * (MWG + 1) + KWG * (NWG + 1)) * sizeof(float);
+            if (ldsBytes > 65536)
+                return $"Local memory {ldsBytes / 1024.0:F1} KB exceeds 64 KB limit (double-buffered: {isHighOccupancy})";
+        }
         if (mwi < 1 || nwi < 1)
             return $"Invalid output per thread: {mwi}x{nwi}";
 
@@ -2398,11 +2419,13 @@ void gemm_tuned(
             kernel.SetArg(8, 0);
             kernel.SetArg(9, 0);
 
-            int globalX = gemmK == 1 ? numWorkGroupsN * config.ThreadTileM : globalM;
-            int globalY = gemmK == 1 ? numWorkGroupsM * config.ThreadTileN : globalN;
-            if (gemmK == 1 && EnableDiagnostics)
+            int cOneI = gemmK == 1 ? N : M;
+            int cTwoI = gemmK == 1 ? M : N;
+            int globalX = (cOneI * config.ThreadTileM) / config.TileM;
+            int globalY = (cTwoI * config.ThreadTileN) / config.TileN;
+            if (EnableDiagnostics)
             {
-                LogDiag($"  CLBlast kernel1 grid swap: global {globalX}x{globalY}");
+                LogDiag($"  CLBlast grid: c={cOneI}x{cTwoI} global {globalX}x{globalY}");
             }
 
             kernel.Execute2D(globalX, globalY, config.ThreadTileM, config.ThreadTileN);

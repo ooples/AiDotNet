@@ -17,6 +17,9 @@
 - CUDA AllocateByteBuffer implemented; Cuda activation kernel source + CLBlast raw strings fixed for build.
 - GpuEngine memory pool returns corrected in matmul/cached-weight paths; DirectGpuEngine buffer lookup now skips null buffers.
 - RX 5500 XT benchmarks captured (see "Latest Benchmarks" below).
+- Tuning/benchmark output now shows progress indicators + bottleneck color-coding.
+- CLBlast OpenCL databases (xgemm/pad/padtranspose/gemm_routine) ported via generator script.
+- CLBlast baseline selection + packing path wired in OpenClBackend (pad/transpose kernels + correct padding rules).
 
 ## Non-goals
 - Multi-node/distributed GPU execution.
@@ -95,6 +98,7 @@ DirectGpu TUNED (OpenClBackend) vs CLBlast:
    - Port CLBlast kernels + packing + selectors into C# and validate bitwise/close parity.
    - Keep the current DirectOpenClBackend path archived as an alternate for comparison only.
    - Switch primary OpenCL engine to the CLBlast-equivalent path once parity holds.
+   - Remaining: port XgemmDirect + fast copy/transpose kernels and match CLBlast small-size routing.
 
 ## 100% Confidence Checklist
 - Build a kernel parity matrix mapping ILGPU ops to DirectOpenCL/DirectCUDA/cuDNN/CLBlast/CPU and track per-op test coverage.
