@@ -98,6 +98,11 @@ public sealed class GemmAutoTuner
     public static int ProgressInterval { get; set; } = 10;
 
     /// <summary>
+    /// Emit progress output during tuning and benchmarks.
+    /// </summary>
+    public static bool EnableProgress { get; set; } = true;
+
+    /// <summary>
     /// Emit a heartbeat log for long-running trials (seconds). Set to 0 to disable.
     /// </summary>
     public static int TrialHeartbeatSeconds { get; set; } = 0;
@@ -153,8 +158,60 @@ public sealed class GemmAutoTuner
         }
         else if (EnableDiagnostics && Logger == null)
         {
-            Console.WriteLine(logLine);
+            WriteConsoleWithColor(logLine);
         }
+    }
+
+    private static void LogProgress(string message)
+    {
+        if (!EnableProgress)
+            return;
+
+        if (Logger != null)
+        {
+            Logger.LogInformation(message);
+            return;
+        }
+
+        WriteConsoleWithColor(message);
+    }
+
+    private static void WriteConsoleWithColor(string message)
+    {
+        if (Console.IsOutputRedirected)
+        {
+            Console.WriteLine(message);
+            return;
+        }
+
+        var color = GetDiagColor(message);
+        if (color.HasValue)
+        {
+            var previous = Console.ForegroundColor;
+            Console.ForegroundColor = color.Value;
+            Console.WriteLine(message);
+            Console.ForegroundColor = previous;
+        }
+        else
+        {
+            Console.WriteLine(message);
+        }
+    }
+
+    private static ConsoleColor? GetDiagColor(string message)
+    {
+        if (message.Contains("Diag[HIGH]", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("LIKELY COMPUTE BOUND", StringComparison.OrdinalIgnoreCase))
+            return ConsoleColor.Red;
+        if (message.Contains("Diag[MED]", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("LIKELY MEMORY BOUND", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("MODERATE EFFICIENCY", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("WARNING", StringComparison.OrdinalIgnoreCase))
+            return ConsoleColor.Yellow;
+        if (message.Contains("Diag[LOW]", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("GOOD EFFICIENCY", StringComparison.OrdinalIgnoreCase))
+            return ConsoleColor.Green;
+        return null;
     }
 
     private static string GetTrialLogHeader()
@@ -540,9 +597,11 @@ public sealed class GemmAutoTuner
 
     private sealed class TrialHeartbeat : IDisposable
     {
+        private static readonly char[] Spinner = new[] { '|', '/', '-', '\\' };
         private readonly string _label;
         private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
         private readonly System.Threading.Timer _timer;
+        private int _spinnerIndex;
         private bool _disposed;
 
         public TrialHeartbeat(string label, int intervalSeconds)
@@ -558,7 +617,8 @@ public sealed class GemmAutoTuner
                 return;
 
             double elapsed = _stopwatch.Elapsed.TotalSeconds;
-            LogDiag($"    ... still running ({_label}), elapsed {elapsed:F1}s");
+            char spinner = Spinner[_spinnerIndex++ % Spinner.Length];
+            LogProgress($"    [{spinner}] running {_label}, elapsed {elapsed:F1}s");
         }
 
         public void Dispose()
@@ -699,66 +759,20 @@ public sealed class GemmAutoTuner
         }
         var results = new List<TuningResult>();
         int trialIndex = 0;
+        int totalCandidates = candidates.Length;
 
         foreach (var config in candidates)
         {
             trialIndex++;
-            try
+            string progressLabel = $"trial {trialIndex}/{totalCandidates} exhaustive {config.KernelName ?? "kernel"}";
+            var result = BenchmarkConfig(config, benchmarkFunc, warmupRuns, benchmarkRuns, M, N, K, capabilities, progressLabel);
+            results.Add(result);
+            LogTrialCsv(trialIndex, "exhaustive", "exhaustive", M, N, K, result, capabilities);
+
+            if (trialIndex % ProgressInterval == 0 || trialIndex == totalCandidates)
             {
-                // Warmup
-                for (int i = 0; i < warmupRuns; i++)
-                {
-                    double time = benchmarkFunc(config);
-                    if (!IsValidTime(time))
-                    {
-                        LogDiag($"  {config.KernelName}: invalid warmup time {time}");
-                        throw new InvalidOperationException("Invalid warmup timing result");
-                    }
-                }
-
-                // Benchmark
-                double totalTimeMs = 0;
-                for (int i = 0; i < benchmarkRuns; i++)
-                {
-                    double time = benchmarkFunc(config);
-                    if (!IsValidTime(time))
-                    {
-                        LogDiag($"  {config.KernelName}: invalid benchmark time {time}");
-                        throw new InvalidOperationException("Invalid benchmark timing result");
-                    }
-                    totalTimeMs += time;
-                }
-
-                double avgTimeMs = totalTimeMs / benchmarkRuns;
-                if (!IsValidTime(avgTimeMs))
-                    throw new InvalidOperationException("Invalid average timing result");
-                double gflops = (2.0 * M * N * K) / (avgTimeMs * 1e6);
-
-                var result = new TuningResult
-                {
-                    Config = config,
-                    GFlops = gflops,
-                    TimeMs = avgTimeMs,
-                    IsValid = true,
-                    Error = null
-                };
-                results.Add(result);
-                LogTrialCsv(trialIndex, "exhaustive", "exhaustive", M, N, K, result, capabilities);
-                LogBottleneckDiagnostics(config, capabilities, M, N, K);
-            }
-            catch (Exception ex)
-            {
-                LogDiag($"  Config {config.KernelName} failed: {ex.Message}");
-                var result = new TuningResult
-                {
-                    Config = config,
-                    GFlops = 0,
-                    TimeMs = double.MaxValue,
-                    IsValid = false,
-                    Error = ex.Message
-                };
-                results.Add(result);
-                LogTrialCsv(trialIndex, "exhaustive", "exhaustive", M, N, K, result, capabilities);
+                double pct = totalCandidates > 0 ? (trialIndex * 100.0 / totalCandidates) : 100.0;
+                LogProgress($"[Progress] exhaustive {trialIndex}/{totalCandidates} ({pct:F1}%)");
             }
         }
 
@@ -866,7 +880,8 @@ public sealed class GemmAutoTuner
 
             var config = allConfigs[idx];
             LogDiag($"Trial {i + 1}/{maxTrials}: {config.KernelName} [{strategy}]");
-            var result = BenchmarkConfig(config, benchmarkFunc, warmupRuns, benchmarkRuns, M, N, K, capabilities);
+            string progressLabel = $"trial {i + 1}/{maxTrials} {strategy} {config.KernelName ?? "kernel"}";
+            var result = BenchmarkConfig(config, benchmarkFunc, warmupRuns, benchmarkRuns, M, N, K, capabilities, progressLabel);
             results.Add(result);
             LogTrialCsv(i + 1, "explore", strategy, M, N, K, result, capabilities);
 
@@ -884,6 +899,13 @@ public sealed class GemmAutoTuner
             {
                 failedTrials++;
                 bayesian.AddObservation(idx, 0);  // Record failure
+            }
+
+            int progressTrial = i + 1;
+            if (progressTrial % ProgressInterval == 0 || progressTrial == initialRandomSamples)
+            {
+                double pct = maxTrials > 0 ? (progressTrial * 100.0 / maxTrials) : 100.0;
+                LogProgress($"[Progress] explore {progressTrial}/{maxTrials} ({pct:F1}%) best={bestGflops:F2} failed={failedTrials}");
             }
         }
 
@@ -954,12 +976,14 @@ public sealed class GemmAutoTuner
                 if ((trial + 1) % ProgressInterval == 0 || trial == maxTrials - 1)
                 {
                     double elapsed = tuningStopwatch.Elapsed.TotalSeconds;
-                    double trialsPerSec = (trial + 1) / elapsed;
-                    double eta = (maxTrials - trial - 1) / trialsPerSec;
-                    LogDiag($"Trial {trial + 1}/{maxTrials}: Best={bestGflops:F2} GFLOPS, Failed={failedTrials}, NoImprove={trialsSinceImprovement}/{earlyStopPatience}, ETA={eta:F1}s");
+                    double trialsPerSec = elapsed > 0 ? (trial + 1) / elapsed : 0.0;
+                    double eta = trialsPerSec > 0 ? (maxTrials - trial - 1) / trialsPerSec : 0.0;
+                    double pct = maxTrials > 0 ? ((trial + 1) * 100.0 / maxTrials) : 100.0;
+                    LogProgress($"[Progress] bayes {trial + 1}/{maxTrials} ({pct:F1}%) best={bestGflops:F2} failed={failedTrials} noImprove={trialsSinceImprovement}/{earlyStopPatience} eta={eta:F1}s");
                 }
 
-                var result = BenchmarkConfig(config, benchmarkFunc, warmupRuns, benchmarkRuns, M, N, K, capabilities);
+                string progressLabel = $"trial {trial + 1}/{maxTrials} {strategy} {config.KernelName ?? "kernel"}";
+                var result = BenchmarkConfig(config, benchmarkFunc, warmupRuns, benchmarkRuns, M, N, K, capabilities, progressLabel);
                 results.Add(result);
                 LogTrialCsv(trial + 1, "bayes", strategy, M, N, K, result, capabilities);
 
@@ -1033,7 +1057,8 @@ public sealed class GemmAutoTuner
     }
 
     private TuningResult BenchmarkConfig(GemmConfig config, Func<GemmConfig, double> benchmarkFunc,
-        int warmupRuns, int benchmarkRuns, int M, int N, int K, GpuCapabilities capabilities)
+        int warmupRuns, int benchmarkRuns, int M, int N, int K, GpuCapabilities capabilities,
+        string? progressLabel = null)
     {
         // First validate the configuration
         var validationError = DynamicGemmKernel.ValidateConfig(config);
@@ -1054,8 +1079,13 @@ public sealed class GemmAutoTuner
         TrialHeartbeat? heartbeat = null;
         try
         {
-            if (EnableDiagnostics && TrialHeartbeatSeconds > 0)
-                heartbeat = new TrialHeartbeat($"{config.KernelName ?? "kernel"} {M}x{N}x{K}", TrialHeartbeatSeconds);
+            if (TrialHeartbeatSeconds > 0 && (EnableDiagnostics || EnableProgress))
+            {
+                string label = string.IsNullOrWhiteSpace(progressLabel)
+                    ? $"{config.KernelName ?? "kernel"} {M}x{N}x{K}"
+                    : progressLabel;
+                heartbeat = new TrialHeartbeat(label, TrialHeartbeatSeconds);
+            }
 
             // Warmup
             for (int i = 0; i < warmupRuns; i++)

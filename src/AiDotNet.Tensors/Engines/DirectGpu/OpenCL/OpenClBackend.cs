@@ -365,7 +365,9 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             if (!string.IsNullOrWhiteSpace(progressEnv))
                 GemmAutoTuner.ProgressInterval = GetEnvInt(OfflineTuningProgressEnvVar, GemmAutoTuner.ProgressInterval);
 
-            GemmAutoTuner.TrialHeartbeatSeconds = GetEnvInt(OfflineTuningHeartbeatEnvVar, enableDiag ? 10 : 0);
+            GemmAutoTuner.TrialHeartbeatSeconds = GetEnvInt(
+                OfflineTuningHeartbeatEnvVar,
+                GemmAutoTuner.EnableProgress ? 10 : 0);
 
             if (_logger != null)
             {
@@ -1731,6 +1733,20 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         /// </summary>
         public void PrintGemmDiagnostics(GemmDiagnostics diagnostics)
         {
+            void WriteColored(string message, ConsoleColor color)
+            {
+                if (Console.IsOutputRedirected)
+                {
+                    Console.WriteLine(message);
+                    return;
+                }
+
+                var previous = Console.ForegroundColor;
+                Console.ForegroundColor = color;
+                Console.WriteLine(message);
+                Console.ForegroundColor = previous;
+            }
+
             Console.WriteLine();
             Console.WriteLine("=== OpenCL GEMM Diagnostics ===");
             Console.WriteLine($"Matrix dimensions: M={diagnostics.M}, N={diagnostics.N}, K={diagnostics.K}");
@@ -1768,26 +1784,26 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             Console.WriteLine("--- Bottleneck Analysis ---");
             if (diagnostics.SubmitToStartNs > diagnostics.KernelExecutionNs * 0.5 && diagnostics.KernelExecutionNs > 0)
             {
-                Console.WriteLine("WARNING: High launch overhead detected (>50% of kernel time)");
+                WriteColored("WARNING: High launch overhead detected (>50% of kernel time)", ConsoleColor.Yellow);
                 Console.WriteLine("  -> Consider batching multiple small operations");
             }
             if (diagnostics.IsLikelyMemoryBound)
             {
-                Console.WriteLine("LIKELY MEMORY BOUND: Achieved GFLOPS limited by memory bandwidth");
+                WriteColored("LIKELY MEMORY BOUND: Achieved GFLOPS limited by memory bandwidth", ConsoleColor.Yellow);
                 Console.WriteLine("  -> Consider using data tiling, caching, or reducing data movement");
             }
             else if (diagnostics.ComputeEfficiency < 50)
             {
-                Console.WriteLine("LIKELY COMPUTE BOUND with low efficiency:");
+                WriteColored("LIKELY COMPUTE BOUND with low efficiency:", ConsoleColor.Red);
                 Console.WriteLine("  -> Check for bank conflicts, divergent warps, or suboptimal work group size");
             }
             else if (diagnostics.ComputeEfficiency < 80)
             {
-                Console.WriteLine("MODERATE EFFICIENCY: Some room for optimization");
+                WriteColored("MODERATE EFFICIENCY: Some room for optimization", ConsoleColor.Yellow);
             }
             else
             {
-                Console.WriteLine("GOOD EFFICIENCY: Kernel is well-optimized");
+                WriteColored("GOOD EFFICIENCY: Kernel is well-optimized", ConsoleColor.Green);
             }
             Console.WriteLine();
         }
@@ -1813,9 +1829,12 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             Console.WriteLine($"Profiling enabled: {IsProfilingEnabled}");
             Console.WriteLine();
 
+            int sizeIndex = 0;
             foreach (int size in sizes)
             {
+                sizeIndex++;
                 int M = size, N = size, K = size;
+                Console.WriteLine($"[Progress] {sizeIndex}/{sizes.Length} size {size}x{size}x{size}");
                 Console.WriteLine($"--- Matrix size: {size}x{size}x{size} ---");
 
                 // Allocate buffers

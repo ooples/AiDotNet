@@ -5,6 +5,7 @@
 - Remove ILGPU and replace all GPU execution with direct GPU backends.
 - Keep CLBlast as a fallback option when direct kernels are unavailable or fail.
 - Preserve tuning + diagnostics so we can beat CLBlast on end-to-end performance.
+- Establish a CLBlast-identical OpenCL engine (kernels + selection + packing) as the primary baseline, then improve it surgically with benchmarks after each change.
 
 ## Progress
 - CUDA backend scaffolded with cuBLAS GEMM + NVRTC kernels.
@@ -32,6 +33,9 @@
 - Removal: delete ILGPU packages/types after parity + tests are in place.
 - Type conversion: convert to float at GPU boundary, convert back via INumericOperations.
 - NVRTC: add fallback probing for multiple DLL versions.
+- CLBlast baseline: implement CLBlast kernels, packing, selection heuristics, and search space in C# exactly (OpenCL path), and use this as the primary GPU engine.
+- Optimization method: apply one change at a time on top of CLBlast baseline, run fixed benchmarks, and keep only improvements (no regressions).
+- Search space policy: start with CLBlast exact search space and expand gradually only after stable wins.
 
 ## Decisions (TBD)
 - cuDNN version support list (8/9 and platform-specific names).
@@ -60,7 +64,7 @@ DirectGpu TUNED (OpenClBackend) vs CLBlast:
 ## Architecture Outline
 - Engine selection:
   - NVIDIA GPU -> DirectCudaBackend (custom kernels) -> cuDNN/cuBLAS fallback -> CPU
-  - Non-NVIDIA GPU -> DirectOpenClBackend (primary) -> CLBlast fallback -> CPU
+  - Non-NVIDIA GPU -> CLBlast-equivalent DirectOpenClBackend (primary) -> CLBlast library fallback -> CPU
 - Shared abstractions:
   - IGpuBackend, IGpuAllocator, IGpuKernel, IGpuStream, IGpuTuner
   - Unified diagnostics + CSV logging across backends
@@ -69,6 +73,7 @@ DirectGpu TUNED (OpenClBackend) vs CLBlast:
 1. Inventory + design
    - Map ILGPU usage and entry points to replace.
    - Define backend selection logic and configuration knobs.
+   - Identify CLBlast kernel files, packing routines, and selection/tuning logic to port 1:1.
 2. NVIDIA backend
    - Device discovery, context, stream, memory, kernel launch.
    - GEMM baseline + tuned kernels; packing and layout parity with OpenCL.
@@ -86,6 +91,10 @@ DirectGpu TUNED (OpenClBackend) vs CLBlast:
 5. Docs + benchmarks
    - Update GPU docs and benchmarks to include CUDA path.
    - Capture tuning runs and performance deltas.
+6. CLBlast baseline adoption (OpenCL primary)
+   - Port CLBlast kernels + packing + selectors into C# and validate bitwise/close parity.
+   - Keep the current DirectOpenClBackend path archived as an alternate for comparison only.
+   - Switch primary OpenCL engine to the CLBlast-equivalent path once parity holds.
 
 ## 100% Confidence Checklist
 - Build a kernel parity matrix mapping ILGPU ops to DirectOpenCL/DirectCUDA/cuDNN/CLBlast/CPU and track per-op test coverage.
@@ -95,6 +104,9 @@ DirectGpu TUNED (OpenClBackend) vs CLBlast:
 - Validate performance vs CLBlast/cuBLAS across target sizes; run offline tuning on RX 5500 XT and store best configs + CSV diagnostics.
 - Remove ILGPU packages/types only after parity + tests + perf baselines pass; update Engine.Default to DirectGpu-first.
 - Document CI/manual GPU validation steps (AMD + NVIDIA) and required env vars for tuning/diagnostics.
+- Adopt CLBlast-equivalent OpenCL baseline as primary engine and freeze it as the performance baseline.
+- Add A/B benchmark harness: CLBlast-equivalent baseline vs baseline+1 change, with regression gates per size and end-to-end shapes.
+- Expand search space only after 2-3 consecutive non-regressing wins on the baseline benchmark suite.
 
 ## Open Questions
 - Scope of kernels beyond GEMM (convs, activations, etc.)?
