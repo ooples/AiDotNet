@@ -114,6 +114,14 @@ public class SlowFast<T> : NeuralNetworkBase<T>
     {
         if (numClasses < 1)
             throw new ArgumentOutOfRangeException(nameof(numClasses), "Number of classes must be at least 1.");
+        if (slowFrames < 1)
+            throw new ArgumentOutOfRangeException(nameof(slowFrames), "Slow frames must be at least 1.");
+        if (slowChannels < 1)
+            throw new ArgumentOutOfRangeException(nameof(slowChannels), "Slow channels must be at least 1.");
+        if (fastChannels < 1)
+            throw new ArgumentOutOfRangeException(nameof(fastChannels), "Fast channels must be at least 1.");
+        if (alpha < 1)
+            throw new ArgumentOutOfRangeException(nameof(alpha), "Alpha must be at least 1.");
 
         _useNativeMode = true;
         _numClasses = numClasses;
@@ -269,25 +277,26 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         int h = input.Shape[2];
         int w = input.Shape[3];
 
-        // Calculate subsampled channels (every subsampleRate-th set of RGB channels)
-        int framesInInput = totalChannels / 3;
+        // Calculate subsampled channels using actual input depth from architecture (supports RGB, grayscale, RGBA, etc.)
+        int channelsPerFrame = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+        int framesInInput = totalChannels / channelsPerFrame;
         int subsampledFrames = (framesInInput + subsampleRate - 1) / subsampleRate;
-        int subsampledChannels = subsampledFrames * 3;
+        int subsampledChannels = subsampledFrames * channelsPerFrame;
 
         if (subsampledFrames == framesInInput || subsampleRate == 1)
             return input;
 
         var result = new Tensor<T>([batch, subsampledChannels, h, w]);
-        int srcFrameSize = 3 * h * w;
-        int dstFrameSize = 3 * h * w;
+        int srcFrameSize = channelsPerFrame * h * w;
+        int dstFrameSize = channelsPerFrame * h * w;
 
         for (int b = 0; b < batch; b++)
         {
             int dstFrame = 0;
             for (int srcFrame = 0; srcFrame < framesInInput && dstFrame < subsampledFrames; srcFrame += subsampleRate)
             {
-                int srcOffset = b * totalChannels * h * w + srcFrame * 3 * h * w;
-                int dstOffset = b * subsampledChannels * h * w + dstFrame * 3 * h * w;
+                int srcOffset = b * totalChannels * h * w + srcFrame * channelsPerFrame * h * w;
+                int dstOffset = b * subsampledChannels * h * w + dstFrame * channelsPerFrame * h * w;
                 Array.Copy(input.Data, srcOffset, result.Data, dstOffset, Math.Min(srcFrameSize, dstFrameSize));
                 dstFrame++;
             }
@@ -309,6 +318,11 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         int bChannels = b.Shape[1];
         int h = a.Shape[2];
         int w = a.Shape[3];
+
+        if (batch != b.Shape[0] || h != b.Shape[2] || w != b.Shape[3])
+            throw new ArgumentException(
+                $"Tensor dimensions must match. Expected batch={batch}, height={h}, width={w}, " +
+                $"but got batch={b.Shape[0]}, height={b.Shape[2]}, width={b.Shape[3]}.");
 
         var result = new Tensor<T>([batch, aChannels + bChannels, h, w]);
         int aSliceSize = aChannels * h * w;
