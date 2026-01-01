@@ -1066,7 +1066,10 @@ public class SAM2<T> : NeuralNetworkBase<T>
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultSAM2Layers(
+            // SAM2 uses a multi-branch architecture. The Layers list contains the image encoder.
+            // Prompt encoders, memory layers, and mask decoder are created separately in their
+            // respective processing methods (ProcessPrompt, ProcessMemory, DecodeMask).
+            Layers.AddRange(LayerHelper<T>.CreateSAM2ImageEncoderLayers(
                 _channels,
                 _height,
                 _width,

@@ -298,8 +298,10 @@ public class SlowFast<T> : NeuralNetworkBase<T>
             int inputHeight = Architecture.InputHeight > 0 ? Architecture.InputHeight : 224;
             int inputWidth = Architecture.InputWidth > 0 ? Architecture.InputWidth : 224;
 
-            Layers.AddRange(LayerHelper<T>.CreateDefaultSlowFastLayers(
-                inputChannels, inputHeight, inputWidth, _numClasses, _slowChannels, _fastChannels, _alpha));
+            // SlowFast uses a dual-pathway architecture. The Layers list contains the slow pathway.
+            // Fast pathway is created and executed separately in the Forward method, then fused.
+            Layers.AddRange(LayerHelper<T>.CreateSlowFastSlowPathwayLayers(
+                inputChannels, inputHeight, inputWidth, _slowChannels));
         }
     }
 

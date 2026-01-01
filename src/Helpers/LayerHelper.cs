@@ -6798,7 +6798,7 @@ public static class LayerHelper<T>
             yield return new ConvolutionalLayer<T>(currentDim * 4, h, w, currentDim, 1, 1, 0);
         }
 
-        // Decoder (upsampling path)
+        // Decoder (upsampling path) - symmetric with encoder
         for (int i = channelMults.Length - 1; i >= 0; i--)
         {
             int outDim = i > 0 ? embedDim * channelMults[i - 1] : embedDim;
@@ -6809,8 +6809,9 @@ public static class LayerHelper<T>
 
             currentDim = outDim;
 
-            // Upsample (except first level)
-            if (i > 0)
+            // Upsample only at levels that downsampled in encoder (mult != last element)
+            // This ensures symmetric encoder/decoder geometry for proper U-Net denoising
+            if (i > 0 && channelMults[i - 1] != channelMults[^1])
             {
                 yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim * 4, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
                 yield return new PixelShuffleLayer<T>([currentDim * 4, h, w], 2);
@@ -7074,32 +7075,27 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates default layers for SAM2 (Segment Anything Model 2) video object segmentation.
+    /// Creates the image encoder layers for SAM2 (Segment Anything Model 2).
     /// </summary>
     /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
     /// <param name="inputHeight">Input height (default: 1024).</param>
     /// <param name="inputWidth">Input width (default: 1024).</param>
-    /// <param name="numFeatures">Number of feature channels (default: 256).</param>
-    /// <returns>An enumerable of layers configured for SAM2.</returns>
+    /// <param name="numFeatures">Number of output feature channels (default: 256).</param>
+    /// <returns>Image encoder layers that downsample input to feature maps.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> SAM2 is a powerful model that can segment any object in video.
-    /// You can interact with it by clicking on objects or drawing boxes, and it will
-    /// track and segment those objects across all video frames.
+    /// <b>For Beginners:</b> This creates the image encoder part of SAM2, which processes
+    /// input images into feature maps. The output has shape [numFeatures, H/16, W/16].
     /// </para>
     /// <para>
-    /// <b>Architecture:</b>
-    /// - Hierarchical image encoder (ViT-like)
-    /// - Prompt encoders (points, boxes, masks)
-    /// - Memory attention for temporal consistency
-    /// - Mask decoder with multiple mask candidates
-    /// </para>
-    /// <para>
-    /// <b>Reference:</b> "SAM 2: Segment Anything in Images and Videos"
-    /// https://arxiv.org/abs/2408.00714
+    /// <b>Note:</b> SAM2 is a multi-branch architecture. Use separate factory methods:
+    /// - CreateSAM2ImageEncoderLayers: Image feature extraction (this method)
+    /// - CreateSAM2PromptEncoderLayers: Point/box/mask prompt encoding
+    /// - CreateSAM2MemoryLayers: Temporal memory attention
+    /// - CreateSAM2MaskDecoderLayers: Mask prediction head
     /// </para>
     /// </remarks>
-    public static IEnumerable<ILayer<T>> CreateDefaultSAM2Layers(
+    public static IEnumerable<ILayer<T>> CreateSAM2ImageEncoderLayers(
         int inputChannels = 3,
         int inputHeight = 1024,
         int inputWidth = 1024,
@@ -7134,13 +7130,68 @@ public static class LayerHelper<T>
         // Neck (feature pyramid fusion)
         yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+    }
 
-        // Prompt encoders (point, box, mask)
-        yield return new ConvolutionalLayer<T>(2, 1, 1, numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(4, 1, 1, numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(1, h * 4, w * 4, numFeatures / 4, 4, 4, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+    /// <summary>
+    /// Creates the prompt encoder layers for SAM2 (point, box, and mask prompts).
+    /// </summary>
+    /// <param name="numFeatures">Number of output feature channels (default: 256).</param>
+    /// <param name="maskHeight">Height of mask prompt input (default: 256).</param>
+    /// <param name="maskWidth">Width of mask prompt input (default: 256).</param>
+    /// <returns>Prompt encoder layers for different prompt types.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SAM2 accepts different types of prompts to tell it what to segment:
+    /// - Points: Click on the object (x, y coordinates)
+    /// - Boxes: Draw a bounding box (x1, y1, x2, y2)
+    /// - Masks: Provide an initial mask estimate
+    /// </para>
+    /// <para>
+    /// <b>Usage:</b> These layers are applied to prompt inputs separately, then combined
+    /// with image features in the mask decoder. They are NOT chained sequentially with
+    /// the image encoder.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSAM2PromptEncoderLayers(
+        int numFeatures = 256,
+        int maskHeight = 256,
+        int maskWidth = 256)
+    {
+        // Point prompt encoder: input [2] (x, y) -> [numFeatures]
+        yield return new DenseLayer<T>(2, numFeatures, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>(numFeatures, numFeatures, new ReLUActivation<T>() as IActivationFunction<T>);
 
-        // Memory attention layers
+        // Box prompt encoder: input [4] (x1, y1, x2, y2) -> [numFeatures]
+        yield return new DenseLayer<T>(4, numFeatures, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>(numFeatures, numFeatures, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Mask prompt encoder: input [1, maskHeight, maskWidth] -> [numFeatures/4, maskHeight/4, maskWidth/4]
+        yield return new ConvolutionalLayer<T>(1, maskHeight, maskWidth, numFeatures / 4, 4, 4, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures / 4, maskHeight / 4, maskWidth / 4, numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates the memory attention layers for SAM2 temporal consistency.
+    /// </summary>
+    /// <param name="numFeatures">Number of feature channels (default: 256).</param>
+    /// <param name="featureHeight">Height of feature maps (default: 64).</param>
+    /// <param name="featureWidth">Width of feature maps (default: 64).</param>
+    /// <returns>Memory attention layers for video object tracking.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Memory layers help SAM2 track objects across video frames
+    /// by maintaining a memory of past segmentations and matching them to new frames.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSAM2MemoryLayers(
+        int numFeatures = 256,
+        int featureHeight = 64,
+        int featureWidth = 64)
+    {
+        int h = featureHeight;
+        int w = featureWidth;
+
+        // Memory attention: fuses current features with memory
         yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
@@ -7148,15 +7199,72 @@ public static class LayerHelper<T>
 
         // Memory projection
         yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+    }
 
-        // Mask decoder
+    /// <summary>
+    /// Creates the mask decoder layers for SAM2.
+    /// </summary>
+    /// <param name="numFeatures">Number of feature channels (default: 256).</param>
+    /// <param name="featureHeight">Height of feature maps (default: 64).</param>
+    /// <param name="featureWidth">Width of feature maps (default: 64).</param>
+    /// <param name="numMaskCandidates">Number of mask candidates to output (default: 4).</param>
+    /// <returns>Mask decoder layers that produce segmentation outputs.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The mask decoder takes image features and prompt embeddings
+    /// to produce the final segmentation masks. It outputs multiple candidate masks
+    /// along with confidence scores.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSAM2MaskDecoderLayers(
+        int numFeatures = 256,
+        int featureHeight = 64,
+        int featureWidth = 64,
+        int numMaskCandidates = 4)
+    {
+        int h = featureHeight;
+        int w = featureWidth;
+
+        // Mask decoder refinement
         yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
-        // Output heads: mask candidates, IoU scores, occlusion
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, 4, 1, 1, 0, new SigmoidActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 4, 1, 1, 0, new SigmoidActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 1, 1, 1, 0, new SigmoidActivation<T>() as IActivationFunction<T>);
+        // Output: mask candidates at feature resolution
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numMaskCandidates, 1, 1, 0, new SigmoidActivation<T>() as IActivationFunction<T>);
+
+        // IoU prediction head (uses global pooled features)
+        yield return new GlobalPoolingLayer<T>([numFeatures, h, w], PoolingType.Average);
+        yield return new DenseLayer<T>(numFeatures, numMaskCandidates, new SigmoidActivation<T>() as IActivationFunction<T>);
+
+        // Occlusion prediction head
+        yield return new DenseLayer<T>(numFeatures, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates all SAM2 layers for backward compatibility.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Warning:</b> This method returns layers from multiple branches that cannot be
+    /// chained sequentially. Use the individual factory methods (CreateSAM2ImageEncoderLayers,
+    /// CreateSAM2PromptEncoderLayers, CreateSAM2MemoryLayers, CreateSAM2MaskDecoderLayers)
+    /// for proper multi-branch handling.
+    /// </para>
+    /// </remarks>
+    [Obsolete("Use individual SAM2 factory methods (CreateSAM2ImageEncoderLayers, etc.) for proper multi-branch architecture.")]
+    public static IEnumerable<ILayer<T>> CreateDefaultSAM2Layers(
+        int inputChannels = 3,
+        int inputHeight = 1024,
+        int inputWidth = 1024,
+        int numFeatures = 256)
+    {
+        int featureHeight = inputHeight / 16;
+        int featureWidth = inputWidth / 16;
+
+        // Return only the image encoder as a chainable sequence
+        // Other branches must be created separately and wired in the SAM2 model
+        foreach (var layer in CreateSAM2ImageEncoderLayers(inputChannels, inputHeight, inputWidth, numFeatures))
+            yield return layer;
     }
 
     /// <summary>
@@ -7340,16 +7448,31 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates default layers for SlowFast video recognition.
+    /// Creates the slow pathway layers for SlowFast video recognition.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultSlowFastLayers(
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input height (default: 224).</param>
+    /// <param name="inputWidth">Input width (default: 224).</param>
+    /// <param name="slowChannels">Base channel count for slow pathway (default: 64).</param>
+    /// <returns>Slow pathway layers that process fewer frames at higher capacity.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The slow pathway processes video at a low frame rate (e.g., 4 fps)
+    /// but with high channel capacity. It captures spatial semantics and appearance features.
+    /// Output shape: [slowChannels * 8, H/16, W/16]
+    /// </para>
+    /// <para>
+    /// <b>Note:</b> SlowFast is a dual-pathway architecture. Use separate factory methods:
+    /// - CreateSlowFastSlowPathwayLayers: Low frame rate, high capacity (this method)
+    /// - CreateSlowFastFastPathwayLayers: High frame rate, low capacity
+    /// - CreateSlowFastFusionLayers: Combines pathways for classification
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSlowFastSlowPathwayLayers(
         int inputChannels = 3,
         int inputHeight = 224,
         int inputWidth = 224,
-        int numClasses = 400,
-        int slowChannels = 64,
-        int fastChannels = 8,
-        int alpha = 8)
+        int slowChannels = 64)
     {
         int h = inputHeight;
         int w = inputWidth;
@@ -7362,23 +7485,108 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(slowChannels * 2, h, w, slowChannels * 4, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
         yield return new ConvolutionalLayer<T>(slowChannels * 4, h, w, slowChannels * 8, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates the fast pathway layers for SlowFast video recognition.
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input height (default: 224).</param>
+    /// <param name="inputWidth">Input width (default: 224).</param>
+    /// <param name="fastChannels">Base channel count for fast pathway (default: 8).</param>
+    /// <returns>Fast pathway layers that process more frames at lower capacity.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The fast pathway processes video at a high frame rate (e.g., 32 fps)
+    /// but with lower channel capacity (1/8 of slow pathway). It captures motion and temporal dynamics.
+    /// Output shape: [fastChannels * 8, H/16, W/16]
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSlowFastFastPathwayLayers(
+        int inputChannels = 3,
+        int inputHeight = 224,
+        int inputWidth = 224,
+        int fastChannels = 8)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
 
         // Fast pathway - processes more frames at lower channel capacity
-        int fh = inputHeight;
-        int fw = inputWidth;
-        yield return new ConvolutionalLayer<T>(inputChannels, fh, fw, fastChannels, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
-        fh /= 2; fw /= 2;
-        yield return new ConvolutionalLayer<T>(fastChannels, fh, fw, fastChannels * 2, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        fh /= 2; fw /= 2;
-        yield return new ConvolutionalLayer<T>(fastChannels * 2, fh, fw, fastChannels * 4, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        fh /= 2; fw /= 2;
-        yield return new ConvolutionalLayer<T>(fastChannels * 4, fh, fw, fastChannels * 8, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(inputChannels, h, w, fastChannels, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(fastChannels, h, w, fastChannels * 2, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(fastChannels * 2, h, w, fastChannels * 4, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(fastChannels * 4, h, w, fastChannels * 8, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+    }
 
-        // Lateral connections and fusion
+    /// <summary>
+    /// Creates the fusion and classification layers for SlowFast.
+    /// </summary>
+    /// <param name="slowChannels">Base channel count for slow pathway (default: 64).</param>
+    /// <param name="fastChannels">Base channel count for fast pathway (default: 8).</param>
+    /// <param name="featureHeight">Height of feature maps after pathways (default: 14).</param>
+    /// <param name="featureWidth">Width of feature maps after pathways (default: 14).</param>
+    /// <param name="numClasses">Number of action classes (default: 400 for Kinetics).</param>
+    /// <returns>Fusion layers that combine pathways and classify actions.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This fuses the slow and fast pathway features (after concatenation)
+    /// and produces the final action classification. The SlowFast model should:
+    /// 1. Run slow pathway on subsampled frames
+    /// 2. Run fast pathway on all frames
+    /// 3. Concatenate outputs along channel dimension
+    /// 4. Apply these fusion layers
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSlowFastFusionLayers(
+        int slowChannels = 64,
+        int fastChannels = 8,
+        int featureHeight = 14,
+        int featureWidth = 14,
+        int numClasses = 400)
+    {
         int fusedChannels = slowChannels * 8 + fastChannels * 8;
+        int h = featureHeight;
+        int w = featureWidth;
 
-        // Global average pooling + classification
+        // 1x1 conv to fuse concatenated features
+        yield return new ConvolutionalLayer<T>(fusedChannels, h, w, fusedChannels, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Global average pooling
+        yield return new GlobalPoolingLayer<T>([fusedChannels, h, w], PoolingType.Average);
+
+        // Classification head
         yield return new DenseLayer<T>(fusedChannels, numClasses, new SoftmaxActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates all SlowFast layers for backward compatibility (returns only slow pathway).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Warning:</b> SlowFast is a dual-pathway architecture that cannot be represented
+    /// as a single sequential layer list. Use the individual factory methods:
+    /// - CreateSlowFastSlowPathwayLayers
+    /// - CreateSlowFastFastPathwayLayers
+    /// - CreateSlowFastFusionLayers
+    /// </para>
+    /// </remarks>
+    [Obsolete("Use individual SlowFast factory methods for proper dual-pathway architecture.")]
+    public static IEnumerable<ILayer<T>> CreateDefaultSlowFastLayers(
+        int inputChannels = 3,
+        int inputHeight = 224,
+        int inputWidth = 224,
+        int numClasses = 400,
+        int slowChannels = 64,
+        int fastChannels = 8,
+        int alpha = 8)
+    {
+        // Return only the slow pathway as a chainable sequence
+        // Fast pathway and fusion must be handled separately in the SlowFast model
+        foreach (var layer in CreateSlowFastSlowPathwayLayers(inputChannels, inputHeight, inputWidth, slowChannels))
+            yield return layer;
     }
 
     /// <summary>
