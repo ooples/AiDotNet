@@ -301,9 +301,13 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
         _textProjection = new DenseLayer<T>(_hiddenDim, _embeddingDimension, (IActivationFunction<T>?)null);
 
         // Audio encoder (processes mel spectrogram)
+        int audioPatchSize = 16;
         int audioSeqLen = (_audioSampleRate * _audioMaxDuration) / 160; // hop length 160
-        _audioConv = new PatchEmbeddingLayer<T>(128, audioSeqLen, 1, 16, _hiddenDim); // mel bins as "height"
-        _audioPositionalEmbeddings = Matrix<T>.CreateDefault(audioSeqLen / 16 + 1, _hiddenDim, NumOps.Zero);
+        // Ensure audioSeqLen is divisible by patch size
+        audioSeqLen = (audioSeqLen / audioPatchSize) * audioPatchSize;
+        if (audioSeqLen < audioPatchSize) audioSeqLen = audioPatchSize; // minimum one patch
+        _audioConv = new PatchEmbeddingLayer<T>(128, audioSeqLen, 1, audioPatchSize, _hiddenDim); // mel bins as "height"
+        _audioPositionalEmbeddings = Matrix<T>.CreateDefault(audioSeqLen / audioPatchSize + 1, _hiddenDim, NumOps.Zero);
 
         for (int i = 0; i < _numEncoderLayers; i++)
         {
@@ -1360,6 +1364,147 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
     #region NeuralNetworkBase Implementation
 
     /// <inheritdoc/>
+    public override int ParameterCount
+    {
+        get
+        {
+            if (!_useNativeMode)
+            {
+                return 0;
+            }
+
+            int count = 0;
+
+            // Image encoder layers
+            foreach (var layer in _imageEncoderLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            // Text encoder layers
+            foreach (var layer in _textEncoderLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            // Audio encoder layers
+            foreach (var layer in _audioEncoderLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            // Thermal encoder layers
+            foreach (var layer in _thermalEncoderLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            // Depth encoder layers
+            foreach (var layer in _depthEncoderLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            // IMU encoder layers
+            foreach (var layer in _imuEncoderLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            // Video temporal layers
+            foreach (var layer in _videoTemporalLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            // Single layers
+            if (_imagePatchEmbedding is not null) count += _imagePatchEmbedding.ParameterCount;
+            if (_imageProjection is not null) count += _imageProjection.ParameterCount;
+            if (_textTokenEmbedding is not null) count += _textTokenEmbedding.ParameterCount;
+            if (_textProjection is not null) count += _textProjection.ParameterCount;
+            if (_audioConv is not null) count += _audioConv.ParameterCount;
+            if (_audioProjection is not null) count += _audioProjection.ParameterCount;
+            if (_thermalPatchEmbedding is not null) count += _thermalPatchEmbedding.ParameterCount;
+            if (_thermalProjection is not null) count += _thermalProjection.ParameterCount;
+            if (_depthPatchEmbedding is not null) count += _depthPatchEmbedding.ParameterCount;
+            if (_depthProjection is not null) count += _depthProjection.ParameterCount;
+            if (_imuEmbedding is not null) count += _imuEmbedding.ParameterCount;
+            if (_imuProjection is not null) count += _imuProjection.ParameterCount;
+            if (_videoProjection is not null) count += _videoProjection.ParameterCount;
+
+            // Positional embeddings and CLS tokens
+            if (_imageClsToken is not null) count += _imageClsToken.Rows * _imageClsToken.Columns;
+            if (_imagePositionalEmbeddings is not null) count += _imagePositionalEmbeddings.Rows * _imagePositionalEmbeddings.Columns;
+            if (_textPositionalEmbeddings is not null) count += _textPositionalEmbeddings.Rows * _textPositionalEmbeddings.Columns;
+            if (_audioPositionalEmbeddings is not null) count += _audioPositionalEmbeddings.Rows * _audioPositionalEmbeddings.Columns;
+            if (_thermalClsToken is not null) count += _thermalClsToken.Rows * _thermalClsToken.Columns;
+            if (_thermalPositionalEmbeddings is not null) count += _thermalPositionalEmbeddings.Rows * _thermalPositionalEmbeddings.Columns;
+            if (_depthClsToken is not null) count += _depthClsToken.Rows * _depthClsToken.Columns;
+            if (_depthPositionalEmbeddings is not null) count += _depthPositionalEmbeddings.Rows * _depthPositionalEmbeddings.Columns;
+            if (_imuPositionalEmbeddings is not null) count += _imuPositionalEmbeddings.Rows * _imuPositionalEmbeddings.Columns;
+            if (_videoTemporalPositionalEmbeddings is not null) count += _videoTemporalPositionalEmbeddings.Rows * _videoTemporalPositionalEmbeddings.Columns;
+
+            return count;
+        }
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var parameters = new Vector<T>(ParameterCount);
+        if (!_useNativeMode)
+        {
+            return parameters;
+        }
+
+        int offset = 0;
+        offset = AppendLayerListParameters(_imageEncoderLayers, parameters, offset);
+        offset = AppendLayerListParameters(_textEncoderLayers, parameters, offset);
+        offset = AppendLayerListParameters(_audioEncoderLayers, parameters, offset);
+        offset = AppendLayerListParameters(_thermalEncoderLayers, parameters, offset);
+        offset = AppendLayerListParameters(_depthEncoderLayers, parameters, offset);
+        offset = AppendLayerListParameters(_imuEncoderLayers, parameters, offset);
+        offset = AppendLayerListParameters(_videoTemporalLayers, parameters, offset);
+
+        offset = AppendSingleLayerParameters(_imagePatchEmbedding, parameters, offset);
+        offset = AppendSingleLayerParameters(_imageProjection, parameters, offset);
+        offset = AppendSingleLayerParameters(_textTokenEmbedding, parameters, offset);
+        offset = AppendSingleLayerParameters(_textProjection, parameters, offset);
+        offset = AppendSingleLayerParameters(_audioConv, parameters, offset);
+        offset = AppendSingleLayerParameters(_audioProjection, parameters, offset);
+        offset = AppendSingleLayerParameters(_thermalPatchEmbedding, parameters, offset);
+        offset = AppendSingleLayerParameters(_thermalProjection, parameters, offset);
+        offset = AppendSingleLayerParameters(_depthPatchEmbedding, parameters, offset);
+        offset = AppendSingleLayerParameters(_depthProjection, parameters, offset);
+        offset = AppendSingleLayerParameters(_imuEmbedding, parameters, offset);
+        offset = AppendSingleLayerParameters(_imuProjection, parameters, offset);
+        offset = AppendSingleLayerParameters(_videoProjection, parameters, offset);
+
+        offset = AppendMatrixParameters(_imageClsToken, parameters, offset);
+        offset = AppendMatrixParameters(_imagePositionalEmbeddings, parameters, offset);
+        offset = AppendMatrixParameters(_textPositionalEmbeddings, parameters, offset);
+        offset = AppendMatrixParameters(_audioPositionalEmbeddings, parameters, offset);
+        offset = AppendMatrixParameters(_thermalClsToken, parameters, offset);
+        offset = AppendMatrixParameters(_thermalPositionalEmbeddings, parameters, offset);
+        offset = AppendMatrixParameters(_depthClsToken, parameters, offset);
+        offset = AppendMatrixParameters(_depthPositionalEmbeddings, parameters, offset);
+        offset = AppendMatrixParameters(_imuPositionalEmbeddings, parameters, offset);
+        offset = AppendMatrixParameters(_videoTemporalPositionalEmbeddings, parameters, offset);
+
+        return parameters;
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters == null)
+        {
+            throw new ArgumentNullException(nameof(parameters));
+        }
+
+        UpdateParameters(parameters);
+    }
+    /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         SetTrainingMode(false);
@@ -1426,6 +1571,11 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
                 nameof(parameters));
         }
 
+        if (!_useNativeMode)
+        {
+            return;
+        }
+
         int offset = 0;
         offset = UpdateLayerListParameters(_imageEncoderLayers, parameters, offset);
         offset = UpdateLayerListParameters(_textEncoderLayers, parameters, offset);
@@ -1434,6 +1584,31 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
         offset = UpdateLayerListParameters(_depthEncoderLayers, parameters, offset);
         offset = UpdateLayerListParameters(_imuEncoderLayers, parameters, offset);
         offset = UpdateLayerListParameters(_videoTemporalLayers, parameters, offset);
+
+        offset = UpdateSingleLayerParameters(_imagePatchEmbedding, parameters, offset);
+        offset = UpdateSingleLayerParameters(_imageProjection, parameters, offset);
+        offset = UpdateSingleLayerParameters(_textTokenEmbedding, parameters, offset);
+        offset = UpdateSingleLayerParameters(_textProjection, parameters, offset);
+        offset = UpdateSingleLayerParameters(_audioConv, parameters, offset);
+        offset = UpdateSingleLayerParameters(_audioProjection, parameters, offset);
+        offset = UpdateSingleLayerParameters(_thermalPatchEmbedding, parameters, offset);
+        offset = UpdateSingleLayerParameters(_thermalProjection, parameters, offset);
+        offset = UpdateSingleLayerParameters(_depthPatchEmbedding, parameters, offset);
+        offset = UpdateSingleLayerParameters(_depthProjection, parameters, offset);
+        offset = UpdateSingleLayerParameters(_imuEmbedding, parameters, offset);
+        offset = UpdateSingleLayerParameters(_imuProjection, parameters, offset);
+        offset = UpdateSingleLayerParameters(_videoProjection, parameters, offset);
+
+        offset = UpdateMatrixParameters(_imageClsToken, parameters, offset);
+        offset = UpdateMatrixParameters(_imagePositionalEmbeddings, parameters, offset);
+        offset = UpdateMatrixParameters(_textPositionalEmbeddings, parameters, offset);
+        offset = UpdateMatrixParameters(_audioPositionalEmbeddings, parameters, offset);
+        offset = UpdateMatrixParameters(_thermalClsToken, parameters, offset);
+        offset = UpdateMatrixParameters(_thermalPositionalEmbeddings, parameters, offset);
+        offset = UpdateMatrixParameters(_depthClsToken, parameters, offset);
+        offset = UpdateMatrixParameters(_depthPositionalEmbeddings, parameters, offset);
+        offset = UpdateMatrixParameters(_imuPositionalEmbeddings, parameters, offset);
+        offset = UpdateMatrixParameters(_videoTemporalPositionalEmbeddings, parameters, offset);
     }
 
     private int UpdateLayerListParameters(List<ILayer<T>> layers, Vector<T> parameters, int offset)
@@ -1452,6 +1627,93 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
                 offset += layerParamCount;
             }
         }
+        return offset;
+    }
+
+    private int AppendLayerListParameters(List<ILayer<T>> layers, Vector<T> parameters, int offset)
+    {
+        foreach (var layer in layers)
+        {
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
+            {
+                parameters[offset + i] = layerParams[i];
+            }
+            offset += layerParams.Length;
+        }
+        return offset;
+    }
+
+    private int AppendSingleLayerParameters(ILayer<T>? layer, Vector<T> parameters, int offset)
+    {
+        if (layer is null)
+        {
+            return offset;
+        }
+
+        var layerParams = layer.GetParameters();
+        for (int i = 0; i < layerParams.Length; i++)
+        {
+            parameters[offset + i] = layerParams[i];
+        }
+
+        return offset + layerParams.Length;
+    }
+
+    private int AppendMatrixParameters(Matrix<T>? matrix, Vector<T> parameters, int offset)
+    {
+        if (matrix is null)
+        {
+            return offset;
+        }
+
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                parameters[offset++] = matrix[i, j];
+            }
+        }
+
+        return offset;
+    }
+
+    private int UpdateSingleLayerParameters(ILayer<T>? layer, Vector<T> parameters, int offset)
+    {
+        if (layer is null)
+        {
+            return offset;
+        }
+
+        int layerParamCount = layer.ParameterCount;
+        if (layerParamCount > 0)
+        {
+            var layerParams = new Vector<T>(layerParamCount);
+            for (int i = 0; i < layerParamCount; i++)
+            {
+                layerParams[i] = parameters[offset + i];
+            }
+            layer.UpdateParameters(layerParams);
+        }
+
+        return offset + layerParamCount;
+    }
+
+    private int UpdateMatrixParameters(Matrix<T>? matrix, Vector<T> parameters, int offset)
+    {
+        if (matrix is null)
+        {
+            return offset;
+        }
+
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                matrix[i, j] = parameters[offset++];
+            }
+        }
+
         return offset;
     }
 
@@ -1552,3 +1814,9 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
 
     #endregion
 }
+
+
+
+
+
+

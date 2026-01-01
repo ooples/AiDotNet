@@ -3,6 +3,8 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using Microsoft.ML.OnnxRuntime;
+using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.Video.Segmentation;
 
@@ -52,6 +54,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
     private readonly SAM2ModelSize _modelSize;
     private readonly bool _useNativeMode;
     private readonly string? _onnxModelPath;
+    private InferenceSession? _onnxSession;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     // Memory bank for tracking
@@ -157,6 +160,8 @@ public class SAM2<T> : NeuralNetworkBase<T>
     /// Download pre-trained models from Meta's SAM2 repository.
     /// </para>
     /// </remarks>
+    /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if the ONNX model fails to load.</exception>
     public SAM2(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
@@ -164,6 +169,11 @@ public class SAM2<T> : NeuralNetworkBase<T>
         int memoryBankSize = 7)
         : base(architecture, new BinaryCrossEntropyLoss<T>())
     {
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"SAM2 ONNX model not found: {onnxModelPath}");
+
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
@@ -184,6 +194,16 @@ public class SAM2<T> : NeuralNetworkBase<T>
 
         _memoryBank = [];
         _memoryFrameIndices = [];
+
+        // Initialize ONNX session
+        try
+        {
+            _onnxSession = new InferenceSession(onnxModelPath);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to load SAM2 ONNX model: {ex.Message}", ex);
+        }
 
         InitializeLayers();
     }
@@ -528,11 +548,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
     {
         if (!_useNativeMode)
         {
-            // ONNX mode - would use ONNX runtime
-            // For now, return placeholder features
-            int featH = _height / 16;
-            int featW = _width / 16;
-            return new Tensor<T>([image.Shape[0], _numFeatures, featH, featW]);
+            return EncodeImageOnnx(image);
         }
 
         var features = image;
@@ -545,6 +561,48 @@ public class SAM2<T> : NeuralNetworkBase<T>
         }
 
         return features;
+    }
+
+    /// <summary>
+    /// Encodes an image using the ONNX model.
+    /// </summary>
+    private Tensor<T> EncodeImageOnnx(Tensor<T> image)
+    {
+        if (_onnxSession is null)
+            throw new InvalidOperationException("ONNX session is not initialized.");
+
+        // Convert input tensor to float array for ONNX
+        var inputData = new float[image.Length];
+        for (int i = 0; i < image.Length; i++)
+        {
+            inputData[i] = Convert.ToSingle(image.Data[i]);
+        }
+
+        // Create ONNX input tensor
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, image.Shape);
+        var inputMeta = _onnxSession.InputMetadata;
+
+        // SAM2 encoder typically has 'image' as input name
+        string inputName = inputMeta.Keys.FirstOrDefault() ?? "image";
+
+        var inputs = new List<NamedOnnxValue>
+        {
+            NamedOnnxValue.CreateFromTensor(inputName, onnxInput)
+        };
+
+        // Run inference
+        using var results = _onnxSession.Run(inputs);
+        var outputTensor = results.First().AsTensor<float>();
+
+        // Convert output to our tensor format
+        var outputShape = outputTensor.Dimensions.ToArray();
+        var outputData = new T[outputTensor.Length];
+        for (int i = 0; i < outputTensor.Length; i++)
+        {
+            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        }
+
+        return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
 
     private Tensor<T> EncodePoints(float[,] points, int[] pointLabels)

@@ -52,8 +52,13 @@ public class ProPainter<T> : NeuralNetworkBase<T>
     private readonly List<ConvolutionalLayer<T>> _imageEncoder;
     private readonly List<ConvolutionalLayer<T>> _imageDecoder;
 
-    // Feature propagation with transformers (simplified)
-    private readonly List<ConvolutionalLayer<T>> _transformerBlocks;
+    // Feature propagation with transformers
+    // Uses multi-head self-attention following the Temporal Focal Transformer architecture
+    private readonly List<ConvolutionalLayer<T>> _transformerQKV;  // Q, K, V projections
+    private readonly List<ConvolutionalLayer<T>> _transformerProj; // Output projections
+    private readonly List<ConvolutionalLayer<T>> _transformerFFN;  // Feed-forward networks
+    private readonly int _numHeads;
+    private readonly int _headDim;
 
     // Output generation
     private ConvolutionalLayer<T>? _outputConv;
@@ -100,12 +105,16 @@ public class ProPainter<T> : NeuralNetworkBase<T>
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numFeatures = numFeatures;
+        _numHeads = 8; // Standard number of heads for transformer
+        _headDim = (_numFeatures * 4) / _numHeads; // Each head dimension
 
         _flowEncoder = [];
         _flowDecoder = [];
         _imageEncoder = [];
         _imageDecoder = [];
-        _transformerBlocks = [];
+        _transformerQKV = [];
+        _transformerProj = [];
+        _transformerFFN = [];
 
         InitializeNativeLayers();
     }
@@ -239,13 +248,27 @@ public class ProPainter<T> : NeuralNetworkBase<T>
         _imageEncoder.Add(new ConvolutionalLayer<T>(
             _numFeatures * 2, _height / 4, _width / 4, _numFeatures * 4, 3, 2, 1));
 
-        // Transformer blocks for global attention
+        // Transformer blocks for global attention (Temporal Focal Transformer)
+        // Each block has: QKV projection, attention, output projection, FFN
         int featH = _height / 8;
         int featW = _width / 8;
+        int featChannels = _numFeatures * 4;
+
         for (int i = 0; i < 6; i++)
         {
-            _transformerBlocks.Add(new ConvolutionalLayer<T>(
-                _numFeatures * 4, featH, featW, _numFeatures * 4, 3, 1, 1));
+            // Q, K, V projection (combined into one conv that outputs 3x channels for Q, K, V)
+            _transformerQKV.Add(new ConvolutionalLayer<T>(
+                featChannels, featH, featW, featChannels * 3, 1, 1, 0));
+
+            // Output projection after attention
+            _transformerProj.Add(new ConvolutionalLayer<T>(
+                featChannels, featH, featW, featChannels, 1, 1, 0));
+
+            // Feed-forward network (expand then contract)
+            _transformerFFN.Add(new ConvolutionalLayer<T>(
+                featChannels, featH, featW, featChannels * 4, 1, 1, 0)); // Expand
+            _transformerFFN.Add(new ConvolutionalLayer<T>(
+                featChannels * 4, featH, featW, featChannels, 1, 1, 0)); // Contract
         }
 
         // Image decoder
@@ -264,7 +287,9 @@ public class ProPainter<T> : NeuralNetworkBase<T>
         foreach (var layer in _flowEncoder) Layers.Add(layer);
         foreach (var layer in _flowDecoder) Layers.Add(layer);
         foreach (var layer in _imageEncoder) Layers.Add(layer);
-        foreach (var layer in _transformerBlocks) Layers.Add(layer);
+        foreach (var layer in _transformerQKV) Layers.Add(layer);
+        foreach (var layer in _transformerProj) Layers.Add(layer);
+        foreach (var layer in _transformerFFN) Layers.Add(layer);
         foreach (var layer in _imageDecoder) Layers.Add(layer);
         Layers.Add(_outputConv);
     }
@@ -295,12 +320,31 @@ public class ProPainter<T> : NeuralNetworkBase<T>
             encoderOutputs.Add(imageFeatures);
         }
 
-        // Step 4: Apply transformer blocks for global context
+        // Step 4: Apply transformer blocks for global context (Multi-Head Self-Attention)
         var transformedFeatures = imageFeatures;
-        foreach (var block in _transformerBlocks)
+        for (int i = 0; i < 6; i++)
         {
-            transformedFeatures = block.Forward(transformedFeatures);
-            transformedFeatures = ApplyGELU(transformedFeatures);
+            // Pre-norm (layer normalization approximation via standardization)
+            var normed = LayerNorm(transformedFeatures);
+
+            // Multi-head self-attention
+            var qkv = _transformerQKV[i].Forward(normed);
+            var attended = MultiHeadSelfAttention(qkv, transformedFeatures.Shape);
+            attended = _transformerProj[i].Forward(attended);
+
+            // Residual connection
+            transformedFeatures = AddTensors(transformedFeatures, attended);
+
+            // Pre-norm for FFN
+            normed = LayerNorm(transformedFeatures);
+
+            // Feed-forward network with GELU activation
+            var ffnOut = _transformerFFN[i * 2].Forward(normed);
+            ffnOut = ApplyGELU(ffnOut);
+            ffnOut = _transformerFFN[i * 2 + 1].Forward(ffnOut);
+
+            // Residual connection
+            transformedFeatures = AddTensors(transformedFeatures, ffnOut);
         }
 
         // Step 5: Decode and generate output
@@ -536,6 +580,178 @@ public class ProPainter<T> : NeuralNetworkBase<T>
         });
     }
 
+    /// <summary>
+    /// Element-wise addition of two tensors (residual connection).
+    /// </summary>
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
+    {
+        return a.Transform((v, idx) => NumOps.Add(v, b.Data[idx]));
+    }
+
+    /// <summary>
+    /// Applies layer normalization (standardization) to input tensor.
+    /// </summary>
+    private Tensor<T> LayerNorm(Tensor<T> input)
+    {
+        int batchSize = input.Shape[0];
+        int channels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        var result = new Tensor<T>(input.Shape);
+        const double eps = 1e-5;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Compute mean and variance across C, H, W
+            double sum = 0;
+            double sumSq = 0;
+            int count = channels * height * width;
+
+            for (int c = 0; c < channels; c++)
+            {
+                for (int h = 0; h < height; h++)
+                {
+                    for (int w = 0; w < width; w++)
+                    {
+                        double val = Convert.ToDouble(input[b, c, h, w]);
+                        sum += val;
+                        sumSq += val * val;
+                    }
+                }
+            }
+
+            double mean = sum / count;
+            double variance = (sumSq / count) - (mean * mean);
+            double std = Math.Sqrt(variance + eps);
+
+            // Normalize
+            for (int c = 0; c < channels; c++)
+            {
+                for (int h = 0; h < height; h++)
+                {
+                    for (int w = 0; w < width; w++)
+                    {
+                        double val = Convert.ToDouble(input[b, c, h, w]);
+                        result[b, c, h, w] = NumOps.FromDouble((val - mean) / std);
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Applies multi-head self-attention following the Transformer architecture.
+    /// </summary>
+    /// <param name="qkv">Combined Q, K, V tensor [B, 3*C, H, W].</param>
+    /// <param name="inputShape">Original input shape [B, C, H, W].</param>
+    /// <returns>Attention output [B, C, H, W].</returns>
+    private Tensor<T> MultiHeadSelfAttention(Tensor<T> qkv, int[] inputShape)
+    {
+        int batchSize = inputShape[0];
+        int channels = inputShape[1];
+        int height = inputShape[2];
+        int width = inputShape[3];
+        int seqLen = height * width;
+
+        var output = new Tensor<T>(inputShape);
+        double scale = 1.0 / Math.Sqrt(_headDim);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Split QKV into separate tensors
+            var q = new double[channels, seqLen];
+            var k = new double[channels, seqLen];
+            var v = new double[channels, seqLen];
+
+            for (int c = 0; c < channels; c++)
+            {
+                int pos = 0;
+                for (int h = 0; h < height; h++)
+                {
+                    for (int w = 0; w < width; w++)
+                    {
+                        q[c, pos] = Convert.ToDouble(qkv[b, c, h, w]);
+                        k[c, pos] = Convert.ToDouble(qkv[b, channels + c, h, w]);
+                        v[c, pos] = Convert.ToDouble(qkv[b, channels * 2 + c, h, w]);
+                        pos++;
+                    }
+                }
+            }
+
+            // Multi-head attention
+            var attOutput = new double[channels, seqLen];
+
+            for (int headIdx = 0; headIdx < _numHeads; headIdx++)
+            {
+                int headStart = headIdx * _headDim;
+                int headEnd = Math.Min(headStart + _headDim, channels);
+
+                // Compute attention scores for this head
+                var scores = new double[seqLen, seqLen];
+                for (int i = 0; i < seqLen; i++)
+                {
+                    double maxScore = double.MinValue;
+                    for (int j = 0; j < seqLen; j++)
+                    {
+                        double score = 0;
+                        for (int c = headStart; c < headEnd; c++)
+                        {
+                            score += q[c, i] * k[c, j];
+                        }
+                        score *= scale;
+                        scores[i, j] = score;
+                        if (score > maxScore) maxScore = score;
+                    }
+
+                    // Softmax normalization
+                    double sumExp = 0;
+                    for (int j = 0; j < seqLen; j++)
+                    {
+                        scores[i, j] = Math.Exp(scores[i, j] - maxScore);
+                        sumExp += scores[i, j];
+                    }
+                    for (int j = 0; j < seqLen; j++)
+                    {
+                        scores[i, j] /= Math.Max(sumExp, 1e-12);
+                    }
+                }
+
+                // Apply attention weights to values
+                for (int c = headStart; c < headEnd; c++)
+                {
+                    for (int i = 0; i < seqLen; i++)
+                    {
+                        double weightedSum = 0;
+                        for (int j = 0; j < seqLen; j++)
+                        {
+                            weightedSum += scores[i, j] * v[c, j];
+                        }
+                        attOutput[c, i] = weightedSum;
+                    }
+                }
+            }
+
+            // Copy to output tensor
+            for (int c = 0; c < channels; c++)
+            {
+                int pos = 0;
+                for (int h = 0; h < height; h++)
+                {
+                    for (int w = 0; w < width; w++)
+                    {
+                        output[b, c, h, w] = NumOps.FromDouble(attOutput[c, pos]);
+                        pos++;
+                    }
+                }
+            }
+        }
+
+        return output;
+    }
+
     private T BilinearSample(Tensor<T> tensor, int b, int c, double h, double w, int height, int width)
     {
         int h0 = (int)Math.Floor(h);
@@ -635,9 +851,16 @@ public class ProPainter<T> : NeuralNetworkBase<T>
             gradient = _imageDecoder[i].Backward(gradient);
         }
 
-        for (int i = _transformerBlocks.Count - 1; i >= 0; i--)
+        // Backward through transformer blocks (in reverse order)
+        for (int i = 5; i >= 0; i--)
         {
-            gradient = _transformerBlocks[i].Backward(gradient);
+            // Backward through FFN (contract then expand)
+            gradient = _transformerFFN[i * 2 + 1].Backward(gradient);
+            gradient = _transformerFFN[i * 2].Backward(gradient);
+
+            // Backward through attention projection and QKV
+            gradient = _transformerProj[i].Backward(gradient);
+            gradient = _transformerQKV[i].Backward(gradient);
         }
 
         for (int i = _imageEncoder.Count - 1; i >= 0; i--)

@@ -59,6 +59,28 @@ public class FILM<T> : NeuralNetworkBase<T>
     // Occlusion estimator
     private readonly ConvolutionalLayer<T> _occlusionEstimator;
 
+    // Cached intermediate activations for backward pass
+    private Tensor<T>? _cachedFrame1;
+    private Tensor<T>? _cachedFrame2;
+    private Tensor<T>? _cachedFeatures1;
+    private Tensor<T>? _cachedFeatures2;
+    private Tensor<T>? _cachedFlow1to2;
+    private Tensor<T>? _cachedFlow2to1;
+    private Tensor<T>? _cachedFlowToT1;
+    private Tensor<T>? _cachedFlowToT2;
+    private Tensor<T>? _cachedOcc1;
+    private Tensor<T>? _cachedOcc2;
+    private Tensor<T>? _cachedWarped1;
+    private Tensor<T>? _cachedWarped2;
+    private Tensor<T>? _cachedFused;
+    private Tensor<T>? _cachedFlowConcat;
+    private Tensor<T>? _cachedOccConcat;
+    private List<Tensor<T>>? _cachedFeatureExtractor1Activations;
+    private List<Tensor<T>>? _cachedFeatureExtractor2Activations;
+    private List<Tensor<T>>? _cachedFlowEstimatorActivations;
+    private List<Tensor<T>>? _cachedFusionActivations;
+    private double _cachedTimestep;
+
     #endregion
 
     #region Properties
@@ -179,26 +201,48 @@ public class FILM<T> : NeuralNetworkBase<T>
             frame2 = AddBatchDimension(frame2);
         }
 
-        // Extract multi-scale features for both frames
-        var features1 = ExtractFeatures(frame1);
-        var features2 = ExtractFeatures(frame2);
+        // Cache inputs for backward pass
+        _cachedFrame1 = frame1;
+        _cachedFrame2 = frame2;
+        _cachedTimestep = timestep;
 
-        // Estimate bi-directional flow
-        var (flow1to2, flow2to1) = EstimateFlow(features1, features2);
+        // Extract multi-scale features for both frames (with activation caching)
+        _cachedFeatureExtractor1Activations = [];
+        var features1 = ExtractFeaturesWithCache(frame1, _cachedFeatureExtractor1Activations);
+        _cachedFeatureExtractor2Activations = [];
+        var features2 = ExtractFeaturesWithCache(frame2, _cachedFeatureExtractor2Activations);
+        _cachedFeatures1 = features1;
+        _cachedFeatures2 = features2;
+
+        // Estimate bi-directional flow (with activation caching)
+        _cachedFlowEstimatorActivations = [];
+        var (flow1to2, flow2to1, flowConcat) = EstimateFlowWithCache(features1, features2, _cachedFlowEstimatorActivations);
+        _cachedFlow1to2 = flow1to2;
+        _cachedFlow2to1 = flow2to1;
+        _cachedFlowConcat = flowConcat;
 
         // Scale flows by timestep
         var flowToT1 = ScaleFlow(flow2to1, timestep);
         var flowToT2 = ScaleFlow(flow1to2, 1.0 - timestep);
+        _cachedFlowToT1 = flowToT1;
+        _cachedFlowToT2 = flowToT2;
 
-        // Estimate occlusion masks
-        var (occ1, occ2) = EstimateOcclusion(features1, features2, flow1to2, flow2to1);
+        // Estimate occlusion masks (with activation caching)
+        var (occ1, occ2, occConcat) = EstimateOcclusionWithCache(features1, features2, flow1to2, flow2to1);
+        _cachedOcc1 = occ1;
+        _cachedOcc2 = occ2;
+        _cachedOccConcat = occConcat;
 
         // Warp features using flows
         var warped1 = WarpFeatures(features1, flowToT1);
         var warped2 = WarpFeatures(features2, flowToT2);
+        _cachedWarped1 = warped1;
+        _cachedWarped2 = warped2;
 
-        // Fuse features with occlusion-aware blending
-        var fused = FuseFeatures(warped1, warped2, occ1, occ2, flowToT1, flowToT2, timestep);
+        // Fuse features with occlusion-aware blending (with activation caching)
+        _cachedFusionActivations = [];
+        var fused = FuseFeaturesWithCache(warped1, warped2, occ1, occ2, flowToT1, flowToT2, timestep, _cachedFusionActivations);
+        _cachedFused = fused;
 
         // Synthesize output frame
         var output = SynthesizeFrame(fused);
@@ -335,10 +379,15 @@ public class FILM<T> : NeuralNetworkBase<T>
 
         // Estimate flow
         var flowFeatures = concat;
-        foreach (var layer in _flowEstimator)
+        for (int i = 0; i < _flowEstimator.Count; i++)
         {
-            flowFeatures = layer.Forward(flowFeatures);
-            flowFeatures = ApplyLeakyReLU(flowFeatures, 0.2);
+            flowFeatures = _flowEstimator[i].Forward(flowFeatures);
+            // Only apply activation to intermediate layers, not final flow output
+            // Flow represents pixel displacements (positive or negative, unbounded)
+            if (i < _flowEstimator.Count - 1)
+            {
+                flowFeatures = ApplyLeakyReLU(flowFeatures, 0.2);
+            }
         }
 
         // Split into two flows
@@ -595,11 +644,591 @@ public class FILM<T> : NeuralNetworkBase<T>
         return result;
     }
 
+    private Tensor<T> ExtractFeaturesWithCache(Tensor<T> frame, List<Tensor<T>> activationCache)
+    {
+        var features = frame;
+        activationCache.Add(features); // Cache input
+        foreach (var layer in _featureExtractor)
+        {
+            features = layer.Forward(features);
+            activationCache.Add(features); // Cache pre-activation
+            features = ApplyLeakyReLU(features, 0.2);
+            activationCache.Add(features); // Cache post-activation
+        }
+        return features;
+    }
+
+    private (Tensor<T> flow1to2, Tensor<T> flow2to1, Tensor<T> concat) EstimateFlowWithCache(
+        Tensor<T> features1, Tensor<T> features2, List<Tensor<T>> activationCache)
+    {
+        var concat = ConcatenateChannels(features1, features2);
+        activationCache.Add(concat); // Cache concatenated input
+
+        var flowFeatures = concat;
+        for (int i = 0; i < _flowEstimator.Count; i++)
+        {
+            flowFeatures = _flowEstimator[i].Forward(flowFeatures);
+            activationCache.Add(flowFeatures); // Cache layer output
+            if (i < _flowEstimator.Count - 1)
+            {
+                flowFeatures = ApplyLeakyReLU(flowFeatures, 0.2);
+                activationCache.Add(flowFeatures); // Cache post-activation
+            }
+        }
+
+        // Split into two flows
+        int batchSize = flowFeatures.Shape[0];
+        int height = flowFeatures.Shape[2];
+        int width = flowFeatures.Shape[3];
+
+        var flow1to2 = new Tensor<T>([batchSize, 2, height, width]);
+        var flow2to1 = new Tensor<T>([batchSize, 2, height, width]);
+
+        for (int b = 0; b < batchSize; b++)
+            for (int h = 0; h < height; h++)
+                for (int w = 0; w < width; w++)
+                {
+                    flow1to2[b, 0, h, w] = flowFeatures[b, 0, h, w];
+                    flow1to2[b, 1, h, w] = flowFeatures[b, 1, h, w];
+                    flow2to1[b, 0, h, w] = flowFeatures[b, 2, h, w];
+                    flow2to1[b, 1, h, w] = flowFeatures[b, 3, h, w];
+                }
+
+        return (flow1to2, flow2to1, concat);
+    }
+
+    private (Tensor<T> occ1, Tensor<T> occ2, Tensor<T> concat) EstimateOcclusionWithCache(
+        Tensor<T> features1, Tensor<T> features2,
+        Tensor<T> flow1to2, Tensor<T> flow2to1)
+    {
+        var concat = ConcatenateChannels(features1, features2);
+        concat = ConcatenateChannels(concat, flow1to2);
+        concat = ConcatenateChannels(concat, flow2to1);
+
+        var occFeatures = _occlusionEstimator.Forward(concat);
+        var occPreSigmoid = occFeatures; // Cache for gradient
+        occFeatures = ApplySigmoid(occFeatures);
+
+        int batchSize = occFeatures.Shape[0];
+        int height = occFeatures.Shape[2];
+        int width = occFeatures.Shape[3];
+
+        var occ1 = new Tensor<T>([batchSize, 1, height, width]);
+        var occ2 = new Tensor<T>([batchSize, 1, height, width]);
+
+        for (int b = 0; b < batchSize; b++)
+            for (int h = 0; h < height; h++)
+                for (int w = 0; w < width; w++)
+                {
+                    occ1[b, 0, h, w] = occFeatures[b, 0, h, w];
+                    occ2[b, 0, h, w] = occFeatures[b, 1, h, w];
+                }
+
+        return (occ1, occ2, concat);
+    }
+
+    private Tensor<T> FuseFeaturesWithCache(
+        Tensor<T> warped1, Tensor<T> warped2,
+        Tensor<T> occ1, Tensor<T> occ2,
+        Tensor<T> flowToT1, Tensor<T> flowToT2,
+        double timestep, List<Tensor<T>> activationCache)
+    {
+        // Weighted blending based on occlusion and timestep
+        T t = NumOps.FromDouble(timestep);
+        T oneMinusT = NumOps.FromDouble(1.0 - timestep);
+
+        var blended = warped1.Transform((v, idx) =>
+        {
+            int batchSize = warped1.Shape[0];
+            int channels = warped1.Shape[1];
+            int height = warped1.Shape[2];
+            int width = warped1.Shape[3];
+
+            int totalPerBatch = channels * height * width;
+            int b = idx / totalPerBatch;
+            int remaining = idx % totalPerBatch;
+            int c = remaining / (height * width);
+            remaining = remaining % (height * width);
+            int h = remaining / width;
+            int w = remaining % width;
+
+            double o1 = Convert.ToDouble(occ1[b, 0, h, w]);
+            double o2 = Convert.ToDouble(occ2[b, 0, h, w]);
+            double w1Val = Convert.ToDouble(warped1[b, c, h, w]);
+            double w2Val = Convert.ToDouble(warped2[b, c, h, w]);
+
+            double weight1 = (1.0 - timestep) * (1.0 - o1);
+            double weight2 = timestep * (1.0 - o2);
+            double totalWeight = weight1 + weight2 + 1e-8;
+
+            return NumOps.FromDouble((weight1 * w1Val + weight2 * w2Val) / totalWeight);
+        });
+
+        activationCache.Add(blended);
+
+        // Pass through fusion layers
+        var fused = blended;
+        foreach (var layer in _fusionLayers)
+        {
+            fused = layer.Forward(fused);
+            activationCache.Add(fused);
+            fused = ApplyLeakyReLU(fused, 0.2);
+            activationCache.Add(fused);
+        }
+
+        return fused;
+    }
+
     private void BackwardPass(Tensor<T> gradient)
     {
+        if (_cachedFeatures1 == null || _cachedFeatures2 == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // 1. Backpropagate through synthesis head
         gradient = _synthesisHead.Backward(gradient);
-        for (int i = _fusionLayers.Count - 1; i >= 0; i--)
-            gradient = _fusionLayers[i].Backward(gradient);
+
+        // 2. Backpropagate through fusion layers (reverse order)
+        // Apply LeakyReLU gradient for each layer
+        if (_cachedFusionActivations != null)
+        {
+            int actIdx = _cachedFusionActivations.Count - 1;
+            for (int i = _fusionLayers.Count - 1; i >= 0; i--)
+            {
+                // LeakyReLU gradient
+                if (actIdx >= 1)
+                {
+                    var preActivation = _cachedFusionActivations[actIdx - 1];
+                    gradient = ApplyLeakyReLUGradient(gradient, preActivation, 0.2);
+                    actIdx--;
+                }
+                gradient = _fusionLayers[i].Backward(gradient);
+                actIdx--;
+            }
+        }
+
+        // 3. At this point, gradient is for the fused (blended) tensor
+        // Split gradient to warped1, warped2, occ1, occ2 based on blending formula
+        var (gradWarped1, gradWarped2, gradOcc1, gradOcc2) = ComputeFusionGradients(
+            gradient, _cachedWarped1!, _cachedWarped2!, _cachedOcc1!, _cachedOcc2!, _cachedTimestep);
+
+        // 4. Backpropagate warping gradients
+        // Warp backward: gradient w.r.t. features and flow
+        var (gradFeatures1FromWarp, gradFlowToT1) = WarpFeaturesBackward(
+            gradWarped1, _cachedFeatures1, _cachedFlowToT1!);
+        var (gradFeatures2FromWarp, gradFlowToT2) = WarpFeaturesBackward(
+            gradWarped2, _cachedFeatures2, _cachedFlowToT2!);
+
+        // 5. Scale flow gradients back (reverse of ScaleFlow)
+        var gradFlow2to1 = ScaleFlow(gradFlowToT1, _cachedTimestep);
+        var gradFlow1to2 = ScaleFlow(gradFlowToT2, 1.0 - _cachedTimestep);
+
+        // 6. Backpropagate through occlusion estimator
+        // Combine occlusion gradients and apply sigmoid gradient
+        var gradOccCombined = CombineOcclusionGradients(gradOcc1, gradOcc2, _cachedOcc1!, _cachedOcc2!);
+        gradOccCombined = ApplySigmoidGradient(gradOccCombined, _cachedOcc1!, _cachedOcc2!);
+        var gradOccInput = _occlusionEstimator.Backward(gradOccCombined);
+
+        // Split occlusion input gradient to features and flows
+        int feat1Channels = _cachedFeatures1.Shape[1];
+        int feat2Channels = _cachedFeatures2.Shape[1];
+        var (gradFeaturesFromOcc1, gradFeaturesFromOcc2, gradFlowFromOcc1, gradFlowFromOcc2) =
+            SplitOcclusionGradient(gradOccInput, feat1Channels, feat2Channels);
+
+        // Accumulate flow gradients
+        gradFlow1to2 = AddTensors(gradFlow1to2, gradFlowFromOcc1);
+        gradFlow2to1 = AddTensors(gradFlow2to1, gradFlowFromOcc2);
+
+        // 7. Backpropagate through flow estimator
+        var gradFlowCombined = CombineFlowGradients(gradFlow1to2, gradFlow2to1);
+
+        if (_cachedFlowEstimatorActivations != null)
+        {
+            int actIdx = _cachedFlowEstimatorActivations.Count - 1;
+            for (int i = _flowEstimator.Count - 1; i >= 0; i--)
+            {
+                // Apply LeakyReLU gradient for non-final layers
+                if (i < _flowEstimator.Count - 1 && actIdx >= 1)
+                {
+                    var preActivation = _cachedFlowEstimatorActivations[actIdx - 1];
+                    gradFlowCombined = ApplyLeakyReLUGradient(gradFlowCombined, preActivation, 0.2);
+                    actIdx--;
+                }
+                gradFlowCombined = _flowEstimator[i].Backward(gradFlowCombined);
+                actIdx--;
+            }
+        }
+
+        // Split flow input gradient to features1 and features2
+        var (gradFeaturesFromFlow1, gradFeaturesFromFlow2) = SplitConcatenatedGradient(
+            gradFlowCombined, _cachedFeatures1.Shape[1], _cachedFeatures2.Shape[1]);
+
+        // 8. Accumulate all gradients going to features1 and features2
+        var gradFeatures1 = AddTensors(gradFeatures1FromWarp, gradFeaturesFromOcc1);
+        gradFeatures1 = AddTensors(gradFeatures1, gradFeaturesFromFlow1);
+
+        var gradFeatures2 = AddTensors(gradFeatures2FromWarp, gradFeaturesFromOcc2);
+        gradFeatures2 = AddTensors(gradFeatures2, gradFeaturesFromFlow2);
+
+        // 9. Backpropagate through feature extractors
+        BackwardThroughFeatureExtractor(gradFeatures1, _cachedFeatureExtractor1Activations!);
+        BackwardThroughFeatureExtractor(gradFeatures2, _cachedFeatureExtractor2Activations!);
+
+        // Clear cached activations
+        ClearActivationCache();
+    }
+
+    private (Tensor<T> gradWarped1, Tensor<T> gradWarped2, Tensor<T> gradOcc1, Tensor<T> gradOcc2)
+        ComputeFusionGradients(Tensor<T> gradOutput, Tensor<T> warped1, Tensor<T> warped2,
+            Tensor<T> occ1, Tensor<T> occ2, double timestep)
+    {
+        var gradWarped1 = new Tensor<T>(warped1.Shape);
+        var gradWarped2 = new Tensor<T>(warped2.Shape);
+        var gradOcc1 = new Tensor<T>(occ1.Shape);
+        var gradOcc2 = new Tensor<T>(occ2.Shape);
+
+        int batchSize = warped1.Shape[0];
+        int channels = warped1.Shape[1];
+        int height = warped1.Shape[2];
+        int width = warped1.Shape[3];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < height; h++)
+            {
+                for (int w = 0; w < width; w++)
+                {
+                    double o1 = Convert.ToDouble(occ1[b, 0, h, w]);
+                    double o2 = Convert.ToDouble(occ2[b, 0, h, w]);
+                    double weight1 = (1.0 - timestep) * (1.0 - o1);
+                    double weight2 = timestep * (1.0 - o2);
+                    double totalWeight = weight1 + weight2 + 1e-8;
+
+                    double dOcc1Sum = 0, dOcc2Sum = 0;
+
+                    for (int c = 0; c < channels; c++)
+                    {
+                        double grad = Convert.ToDouble(gradOutput[b, c, h, w]);
+                        double w1Val = Convert.ToDouble(warped1[b, c, h, w]);
+                        double w2Val = Convert.ToDouble(warped2[b, c, h, w]);
+
+                        // Gradient w.r.t. warped values
+                        gradWarped1.Data[(b * channels + c) * height * width + h * width + w] =
+                            NumOps.FromDouble(grad * weight1 / totalWeight);
+                        gradWarped2.Data[(b * channels + c) * height * width + h * width + w] =
+                            NumOps.FromDouble(grad * weight2 / totalWeight);
+
+                        // Gradient w.r.t. occlusion (accumulated over channels)
+                        double blendedVal = (weight1 * w1Val + weight2 * w2Val) / totalWeight;
+                        double dWeight1 = (w1Val - blendedVal) / totalWeight;
+                        double dWeight2 = (w2Val - blendedVal) / totalWeight;
+
+                        dOcc1Sum += grad * dWeight1 * (-(1.0 - timestep));
+                        dOcc2Sum += grad * dWeight2 * (-timestep);
+                    }
+
+                    gradOcc1[b, 0, h, w] = NumOps.FromDouble(dOcc1Sum);
+                    gradOcc2[b, 0, h, w] = NumOps.FromDouble(dOcc2Sum);
+                }
+            }
+        }
+
+        return (gradWarped1, gradWarped2, gradOcc1, gradOcc2);
+    }
+
+    private (Tensor<T> gradFeatures, Tensor<T> gradFlow) WarpFeaturesBackward(
+        Tensor<T> gradOutput, Tensor<T> features, Tensor<T> flow)
+    {
+        var gradFeatures = new Tensor<T>(features.Shape);
+        var gradFlow = new Tensor<T>(flow.Shape);
+
+        int batchSize = features.Shape[0];
+        int channels = features.Shape[1];
+        int height = features.Shape[2];
+        int width = features.Shape[3];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < height; h++)
+            {
+                for (int w = 0; w < width; w++)
+                {
+                    double flowX = Convert.ToDouble(flow[b, 0, h, w]);
+                    double flowY = Convert.ToDouble(flow[b, 1, h, w]);
+
+                    double srcX = w + flowX;
+                    double srcY = h + flowY;
+
+                    int x0 = (int)Math.Floor(srcX);
+                    int y0 = (int)Math.Floor(srcY);
+                    int x1 = x0 + 1;
+                    int y1 = y0 + 1;
+
+                    double dx = srcX - x0;
+                    double dy = srcY - y0;
+
+                    double dFlowX = 0, dFlowY = 0;
+
+                    for (int c = 0; c < channels; c++)
+                    {
+                        double grad = Convert.ToDouble(gradOutput[b, c, h, w]);
+
+                        // Bilinear interpolation weights
+                        double w00 = (1 - dx) * (1 - dy);
+                        double w01 = dx * (1 - dy);
+                        double w10 = (1 - dx) * dy;
+                        double w11 = dx * dy;
+
+                        // Gradient w.r.t. source pixels (features)
+                        if (x0 >= 0 && x0 < width && y0 >= 0 && y0 < height)
+                        {
+                            int idx = (b * channels + c) * height * width + y0 * width + x0;
+                            gradFeatures.Data[idx] = NumOps.Add(gradFeatures.Data[idx],
+                                NumOps.FromDouble(grad * w00));
+                        }
+                        if (x1 >= 0 && x1 < width && y0 >= 0 && y0 < height)
+                        {
+                            int idx = (b * channels + c) * height * width + y0 * width + x1;
+                            gradFeatures.Data[idx] = NumOps.Add(gradFeatures.Data[idx],
+                                NumOps.FromDouble(grad * w01));
+                        }
+                        if (x0 >= 0 && x0 < width && y1 >= 0 && y1 < height)
+                        {
+                            int idx = (b * channels + c) * height * width + y1 * width + x0;
+                            gradFeatures.Data[idx] = NumOps.Add(gradFeatures.Data[idx],
+                                NumOps.FromDouble(grad * w10));
+                        }
+                        if (x1 >= 0 && x1 < width && y1 >= 0 && y1 < height)
+                        {
+                            int idx = (b * channels + c) * height * width + y1 * width + x1;
+                            gradFeatures.Data[idx] = NumOps.Add(gradFeatures.Data[idx],
+                                NumOps.FromDouble(grad * w11));
+                        }
+
+                        // Gradient w.r.t. flow (through bilinear weights)
+                        double v00 = GetPixelSafe(features, b, c, y0, x0, height, width);
+                        double v01 = GetPixelSafe(features, b, c, y0, x1, height, width);
+                        double v10 = GetPixelSafe(features, b, c, y1, x0, height, width);
+                        double v11 = GetPixelSafe(features, b, c, y1, x1, height, width);
+
+                        // d/dFlowX = d/dSrcX
+                        dFlowX += grad * ((1 - dy) * (v01 - v00) + dy * (v11 - v10));
+                        // d/dFlowY = d/dSrcY
+                        dFlowY += grad * ((1 - dx) * (v10 - v00) + dx * (v11 - v01));
+                    }
+
+                    gradFlow[b, 0, h, w] = NumOps.FromDouble(dFlowX);
+                    gradFlow[b, 1, h, w] = NumOps.FromDouble(dFlowY);
+                }
+            }
+        }
+
+        return (gradFeatures, gradFlow);
+    }
+
+    private double GetPixelSafe(Tensor<T> tensor, int b, int c, int h, int w, int height, int width)
+    {
+        if (h < 0 || h >= height || w < 0 || w >= width)
+            return 0.0;
+        return Convert.ToDouble(tensor[b, c, h, w]);
+    }
+
+    private Tensor<T> ApplyLeakyReLUGradient(Tensor<T> gradOutput, Tensor<T> input, double negativeSlope)
+    {
+        return gradOutput.Transform((g, idx) =>
+        {
+            double x = Convert.ToDouble(input.Data[idx]);
+            double grad = Convert.ToDouble(g);
+            return NumOps.FromDouble(x > 0 ? grad : grad * negativeSlope);
+        });
+    }
+
+    private Tensor<T> ApplySigmoidGradient(Tensor<T> gradOutput, Tensor<T> occ1, Tensor<T> occ2)
+    {
+        // Sigmoid gradient: sig(x) * (1 - sig(x))
+        int batchSize = gradOutput.Shape[0];
+        int height = gradOutput.Shape[2];
+        int width = gradOutput.Shape[3];
+
+        var result = new Tensor<T>(gradOutput.Shape);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < height; h++)
+            {
+                for (int w = 0; w < width; w++)
+                {
+                    double sig1 = Convert.ToDouble(occ1[b, 0, h, w]);
+                    double sig2 = Convert.ToDouble(occ2[b, 0, h, w]);
+                    double grad1 = Convert.ToDouble(gradOutput[b, 0, h, w]);
+                    double grad2 = Convert.ToDouble(gradOutput[b, 1, h, w]);
+
+                    result[b, 0, h, w] = NumOps.FromDouble(grad1 * sig1 * (1 - sig1));
+                    result[b, 1, h, w] = NumOps.FromDouble(grad2 * sig2 * (1 - sig2));
+                }
+            }
+        }
+        return result;
+    }
+
+    private Tensor<T> CombineOcclusionGradients(Tensor<T> gradOcc1, Tensor<T> gradOcc2,
+        Tensor<T> occ1, Tensor<T> occ2)
+    {
+        int batchSize = gradOcc1.Shape[0];
+        int height = gradOcc1.Shape[2];
+        int width = gradOcc1.Shape[3];
+
+        var combined = new Tensor<T>([batchSize, 2, height, width]);
+        for (int b = 0; b < batchSize; b++)
+            for (int h = 0; h < height; h++)
+                for (int w = 0; w < width; w++)
+                {
+                    combined[b, 0, h, w] = gradOcc1[b, 0, h, w];
+                    combined[b, 1, h, w] = gradOcc2[b, 0, h, w];
+                }
+        return combined;
+    }
+
+    private Tensor<T> CombineFlowGradients(Tensor<T> gradFlow1to2, Tensor<T> gradFlow2to1)
+    {
+        int batchSize = gradFlow1to2.Shape[0];
+        int height = gradFlow1to2.Shape[2];
+        int width = gradFlow1to2.Shape[3];
+
+        var combined = new Tensor<T>([batchSize, 4, height, width]);
+        for (int b = 0; b < batchSize; b++)
+            for (int h = 0; h < height; h++)
+                for (int w = 0; w < width; w++)
+                {
+                    combined[b, 0, h, w] = gradFlow1to2[b, 0, h, w];
+                    combined[b, 1, h, w] = gradFlow1to2[b, 1, h, w];
+                    combined[b, 2, h, w] = gradFlow2to1[b, 0, h, w];
+                    combined[b, 3, h, w] = gradFlow2to1[b, 1, h, w];
+                }
+        return combined;
+    }
+
+    private (Tensor<T> grad1, Tensor<T> grad2) SplitConcatenatedGradient(
+        Tensor<T> gradient, int channels1, int channels2)
+    {
+        int batchSize = gradient.Shape[0];
+        int height = gradient.Shape[2];
+        int width = gradient.Shape[3];
+
+        var grad1 = new Tensor<T>([batchSize, channels1, height, width]);
+        var grad2 = new Tensor<T>([batchSize, channels2, height, width]);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int c = 0; c < channels1; c++)
+                for (int h = 0; h < height; h++)
+                    for (int w = 0; w < width; w++)
+                        grad1[b, c, h, w] = gradient[b, c, h, w];
+
+            for (int c = 0; c < channels2; c++)
+                for (int h = 0; h < height; h++)
+                    for (int w = 0; w < width; w++)
+                        grad2[b, c, h, w] = gradient[b, channels1 + c, h, w];
+        }
+
+        return (grad1, grad2);
+    }
+
+    private (Tensor<T> gradFeat1, Tensor<T> gradFeat2, Tensor<T> gradFlow1, Tensor<T> gradFlow2)
+        SplitOcclusionGradient(Tensor<T> gradient, int feat1Channels, int feat2Channels)
+    {
+        int batchSize = gradient.Shape[0];
+        int totalChannels = gradient.Shape[1];
+        int height = gradient.Shape[2];
+        int width = gradient.Shape[3];
+
+        int flowChannels = 2;
+
+        var gradFeat1 = new Tensor<T>([batchSize, feat1Channels, height, width]);
+        var gradFeat2 = new Tensor<T>([batchSize, feat2Channels, height, width]);
+        var gradFlow1 = new Tensor<T>([batchSize, flowChannels, height, width]);
+        var gradFlow2 = new Tensor<T>([batchSize, flowChannels, height, width]);
+
+        int offset = 0;
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int c = 0; c < feat1Channels; c++)
+                for (int h = 0; h < height; h++)
+                    for (int w = 0; w < width; w++)
+                        gradFeat1[b, c, h, w] = gradient[b, offset + c, h, w];
+        }
+        offset += feat1Channels;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int c = 0; c < feat2Channels; c++)
+                for (int h = 0; h < height; h++)
+                    for (int w = 0; w < width; w++)
+                        gradFeat2[b, c, h, w] = gradient[b, offset + c, h, w];
+        }
+        offset += feat2Channels;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int c = 0; c < flowChannels; c++)
+                for (int h = 0; h < height; h++)
+                    for (int w = 0; w < width; w++)
+                        gradFlow1[b, c, h, w] = gradient[b, offset + c, h, w];
+        }
+        offset += flowChannels;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int c = 0; c < flowChannels; c++)
+                for (int h = 0; h < height; h++)
+                    for (int w = 0; w < width; w++)
+                        gradFlow2[b, c, h, w] = gradient[b, offset + c, h, w];
+        }
+
+        return (gradFeat1, gradFeat2, gradFlow1, gradFlow2);
+    }
+
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
+    {
+        return a.Transform((v, idx) => NumOps.Add(v, b.Data[idx]));
+    }
+
+    private void BackwardThroughFeatureExtractor(Tensor<T> gradient, List<Tensor<T>> activationCache)
+    {
+        int actIdx = activationCache.Count - 1;
+        for (int i = _featureExtractor.Count - 1; i >= 0; i--)
+        {
+            // LeakyReLU gradient
+            if (actIdx >= 1)
+            {
+                var preActivation = activationCache[actIdx - 1];
+                gradient = ApplyLeakyReLUGradient(gradient, preActivation, 0.2);
+                actIdx--;
+            }
+            gradient = _featureExtractor[i].Backward(gradient);
+            actIdx--;
+        }
+    }
+
+    private void ClearActivationCache()
+    {
+        _cachedFrame1 = null;
+        _cachedFrame2 = null;
+        _cachedFeatures1 = null;
+        _cachedFeatures2 = null;
+        _cachedFlow1to2 = null;
+        _cachedFlow2to1 = null;
+        _cachedFlowToT1 = null;
+        _cachedFlowToT2 = null;
+        _cachedOcc1 = null;
+        _cachedOcc2 = null;
+        _cachedWarped1 = null;
+        _cachedWarped2 = null;
+        _cachedFused = null;
+        _cachedFlowConcat = null;
+        _cachedOccConcat = null;
+        _cachedFeatureExtractor1Activations = null;
+        _cachedFeatureExtractor2Activations = null;
+        _cachedFlowEstimatorActivations = null;
+        _cachedFusionActivations = null;
     }
 
     #endregion

@@ -242,26 +242,177 @@ public class DIFRINT<T> : NeuralNetworkBase<T>
         return smoothPath;
     }
 
+    /// <summary>
+    /// Estimates motion between two frames using block matching with subpixel refinement.
+    /// Returns the global motion parameters (translation and rotation).
+    /// </summary>
     private (double Dx, double Dy, double Rotation) EstimateMotionBetweenFrames(Tensor<T> frame1, Tensor<T> frame2)
     {
-        // Simplified motion estimation using mean pixel differences
-        double sumDx = 0, sumDy = 0;
         int c = frame1.Rank == 4 ? frame1.Shape[1] : frame1.Shape[0];
         int h = frame1.Rank == 4 ? frame1.Shape[2] : frame1.Shape[1];
         int w = frame1.Rank == 4 ? frame1.Shape[3] : frame1.Shape[2];
 
-        // Sample points for motion estimation
-        for (int y = h / 4; y < 3 * h / 4; y += 8)
+        // Block matching parameters
+        const int blockSize = 16;
+        const int searchRange = 8;
+        const int gridStep = 32; // Sample grid for efficiency
+
+        var motionVectors = new List<(double dx, double dy, int x, int y)>();
+
+        // Perform block matching at grid points
+        for (int by = blockSize + searchRange; by < h - blockSize - searchRange; by += gridStep)
         {
-            for (int x = w / 4; x < 3 * w / 4; x += 8)
+            for (int bx = blockSize + searchRange; bx < w - blockSize - searchRange; bx += gridStep)
             {
-                double v1 = Convert.ToDouble(frame1.Data[y * w + x]);
-                double v2 = Convert.ToDouble(frame2.Data[y * w + x]);
-                sumDx += v2 - v1;
+                // Find best matching block in frame2
+                double bestSad = double.MaxValue;
+                int bestDx = 0, bestDy = 0;
+
+                // Search within range
+                for (int dy = -searchRange; dy <= searchRange; dy++)
+                {
+                    for (int dx = -searchRange; dx <= searchRange; dx++)
+                    {
+                        double sad = ComputeBlockSAD(frame1, frame2, bx, by, bx + dx, by + dy, blockSize, c, w);
+                        if (sad < bestSad)
+                        {
+                            bestSad = sad;
+                            bestDx = dx;
+                            bestDy = dy;
+                        }
+                    }
+                }
+
+                // Subpixel refinement using parabolic fitting
+                if (bestDx > -searchRange && bestDx < searchRange &&
+                    bestDy > -searchRange && bestDy < searchRange)
+                {
+                    double sadLeft = ComputeBlockSAD(frame1, frame2, bx, by, bx + bestDx - 1, by + bestDy, blockSize, c, w);
+                    double sadRight = ComputeBlockSAD(frame1, frame2, bx, by, bx + bestDx + 1, by + bestDy, blockSize, c, w);
+                    double sadUp = ComputeBlockSAD(frame1, frame2, bx, by, bx + bestDx, by + bestDy - 1, blockSize, c, w);
+                    double sadDown = ComputeBlockSAD(frame1, frame2, bx, by, bx + bestDx, by + bestDy + 1, blockSize, c, w);
+
+                    // Parabolic subpixel refinement
+                    double subDx = bestDx;
+                    double subDy = bestDy;
+
+                    double denom = 2 * (sadLeft + sadRight - 2 * bestSad);
+                    if (Math.Abs(denom) > 1e-6)
+                        subDx = bestDx - (sadRight - sadLeft) / denom;
+
+                    denom = 2 * (sadUp + sadDown - 2 * bestSad);
+                    if (Math.Abs(denom) > 1e-6)
+                        subDy = bestDy - (sadDown - sadUp) / denom;
+
+                    motionVectors.Add((subDx, subDy, bx, by));
+                }
+                else
+                {
+                    motionVectors.Add((bestDx, bestDy, bx, by));
+                }
             }
         }
 
-        return (sumDx * 0.1, sumDy * 0.1, 0);
+        if (motionVectors.Count == 0)
+            return (0, 0, 0);
+
+        // Robust estimation of global motion using RANSAC-like outlier rejection
+        var sortedDx = motionVectors.Select(v => v.dx).OrderBy(x => x).ToList();
+        var sortedDy = motionVectors.Select(v => v.dy).OrderBy(x => x).ToList();
+
+        // Use median for robust translation estimation
+        double medianDx = sortedDx[sortedDx.Count / 2];
+        double medianDy = sortedDy[sortedDy.Count / 2];
+
+        // Filter inliers (within 2 pixels of median)
+        var inliers = motionVectors.Where(v =>
+            Math.Abs(v.dx - medianDx) < 2 && Math.Abs(v.dy - medianDy) < 2).ToList();
+
+        if (inliers.Count < 4)
+        {
+            // Fall back to median if too few inliers
+            return (medianDx, medianDy, 0);
+        }
+
+        // Compute refined translation from inliers
+        double globalDx = inliers.Average(v => v.dx);
+        double globalDy = inliers.Average(v => v.dy);
+
+        // Estimate rotation from motion field
+        double rotation = EstimateRotation(inliers, w / 2.0, h / 2.0, globalDx, globalDy);
+
+        return (globalDx, globalDy, rotation);
+    }
+
+    /// <summary>
+    /// Computes Sum of Absolute Differences (SAD) between two blocks.
+    /// </summary>
+    private double ComputeBlockSAD(Tensor<T> frame1, Tensor<T> frame2,
+        int x1, int y1, int x2, int y2, int blockSize, int channels, int width)
+    {
+        double sad = 0;
+        int halfBlock = blockSize / 2;
+
+        for (int dy = -halfBlock; dy < halfBlock; dy++)
+        {
+            for (int dx = -halfBlock; dx < halfBlock; dx++)
+            {
+                for (int ch = 0; ch < channels; ch++)
+                {
+                    int idx1 = ch * width * (frame1.Shape[frame1.Rank == 4 ? 2 : 1]) + (y1 + dy) * width + (x1 + dx);
+                    int idx2 = ch * width * (frame2.Shape[frame2.Rank == 4 ? 2 : 1]) + (y2 + dy) * width + (x2 + dx);
+
+                    if (idx1 >= 0 && idx1 < frame1.Data.Length && idx2 >= 0 && idx2 < frame2.Data.Length)
+                    {
+                        double v1 = Convert.ToDouble(frame1.Data[idx1]);
+                        double v2 = Convert.ToDouble(frame2.Data[idx2]);
+                        sad += Math.Abs(v2 - v1);
+                    }
+                }
+            }
+        }
+
+        return sad;
+    }
+
+    /// <summary>
+    /// Estimates rotation angle from motion vectors using least squares fitting.
+    /// </summary>
+    private double EstimateRotation(List<(double dx, double dy, int x, int y)> vectors,
+        double centerX, double centerY, double globalDx, double globalDy)
+    {
+        // Estimate rotation from residual motion after translation removal
+        double sumAngle = 0;
+        int count = 0;
+
+        foreach (var (dx, dy, x, y) in vectors)
+        {
+            // Position relative to center
+            double rx = x - centerX;
+            double ry = y - centerY;
+            double r = Math.Sqrt(rx * rx + ry * ry);
+
+            if (r > 10) // Only use points away from center
+            {
+                // Residual motion after translation
+                double resDx = dx - globalDx;
+                double resDy = dy - globalDy;
+
+                // Expected tangential direction for rotation
+                double tangX = -ry / r;
+                double tangY = rx / r;
+
+                // Project residual onto tangential direction
+                double tangentialMotion = resDx * tangX + resDy * tangY;
+
+                // Angle = arctan(tangential motion / radius)
+                double angle = Math.Atan2(tangentialMotion, r);
+                sumAngle += angle;
+                count++;
+            }
+        }
+
+        return count > 0 ? sumAngle / count : 0;
     }
 
     public override Tensor<T> Predict(Tensor<T> input) => Forward(input);

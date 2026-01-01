@@ -47,6 +47,7 @@ public class FlashAttentionLayer<T> : LayerBase<T>
     private Tensor<T>? _lastKey;
     private Tensor<T>? _lastValue;
     private Tensor<T>? _lastAttentionOutput;
+    private int[]? _originalInputShape;
 
     // Gradients
     private Matrix<T>? _queryWeightsGradient;
@@ -210,16 +211,14 @@ public class FlashAttentionLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-
-        int batchSize = input.Shape[0];
-        int sequenceLength = input.Shape[1];
-        int embeddingDimension = input.Shape[2];
+        _originalInputShape = input.Shape;
+        var input3D = NormalizeTo3D(input, out int batchSize, out int sequenceLength, out int embeddingDimension);
+        _lastInput = input3D;
 
         // Project input to Q, K, V
-        var queries = input.Multiply(_queryWeights);
-        var keys = input.Multiply(_keyWeights);
-        var values = input.Multiply(_valueWeights);
+        var queries = input3D.Multiply(_queryWeights);
+        var keys = input3D.Multiply(_keyWeights);
+        var values = input3D.Multiply(_valueWeights);
 
         // Reshape to [batch, heads, seq, headDim]
         queries = queries.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose([0, 2, 1, 3]);
@@ -243,11 +242,26 @@ public class FlashAttentionLayer<T> : LayerBase<T>
         var output = attentionOutput.Multiply(_outputWeights).Add(_outputBias);
 
         _lastOutput = ApplyActivation(output);
-        return _lastOutput;
+
+        if (_originalInputShape == null || _originalInputShape.Length == 3)
+        {
+            return _lastOutput;
+        }
+
+        if (_originalInputShape.Length == 2)
+        {
+            return _lastOutput.Reshape(_originalInputShape);
+        }
+
+        if (_originalInputShape.Length == 1)
+        {
+            return _lastOutput.Reshape([embeddingDimension]);
+        }
+
+        return _lastOutput.Reshape(_originalInputShape);
     }
 
     /// <summary>
-    /// Performs the backward pass using Flash Attention's memory-efficient gradient computation.
     /// </summary>
     /// <param name="outputGradient">Gradient from the next layer.</param>
     /// <returns>Gradient to pass to the previous layer.</returns>
@@ -259,12 +273,10 @@ public class FlashAttentionLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        int batchSize = _lastInput.Shape[0];
-        int sequenceLength = _lastInput.Shape[1];
-        int embeddingDimension = _lastInput.Shape[2];
+        var normalizedGrad = NormalizeOutputGradient(outputGradient, out int batchSize, out int sequenceLength, out int embeddingDimension);
 
         // Apply activation derivative
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var activationGradient = ApplyActivationDerivative(_lastOutput, normalizedGrad);
 
         // Gradient through output projection
         var attentionOutputGradient = activationGradient.Multiply(_outputWeights.Transpose());
@@ -301,12 +313,102 @@ public class FlashAttentionLayer<T> : LayerBase<T>
             .Add(gradKey.Multiply(_keyWeights.Transpose()))
             .Add(gradValue.Multiply(_valueWeights.Transpose()));
 
-        return inputGradient;
+        if (_originalInputShape == null || _originalInputShape.Length == 3)
+        {
+            return inputGradient;
+        }
+
+        if (_originalInputShape.Length == 2)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        if (_originalInputShape.Length == 1)
+        {
+            return inputGradient.Reshape([embeddingDimension]);
+        }
+
+        return inputGradient.Reshape(_originalInputShape);
     }
 
-    /// <summary>
-    /// Computes weight gradient from input and output gradient.
-    /// </summary>
+    private Tensor<T> NormalizeTo3D(Tensor<T> input, out int batchSize, out int sequenceLength, out int embeddingDimension)
+    {
+        if (input.Rank == 3)
+        {
+            batchSize = input.Shape[0];
+            sequenceLength = input.Shape[1];
+            embeddingDimension = input.Shape[2];
+            return input;
+        }
+
+        if (input.Rank == 2)
+        {
+            batchSize = 1;
+            sequenceLength = input.Shape[0];
+            embeddingDimension = input.Shape[1];
+            return input.Reshape([1, sequenceLength, embeddingDimension]);
+        }
+
+        if (input.Rank > 3)
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < input.Rank - 2; d++)
+            {
+                flatBatch *= input.Shape[d];
+            }
+            batchSize = flatBatch;
+            sequenceLength = input.Shape[input.Rank - 2];
+            embeddingDimension = input.Shape[input.Rank - 1];
+            return input.Reshape([batchSize, sequenceLength, embeddingDimension]);
+        }
+
+        batchSize = 1;
+        sequenceLength = 1;
+        embeddingDimension = input.Shape[0];
+        return input.Reshape([1, 1, embeddingDimension]);
+    }
+
+    private Tensor<T> NormalizeOutputGradient(Tensor<T> outputGradient, out int batchSize, out int sequenceLength, out int embeddingDimension)
+    {
+        if (_originalInputShape == null)
+        {
+            return NormalizeTo3D(outputGradient, out batchSize, out sequenceLength, out embeddingDimension);
+        }
+
+        if (_originalInputShape.Length == 3)
+        {
+            batchSize = _originalInputShape[0];
+            sequenceLength = _originalInputShape[1];
+            embeddingDimension = _originalInputShape[2];
+            return outputGradient;
+        }
+
+        if (_originalInputShape.Length == 2)
+        {
+            batchSize = 1;
+            sequenceLength = _originalInputShape[0];
+            embeddingDimension = _originalInputShape[1];
+            return outputGradient.Reshape([1, sequenceLength, embeddingDimension]);
+        }
+
+        if (_originalInputShape.Length == 1)
+        {
+            batchSize = 1;
+            sequenceLength = 1;
+            embeddingDimension = _originalInputShape[0];
+            return outputGradient.Reshape([1, 1, embeddingDimension]);
+        }
+
+        int flatBatch = 1;
+        for (int d = 0; d < _originalInputShape.Length - 2; d++)
+        {
+            flatBatch *= _originalInputShape[d];
+        }
+        batchSize = flatBatch;
+        sequenceLength = _originalInputShape[^2];
+        embeddingDimension = _originalInputShape[^1];
+        return outputGradient.Reshape([batchSize, sequenceLength, embeddingDimension]);
+    }
     private Matrix<T> ComputeWeightGradient(Tensor<T> input, Tensor<T> gradient)
     {
         // Sum over batch dimension: input^T @ gradient
@@ -405,6 +507,7 @@ public class FlashAttentionLayer<T> : LayerBase<T>
         _lastKey = null;
         _lastValue = null;
         _lastAttentionOutput = null;
+        _originalInputShape = null;
 
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;

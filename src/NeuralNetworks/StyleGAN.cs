@@ -131,6 +131,11 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
     public ConvolutionalNeuralNetwork<T> Discriminator { get; private set; }
 
     /// <summary>
+    /// Gets the total number of trainable parameters in the StyleGAN.
+    /// </summary>
+    public override int ParameterCount => MappingNetwork.GetParameterCount() + SynthesisNetwork.GetParameterCount() + Discriminator.GetParameterCount();
+
+    /// <summary>
     /// Enables style mixing during training.
     /// </summary>
     /// <remarks>
@@ -437,33 +442,112 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Generates images from latent codes.
     /// </summary>
-    /// <param name="latentCodes">Latent codes Z.</param>
+    /// <param name="latentCodes">Latent codes Z. Can be any rank - will be reshaped/padded as needed.</param>
     /// <returns>Generated images.</returns>
     public Tensor<T> Generate(Tensor<T> latentCodes)
     {
         MappingNetwork.SetTrainingMode(false);
         SynthesisNetwork.SetTrainingMode(false);
 
-        var styles = MappingNetwork.Predict(latentCodes);
-        return SynthesisNetwork.Predict(styles);
+        // Reshape latent codes for CNN mapping network
+        // CNN expects 4D input [N, C, H, W]
+        var reshapedLatent = ReshapeForCNN(latentCodes, MappingNetwork.Architecture);
+
+        var styles = MappingNetwork.Predict(reshapedLatent);
+
+        // Reshape styles for CNN synthesis network if needed
+        var reshapedStyles = ReshapeForCNN(styles, SynthesisNetwork.Architecture);
+
+        return SynthesisNetwork.Predict(reshapedStyles);
+    }
+
+    /// <summary>
+    /// Reshapes any-rank tensor to match CNN architecture input requirements.
+    /// Handles padding/tiling if input has fewer elements than required.
+    /// </summary>
+    private Tensor<T> ReshapeForCNN(Tensor<T> input, NeuralNetworkArchitecture<T> architecture)
+    {
+        // Already 4D - return as-is
+        if (input.Shape.Length == 4)
+        {
+            return input;
+        }
+
+        // Already 3D [C, H, W] - add batch dimension
+        if (input.Shape.Length == 3)
+        {
+            return input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+        }
+
+        // Calculate expected input size from architecture
+        int expectedDepth = architecture.InputDepth;
+        int expectedHeight = architecture.InputHeight;
+        int expectedWidth = architecture.InputWidth;
+        int expectedElements = expectedDepth * expectedHeight * expectedWidth;
+
+        // Get batch size and input elements
+        int batchSize = input.Shape.Length == 1 ? 1 : input.Shape[0];
+        int inputElements = input.Shape.Length == 1 ? input.Shape[0] : input.Shape[1];
+
+        // If sizes match, simple reshape
+        if (inputElements == expectedElements)
+        {
+            return input.Reshape([batchSize, expectedDepth, expectedHeight, expectedWidth]);
+        }
+
+        // Create output tensor with expected dimensions
+        var output = new Tensor<T>([batchSize, expectedDepth, expectedHeight, expectedWidth]);
+
+        // Tile/repeat input to fill expected dimensions
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < expectedElements; i++)
+            {
+                // Cycle through input elements to fill output
+                int inputIdx = i % inputElements;
+                T value = input.Shape.Length == 1
+                    ? input[inputIdx]
+                    : input[b, inputIdx];
+                output.SetFlat(b * expectedElements + i, value);
+            }
+        }
+
+        return output;
     }
 
     /// <summary>
     /// Generates images with style mixing.
     /// </summary>
-    /// <param name="latentCodes1">First set of latent codes (for coarse features).</param>
-    /// <param name="latentCodes2">Second set of latent codes (for fine features).</param>
+    /// <param name="latentCodes1">First set of latent codes (for coarse features). Can be any rank.</param>
+    /// <param name="latentCodes2">Second set of latent codes (for fine features). Can be any rank.</param>
     /// <returns>Generated images with mixed styles.</returns>
     public Tensor<T> GenerateWithStyleMixing(Tensor<T> latentCodes1, Tensor<T> latentCodes2)
     {
         MappingNetwork.SetTrainingMode(false);
         SynthesisNetwork.SetTrainingMode(false);
 
-        var styles1 = MappingNetwork.Predict(latentCodes1);
-        var styles2 = MappingNetwork.Predict(latentCodes2);
+        // Reshape latent codes for CNN mapping network
+        var reshapedLatent1 = ReshapeForCNN(latentCodes1, MappingNetwork.Architecture);
+        var reshapedLatent2 = ReshapeForCNN(latentCodes2, MappingNetwork.Architecture);
+
+        var styles1 = MappingNetwork.Predict(reshapedLatent1);
+        var styles2 = MappingNetwork.Predict(reshapedLatent2);
+
+        // Flatten styles for mixing if they were 4D
+        if (styles1.Shape.Length > 2)
+        {
+            int batchSize = styles1.Shape[0];
+            int totalSize = styles1.Length / batchSize;
+            styles1 = styles1.Reshape([batchSize, totalSize]);
+            styles2 = styles2.Reshape([batchSize, totalSize]);
+        }
+
         var mixedStyles = MixStyles(styles1, styles2);
 
-        return SynthesisNetwork.Predict(mixedStyles);
+        // Reshape mixed styles for CNN synthesis network
+        var reshapedMixedStyles = ReshapeForCNN(mixedStyles, SynthesisNetwork.Architecture);
+
+        return SynthesisNetwork.Predict(reshapedMixedStyles);
     }
 
     /// <summary>

@@ -53,7 +53,7 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
     private double _maskRatio;
     private bool _useNativeMode;
     private string? _onnxModelPath;
-    private readonly InferenceSession? _onnxSession;
+    private InferenceSession? _onnxSession;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     private readonly Random _random = new();
@@ -791,6 +791,20 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         _useNativeMode = reader.ReadBoolean();
         _onnxModelPath = reader.ReadString();
         if (string.IsNullOrEmpty(_onnxModelPath)) _onnxModelPath = null;
+
+        // Recreate ONNX session if in ONNX mode
+        if (!_useNativeMode && !string.IsNullOrEmpty(_onnxModelPath))
+        {
+            if (File.Exists(_onnxModelPath))
+            {
+                try { _onnxSession = new InferenceSession(_onnxModelPath); }
+                catch (Exception ex) { throw new InvalidOperationException($"Failed to restore ONNX session: {ex.Message}", ex); }
+            }
+            else
+            {
+                throw new FileNotFoundException($"ONNX model file not found during deserialization: {_onnxModelPath}");
+            }
+        }
     }
 
     /// <inheritdoc/>

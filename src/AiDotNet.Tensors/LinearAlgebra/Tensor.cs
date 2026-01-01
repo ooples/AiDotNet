@@ -107,7 +107,10 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
 
         // Use vectorized Copy operation to copy entire matrix data at once (5-10x faster than nested loops)
         // Matrix is stored in row-major order, which matches tensor storage
-        _numOps.Copy(matrix.AsSpan(), new Span<T>(_data));
+        // CRITICAL: Use .Data to access the actual underlying array directly.
+        // Using _data directly triggers implicit Vector<T>->T[] conversion which calls ToArray()
+        // and returns a COPY, causing data to be written to a temporary array that gets discarded.
+        _numOps.Copy(matrix.AsSpan(), new Span<T>(_data.Data));
     }
 
     /// <summary>
@@ -503,11 +506,14 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
             var result = new Tensor<T>(this.Shape);
             int rowLength = this.Shape[1];
             // Use vectorized Add for each row (5-15x faster with AVX2)
+            // CRITICAL: Use .Data to access the actual underlying array directly.
+            // Using _data directly triggers implicit Vector<T>->T[] conversion which calls ToArray()
+            // and returns a COPY, causing data to be written to a temporary array that gets discarded.
             for (int i = 0; i < this.Shape[0]; i++)
             {
                 int offset = i * rowLength;
-                var sourceRow = new ReadOnlySpan<T>(_data, offset, rowLength);
-                var destRow = new Span<T>(result._data, offset, rowLength);
+                var sourceRow = new ReadOnlySpan<T>(_data.Data, offset, rowLength);
+                var destRow = new Span<T>(result._data.Data, offset, rowLength);
                 _numOps.Add(sourceRow, vector.AsSpan(), destRow);
             }
             return result;
@@ -521,13 +527,16 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
             int lastDimLength = this.Shape[2];
             int sliceSize = this.Shape[1] * this.Shape[2];
             // Use vectorized Add for each row in the last dimension (5-15x faster with AVX2)
+            // CRITICAL: Use .Data to access the actual underlying array directly.
+            // Using _data directly triggers implicit Vector<T>->T[] conversion which calls ToArray()
+            // and returns a COPY, causing data to be written to a temporary array that gets discarded.
             for (int i = 0; i < this.Shape[0]; i++)
             {
                 for (int j = 0; j < this.Shape[1]; j++)
                 {
                     int offset = i * sliceSize + j * lastDimLength;
-                    var sourceSlice = new ReadOnlySpan<T>(_data, offset, lastDimLength);
-                    var destSlice = new Span<T>(result._data, offset, lastDimLength);
+                    var sourceSlice = new ReadOnlySpan<T>(_data.Data, offset, lastDimLength);
+                    var destSlice = new Span<T>(result._data.Data, offset, lastDimLength);
                     _numOps.Add(sourceSlice, vector.AsSpan(), destSlice);
                 }
             }
@@ -1748,11 +1757,14 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
         if (startCol == 0 && endCol == sourceCols)
         {
             // Full width slice - use vectorized Copy per row (5-10x faster)
+            // CRITICAL: Use .Data to access the actual underlying array directly.
+            // Using _data directly triggers implicit Vector<T>->T[] conversion which calls ToArray()
+            // and returns a COPY, causing data to be copied to a temporary array that gets discarded.
             for (int i = 0; i < newRows; i++)
             {
                 int sourceOffset = (startRow + i) * sourceCols;
                 int destOffset = i * newCols;
-                _numOps.Copy(new ReadOnlySpan<T>(_data, sourceOffset, newCols), new Span<T>(result._data, destOffset, newCols));
+                _numOps.Copy(new ReadOnlySpan<T>(_data.Data, sourceOffset, newCols), new Span<T>(result._data.Data, destOffset, newCols));
             }
         }
         else
@@ -2072,6 +2084,95 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
         Array.Copy(_data, batchIndex * sliceSize, slice._data, 0, sliceSize);
 
         return slice;
+    }
+
+    /// <summary>
+    /// Gets a slice of the tensor along a specified dimension.
+    /// </summary>
+    /// <param name="index">The index along the dimension to slice.</param>
+    /// <param name="dimension">The dimension to slice along (0-indexed).</param>
+    /// <returns>A new tensor with the specified dimension removed.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when index or dimension is out of bounds.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method extracts a "slice" of data from a multi-dimensional tensor
+    /// along any dimension you specify.</para>
+    ///
+    /// <para>For example, if you have a tensor with shape [batchSize, timeSteps, features] and want to
+    /// get all the data for a specific time step (keeping the batch dimension), you would use
+    /// GetSliceAlongDimension(timeStepIndex, 1).</para>
+    ///
+    /// <para>This is particularly useful for:
+    /// <list type="bullet">
+    /// <item><description>LSTM/RNN processing: iterating through time steps while keeping batch dimension</description></item>
+    /// <item><description>Multi-head attention: extracting specific heads or positions</description></item>
+    /// <item><description>Any operation that needs to extract along a non-batch dimension</description></item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    public Tensor<T> GetSliceAlongDimension(int index, int dimension)
+    {
+        if (dimension < 0 || dimension >= Shape.Length)
+            throw new ArgumentOutOfRangeException(nameof(dimension), $"Dimension {dimension} is out of range for tensor with {Shape.Length} dimensions.");
+        if (index < 0 || index >= Shape[dimension])
+            throw new ArgumentOutOfRangeException(nameof(index), $"Index {index} is out of range for dimension {dimension} with size {Shape[dimension]}.");
+
+        // Create new shape without the sliced dimension
+        int[] newShape = new int[Shape.Length - 1];
+        for (int d = 0, nd = 0; d < Shape.Length; d++)
+        {
+            if (d != dimension)
+                newShape[nd++] = Shape[d];
+        }
+
+        var result = new Tensor<T>(newShape);
+
+        // Calculate strides for source tensor
+        int[] strides = new int[Shape.Length];
+        strides[Shape.Length - 1] = 1;
+        for (int d = Shape.Length - 2; d >= 0; d--)
+            strides[d] = strides[d + 1] * Shape[d + 1];
+
+        // Calculate strides for destination tensor
+        int[] resultStrides = new int[newShape.Length];
+        if (newShape.Length > 0)
+        {
+            resultStrides[newShape.Length - 1] = 1;
+            for (int d = newShape.Length - 2; d >= 0; d--)
+                resultStrides[d] = resultStrides[d + 1] * newShape[d + 1];
+        }
+
+        // Copy elements - use Data property to access underlying array directly,
+        // avoiding implicit conversion from Vector<T> to T[] which creates copies
+        int resultIdx = 0;
+        CopySliceRecursive(Data, result.Data, Shape, newShape, strides, dimension, index, 0, 0, ref resultIdx);
+
+        return result;
+    }
+
+    private void CopySliceRecursive(T[] source, T[] dest, int[] shape, int[] newShape,
+        int[] strides, int sliceDim, int sliceIdx, int currentDim, int sourceOffset, ref int destIdx)
+    {
+        if (currentDim == shape.Length)
+        {
+            dest[destIdx++] = source[sourceOffset];
+            return;
+        }
+
+        if (currentDim == sliceDim)
+        {
+            // Skip to the specific index in the slice dimension
+            int newSourceOffset = sourceOffset + sliceIdx * strides[currentDim];
+            CopySliceRecursive(source, dest, shape, newShape, strides, sliceDim, sliceIdx, currentDim + 1, newSourceOffset, ref destIdx);
+        }
+        else
+        {
+            // Iterate through all indices in non-slice dimensions
+            for (int i = 0; i < shape[currentDim]; i++)
+            {
+                int newSourceOffset = sourceOffset + i * strides[currentDim];
+                CopySliceRecursive(source, dest, shape, newShape, strides, sliceDim, sliceIdx, currentDim + 1, newSourceOffset, ref destIdx);
+            }
+        }
     }
 
     /// <summary>
@@ -2432,6 +2533,75 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     }
 
     /// <summary>
+    /// Subtracts another tensor from this tensor with NumPy-style broadcasting.
+    /// </summary>
+    /// <param name="other">The tensor to subtract.</param>
+    /// <returns>A new tensor containing the element-wise difference with broadcasting.</returns>
+    /// <remarks>
+    /// <para>
+    /// Broadcasting allows tensors of different shapes to be subtracted by automatically
+    /// expanding the smaller tensor. For example, [B,H,W,C] - [B,1,1,C] broadcasts the [B,1,1,C]
+    /// tensor across the spatial dimensions.
+    /// </para>
+    /// <para>
+    /// The rule is: dimensions are compatible if they're equal or one of them is 1.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> BroadcastSubtract(Tensor<T> other)
+    {
+        // Check if shapes are already identical - use fast path
+        if (Shape.SequenceEqual(other.Shape))
+        {
+            return Subtract(other);
+        }
+
+        // Get broadcast shape
+        int[] broadcastShape = GetBroadcastShape(this.Shape, other.Shape);
+        var result = new Tensor<T>(broadcastShape);
+
+        // Pad shapes to same rank for easier indexing
+        int maxRank = broadcastShape.Length;
+        int[] thisShape = new int[maxRank];
+        int[] otherShape = new int[maxRank];
+
+        // Right-align shapes (prepend 1s)
+        int thisOffset = maxRank - this.Rank;
+        int otherOffset = maxRank - other.Rank;
+
+        for (int i = 0; i < maxRank; i++)
+        {
+            thisShape[i] = i < thisOffset ? 1 : this.Shape[i - thisOffset];
+            otherShape[i] = i < otherOffset ? 1 : other.Shape[i - otherOffset];
+        }
+
+        // Iterate over the result tensor
+        int[] thisIndices = new int[this.Rank];
+        int[] otherIndices = new int[other.Rank];
+
+        foreach (var index in result.GetIndices())
+        {
+            // Map result index to this tensor's index (accounting for broadcasting)
+            for (int i = 0; i < this.Rank; i++)
+            {
+                int broadcastIdx = i + thisOffset;
+                thisIndices[i] = thisShape[broadcastIdx] == 1 ? 0 : index[broadcastIdx];
+            }
+
+            // Map result index to other tensor's index (accounting for broadcasting)
+            for (int i = 0; i < other.Rank; i++)
+            {
+                int broadcastIdx = i + otherOffset;
+                otherIndices[i] = otherShape[broadcastIdx] == 1 ? 0 : index[broadcastIdx];
+            }
+
+            // Perform subtraction
+            result[index] = _numOps.Subtract(this[thisIndices], other[otherIndices]);
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Multiplies this tensor by another tensor with NumPy-style broadcasting.
     /// </summary>
     /// <param name="other">The tensor to multiply by.</param>
@@ -2498,6 +2668,80 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
 
             // Perform multiplication
             result[index] = _numOps.Multiply(this[thisIndices], other[otherIndices]);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Divides this tensor by another tensor with NumPy-style broadcasting.
+    /// </summary>
+    /// <param name="other">The tensor to divide by.</param>
+    /// <returns>A new tensor containing the element-wise quotient with broadcasting.</returns>
+    /// <remarks>
+    /// <para>
+    /// Broadcasting allows tensors of different shapes to be divided by automatically
+    /// expanding the smaller tensor. For example, [B,H,W,C] / [B,1,1,C] broadcasts the [B,1,1,C]
+    /// tensor across the spatial dimensions.
+    /// </para>
+    /// <para>
+    /// The rule is: dimensions are compatible if they're equal or one of them is 1.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> BroadcastDivide(Tensor<T> other)
+    {
+        // Check if shapes are already identical - use fast path (element-wise divide)
+        if (Shape.SequenceEqual(other.Shape))
+        {
+            var fastResult = new Tensor<T>(Shape);
+            for (int i = 0; i < Length; i++)
+            {
+                fastResult.Data[i] = _numOps.Divide(this.Data[i], other.Data[i]);
+            }
+            return fastResult;
+        }
+
+        // Get broadcast shape
+        int[] broadcastShape = GetBroadcastShape(this.Shape, other.Shape);
+        var result = new Tensor<T>(broadcastShape);
+
+        // Pad shapes to same rank for easier indexing
+        int maxRank = broadcastShape.Length;
+        int[] thisShape = new int[maxRank];
+        int[] otherShape = new int[maxRank];
+
+        // Right-align shapes (prepend 1s)
+        int thisOffset = maxRank - this.Rank;
+        int otherOffset = maxRank - other.Rank;
+
+        for (int i = 0; i < maxRank; i++)
+        {
+            thisShape[i] = i < thisOffset ? 1 : this.Shape[i - thisOffset];
+            otherShape[i] = i < otherOffset ? 1 : other.Shape[i - otherOffset];
+        }
+
+        // Iterate over the result tensor
+        int[] thisIndices = new int[this.Rank];
+        int[] otherIndices = new int[other.Rank];
+
+        foreach (var index in result.GetIndices())
+        {
+            // Map result index to this tensor's index (accounting for broadcasting)
+            for (int i = 0; i < this.Rank; i++)
+            {
+                int broadcastIdx = i + thisOffset;
+                thisIndices[i] = thisShape[broadcastIdx] == 1 ? 0 : index[broadcastIdx];
+            }
+
+            // Map result index to other tensor's index (accounting for broadcasting)
+            for (int i = 0; i < other.Rank; i++)
+            {
+                int broadcastIdx = i + otherOffset;
+                otherIndices[i] = otherShape[broadcastIdx] == 1 ? 0 : index[broadcastIdx];
+            }
+
+            // Perform division
+            result[index] = _numOps.Divide(this[thisIndices], other[otherIndices]);
         }
 
         return result;
@@ -2588,9 +2832,129 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
 
             return result;
         }
+        else if (Shape.Length == 3 && other.Shape.Length == 2)
+        {
+            // 3D @ 2D with broadcasting: (batch, m, k) @ (k, n) -> (batch, m, n)
+            // The 2D matrix is broadcast across the batch dimension
+            if (Shape[2] != other.Shape[0])
+            {
+                throw new ArgumentException($"Matrix dimensions don't match for multiplication: ({Shape[1]}, {Shape[2]}) @ ({other.Shape[0]}, {other.Shape[1]})");
+            }
+
+            int batchSize = Shape[0];
+            int resultRows = Shape[1];
+            int resultCols = other.Shape[1];
+            int commonDim = Shape[2];
+
+            var result = new Tensor<T>(new[] { batchSize, resultRows, resultCols });
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int i = 0; i < resultRows; i++)
+                {
+                    for (int j = 0; j < resultCols; j++)
+                    {
+                        T sum = _numOps.Zero;
+                        for (int k = 0; k < commonDim; k++)
+                        {
+                            sum = _numOps.Add(sum, _numOps.Multiply(this[b, i, k], other[k, j]));
+                        }
+                        result[b, i, j] = sum;
+                    }
+                }
+            }
+
+            return result;
+        }
+        else if (Shape.Length == 4 && other.Shape.Length == 4)
+        {
+            // 4D batch-head matrix multiplication for multi-head attention:
+            // (batch, heads, m, k) @ (batch, heads, k, n) -> (batch, heads, m, n)
+            if (Shape[0] != other.Shape[0])
+            {
+                throw new ArgumentException($"Batch dimensions must match: {Shape[0]} vs {other.Shape[0]}");
+            }
+
+            if (Shape[1] != other.Shape[1])
+            {
+                throw new ArgumentException($"Head dimensions must match: {Shape[1]} vs {other.Shape[1]}");
+            }
+
+            if (Shape[3] != other.Shape[2])
+            {
+                throw new ArgumentException($"Matrix dimensions don't match for multiplication: inner dims {Shape[3]} vs {other.Shape[2]}");
+            }
+
+            int batchSize = Shape[0];
+            int numHeads = Shape[1];
+            int resultRows = Shape[2];
+            int resultCols = other.Shape[3];
+            int commonDim = Shape[3];
+
+            var result = new Tensor<T>(new[] { batchSize, numHeads, resultRows, resultCols });
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int h = 0; h < numHeads; h++)
+                {
+                    for (int i = 0; i < resultRows; i++)
+                    {
+                        for (int j = 0; j < resultCols; j++)
+                        {
+                            T sum = _numOps.Zero;
+                            for (int k = 0; k < commonDim; k++)
+                            {
+                                sum = _numOps.Add(sum, _numOps.Multiply(this[b, h, i, k], other[b, h, k, j]));
+                            }
+                            result[b, h, i, j] = sum;
+                        }
+                    }
+                }
+            }
+
+            return result;
+        }
+        else if (Shape.Length == 4 && other.Shape.Length == 2)
+        {
+            // 4D @ 2D with broadcasting: (batch, heads, m, k) @ (k, n) -> (batch, heads, m, n)
+            // The 2D matrix is broadcast across batch and head dimensions
+            if (Shape[3] != other.Shape[0])
+            {
+                throw new ArgumentException($"Matrix dimensions don't match for multiplication: inner dim {Shape[3]} vs {other.Shape[0]}");
+            }
+
+            int batchSize = Shape[0];
+            int numHeads = Shape[1];
+            int resultRows = Shape[2];
+            int resultCols = other.Shape[1];
+            int commonDim = Shape[3];
+
+            var result = new Tensor<T>(new[] { batchSize, numHeads, resultRows, resultCols });
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int h = 0; h < numHeads; h++)
+                {
+                    for (int i = 0; i < resultRows; i++)
+                    {
+                        for (int j = 0; j < resultCols; j++)
+                        {
+                            T sum = _numOps.Zero;
+                            for (int k = 0; k < commonDim; k++)
+                            {
+                                sum = _numOps.Add(sum, _numOps.Multiply(this[b, h, i, k], other[k, j]));
+                            }
+                            result[b, h, i, j] = sum;
+                        }
+                    }
+                }
+            }
+
+            return result;
+        }
         else
         {
-            throw new NotSupportedException("Multiplication is currently only supported for 2D tensors (matrices) and 3D tensors (batch matrix multiplication).");
+            throw new NotSupportedException($"Multiplication is not supported for tensors with shapes {string.Join("x", Shape)} and {string.Join("x", other.Shape)}. Supported: 2D×2D, 3D×3D, 3D×2D, 4D×4D, 4D×2D.");
         }
     }
 
@@ -2848,21 +3212,42 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
 
         // TensorValidator.ValidateShape(slice, expectedSliceShape);
 
-        // Calculate the stride for the specified dimension
-        int stride = 1;
-        for (int i = dimension + 1; i < Rank; i++)
-            stride *= Shape[i];
+        // Calculate strides for source tensor
+        int[] strides = new int[Rank];
+        strides[Rank - 1] = 1;
+        for (int d = Rank - 2; d >= 0; d--)
+            strides[d] = strides[d + 1] * Shape[d + 1];
 
-        // Calculate the starting index in the flat array
-        int startIndex = index * stride;
-        for (int i = 0; i < dimension; i++)
-            startIndex *= Shape[i];
+        // Use recursive helper to copy elements
+        // Use Data property to access underlying T[] directly, avoiding implicit conversion
+        // from Vector<T> to T[] which creates copies and discards the writes
+        int sliceIdx = 0;
+        SetSliceRecursive(Data, slice.Data, Shape, expectedSliceShape, strides, dimension, index, 0, 0, ref sliceIdx);
+    }
 
-        // Copy the slice data into the tensor
-        for (int i = 0; i < slice.Length; i++)
+    private void SetSliceRecursive(T[] dest, T[] source, int[] destShape, int[] sourceShape,
+        int[] destStrides, int sliceDim, int sliceIdx, int currentDim, int destOffset, ref int sourceIdx)
+    {
+        if (currentDim == destShape.Length)
         {
-            int targetIndex = startIndex + (i % stride) + i / stride * stride * Shape[dimension];
-            _data[targetIndex] = slice._data[i];
+            dest[destOffset] = source[sourceIdx++];
+            return;
+        }
+
+        if (currentDim == sliceDim)
+        {
+            // Skip to the specific index in the slice dimension
+            int newDestOffset = destOffset + sliceIdx * destStrides[currentDim];
+            SetSliceRecursive(dest, source, destShape, sourceShape, destStrides, sliceDim, sliceIdx, currentDim + 1, newDestOffset, ref sourceIdx);
+        }
+        else
+        {
+            // Iterate through all indices in non-slice dimensions
+            for (int i = 0; i < destShape[currentDim]; i++)
+            {
+                int newDestOffset = destOffset + i * destStrides[currentDim];
+                SetSliceRecursive(dest, source, destShape, sourceShape, destStrides, sliceDim, sliceIdx, currentDim + 1, newDestOffset, ref sourceIdx);
+            }
         }
     }
 

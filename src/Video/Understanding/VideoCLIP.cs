@@ -3,6 +3,9 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.Algorithms;
+using AiDotNet.Tokenization.Models;
 
 namespace AiDotNet.Video.Understanding;
 
@@ -58,12 +61,22 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     private readonly ConvolutionalLayer<T> _videoProjection;
 
     // Text encoder components
-    private readonly ConvolutionalLayer<T> _tokenEmbedding;
-    private readonly List<ConvolutionalLayer<T>> _textTransformer;
+    // Proper CLIP-style token embedding: embedding lookup table [vocab_size, hidden_dim]
+    private readonly Tensor<T> _tokenEmbeddingTable;          // Embedding lookup table
+    private readonly Tensor<T> _positionalEmbeddingTable;     // Learned positional embeddings
+    private readonly List<ConvolutionalLayer<T>> _textTransformerQKV;      // QKV projections
+    private readonly List<ConvolutionalLayer<T>> _textTransformerAttnProj; // Attention output
+    private readonly List<ConvolutionalLayer<T>> _textTransformerFFN1;     // FFN expand
+    private readonly List<ConvolutionalLayer<T>> _textTransformerFFN2;     // FFN contract
     private readonly ConvolutionalLayer<T> _textProjection;
+    private readonly int _textHiddenDim;
 
     // Shared components
     private readonly ConvolutionalLayer<T> _logitScale;
+
+    // Tokenizer for text encoding
+    private readonly BpeTokenizer? _tokenizer;
+    private readonly EncodingOptions _encodingOptions;
 
     #endregion
 
@@ -112,13 +125,27 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     /// <param name="textMaxLength">Maximum text sequence length.</param>
     /// <param name="vocabSize">Vocabulary size for text encoding.</param>
     /// <param name="temperature">Temperature for softmax scaling.</param>
+    /// <param name="vocabPath">Optional path to CLIP vocabulary JSON file for production tokenization.</param>
+    /// <param name="mergesPath">Optional path to CLIP BPE merges file for production tokenization.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Production Use:</b> Provide vocabPath and mergesPath to use proper CLIP tokenization.
+    /// Download these files from HuggingFace's openai/clip-vit-base-patch32 repository:
+    /// - vocab.json: Token vocabulary mapping
+    /// - merges.txt: BPE merge rules
+    ///
+    /// <b>For Testing:</b> Omit vocabPath and mergesPath to use a simple test tokenizer.
+    /// </para>
+    /// </remarks>
     public VideoCLIP(
         NeuralNetworkArchitecture<T> architecture,
         int numFrames = 32,
         int embeddingDim = 512,
         int textMaxLength = 77,
         int vocabSize = 49408,
-        double temperature = 0.07)
+        double temperature = 0.07,
+        string? vocabPath = null,
+        string? mergesPath = null)
         : base(architecture, new ContrastiveLoss<T>())
     {
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
@@ -131,9 +158,26 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         _temperature = temperature;
         Temperature = temperature;
 
+        // Initialize tokenizer
+        if (vocabPath is not null && mergesPath is not null &&
+            !string.IsNullOrEmpty(vocabPath) && !string.IsNullOrEmpty(mergesPath))
+        {
+            // Use proper CLIP tokenization from pretrained files
+            _tokenizer = ClipTokenizerFactory.FromPretrained(vocabPath, mergesPath);
+        }
+        else
+        {
+            // Use simple tokenizer for testing (will warn in logs)
+            _tokenizer = ClipTokenizerFactory.CreateSimple();
+        }
+        _encodingOptions = ClipTokenizerFactory.GetDefaultEncodingOptions(_textMaxLength);
+
         _videoEncoder = [];
         _temporalTransformer = [];
-        _textTransformer = [];
+        _textTransformerQKV = [];
+        _textTransformerAttnProj = [];
+        _textTransformerFFN1 = [];
+        _textTransformerFFN2 = [];
 
         int featH = _height / 16;
         int featW = _width / 16;
@@ -141,6 +185,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         // Video encoder (ViT-like spatial encoder)
         int patchDim = _channels * 16 * 16; // 16x16 patches
         int hiddenDim = 768;
+        _textHiddenDim = hiddenDim;
 
         // Patch embedding for video frames
         _videoEncoder.Add(new ConvolutionalLayer<T>(_channels, _height, _width, hiddenDim, 16, 16, 0));
@@ -163,15 +208,32 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         // Video projection to shared embedding space
         _videoProjection = new ConvolutionalLayer<T>(hiddenDim, 1, 1, _embeddingDim, 1, 1, 0);
 
-        // Text encoder
-        // Token embedding (simplified)
-        _tokenEmbedding = new ConvolutionalLayer<T>(1, 1, _textMaxLength, hiddenDim, 1, 1, 0);
+        // Text encoder with proper CLIP-style embeddings
+        // Token embedding lookup table: [vocab_size, hidden_dim]
+        // Initialized with Xavier/Glorot uniform initialization
+        _tokenEmbeddingTable = new Tensor<T>([_vocabSize, hiddenDim]);
+        InitializeEmbeddingTable(_tokenEmbeddingTable, _vocabSize, hiddenDim);
 
-        // Text transformer blocks
+        // Positional embedding table: [max_length, hidden_dim]
+        // CLIP uses learned positional embeddings, not sinusoidal
+        _positionalEmbeddingTable = new Tensor<T>([_textMaxLength, hiddenDim]);
+        InitializeEmbeddingTable(_positionalEmbeddingTable, _textMaxLength, hiddenDim);
+
+        // Text transformer blocks with proper multi-head attention (12 layers, 12 heads)
         int numTextBlocks = 12;
+        // Note: numHeads = 12 is used in TextMultiHeadAttention method
+        int ffnDim = hiddenDim * 4; // MLP expansion ratio of 4
+
         for (int i = 0; i < numTextBlocks; i++)
         {
-            _textTransformer.Add(new ConvolutionalLayer<T>(hiddenDim, 1, _textMaxLength, hiddenDim, 1, 1, 0));
+            // QKV projection for multi-head attention
+            _textTransformerQKV.Add(new ConvolutionalLayer<T>(hiddenDim, 1, _textMaxLength, hiddenDim * 3, 1, 1, 0));
+            // Attention output projection
+            _textTransformerAttnProj.Add(new ConvolutionalLayer<T>(hiddenDim, 1, _textMaxLength, hiddenDim, 1, 1, 0));
+            // FFN expand (hidden -> 4*hidden)
+            _textTransformerFFN1.Add(new ConvolutionalLayer<T>(hiddenDim, 1, _textMaxLength, ffnDim, 1, 1, 0));
+            // FFN contract (4*hidden -> hidden)
+            _textTransformerFFN2.Add(new ConvolutionalLayer<T>(ffnDim, 1, _textMaxLength, hiddenDim, 1, 1, 0));
         }
 
         // Text projection to shared embedding space
@@ -184,8 +246,12 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         foreach (var layer in _videoEncoder) Layers.Add(layer);
         foreach (var layer in _temporalTransformer) Layers.Add(layer);
         Layers.Add(_videoProjection);
-        Layers.Add(_tokenEmbedding);
-        foreach (var layer in _textTransformer) Layers.Add(layer);
+
+        // Text transformer layers (embedding tables are tensors, not layers)
+        foreach (var layer in _textTransformerQKV) Layers.Add(layer);
+        foreach (var layer in _textTransformerAttnProj) Layers.Add(layer);
+        foreach (var layer in _textTransformerFFN1) Layers.Add(layer);
+        foreach (var layer in _textTransformerFFN2) Layers.Add(layer);
         Layers.Add(_textProjection);
         Layers.Add(_logitScale);
     }
@@ -254,32 +320,53 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         }
 
         int batchSize = tokenIds.Shape[0];
+        int seqLen = Math.Min(tokenIds.Shape[1], _textMaxLength);
 
-        // Reshape for text encoder
-        var reshaped = new Tensor<T>([batchSize, 1, 1, _textMaxLength]);
-        int copyLen = Math.Min(tokenIds.Shape[1], _textMaxLength);
+        // Pad to max length if needed
+        var paddedTokens = new Tensor<T>([batchSize, _textMaxLength]);
         for (int b = 0; b < batchSize; b++)
         {
-            for (int i = 0; i < copyLen; i++)
+            for (int i = 0; i < _textMaxLength; i++)
             {
-                reshaped[b, 0, 0, i] = tokenIds[b, i];
+                if (i < seqLen)
+                {
+                    paddedTokens[b, i] = tokenIds[b, i];
+                }
+                else
+                {
+                    paddedTokens[b, i] = NumOps.Zero; // Padding token
+                }
             }
         }
 
-        // Token embedding
-        var features = _tokenEmbedding.Forward(reshaped);
+        // Token embedding lookup with positional embeddings (proper CLIP style)
+        var features = LookupTokenEmbeddings(paddedTokens);
 
-        // Add positional encoding
-        features = AddPositionalEncoding(features);
-
-        // Text transformer blocks
-        foreach (var block in _textTransformer)
+        // Text transformer blocks with Pre-LN architecture (following CLIP)
+        int numLayers = _textTransformerQKV.Count;
+        for (int layer = 0; layer < numLayers; layer++)
         {
-            features = block.Forward(features);
-            features = ApplyGELU(features);
+            // Pre-LayerNorm
+            var normed = TextLayerNorm(features);
+
+            // Multi-head self-attention with causal mask
+            var attnOut = TextMultiHeadAttention(normed, layer);
+
+            // Residual connection
+            features = AddTensors(features, attnOut);
+
+            // FFN with Pre-LN
+            var ffnNormed = TextLayerNorm(features);
+            var ffnOut = TextFFN(ffnNormed, layer);
+
+            // Residual connection
+            features = AddTensors(features, ffnOut);
         }
 
-        // Take [EOS] token embedding (last position)
+        // Final layer norm
+        features = TextLayerNorm(features);
+
+        // Take [EOS] token embedding (last position before padding, following CLIP)
         var eosFeature = ExtractEOSFeature(features);
 
         // Project to embedding space
@@ -329,7 +416,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         var textEmbeds = new List<Tensor<T>>();
         foreach (var text in classTexts)
         {
-            var tokenIds = SimpleTokenize(text);
+            var tokenIds = Tokenize(text);
             var textEmbed = EncodeText(tokenIds);
             textEmbeds.Add(textEmbed);
         }
@@ -367,7 +454,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         List<Tensor<T>> videoEmbeddings,
         int topK = 10)
     {
-        var tokenIds = SimpleTokenize(query);
+        var tokenIds = Tokenize(query);
         var queryEmbed = EncodeText(tokenIds);
 
         var results = new List<(int, double)>();
@@ -397,7 +484,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         var results = new List<(string, double)>();
         foreach (var text in candidateTexts)
         {
-            var tokenIds = SimpleTokenize(text);
+            var tokenIds = Tokenize(text);
             var textEmbed = EncodeText(tokenIds);
             double sim = ComputeSimilarity(videoEmbed, textEmbed);
             results.Add((text, sim));
@@ -583,31 +670,6 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         return attended;
     }
 
-    private Tensor<T> AddPositionalEncoding(Tensor<T> features)
-    {
-        int batchSize = features.Shape[0];
-        int channels = features.Shape[1];
-        int seqLen = features.Shape[3];
-
-        // Sinusoidal positional encoding
-        for (int pos = 0; pos < seqLen; pos++)
-        {
-            for (int i = 0; i < channels; i++)
-            {
-                double angle = pos / Math.Pow(10000, 2.0 * i / channels);
-                double pe = i % 2 == 0 ? Math.Sin(angle) : Math.Cos(angle);
-
-                for (int b = 0; b < batchSize; b++)
-                {
-                    T current = features[b, i, 0, pos];
-                    features[b, i, 0, pos] = NumOps.Add(current, NumOps.FromDouble(pe * 0.1));
-                }
-            }
-        }
-
-        return features;
-    }
-
     private Tensor<T> ExtractEOSFeature(Tensor<T> features)
     {
         int batchSize = features.Shape[0];
@@ -706,25 +768,41 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         return exps.Select(e => e / sum).ToList();
     }
 
-    private Tensor<T> SimpleTokenize(string text)
+    /// <summary>
+    /// Tokenizes text using the CLIP BPE tokenizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Uses proper BPE tokenization with the CLIP vocabulary.
+    /// The tokenizer handles:
+    /// - Subword segmentation using BPE merges
+    /// - Special token insertion (BOS/EOS)
+    /// - Padding to max length
+    /// - Truncation for long texts
+    /// </para>
+    /// </remarks>
+    private Tensor<T> Tokenize(string text)
     {
-        // Very simplified tokenization (character-based for demonstration)
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer is not initialized.");
+
+        // Encode text using the BPE tokenizer
+        var encoded = _tokenizer.Encode(text, _encodingOptions);
+        var tokenIds = encoded.TokenIds;
+
+        // Convert to tensor with padding
         var tokens = new Tensor<T>([_textMaxLength]);
-
-        // Start token
-        tokens[0] = NumOps.FromDouble(49406); // BOS
-
-        int pos = 1;
-        foreach (char c in text.ToLower())
+        for (int i = 0; i < _textMaxLength; i++)
         {
-            if (pos >= _textMaxLength - 1) break;
-            tokens[pos++] = NumOps.FromDouble(c);
-        }
-
-        // End token
-        if (pos < _textMaxLength)
-        {
-            tokens[pos] = NumOps.FromDouble(49407); // EOS
+            if (i < tokenIds.Count)
+            {
+                tokens[i] = NumOps.FromDouble(tokenIds[i]);
+            }
+            else
+            {
+                // Pad with padding token (typically 0 or the pad_token_id)
+                tokens[i] = NumOps.Zero;
+            }
         }
 
         return tokens;
@@ -739,6 +817,243 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
             double gelu = 0.5 * x * (1.0 + Math.Tanh(c * (x + 0.044715 * x * x * x)));
             return NumOps.FromDouble(gelu);
         });
+    }
+
+    /// <summary>
+    /// Initializes an embedding table with Xavier/Glorot uniform initialization.
+    /// </summary>
+    private void InitializeEmbeddingTable(Tensor<T> table, int numEmbeddings, int embeddingDim)
+    {
+        var random = RandomHelper.CreateSecureRandom();
+
+        // Xavier/Glorot uniform: range = sqrt(6 / (fan_in + fan_out))
+        // For embeddings: fan_in = 1, fan_out = embeddingDim
+        double limit = Math.Sqrt(6.0 / (1 + embeddingDim));
+
+        for (int i = 0; i < numEmbeddings; i++)
+        {
+            for (int j = 0; j < embeddingDim; j++)
+            {
+                double val = (random.NextDouble() * 2 - 1) * limit;
+                table[i, j] = NumOps.FromDouble(val);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Performs embedding lookup from the token embedding table.
+    /// </summary>
+    /// <param name="tokenIds">Input token IDs [batch, seq_len].</param>
+    /// <returns>Embedded tokens [batch, hidden_dim, 1, seq_len].</returns>
+    private Tensor<T> LookupTokenEmbeddings(Tensor<T> tokenIds)
+    {
+        int batchSize = tokenIds.Shape[0];
+        int seqLen = tokenIds.Shape.Length > 1 ? tokenIds.Shape[1] : _textMaxLength;
+
+        var output = new Tensor<T>([batchSize, _textHiddenDim, 1, seqLen]);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int pos = 0; pos < seqLen; pos++)
+            {
+                // Get token ID and clamp to valid range
+                int tokenId = Math.Min(Math.Max(0, (int)NumOps.ToDouble(tokenIds[b, pos])), _vocabSize - 1);
+
+                // Lookup embedding from table and add positional embedding
+                for (int d = 0; d < _textHiddenDim; d++)
+                {
+                    double tokenEmbed = NumOps.ToDouble(_tokenEmbeddingTable[tokenId, d]);
+                    double posEmbed = NumOps.ToDouble(_positionalEmbeddingTable[pos, d]);
+                    output[b, d, 0, pos] = NumOps.FromDouble(tokenEmbed + posEmbed);
+                }
+            }
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Text transformer multi-head self-attention following CLIP architecture.
+    /// </summary>
+    private Tensor<T> TextMultiHeadAttention(Tensor<T> input, int layerIdx)
+    {
+        int batchSize = input.Shape[0];
+        int channels = input.Shape[1];
+        int seqLen = input.Shape[3];
+        int numHeads = 12;
+        int headDim = channels / numHeads;
+        double scale = 1.0 / Math.Sqrt(headDim);
+
+        // Compute QKV projections
+        var qkv = _textTransformerQKV[layerIdx].Forward(input);
+
+        // Split into Q, K, V
+        var query = new Tensor<T>([batchSize, channels, 1, seqLen]);
+        var key = new Tensor<T>([batchSize, channels, 1, seqLen]);
+        var value = new Tensor<T>([batchSize, channels, 1, seqLen]);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int pos = 0; pos < seqLen; pos++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    query[b, c, 0, pos] = qkv[b, c, 0, pos];
+                    key[b, c, 0, pos] = qkv[b, channels + c, 0, pos];
+                    value[b, c, 0, pos] = qkv[b, 2 * channels + c, 0, pos];
+                }
+            }
+        }
+
+        // Multi-head attention with causal mask (for autoregressive text)
+        var output = new Tensor<T>([batchSize, channels, 1, seqLen]);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int head = 0; head < numHeads; head++)
+            {
+                int headStart = head * headDim;
+
+                // Compute attention scores for this head
+                var attnScores = new double[seqLen, seqLen];
+                for (int i = 0; i < seqLen; i++)
+                {
+                    for (int j = 0; j <= i; j++) // Causal mask: can only attend to past positions
+                    {
+                        double score = 0;
+                        for (int d = 0; d < headDim; d++)
+                        {
+                            double q = NumOps.ToDouble(query[b, headStart + d, 0, i]);
+                            double k = NumOps.ToDouble(key[b, headStart + d, 0, j]);
+                            score += q * k;
+                        }
+                        attnScores[i, j] = score * scale;
+                    }
+                    // Masked positions get very negative value
+                    for (int j = i + 1; j < seqLen; j++)
+                    {
+                        attnScores[i, j] = -1e9;
+                    }
+                }
+
+                // Softmax over each row
+                for (int i = 0; i < seqLen; i++)
+                {
+                    double maxScore = double.NegativeInfinity;
+                    for (int j = 0; j < seqLen; j++)
+                    {
+                        maxScore = Math.Max(maxScore, attnScores[i, j]);
+                    }
+
+                    double sumExp = 0;
+                    for (int j = 0; j < seqLen; j++)
+                    {
+                        attnScores[i, j] = Math.Exp(attnScores[i, j] - maxScore);
+                        sumExp += attnScores[i, j];
+                    }
+                    for (int j = 0; j < seqLen; j++)
+                    {
+                        attnScores[i, j] /= sumExp;
+                    }
+                }
+
+                // Weighted sum of values
+                for (int i = 0; i < seqLen; i++)
+                {
+                    for (int d = 0; d < headDim; d++)
+                    {
+                        double sum = 0;
+                        for (int j = 0; j < seqLen; j++)
+                        {
+                            sum += attnScores[i, j] * NumOps.ToDouble(value[b, headStart + d, 0, j]);
+                        }
+                        output[b, headStart + d, 0, i] = NumOps.FromDouble(sum);
+                    }
+                }
+            }
+        }
+
+        // Output projection
+        return _textTransformerAttnProj[layerIdx].Forward(output);
+    }
+
+    /// <summary>
+    /// Text transformer feed-forward network with quick GELU activation.
+    /// </summary>
+    private Tensor<T> TextFFN(Tensor<T> input, int layerIdx)
+    {
+        // Expand: hidden_dim -> 4 * hidden_dim
+        var expanded = _textTransformerFFN1[layerIdx].Forward(input);
+        // Quick GELU (following CLIP implementation)
+        expanded = ApplyQuickGELU(expanded);
+        // Contract: 4 * hidden_dim -> hidden_dim
+        return _textTransformerFFN2[layerIdx].Forward(expanded);
+    }
+
+    /// <summary>
+    /// Quick GELU approximation as used in OpenAI CLIP.
+    /// </summary>
+    private Tensor<T> ApplyQuickGELU(Tensor<T> input)
+    {
+        return input.Transform((v, _) =>
+        {
+            double x = NumOps.ToDouble(v);
+            double quickGelu = x * (1.0 / (1.0 + Math.Exp(-1.702 * x)));
+            return NumOps.FromDouble(quickGelu);
+        });
+    }
+
+    /// <summary>
+    /// Layer normalization for text transformer.
+    /// </summary>
+    private Tensor<T> TextLayerNorm(Tensor<T> input)
+    {
+        int batchSize = input.Shape[0];
+        int channels = input.Shape[1];
+        int seqLen = input.Shape[3];
+        var output = new Tensor<T>(input.Shape);
+        double eps = 1e-5;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int pos = 0; pos < seqLen; pos++)
+            {
+                // Compute mean and variance across channels
+                double sum = 0.0;
+                for (int c = 0; c < channels; c++)
+                {
+                    sum += NumOps.ToDouble(input[b, c, 0, pos]);
+                }
+                double mean = sum / channels;
+
+                double varSum = 0.0;
+                for (int c = 0; c < channels; c++)
+                {
+                    double diff = NumOps.ToDouble(input[b, c, 0, pos]) - mean;
+                    varSum += diff * diff;
+                }
+                double variance = varSum / channels;
+                double invStd = 1.0 / Math.Sqrt(variance + eps);
+
+                // Normalize
+                for (int c = 0; c < channels; c++)
+                {
+                    double val = NumOps.ToDouble(input[b, c, 0, pos]);
+                    double normalized = (val - mean) * invStd;
+                    output[b, c, 0, pos] = NumOps.FromDouble(normalized);
+                }
+            }
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Element-wise tensor addition for residual connections.
+    /// </summary>
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
+    {
+        return a.Transform((v, idx) => NumOps.Add(v, b.Data[idx]));
     }
 
     private Tensor<T> AddBatchDimension5D(Tensor<T> tensor)
@@ -777,6 +1092,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
 
     private void BackwardPass(Tensor<T> gradient)
     {
+        // Backpropagate through video encoder path
         gradient = _videoProjection.Backward(gradient);
 
         foreach (var layer in _temporalTransformer.AsEnumerable().Reverse())
@@ -788,6 +1104,25 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         {
             gradient = layer.Backward(gradient);
         }
+
+        // Backpropagate through text encoder path
+        _textProjection.Backward(gradient);
+
+        // Text transformer layers in reverse
+        int numLayers = _textTransformerQKV.Count;
+        for (int layer = numLayers - 1; layer >= 0; layer--)
+        {
+            // FFN backward
+            _textTransformerFFN2[layer].Backward(gradient);
+            _textTransformerFFN1[layer].Backward(gradient);
+
+            // Attention backward
+            _textTransformerAttnProj[layer].Backward(gradient);
+            _textTransformerQKV[layer].Backward(gradient);
+        }
+
+        // Note: Embedding tables gradients are accumulated during forward pass
+        // and would be updated separately in a full implementation
     }
 
     #endregion

@@ -125,10 +125,11 @@
 	  <Using Include="AiDotNet.Tensors.Helpers" />
 	</ItemGroup>
 
-	<!-- Global usings for internal AiDotNet namespaces -->
-	<ItemGroup>
-	  <Using Include="AiDotNet.Autodiff" />
-	</ItemGroup>
+        <!-- Global usings for internal AiDotNet namespaces -->
+        <ItemGroup>
+          <Using Include="AiDotNet.Autodiff" />
+          <Using Include="AiDotNet.Validation" />
+        </ItemGroup>
 
 	<!-- Global usings for common System namespaces -->
 	<ItemGroup>

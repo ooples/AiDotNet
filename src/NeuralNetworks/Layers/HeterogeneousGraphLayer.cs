@@ -511,7 +511,36 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
     /// </summary>
     private Tensor<T> NormalizeAdjacency(Tensor<T> adjacency, int batchSize, int numNodes)
     {
-        var normalized = new Tensor<T>(adjacency.Shape);
+        // Handle both 2D [N, N] and 3D [B, N, N] adjacency matrices
+        bool is2D = adjacency.Shape.Length == 2;
+        Tensor<T> adj3D;
+        if (is2D)
+        {
+            // Reshape 2D to 3D for processing
+            adj3D = adjacency.Reshape([1, adjacency.Shape[0], adjacency.Shape[1]]);
+            // Tile for batch if needed
+            if (batchSize > 1)
+            {
+                var tiled = new Tensor<T>([batchSize, adjacency.Shape[0], adjacency.Shape[1]]);
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int i = 0; i < adjacency.Shape[0]; i++)
+                    {
+                        for (int j = 0; j < adjacency.Shape[1]; j++)
+                        {
+                            tiled[new int[] { b, i, j }] = adjacency[new int[] { i, j }];
+                        }
+                    }
+                }
+                adj3D = tiled;
+            }
+        }
+        else
+        {
+            adj3D = adjacency;
+        }
+
+        var normalized = new Tensor<T>(adj3D.Shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -521,7 +550,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
                 int degree = 0;
                 for (int j = 0; j < numNodes; j++)
                 {
-                    if (!NumOps.Equals(adjacency[b, i, j], NumOps.Zero))
+                    if (!NumOps.Equals(adj3D[new int[] { b, i, j }], NumOps.Zero))
                         degree++;
                 }
 
@@ -530,7 +559,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
                     // No neighbors, copy zeros
                     for (int j = 0; j < numNodes; j++)
                     {
-                        normalized[b, i, j] = NumOps.Zero;
+                        normalized[new int[] { b, i, j }] = NumOps.Zero;
                     }
                 }
                 else
@@ -538,7 +567,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
                     T normalization = NumOps.Divide(NumOps.One, NumOps.FromDouble(degree));
                     for (int j = 0; j < numNodes; j++)
                     {
-                        normalized[b, i, j] = NumOps.Multiply(adjacency[b, i, j], normalization);
+                        normalized[new int[] { b, i, j }] = NumOps.Multiply(adj3D[new int[] { b, i, j }], normalization);
                     }
                 }
             }

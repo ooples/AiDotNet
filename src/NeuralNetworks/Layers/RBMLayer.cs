@@ -171,6 +171,11 @@ public class RBMLayer<T> : LayerBase<T>
     private Tensor<T>? _lastVisibleInput;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// Stores the last output from the hidden layer during training.
     /// </summary>
     /// <remarks>
@@ -365,22 +370,39 @@ public class RBMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Flatten input to 1D tensor if needed
-        var visibleTensor = input.Shape.Length == 1
-            ? input
-            : input.Reshape([input.Length]);
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException("Input must have at least one dimension.", nameof(input));
 
-        // Store the visible input for training
-        _lastVisibleInput = visibleTensor;
+        int visibleSize = input.Shape[^1];
+        if (visibleSize != _visibleUnits)
+            throw new ArgumentException($"Expected input feature size {_visibleUnits} but got {visibleSize}.", nameof(input));
 
-        // Compute hidden probabilities given visible using tensor operations
-        Tensor<T> hiddenProbs = SampleHiddenGivenVisibleTensor(visibleTensor);
+        int flatBatch = 1;
+        for (int d = 0; d < rank - 1; d++)
+            flatBatch *= input.Shape[d];
 
-        // Store the hidden output for training
+        var visible2D = rank == 1
+            ? input.Reshape([1, _visibleUnits])
+            : input.Reshape([flatBatch, _visibleUnits]);
+
+        _lastVisibleInput = visible2D;
+
+        Tensor<T> hiddenProbs = SampleHiddenGivenVisibleTensor(visible2D);
         _lastHiddenOutput = hiddenProbs;
 
-        return hiddenProbs;
+        if (rank == 1)
+            return hiddenProbs.Reshape([_hiddenUnits]);
+
+        var outputShape = new int[rank];
+        for (int d = 0; d < rank - 1; d++)
+            outputShape[d] = input.Shape[d];
+        outputShape[rank - 1] = _hiddenUnits;
+
+        return hiddenProbs.Reshape(outputShape);
     }
+
 
     /// <summary>
     /// Trains the RBM using contrastive divergence with the given data.
@@ -422,62 +444,66 @@ public class RBMLayer<T> : LayerBase<T>
     /// </summary>
     private void TrainWithContrastiveDivergenceTensor(Tensor<T> input, T learningRate, int kSteps = 1)
     {
-        // --- Positive phase (data-driven) ---
-        // Compute hidden probabilities and samples given the input data
-        Tensor<T> v0 = input;
-        Tensor<T> h0Probs = SampleHiddenGivenVisibleTensor(v0);
-        Tensor<T> h0Samples = SampleBinaryStatesTensor(h0Probs);
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException("Input must have at least one dimension.", nameof(input));
 
-        // --- Negative phase (model-driven) ---
-        // Reconstruct visible layer and resample hidden layer
-        Tensor<T> vk = v0;
-        Tensor<T> hkSamples = h0Samples;
-        Tensor<T> vkProbs = new Tensor<T>([_visibleUnits]);
-        Tensor<T> hkProbs = new Tensor<T>([_hiddenUnits]);
+        int visibleSize = input.Shape[^1];
+        if (visibleSize != _visibleUnits)
+            throw new ArgumentException($"Expected input feature size {_visibleUnits} but got {visibleSize}.", nameof(input));
 
-        // Perform k steps of Gibbs sampling
+        int flatBatch = 1;
+        for (int d = 0; d < rank - 1; d++)
+            flatBatch *= input.Shape[d];
+
+        var v0 = rank == 1
+            ? input.Reshape([1, _visibleUnits])
+            : input.Reshape([flatBatch, _visibleUnits]);
+
+        var h0Probs = SampleHiddenGivenVisibleTensor(v0);
+        var h0Samples = SampleBinaryStatesTensor(h0Probs);
+
+        var vk = v0;
+        var hkSamples = h0Samples;
+        Tensor<T> vkProbs = new Tensor<T>([flatBatch, _visibleUnits]);
+        Tensor<T> hkProbs = new Tensor<T>([flatBatch, _hiddenUnits]);
+
         for (int step = 0; step < kSteps; step++)
         {
-            // Sample v given h
             vkProbs = SampleVisibleGivenHiddenTensor(hkSamples);
             vk = SampleBinaryStatesTensor(vkProbs);
 
-            // Sample h given v
             hkProbs = SampleHiddenGivenVisibleTensor(vk);
 
-            // In the last step, we keep the probabilities instead of samples
-            // for a more stable gradient estimate
             if (step < kSteps - 1)
             {
                 hkSamples = SampleBinaryStatesTensor(hkProbs);
             }
             else
             {
-                hkSamples = hkProbs; // On the last step, use probabilities
+                hkSamples = hkProbs;
             }
         }
 
-        // --- Update biases using Engine operations ---
-        // Update hidden biases: hBias += learningRate * (h0 - hk)
+        T batchScale = NumOps.Divide(learningRate, NumOps.FromDouble(flatBatch));
+
         var hiddenBiasDiff = Engine.TensorSubtract(h0Probs, hkProbs);
-        var hiddenBiasDelta = Engine.TensorMultiplyScalar(hiddenBiasDiff, learningRate);
+        var hiddenBiasGrad = Engine.ReduceSum(hiddenBiasDiff, new[] { 0 }, keepDims: false);
+        var hiddenBiasDelta = Engine.TensorMultiplyScalar(hiddenBiasGrad, batchScale);
         _hiddenBiases = Engine.TensorAdd(_hiddenBiases, hiddenBiasDelta);
 
-        // Update visible biases: vBias += learningRate * (v0 - vk)
         var visibleBiasDiff = Engine.TensorSubtract(v0, vkProbs);
-        var visibleBiasDelta = Engine.TensorMultiplyScalar(visibleBiasDiff, learningRate);
+        var visibleBiasGrad = Engine.ReduceSum(visibleBiasDiff, new[] { 0 }, keepDims: false);
+        var visibleBiasDelta = Engine.TensorMultiplyScalar(visibleBiasGrad, batchScale);
         _visibleBiases = Engine.TensorAdd(_visibleBiases, visibleBiasDelta);
 
-        // Update weights: W += learningRate * (outer(h0, v0) - outer(hk, vk))
-        // Positive phase: outer product of h0Probs and v0
-        var positiveOuter = ComputeOuterProductTensor(h0Probs, v0);
-        // Negative phase: outer product of hkProbs and vk
-        var negativeOuter = ComputeOuterProductTensor(hkProbs, vk);
-        // Weight gradient: positive - negative
+        var positiveOuter = Engine.TensorMatMul(Engine.TensorTranspose(h0Probs), v0);
+        var negativeOuter = Engine.TensorMatMul(Engine.TensorTranspose(hkProbs), vk);
         var weightGradient = Engine.TensorSubtract(positiveOuter, negativeOuter);
-        var weightDelta = Engine.TensorMultiplyScalar(weightGradient, learningRate);
+        var weightDelta = Engine.TensorMultiplyScalar(weightGradient, batchScale);
         _weights = Engine.TensorAdd(_weights, weightDelta);
     }
+
 
     /// <summary>
     /// Computes the outer product of two vectors as a 2D tensor.
@@ -560,23 +586,38 @@ public class RBMLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        // In RBM training, this is used for the reconstruction phase
-        // Flatten to 1D if needed
-        var hiddenTensor = outputGradient.Shape.Length == 1
-            ? outputGradient
-            : outputGradient.Reshape([outputGradient.Length]);
+        int rank = outputGradient.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException("Output gradient must have at least one dimension.", nameof(outputGradient));
 
-        // Store the reconstructed hidden for training
-        _reconstructedHidden = hiddenTensor;
+        int hiddenSize = outputGradient.Shape[^1];
+        if (hiddenSize != _hiddenUnits)
+            throw new ArgumentException($"Expected hidden gradient size {_hiddenUnits} but got {hiddenSize}.", nameof(outputGradient));
 
-        // Compute visible probabilities given hidden using tensor operations
-        Tensor<T> visibleProbs = SampleVisibleGivenHiddenTensor(hiddenTensor);
+        int flatBatch = 1;
+        for (int d = 0; d < rank - 1; d++)
+            flatBatch *= outputGradient.Shape[d];
 
-        // Store the reconstructed visible for training
+        var hidden2D = rank == 1
+            ? outputGradient.Reshape([1, _hiddenUnits])
+            : outputGradient.Reshape([flatBatch, _hiddenUnits]);
+
+        _reconstructedHidden = hidden2D;
+
+        Tensor<T> visibleProbs = SampleVisibleGivenHiddenTensor(hidden2D);
         _reconstructedVisible = visibleProbs;
 
-        return visibleProbs;
+        if (_originalInputShape == null)
+            return visibleProbs;
+
+        if (_originalInputShape.Length == 1)
+            return visibleProbs.Reshape([_visibleUnits]);
+
+        var outputShape = (int[])_originalInputShape.Clone();
+        outputShape[^1] = _visibleUnits;
+        return visibleProbs.Reshape(outputShape);
     }
+
 
     /// <summary>
     /// Backward pass implementation using automatic differentiation.
@@ -595,31 +636,27 @@ public class RBMLayer<T> : LayerBase<T>
         if (_lastVisibleInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // 1. Create variables
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastVisibleInput, "input", requiresGradient: true);
         var weightsNode = Autodiff.TensorOperations<T>.Variable(_weights, "weights", requiresGradient: true);
         var biasNode = Autodiff.TensorOperations<T>.Variable(_hiddenBiases, "hBias", requiresGradient: true);
 
-        // 2. Build graph (mean-field inference: sigmoid(W @ v + b))
-        // Reshape input [V] to [V, 1] for matrix multiply
-        var inputReshaped = Autodiff.TensorOperations<T>.Reshape(inputNode, _visibleUnits, 1);
-
-        // W @ v
-        var weighted = Autodiff.TensorOperations<T>.MatrixMultiply(weightsNode, inputReshaped);
-
-        // Reshape to [H] to match bias
-        var weightedFlat = Autodiff.TensorOperations<T>.Reshape(weighted, _hiddenUnits);
-
-        // Add bias
-        var preActivation = Autodiff.TensorOperations<T>.Add(weightedFlat, biasNode);
-
-        // Sigmoid activation (RBM standard)
+        var weightsT = Autodiff.TensorOperations<T>.Transpose(weightsNode);
+        var weighted = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, weightsT);
+        var preActivation = Autodiff.TensorOperations<T>.Add(weighted, biasNode);
         var output = Autodiff.TensorOperations<T>.Sigmoid(preActivation);
 
-        // 3. Set gradient
-        output.Gradient = outputGradient;
+        Tensor<T> gradient = outputGradient;
+        if (outputGradient.Shape.Length != 2)
+        {
+            int rank = outputGradient.Shape.Length;
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 1; d++)
+                flatBatch *= outputGradient.Shape[d];
+            gradient = outputGradient.Reshape([flatBatch, _hiddenUnits]);
+        }
 
-        // 4. Inline topological sort
+        output.Gradient = gradient;
+
         var visited = new HashSet<Autodiff.ComputationNode<T>>();
         var topoOrder = new List<Autodiff.ComputationNode<T>>();
         var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
@@ -649,7 +686,6 @@ public class RBMLayer<T> : LayerBase<T>
             }
         }
 
-        // 5. Execute backward pass
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];
@@ -659,16 +695,18 @@ public class RBMLayer<T> : LayerBase<T>
             }
         }
 
-        // 6. Store gradients
         _weightsGradient = weightsNode.Gradient;
         _hiddenBiasesGradient = biasNode.Gradient;
-
-        // Visible biases are not involved in forward pass, so their gradient is zero for discriminative task
         _visibleBiasesGradient = new Tensor<T>(_visibleBiases.Shape);
         _visibleBiasesGradient.Fill(NumOps.Zero);
 
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        if (_originalInputShape != null)
+            return inputGradient.Reshape(_originalInputShape);
+
+        return inputGradient;
     }
+
 
 
     /// <summary>
@@ -678,19 +716,28 @@ public class RBMLayer<T> : LayerBase<T>
     /// <returns>A tensor of probabilities for each hidden unit.</returns>
     private Tensor<T> SampleHiddenGivenVisibleTensor(Tensor<T> visible)
     {
-        // Compute activations: W * visible + bias using Engine operations
-        var visibleReshaped = visible.Reshape([_visibleUnits, 1]);
+        Tensor<T> visible2D = visible;
+        bool squeeze = false;
 
-        // W @ visible using tensor matrix multiplication
-        var weightedTensor = Engine.TensorMatMul(_weights, visibleReshaped);
-        var weighted = weightedTensor.Reshape([_hiddenUnits]);
+        if (visible.Shape.Length == 1)
+        {
+            visible2D = visible.Reshape([1, _visibleUnits]);
+            squeeze = true;
+        }
+        else if (visible.Shape.Length != 2)
+        {
+            throw new ArgumentException("Visible tensor must be 1D or 2D.", nameof(visible));
+        }
 
-        // Add bias
-        var activations = Engine.TensorAdd(weighted, _hiddenBiases);
+        var weightsT = Engine.TensorTranspose(_weights);
+        var weighted = Engine.TensorMatMul(visible2D, weightsT);
+        var biasExpanded = _hiddenBiases.Reshape([1, _hiddenUnits]);
+        var activations = Engine.TensorBroadcastAdd(weighted, biasExpanded);
+        var probs = Engine.Sigmoid(activations);
 
-        // Apply sigmoid activation using Engine
-        return Engine.Sigmoid(activations);
+        return squeeze ? probs.Reshape([_hiddenUnits]) : probs;
     }
+
 
     /// <summary>
     /// Computes the probability of each visible unit being active given the hidden units (tensor-based).
@@ -699,32 +746,37 @@ public class RBMLayer<T> : LayerBase<T>
     /// <returns>A tensor of probabilities for each visible unit.</returns>
     private Tensor<T> SampleVisibleGivenHiddenTensor(Tensor<T> hidden)
     {
-        // Compute activations: W^T * hidden + bias using Engine operations
-        var hiddenReshaped = hidden.Reshape([_hiddenUnits, 1]);
+        Tensor<T> hidden2D = hidden;
+        bool squeeze = false;
 
-        // W^T @ hidden using tensor matrix multiplication
-        var weightsTranspose = Engine.TensorTranspose(_weights);
-        var weightedTensor = Engine.TensorMatMul(weightsTranspose, hiddenReshaped);
-        var weighted = weightedTensor.Reshape([_visibleUnits]);
+        if (hidden.Shape.Length == 1)
+        {
+            hidden2D = hidden.Reshape([1, _hiddenUnits]);
+            squeeze = true;
+        }
+        else if (hidden.Shape.Length != 2)
+        {
+            throw new ArgumentException("Hidden tensor must be 1D or 2D.", nameof(hidden));
+        }
 
-        // Add bias
-        var activations = Engine.TensorAdd(weighted, _visibleBiases);
+        var weighted = Engine.TensorMatMul(hidden2D, _weights);
+        var biasExpanded = _visibleBiases.Reshape([1, _visibleUnits]);
+        var activations = Engine.TensorBroadcastAdd(weighted, biasExpanded);
+        var probs = Engine.Sigmoid(activations);
 
-        // Apply sigmoid activation using Engine
-        return Engine.Sigmoid(activations);
+        return squeeze ? probs.Reshape([_visibleUnits]) : probs;
     }
+
 
     /// <summary>
     /// Samples binary states from probability tensor using stochastic sampling.
     /// </summary>
     private Tensor<T> SampleBinaryStatesTensor(Tensor<T> probabilities)
     {
-        // Create random tensor [0, 1] for comparison
-        var randomTensor = Tensor<T>.CreateRandom(probabilities.Length, 1).Reshape([probabilities.Length]);
-
-        // Use Engine.TensorGreaterThan to compare probabilities > random
+        var randomTensor = Tensor<T>.CreateRandom(probabilities.Shape);
         return Engine.TensorGreaterThan(probabilities, randomTensor);
     }
+
 
     /// <summary>
     /// Computes the probability of each hidden unit being active given the visible units.
@@ -809,28 +861,30 @@ public class RBMLayer<T> : LayerBase<T>
         }
 
         // 2. Contrastive Divergence (Generative Training)
-        // This method updates parameters using stored values from forward/backward pass
         if (_lastVisibleInput != null && _lastHiddenOutput != null &&
             _reconstructedVisible != null && _reconstructedHidden != null)
         {
-            // Update weights using Engine operations: W += learningRate * (outer(h0, v0) - outer(h1, v1))
-            var positiveOuter = ComputeOuterProductTensor(_lastHiddenOutput, _lastVisibleInput);
-            var negativeOuter = ComputeOuterProductTensor(_reconstructedHidden, _reconstructedVisible);
+            int batchSize = _lastVisibleInput.Shape[0];
+            T batchScale = NumOps.Divide(learningRate, NumOps.FromDouble(batchSize));
+
+            var positiveOuter = Engine.TensorMatMul(Engine.TensorTranspose(_lastHiddenOutput), _lastVisibleInput);
+            var negativeOuter = Engine.TensorMatMul(Engine.TensorTranspose(_reconstructedHidden), _reconstructedVisible);
             var weightGradient = Engine.TensorSubtract(positiveOuter, negativeOuter);
-            var weightDelta = Engine.TensorMultiplyScalar(weightGradient, learningRate);
+            var weightDelta = Engine.TensorMultiplyScalar(weightGradient, batchScale);
             _weights = Engine.TensorAdd(_weights, weightDelta);
 
-            // Update hidden biases: h_bias += learningRate * (h0 - h1)
             var hiddenBiasDiff = Engine.TensorSubtract(_lastHiddenOutput, _reconstructedHidden);
-            var hiddenBiasDelta = Engine.TensorMultiplyScalar(hiddenBiasDiff, learningRate);
+            var hiddenBiasGrad = Engine.ReduceSum(hiddenBiasDiff, new[] { 0 }, keepDims: false);
+            var hiddenBiasDelta = Engine.TensorMultiplyScalar(hiddenBiasGrad, batchScale);
             _hiddenBiases = Engine.TensorAdd(_hiddenBiases, hiddenBiasDelta);
 
-            // Update visible biases: v_bias += learningRate * (v0 - v1)
             var visibleBiasDiff = Engine.TensorSubtract(_lastVisibleInput, _reconstructedVisible);
-            var visibleBiasDelta = Engine.TensorMultiplyScalar(visibleBiasDiff, learningRate);
+            var visibleBiasGrad = Engine.ReduceSum(visibleBiasDiff, new[] { 0 }, keepDims: false);
+            var visibleBiasDelta = Engine.TensorMultiplyScalar(visibleBiasGrad, batchScale);
             _visibleBiases = Engine.TensorAdd(_visibleBiases, visibleBiasDelta);
         }
     }
+
 
     /// <summary>
     /// Computes the outer product of two tensors as a 2D tensor.

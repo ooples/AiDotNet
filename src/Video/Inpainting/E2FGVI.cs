@@ -390,12 +390,10 @@ public class E2FGVI<T> : NeuralNetworkBase<T>
             gradient = _encoder[i].Backward(gradient);
         }
 
-        // Backpropagate through flow network
-        _flowHead.Backward(gradient);
-        for (int i = _flowNet.Count - 1; i >= 0; i--)
-        {
-            gradient = _flowNet[i].Backward(gradient);
-        }
+        // Note: _flowNet and _flowHead are NOT used in the Predict forward pass.
+        // They are only used in EstimateBidirectionalFlow for multi-frame inpainting.
+        // Training the flow network requires a separate training routine with flow-specific
+        // loss functions (e.g., endpoint error, photometric consistency).
     }
 
     #endregion

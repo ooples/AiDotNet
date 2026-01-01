@@ -798,28 +798,104 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var dAttnOutput = dAttnOutputFlat.Reshape(_lastAttentionOutput.Shape);
 
         // Now backprop through the attention computation using dAttnOutput
-        var dV = _lastAttentionWeights.Transpose([1, 0]).Multiply(dAttnOutput);
-        var V = _lastInput.Multiply(_Wv);
-        var dAttentionWeights = dAttnOutput.Multiply(V.Transpose([1, 0]));
+        // Build permutation to transpose last two dimensions for any-rank tensors
+        int attnRank = _lastAttentionWeights.Rank;
+        int[] attnPerm = Enumerable.Range(0, attnRank).ToArray();
+        if (attnRank >= 2)
+        {
+            (attnPerm[attnRank - 2], attnPerm[attnRank - 1]) = (attnPerm[attnRank - 1], attnPerm[attnRank - 2]);
+        }
+        var dV = _lastAttentionWeights.Transpose(attnPerm).Multiply(dAttnOutput);
+
+        // Compute V with same shape as in forward pass - should be 3D [B, S, A]
+        // Forward: inputFlat @ _Wv^T -> reshape to [B, S, A]
+        int batchSize = _lastInput.Shape[0];
+        int seqLen = _lastInput.Shape[1];
+        var inputFlat = _lastInput.Reshape([batchSize * seqLen, _inputSize]);
+        var wvTransposed = Engine.TensorTranspose(_Wv);
+        var vProjected = Engine.TensorMatMul(inputFlat, wvTransposed);
+        var V = vProjected.Reshape([batchSize, seqLen, _attentionSize]);
+
+        int vRank = V.Rank;
+        int[] vPerm = Enumerable.Range(0, vRank).ToArray();
+        if (vRank >= 2)
+        {
+            (vPerm[vRank - 2], vPerm[vRank - 1]) = (vPerm[vRank - 1], vPerm[vRank - 2]);
+        }
+
+        // dAttentionWeights = dAttnOutput @ V^T -> [B, S, S]
+        var dAttentionWeights = Engine.BatchMatMul(dAttnOutput, V.Transpose(vPerm));
+
+        // Softmax backward: dL/dz_i = y_i * (dL/dy_i - sum_j(y_j * dL/dy_j))
+        // where y is softmax output (attention weights), z is pre-softmax scores
+        int sumAxis = _lastAttentionWeights.Rank - 1;
+
+        // Compute weighted sum: sum_j(y_j * dL/dy_j)
+        var weightedGrad = _lastAttentionWeights.ElementwiseMultiply(dAttentionWeights);
+        var weightedSum = weightedGrad.SumOverAxis(sumAxis); // Shape reduces by 1 dimension
+
+        // Broadcast sum back to original shape by expanding the dimension
+        var broadcastShape = new int[_lastAttentionWeights.Rank];
+        for (int i = 0; i < _lastAttentionWeights.Rank; i++)
+        {
+            broadcastShape[i] = i == sumAxis ? 1 : _lastAttentionWeights.Shape[i];
+        }
+        var sumBroadcast = weightedSum.Reshape(broadcastShape);
+
+        // Create result tensor and fill with broadcast values
+        var sumExpanded = new Tensor<T>(_lastAttentionWeights.Shape);
+        var totalBatches = 1;
+        for (int i = 0; i < sumAxis; i++) totalBatches *= _lastAttentionWeights.Shape[i];
+        var lastDim = _lastAttentionWeights.Shape[sumAxis];
+
+        for (int batch = 0; batch < totalBatches; batch++)
+        {
+            T sumVal = sumBroadcast.GetFlat(batch);
+            for (int j = 0; j < lastDim; j++)
+            {
+                sumExpanded.SetFlat(batch * lastDim + j, sumVal);
+            }
+        }
 
         var dAttentionScores = _lastAttentionWeights.ElementwiseMultiply(
-            dAttentionWeights.Subtract(_lastAttentionWeights.SumOverAxis(-1).Reshape(_lastAttentionWeights.Shape).ElementwiseMultiply(dAttentionWeights))
+            dAttentionWeights.Subtract(sumExpanded)
         );
 
         var scaleFactor = NumOps.Sqrt(NumOps.FromDouble(_Wk.Shape[_Wk.Shape.Length - 1]));
         T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor);
         dAttentionScores = dAttentionScores.Scale(scaleValue);
 
-        var dK = _lastInput.Transpose([1, 0]).Multiply(dAttentionScores);
-        var dQ = dAttentionScores.Multiply(_lastInput);
+        // Recompute Q, K from stored input for proper backward
+        // Forward: inputFlat @ Wq^T -> reshape to [B, S, A]
+        var wqTransposed = Engine.TensorTranspose(_Wq);
+        var wkTransposed = Engine.TensorTranspose(_Wk);
+        var qProjected = Engine.TensorMatMul(inputFlat, wqTransposed);
+        var kProjected = Engine.TensorMatMul(inputFlat, wkTransposed);
+        var Q = qProjected.Reshape([batchSize, seqLen, _attentionSize]);
+        var K = kProjected.Reshape([batchSize, seqLen, _attentionSize]);
 
-        _dWv = _lastInput.Transpose([1, 0]).Multiply(dV);
-        _dWk = _lastInput.Transpose([1, 0]).Multiply(dK);
-        _dWq = _lastInput.Transpose([1, 0]).Multiply(dQ);
+        // Correct attention backward formulas:
+        // scores = Q @ K^T, so: dQ = dScores @ K, dK = dScores^T @ Q
+        var dQ = Engine.BatchMatMul(dAttentionScores, K);
+        var dK = Engine.BatchMatMul(dAttentionScores.Transpose([0, 2, 1]), Q);
 
-        var dinput = dQ.Multiply(_Wq.Transpose([1, 0]))
-                    .Add(dK.Multiply(_Wk.Transpose([1, 0])))
-                    .Add(dV.Multiply(_Wv.Transpose([1, 0])));
+        // Flatten for weight gradient computation: [B*S, attentionSize]
+        var dQFlat = dQ.Reshape([batchSize * seqLen, _attentionSize]);
+        var dKFlat = dK.Reshape([batchSize * seqLen, _attentionSize]);
+        var dVFlat = dV.Reshape([batchSize * seqLen, _attentionSize]);
+
+        // Weight gradients: dWq = input^T @ dQ, etc.
+        var inputFlatT = Engine.TensorTranspose(inputFlat);
+        _dWq = Engine.TensorMatMul(inputFlatT, dQFlat);
+        _dWk = Engine.TensorMatMul(inputFlatT, dKFlat);
+        _dWv = Engine.TensorMatMul(inputFlatT, dVFlat);
+
+        // Input gradient: dInput = dQ @ Wq^T + dK @ Wk^T + dV @ Wv^T
+        var dinputFromQ = Engine.TensorMatMul(dQFlat, _Wq);
+        var dinputFromK = Engine.TensorMatMul(dKFlat, _Wk);
+        var dinputFromV = Engine.TensorMatMul(dVFlat, _Wv);
+        var dinputFlat = dinputFromQ.Add(dinputFromK).Add(dinputFromV);
+        var dinput = dinputFlat.Reshape(_lastInput.Shape);
 
         return dinput;
     }

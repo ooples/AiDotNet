@@ -240,6 +240,28 @@ public class NEAT<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Gets the total number of trainable parameters (connections) in the best genome.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// In NEAT, parameters are the connection weights in a genome. This property returns
+    /// the number of connections in the best-performing genome in the population.
+    /// </para>
+    /// </remarks>
+    public override int ParameterCount
+    {
+        get
+        {
+            if (_population == null || _population.Count == 0)
+                return 0;
+
+            // Return the connection count from the best genome
+            var bestGenome = GetBestGenome();
+            return bestGenome?.Connections?.Count ?? 0;
+        }
+    }
+
+    /// <summary>
     /// Creates the initial population of genomes with minimal network structures.
     /// </summary>
     /// <returns>A list of initialized genomes.</returns>

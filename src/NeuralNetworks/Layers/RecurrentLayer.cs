@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Helpers;
 
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -66,6 +67,18 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// activation function, giving it more flexibility to fit the data.
     /// </remarks>
     private Tensor<T> _biases;
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in this recurrent layer.
+    /// </summary>
+    /// <remarks>
+    /// The parameter count includes all weights and biases:
+    /// - Input weights: inputSize × hiddenSize
+    /// - Hidden weights: hiddenSize × hiddenSize
+    /// - Biases: hiddenSize
+    /// </remarks>
+    public override int ParameterCount =>
+        _inputWeights.Length + _hiddenWeights.Length + _biases.Length;
 
     /// <summary>
     /// Stores the input tensor from the most recent forward pass for use in backpropagation.
@@ -279,7 +292,15 @@ public class RecurrentLayer<T> : LayerBase<T>
         int sequenceLength;
         int batchSize;
 
-        if (rank == 2)
+        if (rank == 1)
+        {
+            // 1D: [inputSize] -> treat as single timestep, single batch
+            sequenceLength = 1;
+            batchSize = 1;
+            int inputSize = input.Shape[0];
+            input3D = input.Reshape([1, 1, inputSize]);
+        }
+        else if (rank == 2)
         {
             // 2D: [sequenceLength, inputSize] -> add batch dim
             sequenceLength = input.Shape[0];
@@ -308,6 +329,15 @@ public class RecurrentLayer<T> : LayerBase<T>
 
         _lastInput = input3D;
         int hiddenSize = _inputWeights.Shape[0];
+        int actualInputSize = input3D.Shape[2]; // [seqLen, batch, inputSize]
+        int expectedInputSize = _inputWeights.Shape[1];
+
+        if (actualInputSize != expectedInputSize)
+        {
+            throw new ArgumentException(
+                $"Input size mismatch: expected {expectedInputSize} but got {actualInputSize}.",
+                nameof(input));
+        }
 
         var output = new Tensor<T>([sequenceLength, batchSize, hiddenSize]);
         var hiddenState = new Tensor<T>([sequenceLength + 1, batchSize, hiddenSize]);
@@ -336,7 +366,7 @@ public class RecurrentLayer<T> : LayerBase<T>
 
             // Sum contributions and add biases using Engine operations
             var preActivation = Engine.TensorAdd(inputContribution, hiddenContribution);
-            preActivation = Engine.TensorAdd(preActivation, _biases); // Broadcasting biases across batch
+            preActivation = Engine.TensorBroadcastAdd(preActivation, _biases); // Broadcasting biases across batch
 
             // Apply activation
             var newHidden = ApplyActivation(preActivation);
@@ -364,6 +394,11 @@ public class RecurrentLayer<T> : LayerBase<T>
         {
             // 2D input -> 2D output (remove batch dim)
             output = output.Reshape([sequenceLength, hiddenSize]);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 1)
+        {
+            // 1D input -> 1D output (just the hidden size)
+            output = output.Reshape([hiddenSize]);
         }
 
         return output;
@@ -793,6 +828,26 @@ public class RecurrentLayer<T> : LayerBase<T>
             _inputWeights.ToVector(),
             _hiddenWeights.ToVector(),
             _biases.ToVector()
+        );
+    }
+
+    /// <summary>
+    /// Gets all parameter gradients of the recurrent layer as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all parameter gradients (input weight gradients, hidden weight gradients, and bias gradients).</returns>
+    public override Vector<T> GetParameterGradients()
+    {
+        // If gradients haven't been computed yet, return zero gradients
+        if (_inputWeightsGradient == null || _hiddenWeightsGradient == null || _biasesGradient == null)
+        {
+            return new Vector<T>(ParameterCount);
+        }
+
+        // VECTORIZED: Concatenate gradient data using Vector.Concatenate
+        return Vector<T>.Concatenate(
+            _inputWeightsGradient.ToVector(),
+            _hiddenWeightsGradient.ToVector(),
+            _biasesGradient.ToVector()
         );
     }
 

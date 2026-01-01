@@ -205,11 +205,20 @@ public class RBFLayer<T> : LayerBase<T>
     {
         _lastInput = input;
 
+        // Handle unbatched input (1D) by adding batch dimension
+        bool wasUnbatched = input.Rank == 1;
+        var processedInput = wasUnbatched
+            ? input.Reshape([1, input.Shape[0]])
+            : input;
+
         // Use Engine.RBFKernel for GPU/CPU acceleration
         // This computes exp(-epsilon * ||x - center||²) for Gaussian RBF
         // Convert widths to epsilons: epsilon = 1 / (2 * width²)
         var epsilons = ComputeEpsilonsFromWidths();
-        _lastOutput = Engine.RBFKernel(input, _centers, epsilons);
+        var output = Engine.RBFKernel(processedInput, _centers, epsilons);
+
+        // Remove batch dimension if input was unbatched
+        _lastOutput = wasUnbatched ? output.Reshape([output.Shape[1]]) : output;
 
         return _lastOutput;
     }

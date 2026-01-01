@@ -120,49 +120,151 @@ public class FLAVR<T> : NeuralNetworkBase<T>
     #region Public Methods
 
     /// <summary>
-    /// Interpolates frames between two input frames.
+    /// Interpolates frames between two input frames using recursive neural network synthesis.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Uses recursive binary interpolation where each intermediate frame is synthesized by the
+    /// neural network, not just linearly blended. This produces higher quality results for
+    /// multi-frame interpolation compared to simple blending.
+    /// </para>
+    /// <para>
+    /// Algorithm for numInterpolations=N:
+    /// 1. Compute the midpoint frame using the neural network
+    /// 2. Recursively interpolate the left half (frame1 to midpoint)
+    /// 3. Recursively interpolate the right half (midpoint to frame2)
+    /// 4. Combine results in temporal order
+    /// </para>
+    /// </remarks>
     public List<Tensor<T>> Interpolate(Tensor<T> frame1, Tensor<T> frame2, int numInterpolations = 1)
     {
-        var results = new List<Tensor<T>>();
-        var stacked = StackFrames([frame1, frame2]);
+        if (numInterpolations <= 0)
+            return [];
 
-        // Get the model's mid-point interpolation
-        var midInterpolated = _useNativeMode ? Forward(stacked) : PredictOnnx(stacked);
+        // Use recursive binary interpolation for high-quality multi-frame synthesis
+        var results = new List<Tensor<T>>(numInterpolations);
+        RecursiveInterpolate(frame1, frame2, 0.0, 1.0, numInterpolations, results);
 
-        for (int i = 0; i < numInterpolations; i++)
-        {
-            // Compute temporal position t ∈ (0, 1)
-            double t = (i + 1.0) / (numInterpolations + 1.0);
-
-            // Blend between frames based on temporal position
-            // t < 0.5: blend between frame1 and midInterpolated
-            // t > 0.5: blend between midInterpolated and frame2
-            Tensor<T> interpolated;
-            if (Math.Abs(t - 0.5) < 1e-6)
-            {
-                // At midpoint, use the model output directly
-                interpolated = midInterpolated;
-            }
-            else if (t < 0.5)
-            {
-                // Blend frame1 toward midInterpolated
-                double blendFactor = t * 2.0; // 0 to 1 as t goes from 0 to 0.5
-                interpolated = BlendFrames(frame1, midInterpolated, blendFactor);
-            }
-            else
-            {
-                // Blend midInterpolated toward frame2
-                double blendFactor = (t - 0.5) * 2.0; // 0 to 1 as t goes from 0.5 to 1
-                interpolated = BlendFrames(midInterpolated, frame2, blendFactor);
-            }
-            results.Add(interpolated);
-        }
+        // Results are collected in temporal order due to recursive structure
         return results;
     }
 
     /// <summary>
+    /// Recursively interpolates frames using binary subdivision with neural network synthesis.
+    /// </summary>
+    /// <param name="frameStart">The starting frame at time tStart.</param>
+    /// <param name="frameEnd">The ending frame at time tEnd.</param>
+    /// <param name="tStart">Temporal position of frameStart (0 to 1).</param>
+    /// <param name="tEnd">Temporal position of frameEnd (0 to 1).</param>
+    /// <param name="numFrames">Number of frames to interpolate in this segment.</param>
+    /// <param name="results">List to collect results in temporal order.</param>
+    private void RecursiveInterpolate(
+        Tensor<T> frameStart,
+        Tensor<T> frameEnd,
+        double tStart,
+        double tEnd,
+        int numFrames,
+        List<Tensor<T>> results)
+    {
+        if (numFrames <= 0) return;
+
+        if (numFrames == 1)
+        {
+            // Base case: synthesize single midpoint frame using neural network
+            var stacked = StackFrames([frameStart, frameEnd]);
+            var midFrame = _useNativeMode ? Forward(stacked) : PredictOnnx(stacked);
+            results.Add(midFrame);
+            return;
+        }
+
+        // Recursive case: divide and conquer
+        // First, synthesize the midpoint frame using neural network
+        var stackedMid = StackFrames([frameStart, frameEnd]);
+        var midpointFrame = _useNativeMode ? Forward(stackedMid) : PredictOnnx(stackedMid);
+        double tMid = (tStart + tEnd) / 2.0;
+
+        // Calculate how many frames go in each half
+        // For N frames, we need to distribute them around the midpoint
+        // Left half gets frames at t < tMid, right half gets frames at t > tMid
+        int leftCount = (numFrames - 1) / 2;   // Frames before midpoint
+        int rightCount = numFrames - 1 - leftCount; // Frames after midpoint
+
+        // Recursively interpolate left segment (frameStart to midpoint)
+        RecursiveInterpolate(frameStart, midpointFrame, tStart, tMid, leftCount, results);
+
+        // Add the midpoint frame (synthesized by neural network)
+        results.Add(midpointFrame);
+
+        // Recursively interpolate right segment (midpoint to frameEnd)
+        RecursiveInterpolate(midpointFrame, frameEnd, tMid, tEnd, rightCount, results);
+    }
+
+    /// <summary>
+    /// Interpolates at a specific temporal position using adaptive refinement.
+    /// </summary>
+    /// <remarks>
+    /// Uses hierarchical interpolation to synthesize a frame at an arbitrary timestep t.
+    /// For t close to 0.5, uses direct network output. For other values, recursively
+    /// refines by interpolating between synthesized frames.
+    /// </remarks>
+    /// <param name="frame1">First frame (at t=0).</param>
+    /// <param name="frame2">Second frame (at t=1).</param>
+    /// <param name="t">Target timestep in range (0, 1).</param>
+    /// <param name="maxRecursionDepth">Maximum recursion depth for refinement.</param>
+    /// <returns>Synthesized frame at temporal position t.</returns>
+    public Tensor<T> InterpolateAtTimestep(
+        Tensor<T> frame1,
+        Tensor<T> frame2,
+        double t,
+        int maxRecursionDepth = 4)
+    {
+        if (t <= 0.0) return frame1.Clone();
+        if (t >= 1.0) return frame2.Clone();
+
+        return InterpolateAtTimestepRecursive(frame1, frame2, 0.0, 1.0, t, maxRecursionDepth);
+    }
+
+    /// <summary>
+    /// Recursive helper for arbitrary timestep interpolation.
+    /// </summary>
+    private Tensor<T> InterpolateAtTimestepRecursive(
+        Tensor<T> frameStart,
+        Tensor<T> frameEnd,
+        double tStart,
+        double tEnd,
+        double targetT,
+        int depthRemaining)
+    {
+        double tMid = (tStart + tEnd) / 2.0;
+
+        // If target is close enough to midpoint or max depth reached, use network output
+        double tolerance = (tEnd - tStart) * 0.01; // 1% of current interval
+        if (Math.Abs(targetT - tMid) < tolerance || depthRemaining <= 0)
+        {
+            var stacked = StackFrames([frameStart, frameEnd]);
+            return _useNativeMode ? Forward(stacked) : PredictOnnx(stacked);
+        }
+
+        // Synthesize midpoint frame
+        var stackedMid = StackFrames([frameStart, frameEnd]);
+        var midpointFrame = _useNativeMode ? Forward(stackedMid) : PredictOnnx(stackedMid);
+
+        // Recurse into appropriate half
+        if (targetT < tMid)
+        {
+            return InterpolateAtTimestepRecursive(
+                frameStart, midpointFrame, tStart, tMid, targetT, depthRemaining - 1);
+        }
+        else
+        {
+            return InterpolateAtTimestepRecursive(
+                midpointFrame, frameEnd, tMid, tEnd, targetT, depthRemaining - 1);
+        }
+    }
+
+    /// <summary>
     /// Blends two frames together with a given factor.
+    /// Used only for edge cases where network synthesis is not appropriate.
     /// </summary>
     private Tensor<T> BlendFrames(Tensor<T> frameA, Tensor<T> frameB, double blendFactor)
     {

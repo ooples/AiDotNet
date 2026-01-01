@@ -57,6 +57,27 @@ public class RIFE<T> : NeuralNetworkBase<T>
     private const int DefaultNumFeatures = 64;
     private const int DefaultNumFlowBlocks = 8;
 
+    // Activation cache for backward pass
+    private Tensor<T>? _cachedConcatenatedFrames;
+    private Tensor<T>? _cachedFrame1;
+    private Tensor<T>? _cachedFrame2;
+    private Tensor<T>? _cachedFlow;
+    private Tensor<T>? _cachedFlow_0_1;
+    private Tensor<T>? _cachedFlow_1_0;
+    private Tensor<T>? _cachedFlow_t_0;
+    private Tensor<T>? _cachedFlow_t_1;
+    private Tensor<T>? _cachedFrame1Warped;
+    private Tensor<T>? _cachedFrame2Warped;
+    private Tensor<T>? _cachedContext;
+    private Tensor<T>? _cachedFusionInput;
+    private Tensor<T>? _cachedFused;
+    private double _cachedTimestep;
+    private readonly List<Tensor<T>> _cachedEncoderOutputs;
+    private readonly List<Tensor<T>> _cachedFlowDecoderOutputs;
+    private readonly List<Tensor<T>> _cachedContextEncoderOutputs;
+    private readonly List<Tensor<T>> _cachedFlowBlockInputs;
+    private readonly List<Tensor<T>> _cachedFlowBlockOutputs;
+
     #endregion
 
     #region Properties
@@ -107,6 +128,13 @@ public class RIFE<T> : NeuralNetworkBase<T>
         _flowDecoder = [];
         _contextEncoder = [];
         _flowBlocks = [];
+
+        // Initialize activation caches
+        _cachedEncoderOutputs = [];
+        _cachedFlowDecoderOutputs = [];
+        _cachedContextEncoderOutputs = [];
+        _cachedFlowBlockInputs = [];
+        _cachedFlowBlockOutputs = [];
 
         InitializeNativeLayers();
     }
@@ -261,88 +289,521 @@ public class RIFE<T> : NeuralNetworkBase<T>
 
     private Tensor<T> ProcessInterpolation(Tensor<T> concatenatedFrames, double timestep)
     {
-        var frame1 = SliceChannels(concatenatedFrames, 0, _channels);
-        var frame2 = SliceChannels(concatenatedFrames, _channels, _channels * 2);
+        // Clear and cache input for backward pass
+        ClearActivationCache();
+        _cachedConcatenatedFrames = concatenatedFrames;
+        _cachedTimestep = timestep;
 
-        // Encode features
+        _cachedFrame1 = SliceChannels(concatenatedFrames, 0, _channels);
+        _cachedFrame2 = SliceChannels(concatenatedFrames, _channels, _channels * 2);
+
+        // Encode features with caching
         var features = concatenatedFrames;
+        _cachedEncoderOutputs.Add(features); // Cache input
         foreach (var encoder in _encoder)
         {
             features = encoder.Forward(features);
+            _cachedEncoderOutputs.Add(features);
         }
 
-        // Decode flow
+        // Decode flow with caching
         var flowFeatures = features;
+        _cachedFlowDecoderOutputs.Add(flowFeatures); // Cache input
         for (int i = 0; i < _flowDecoder.Count; i++)
         {
             flowFeatures = _flowDecoder[i].Forward(flowFeatures);
+            _cachedFlowDecoderOutputs.Add(flowFeatures);
             if (i < _flowDecoder.Count - 1)
             {
                 flowFeatures = BilinearUpsample(flowFeatures, 2);
+                _cachedFlowDecoderOutputs.Add(flowFeatures); // Cache after upsample
             }
         }
 
-        var flow = flowFeatures;
-        var flow_0_1 = SliceChannels(flow, 0, 2);
-        var flow_1_0 = SliceChannels(flow, 2, 4);
+        _cachedFlow = flowFeatures;
+        _cachedFlow_0_1 = SliceChannels(_cachedFlow, 0, 2);
+        _cachedFlow_1_0 = SliceChannels(_cachedFlow, 2, 4);
 
         var t = NumOps.FromDouble(timestep);
         var oneMinusT = NumOps.FromDouble(1.0 - timestep);
 
-        // Scale flows correctly for interpolation at time t:
-        // - frame1 warped toward t position uses flow_0_1 scaled by t
-        // - frame2 warped toward t position uses flow_1_0 scaled by (1-t)
-        var flow_t_0 = ScaleFlow(flow_0_1, t);
-        var flow_t_1 = ScaleFlow(flow_1_0, oneMinusT);
+        // Scale flows correctly for interpolation at time t
+        _cachedFlow_t_0 = ScaleFlow(_cachedFlow_0_1, t);
+        _cachedFlow_t_1 = ScaleFlow(_cachedFlow_1_0, oneMinusT);
 
-        var frame1_warped = WarpImage(frame1, flow_t_0);
-        var frame2_warped = WarpImage(frame2, flow_t_1);
+        _cachedFrame1Warped = WarpImage(_cachedFrame1, _cachedFlow_t_0);
+        _cachedFrame2Warped = WarpImage(_cachedFrame2, _cachedFlow_t_1);
 
+        // Context encoder with caching
         var context = concatenatedFrames;
+        _cachedContextEncoderOutputs.Add(context); // Cache input
         foreach (var contextEnc in _contextEncoder)
         {
             context = contextEnc.Forward(context);
+            _cachedContextEncoderOutputs.Add(context);
         }
+        _cachedContext = context;
 
-        var fusionInput = ConcatenateChannels(
-            ConcatenateChannels(frame1_warped, frame2_warped),
-            ConcatenateChannels(context, flow));
+        _cachedFusionInput = ConcatenateChannels(
+            ConcatenateChannels(_cachedFrame1Warped, _cachedFrame2Warped),
+            ConcatenateChannels(_cachedContext, _cachedFlow));
 
-        var fused = _fusion!.Forward(fusionInput);
+        _cachedFused = _fusion!.Forward(_cachedFusionInput);
 
+        // Flow blocks with caching
+        var fused = _cachedFused;
         for (int i = 0; i < _flowBlocks.Count; i++)
         {
-            var blockInput = ConcatenateChannels(fused, flow);
+            var blockInput = ConcatenateChannels(fused, _cachedFlow);
+            _cachedFlowBlockInputs.Add(blockInput);
             fused = _flowBlocks[i].Forward(blockInput);
+            _cachedFlowBlockOutputs.Add(fused);
         }
 
         return _outputConv!.Forward(fused);
     }
 
+    /// <summary>
+    /// Performs the backward pass with proper gradient routing through all parallel branches.
+    /// </summary>
+    /// <remarks>
+    /// The RIFE architecture has multiple parallel branches:
+    /// 1. Encoder branch: processes concatenated frames to features
+    /// 2. Flow decoder branch: decodes features to optical flow
+    /// 3. Context encoder branch: extracts context features independently
+    /// 4. Warping branch: warps frames using predicted flow
+    /// 5. Flow blocks: refine features using flow information
+    ///
+    /// Gradient routing must properly split at branch points and accumulate at merge points.
+    /// </remarks>
     private void BackwardPass(Tensor<T> gradient)
     {
+        // 1. Backward through output convolution
         gradient = _outputConv!.Backward(gradient);
-        gradient = _fusion!.Backward(gradient);
+
+        // 2. Backward through flow blocks with gradient accumulation for flow
+        var flowGradAccumulator = new Tensor<T>(_cachedFlow!.Shape);
+        var fusedGradient = gradient;
 
         for (int i = _flowBlocks.Count - 1; i >= 0; i--)
         {
-            gradient = _flowBlocks[i].Backward(gradient);
+            // Flow block input was [fused, flow] concatenated
+            var blockGradient = _flowBlocks[i].Backward(fusedGradient);
+
+            // Split gradient for fused and flow components
+            var (fusedGrad, flowGrad) = SplitConcatenatedGradient(
+                blockGradient,
+                _cachedFlowBlockOutputs[Math.Max(0, i - 1)].Shape[1],
+                _cachedFlow.Shape[1]);
+
+            // Accumulate flow gradients
+            flowGradAccumulator = AddTensors(flowGradAccumulator, flowGrad);
+
+            // Use fused gradient for next iteration
+            fusedGradient = fusedGrad;
         }
 
+        // 3. Backward through fusion layer
+        var fusionGradient = _fusion!.Backward(fusedGradient);
+
+        // Split fusion gradient: [frame1_warped, frame2_warped, context, flow]
+        int warpedChannels = _channels;
+        int contextChannels = _cachedContext!.Shape[1];
+        int flowChannels = _cachedFlow.Shape[1];
+
+        var (warpedGradients, contextFlowGrad) = SplitConcatenatedGradient(
+            fusionGradient,
+            warpedChannels * 2,
+            contextChannels + flowChannels);
+
+        var (frame1WarpedGrad, frame2WarpedGrad) = SplitConcatenatedGradient(
+            warpedGradients, warpedChannels, warpedChannels);
+
+        var (contextGrad, flowGradFromFusion) = SplitConcatenatedGradient(
+            contextFlowGrad, contextChannels, flowChannels);
+
+        // Accumulate flow gradient from fusion
+        flowGradAccumulator = AddTensors(flowGradAccumulator, flowGradFromFusion);
+
+        // 4. Backward through context encoder
+        var contextEncoderGrad = contextGrad;
         for (int i = _contextEncoder.Count - 1; i >= 0; i--)
         {
-            gradient = _contextEncoder[i].Backward(gradient);
+            contextEncoderGrad = _contextEncoder[i].Backward(contextEncoderGrad);
         }
 
+        // 5. Backward through warping operations
+        // Compute gradients w.r.t. frames and flow from warping
+        var (frame1Grad, flowGrad1) = WarpBackward(
+            frame1WarpedGrad, _cachedFrame1!, _cachedFlow_t_0!);
+        var (frame2Grad, flowGrad2) = WarpBackward(
+            frame2WarpedGrad, _cachedFrame2!, _cachedFlow_t_1!);
+
+        // Scale flow gradients by timestep (chain rule for flow scaling)
+        var t = NumOps.FromDouble(_cachedTimestep);
+        var oneMinusT = NumOps.FromDouble(1.0 - _cachedTimestep);
+        flowGrad1 = ScaleFlow(flowGrad1, t);
+        flowGrad2 = ScaleFlow(flowGrad2, oneMinusT);
+
+        // Combine flow gradients for flow_0_1 and flow_1_0
+        var flowGradCombined = CombineFlowGradients(flowGrad1, flowGrad2, flowGradAccumulator);
+
+        // 6. Backward through flow decoder
+        var flowDecoderGrad = flowGradCombined;
         for (int i = _flowDecoder.Count - 1; i >= 0; i--)
         {
-            gradient = _flowDecoder[i].Backward(gradient);
+            // Handle upsampling backward (downsample gradient)
+            if (i < _flowDecoder.Count - 1)
+            {
+                flowDecoderGrad = BilinearDownsample(flowDecoderGrad, 2);
+            }
+            flowDecoderGrad = _flowDecoder[i].Backward(flowDecoderGrad);
         }
 
+        // 7. Backward through encoder
+        var encoderGrad = flowDecoderGrad;
         for (int i = _encoder.Count - 1; i >= 0; i--)
         {
-            gradient = _encoder[i].Backward(gradient);
+            encoderGrad = _encoder[i].Backward(encoderGrad);
         }
+
+        // 8. Accumulate gradients from encoder, context encoder, and frame warping
+        // All these branches feed back to the concatenated frames input
+        var inputGrad = AccumulateInputGradients(
+            encoderGrad,
+            contextEncoderGrad,
+            frame1Grad,
+            frame2Grad);
+    }
+
+    /// <summary>
+    /// Computes gradients through the warping operation.
+    /// </summary>
+    private (Tensor<T> frameGrad, Tensor<T> flowGrad) WarpBackward(
+        Tensor<T> outputGrad,
+        Tensor<T> inputFrame,
+        Tensor<T> flow)
+    {
+        int batchSize = outputGrad.Shape[0];
+        int channels = outputGrad.Shape[1];
+        int height = outputGrad.Shape[2];
+        int width = outputGrad.Shape[3];
+
+        var frameGrad = new Tensor<T>(inputFrame.Shape);
+        var flowGrad = new Tensor<T>(flow.Shape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < height; h++)
+            {
+                for (int w = 0; w < width; w++)
+                {
+                    double dx = Convert.ToDouble(flow[b, 0, h, w]);
+                    double dy = Convert.ToDouble(flow[b, 1, h, w]);
+
+                    double srcH = h + dy;
+                    double srcW = w + dx;
+
+                    // Compute bilinear interpolation coefficients
+                    int h0 = (int)Math.Floor(srcH);
+                    int w0 = (int)Math.Floor(srcW);
+                    int h1 = h0 + 1;
+                    int w1 = w0 + 1;
+
+                    double hWeight = srcH - Math.Floor(srcH);
+                    double wWeight = srcW - Math.Floor(srcW);
+
+                    // Coefficients for bilinear interpolation
+                    double c00 = (1 - hWeight) * (1 - wWeight);
+                    double c01 = (1 - hWeight) * wWeight;
+                    double c10 = hWeight * (1 - wWeight);
+                    double c11 = hWeight * wWeight;
+
+                    for (int c = 0; c < channels; c++)
+                    {
+                        T grad = outputGrad[b, c, h, w];
+
+                        // Distribute gradient to source pixels (gradient w.r.t. input frame)
+                        if (h0 >= 0 && h0 < height && w0 >= 0 && w0 < width)
+                            frameGrad[b, c, h0, w0] = NumOps.Add(
+                                frameGrad[b, c, h0, w0],
+                                NumOps.Multiply(grad, NumOps.FromDouble(c00)));
+
+                        if (h0 >= 0 && h0 < height && w1 >= 0 && w1 < width)
+                            frameGrad[b, c, h0, w1] = NumOps.Add(
+                                frameGrad[b, c, h0, w1],
+                                NumOps.Multiply(grad, NumOps.FromDouble(c01)));
+
+                        if (h1 >= 0 && h1 < height && w0 >= 0 && w0 < width)
+                            frameGrad[b, c, h1, w0] = NumOps.Add(
+                                frameGrad[b, c, h1, w0],
+                                NumOps.Multiply(grad, NumOps.FromDouble(c10)));
+
+                        if (h1 >= 0 && h1 < height && w1 >= 0 && w1 < width)
+                            frameGrad[b, c, h1, w1] = NumOps.Add(
+                                frameGrad[b, c, h1, w1],
+                                NumOps.Multiply(grad, NumOps.FromDouble(c11)));
+
+                        // Gradient w.r.t. flow (spatial derivatives of bilinear interpolation)
+                        T v00 = GetPixelSafe(inputFrame, b, c, h0, w0, height, width);
+                        T v01 = GetPixelSafe(inputFrame, b, c, h0, w1, height, width);
+                        T v10 = GetPixelSafe(inputFrame, b, c, h1, w0, height, width);
+                        T v11 = GetPixelSafe(inputFrame, b, c, h1, w1, height, width);
+
+                        // dOutput/dx = derivative of bilinear interpolation w.r.t. x (width direction)
+                        T dX = NumOps.Add(
+                            NumOps.Multiply(
+                                NumOps.Subtract(v01, v00),
+                                NumOps.FromDouble(1 - hWeight)),
+                            NumOps.Multiply(
+                                NumOps.Subtract(v11, v10),
+                                NumOps.FromDouble(hWeight)));
+
+                        // dOutput/dy = derivative of bilinear interpolation w.r.t. y (height direction)
+                        T dY = NumOps.Add(
+                            NumOps.Multiply(
+                                NumOps.Subtract(v10, v00),
+                                NumOps.FromDouble(1 - wWeight)),
+                            NumOps.Multiply(
+                                NumOps.Subtract(v11, v01),
+                                NumOps.FromDouble(wWeight)));
+
+                        // Accumulate flow gradients
+                        flowGrad[b, 0, h, w] = NumOps.Add(
+                            flowGrad[b, 0, h, w],
+                            NumOps.Multiply(grad, dX));
+                        flowGrad[b, 1, h, w] = NumOps.Add(
+                            flowGrad[b, 1, h, w],
+                            NumOps.Multiply(grad, dY));
+                    }
+                }
+            }
+        }
+
+        return (frameGrad, flowGrad);
+    }
+
+    /// <summary>
+    /// Gets a pixel value safely with boundary handling.
+    /// </summary>
+    private T GetPixelSafe(Tensor<T> tensor, int b, int c, int h, int w, int height, int width)
+    {
+        h = Math.Max(0, Math.Min(h, height - 1));
+        w = Math.Max(0, Math.Min(w, width - 1));
+        return tensor[b, c, h, w];
+    }
+
+    /// <summary>
+    /// Splits a concatenated gradient tensor along the channel dimension.
+    /// </summary>
+    private (Tensor<T> first, Tensor<T> second) SplitConcatenatedGradient(
+        Tensor<T> gradient, int firstChannels, int secondChannels)
+    {
+        int batchSize = gradient.Shape[0];
+        int height = gradient.Shape[2];
+        int width = gradient.Shape[3];
+
+        var first = new Tensor<T>([batchSize, firstChannels, height, width]);
+        var second = new Tensor<T>([batchSize, secondChannels, height, width]);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < height; h++)
+            {
+                for (int w = 0; w < width; w++)
+                {
+                    for (int c = 0; c < firstChannels; c++)
+                        first[b, c, h, w] = gradient[b, c, h, w];
+                    for (int c = 0; c < secondChannels; c++)
+                        second[b, c, h, w] = gradient[b, firstChannels + c, h, w];
+                }
+            }
+        }
+
+        return (first, second);
+    }
+
+    /// <summary>
+    /// Combines flow gradients from different sources.
+    /// </summary>
+    private Tensor<T> CombineFlowGradients(
+        Tensor<T> flowGrad1,
+        Tensor<T> flowGrad2,
+        Tensor<T> flowGradAccumulator)
+    {
+        // flow_0_1 channels 0-1, flow_1_0 channels 2-3
+        int batchSize = flowGradAccumulator.Shape[0];
+        int height = flowGradAccumulator.Shape[2];
+        int width = flowGradAccumulator.Shape[3];
+
+        var combined = new Tensor<T>(flowGradAccumulator.Shape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < height; h++)
+            {
+                for (int w = 0; w < width; w++)
+                {
+                    // Flow 0->1 gradients (channels 0-1)
+                    combined[b, 0, h, w] = NumOps.Add(
+                        flowGradAccumulator[b, 0, h, w],
+                        flowGrad1[b, 0, h, w]);
+                    combined[b, 1, h, w] = NumOps.Add(
+                        flowGradAccumulator[b, 1, h, w],
+                        flowGrad1[b, 1, h, w]);
+
+                    // Flow 1->0 gradients (channels 2-3)
+                    combined[b, 2, h, w] = NumOps.Add(
+                        flowGradAccumulator[b, 2, h, w],
+                        flowGrad2[b, 0, h, w]);
+                    combined[b, 3, h, w] = NumOps.Add(
+                        flowGradAccumulator[b, 3, h, w],
+                        flowGrad2[b, 1, h, w]);
+                }
+            }
+        }
+
+        return combined;
+    }
+
+    /// <summary>
+    /// Accumulates gradients from multiple branches back to the input.
+    /// </summary>
+    private Tensor<T> AccumulateInputGradients(
+        Tensor<T> encoderGrad,
+        Tensor<T> contextGrad,
+        Tensor<T> frame1Grad,
+        Tensor<T> frame2Grad)
+    {
+        // The input is concatenated frames [frame1, frame2]
+        // Encoder and context encoder both process full concatenated input
+        // Frame gradients only affect their respective parts
+
+        int batchSize = encoderGrad.Shape[0];
+        int totalChannels = encoderGrad.Shape[1];
+        int height = encoderGrad.Shape[2];
+        int width = encoderGrad.Shape[3];
+
+        var result = new Tensor<T>(encoderGrad.Shape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < height; h++)
+            {
+                for (int w = 0; w < width; w++)
+                {
+                    for (int c = 0; c < totalChannels; c++)
+                    {
+                        // Accumulate encoder and context encoder gradients
+                        T grad = NumOps.Add(encoderGrad[b, c, h, w], contextGrad[b, c, h, w]);
+
+                        // Add frame-specific gradients
+                        if (c < _channels)
+                        {
+                            grad = NumOps.Add(grad, frame1Grad[b, c, h, w]);
+                        }
+                        else if (c < _channels * 2)
+                        {
+                            grad = NumOps.Add(grad, frame2Grad[b, c - _channels, h, w]);
+                        }
+
+                        result[b, c, h, w] = grad;
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Adds two tensors element-wise.
+    /// </summary>
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
+    {
+        var result = new Tensor<T>(a.Shape);
+        for (int i = 0; i < a.Length; i++)
+        {
+            result.Data[i] = NumOps.Add(a.Data[i], b.Data[i]);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Downsamples a tensor using bilinear interpolation (backward of upsample).
+    /// </summary>
+    private Tensor<T> BilinearDownsample(Tensor<T> input, int factor)
+    {
+        int batchSize = input.Shape[0];
+        int channels = input.Shape[1];
+        int inHeight = input.Shape[2];
+        int inWidth = input.Shape[3];
+
+        int outHeight = inHeight / factor;
+        int outWidth = inWidth / factor;
+
+        var output = new Tensor<T>([batchSize, channels, outHeight, outWidth]);
+
+        // Average pooling as inverse of bilinear upsampling
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int h = 0; h < outHeight; h++)
+                {
+                    for (int w = 0; w < outWidth; w++)
+                    {
+                        T sum = NumOps.Zero;
+                        int count = 0;
+
+                        for (int dy = 0; dy < factor; dy++)
+                        {
+                            for (int dx = 0; dx < factor; dx++)
+                            {
+                                int srcH = h * factor + dy;
+                                int srcW = w * factor + dx;
+                                if (srcH < inHeight && srcW < inWidth)
+                                {
+                                    sum = NumOps.Add(sum, input[b, c, srcH, srcW]);
+                                    count++;
+                                }
+                            }
+                        }
+
+                        output[b, c, h, w] = count > 0
+                            ? NumOps.Divide(sum, NumOps.FromDouble(count))
+                            : NumOps.Zero;
+                    }
+                }
+            }
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Clears the activation cache.
+    /// </summary>
+    private void ClearActivationCache()
+    {
+        _cachedConcatenatedFrames = null;
+        _cachedFrame1 = null;
+        _cachedFrame2 = null;
+        _cachedFlow = null;
+        _cachedFlow_0_1 = null;
+        _cachedFlow_1_0 = null;
+        _cachedFlow_t_0 = null;
+        _cachedFlow_t_1 = null;
+        _cachedFrame1Warped = null;
+        _cachedFrame2Warped = null;
+        _cachedContext = null;
+        _cachedFusionInput = null;
+        _cachedFused = null;
+        _cachedEncoderOutputs.Clear();
+        _cachedFlowDecoderOutputs.Clear();
+        _cachedContextEncoderOutputs.Clear();
+        _cachedFlowBlockInputs.Clear();
+        _cachedFlowBlockOutputs.Clear();
     }
 
     private Tensor<T> ConcatenateChannels(Tensor<T> t1, Tensor<T> t2)

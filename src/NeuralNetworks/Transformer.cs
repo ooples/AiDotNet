@@ -447,41 +447,45 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        Tensor<T> encoderOutput = input;
-        Tensor<T> decoderOutput = input;  // Initialize with input, will be replaced in decoder layers
+        Tensor<T> output = input;
+        Tensor<T>? encoderOutput = null;
         Tensor<T> mask = AttentionMask ?? Tensor<T>.CreateDefault(input.Shape, NumOps.One); // Default to all ones if no mask is provided
 
-        // Encoder
-        for (int i = 0; i < _transformerArchitecture.NumEncoderLayers; i++)
-        {
-            if (Layers[i] is AttentionLayer<T> attentionLayer)
-            {
-                encoderOutput = attentionLayer.Forward(encoderOutput, mask);
-            }
-            else
-            {
-                encoderOutput = Layers[i].Forward(encoderOutput);
-            }
-        }
-
-        // Decoder
-        for (int i = _transformerArchitecture.NumEncoderLayers; i < Layers.Count; i++)
+        // Process all layers sequentially
+        // The layer list structure: input projection, positional encoding, dropout, then encoder/decoder blocks
+        for (int i = 0; i < Layers.Count; i++)
         {
             if (Layers[i] is DecoderLayer<T> decoderLayer)
             {
-                decoderOutput = decoderLayer.Forward(decoderOutput, encoderOutput, mask);
+                // Decoder layer with cross-attention needs encoder output
+                output = decoderLayer.Forward(output, encoderOutput ?? output, mask);
             }
             else if (Layers[i] is AttentionLayer<T> attentionLayer)
             {
-                decoderOutput = attentionLayer.Forward(decoderOutput, mask);
+                output = attentionLayer.Forward(output, mask);
             }
             else
             {
-                decoderOutput = Layers[i].Forward(decoderOutput);
+                output = Layers[i].Forward(output);
+            }
+
+            // Track encoder output for cross-attention in decoders
+            // The last attention layer before any decoder layer is the encoder output
+            if (Layers[i] is MultiHeadAttentionLayer<T> && encoderOutput is null)
+            {
+                // Check if there are decoder layers ahead
+                for (int j = i + 1; j < Layers.Count; j++)
+                {
+                    if (Layers[j] is DecoderLayer<T>)
+                    {
+                        encoderOutput = output;
+                        break;
+                    }
+                }
             }
         }
 
-        return decoderOutput;
+        return output;
     }
 
     /// <summary>

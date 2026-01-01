@@ -678,6 +678,7 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
     /// <inheritdoc/>
     public override void UpdateParameters(T learningRate)
     {
+        // Update main convolution weights
         if (_weightGradients != null)
         {
             for (int i = 0; i < _weights.Length; i++)
@@ -693,6 +694,47 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
             {
                 _bias.Data[i] = NumOps.Subtract(_bias.Data[i],
                     NumOps.Multiply(learningRate, _biasGradients.Data[i]));
+            }
+        }
+
+        // Update offset prediction network weights
+        if (_offsetWeightGradients != null)
+        {
+            for (int i = 0; i < _offsetWeights.Length; i++)
+            {
+                _offsetWeights.Data[i] = NumOps.Subtract(_offsetWeights.Data[i],
+                    NumOps.Multiply(learningRate, _offsetWeightGradients.Data[i]));
+            }
+        }
+
+        if (_offsetBiasGradients != null)
+        {
+            for (int i = 0; i < _offsetBias.Length; i++)
+            {
+                _offsetBias.Data[i] = NumOps.Subtract(_offsetBias.Data[i],
+                    NumOps.Multiply(learningRate, _offsetBiasGradients.Data[i]));
+            }
+        }
+
+        // Update mask prediction network weights (if using modulation)
+        if (_useModulation)
+        {
+            if (_maskWeightGradients != null && _maskWeights != null)
+            {
+                for (int i = 0; i < _maskWeights.Length; i++)
+                {
+                    _maskWeights.Data[i] = NumOps.Subtract(_maskWeights.Data[i],
+                        NumOps.Multiply(learningRate, _maskWeightGradients.Data[i]));
+                }
+            }
+
+            if (_maskBiasGradients != null && _maskBias != null)
+            {
+                for (int i = 0; i < _maskBias.Length; i++)
+                {
+                    _maskBias.Data[i] = NumOps.Subtract(_maskBias.Data[i],
+                        NumOps.Multiply(learningRate, _maskBiasGradients.Data[i]));
+                }
             }
         }
     }

@@ -113,8 +113,16 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// </summary>
     private int[]? _lastMaxInputShape;
 
+    /// <summary>
+    /// Cached reshaped adjacency matrix for backward pass.
+    /// </summary>
+    private Tensor<T>? _adjForBatch;
+
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    public override int ParameterCount => _selfWeights.Length + _neighborWeights.Length + _bias.Length;
 
     /// <inheritdoc/>
     public int InputFeatures => _inputFeatures;
@@ -234,8 +242,42 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _lastInput = processInput;
         int numNodes = processInput.Shape[1];
 
+        // Ensure adjacency matrix has matching rank for batch operation
+        // If adjacency is 2D [nodes, nodes] and input is 3D [batch, nodes, features], reshape to 3D
+        Tensor<T> adjForBatch;
+        if (_adjacencyMatrix.Shape.Length == 2 && processInput.Shape.Length == 3)
+        {
+            // Reshape 2D adjacency [nodes, nodes] to 3D [1, nodes, nodes] and broadcast to [batchSize, nodes, nodes]
+            if (batchSize == 1)
+            {
+                adjForBatch = _adjacencyMatrix.Reshape([1, numNodes, numNodes]);
+            }
+            else
+            {
+                // Broadcast: repeat adjacency matrix for each batch item
+                adjForBatch = new Tensor<T>([batchSize, numNodes, numNodes]);
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int i = 0; i < numNodes; i++)
+                    {
+                        for (int j = 0; j < numNodes; j++)
+                        {
+                            adjForBatch[new int[] { b, i, j }] = _adjacencyMatrix[new int[] { i, j }];
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            adjForBatch = _adjacencyMatrix;
+        }
+
+        // Store for backward pass
+        _adjForBatch = adjForBatch;
+
         // Step 1: Compute degrees for normalization
-        _lastDegrees = Engine.ReduceSum(_adjacencyMatrix, [2], keepDims: false); // [batch, nodes]
+        _lastDegrees = Engine.ReduceSum(adjForBatch, [2], keepDims: false); // [batch, nodes]
 
         // Clamp degrees to minimum of 1 to avoid division by zero
         var oneTensor = new Tensor<T>(_lastDegrees.Shape);
@@ -243,7 +285,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var safeDegrees = Engine.TensorMax(_lastDegrees, oneTensor);
 
         // Step 2: Aggregate neighbor features using vectorized operations
-        _lastAggregated = ComputeVectorizedAggregation(processInput, safeDegrees, batchSize, numNodes);
+        _lastAggregated = ComputeVectorizedAggregation(processInput, safeDegrees, batchSize, numNodes, adjForBatch);
 
         // Step 3: Transform self features (3D @ 2D requires reshape pattern)
         var selfTransformed = BatchedMatMul3Dx2D(processInput, _selfWeights, batchSize, numNodes, _inputFeatures, _outputFeatures);
@@ -299,17 +341,17 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <summary>
     /// Computes vectorized aggregation using Engine operations.
     /// </summary>
-    private Tensor<T> ComputeVectorizedAggregation(Tensor<T> input, Tensor<T> safeDegrees, int batchSize, int numNodes)
+    private Tensor<T> ComputeVectorizedAggregation(Tensor<T> input, Tensor<T> safeDegrees, int batchSize, int numNodes, Tensor<T> adjForBatch)
     {
         switch (_aggregatorType)
         {
             case SAGEAggregatorType.Sum:
                 // Sum aggregation: A @ X (batched matmul: [batch, nodes, nodes] @ [batch, nodes, features])
-                return Engine.BatchMatMul(_adjacencyMatrix!, input);
+                return Engine.BatchMatMul(adjForBatch, input);
 
             case SAGEAggregatorType.Mean:
                 // Mean aggregation: (A @ X) / degree (batched matmul then divide)
-                var sumAgg = Engine.BatchMatMul(_adjacencyMatrix!, input);
+                var sumAgg = Engine.BatchMatMul(adjForBatch, input);
                 int features = input.Shape[2];
                 var degreesExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
                 // Broadcast degrees to match feature dimension: [batch, nodes, 1] -> [batch, nodes, features]
@@ -318,10 +360,10 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
             case SAGEAggregatorType.MaxPool:
                 // Max aggregation requires masking non-neighbors with -inf then taking max
-                return ComputeMaxAggregation(input, batchSize, numNodes);
+                return ComputeMaxAggregation(input, batchSize, numNodes, adjForBatch);
 
             default:
-                return Engine.BatchMatMul(_adjacencyMatrix!, input);
+                return Engine.BatchMatMul(adjForBatch, input);
         }
     }
 
@@ -343,7 +385,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// Computes max aggregation over neighbors using masked reduce.
     /// Stores max indices for proper backward pass gradient routing.
     /// </summary>
-    private Tensor<T> ComputeMaxAggregation(Tensor<T> input, int batchSize, int numNodes)
+    private Tensor<T> ComputeMaxAggregation(Tensor<T> input, int batchSize, int numNodes, Tensor<T> adjForBatch)
     {
         int features = input.Shape[2];
 
@@ -354,7 +396,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var tiled = Engine.TensorTile(expanded, [1, numNodes, 1, 1]);
 
         // Create mask from adjacency: [batch, nodes, nodes, 1]
-        var adjExpanded = _adjacencyMatrix!.Reshape([batchSize, numNodes, numNodes, 1]);
+        var adjExpanded = adjForBatch.Reshape([batchSize, numNodes, numNodes, 1]);
 
         // Mask non-neighbors with -inf
         var negInf = new Tensor<T>(tiled.Shape);
@@ -434,7 +476,15 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             throw new InvalidOperationException("Forward pass must be called before Backward.");
         }
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        // Reshape outputGradient to match _lastOutput's 3D shape if needed
+        var gradForBackward = outputGradient;
+        if (_originalInputShape != null && _originalInputShape.Length != 3 && outputGradient.Shape.Length != _lastOutput.Shape.Length)
+        {
+            // Reshape gradient to 3D [batch, nodes, features] to match _lastOutput
+            gradForBackward = outputGradient.Reshape(_lastOutput.Shape);
+        }
+
+        var activationGradient = ApplyActivationDerivative(_lastOutput, gradForBackward);
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
 
@@ -478,7 +528,15 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var inputGradientNeighbor = BackpropThroughAggregation(aggGradient, batchSize, numNodes);
 
         // Combine input gradients
-        return Engine.TensorAdd(inputGradientSelf, inputGradientNeighbor);
+        var inputGradient = Engine.TensorAdd(inputGradientSelf, inputGradientNeighbor);
+
+        // Reshape back to original input shape if it was not 3D
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
+        return inputGradient;
     }
 
     /// <summary>
@@ -489,6 +547,8 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // For L2 norm: y = x / ||x||
         // Gradient: dy/dx = (I - y * y^T) / ||x||
 
+        int featureDim = preNorm.Shape[2];
+
         // Compute squared values and norms
         var squared = Engine.TensorMultiply(preNorm, preNorm);
         var normSquared = Engine.ReduceSum(squared, [2], keepDims: true);
@@ -497,17 +557,23 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         normSquared = Engine.TensorAdd(normSquared, epsilon);
         var norm = Engine.TensorSqrt(normSquared);
 
+        // Broadcast norm to match feature dimension: [batch, nodes, 1] -> [batch, nodes, features]
+        var normBroadcast = Engine.TensorTile(norm, [1, 1, featureDim]);
+
         // Normalized output
-        var normalized = Engine.TensorDivide(preNorm, norm);
+        var normalized = Engine.TensorDivide(preNorm, normBroadcast);
 
         // Compute dot product of gradient and normalized output
         var dotProduct = Engine.TensorMultiply(gradient, normalized);
         var dotSum = Engine.ReduceSum(dotProduct, [2], keepDims: true);
 
+        // Broadcast dotSum to match feature dimension
+        var dotSumBroadcast = Engine.TensorTile(dotSum, [1, 1, featureDim]);
+
         // Gradient: (gradient - normalized * dot_sum) / norm
-        var scaled = Engine.TensorMultiply(normalized, dotSum);
+        var scaled = Engine.TensorMultiply(normalized, dotSumBroadcast);
         var diff = Engine.TensorSubtract(gradient, scaled);
-        return Engine.TensorDivide(diff, norm);
+        return Engine.TensorDivide(diff, normBroadcast);
     }
 
     /// <summary>
@@ -515,20 +581,26 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// </summary>
     private Tensor<T> BackpropThroughAggregation(Tensor<T> aggGradient, int batchSize, int numNodes)
     {
+        // Use the stored batched adjacency matrix for backward pass
+        var adjBatched = _adjForBatch ?? _adjacencyMatrix!;
+
         switch (_aggregatorType)
         {
             case SAGEAggregatorType.Sum:
-                // For sum: gradient flows back through A^T
-                var adjT = Engine.TensorTranspose(_adjacencyMatrix!);
-                return Engine.TensorMatMul(adjT, aggGradient);
+                // For sum: gradient flows back through A^T (batched transpose)
+                var adjT = Engine.TensorPermute(adjBatched, [0, 2, 1]); // [batch, nodes, nodes] -> transpose last 2 dims
+                return Engine.BatchMatMul(adjT, aggGradient);
 
             case SAGEAggregatorType.Mean:
                 // For mean: gradient flows back through A^T and is divided by degree
-                var adjTMean = Engine.TensorTranspose(_adjacencyMatrix!);
-                var gradThroughAdj = Engine.TensorMatMul(adjTMean, aggGradient);
+                var adjTMean = Engine.TensorPermute(adjBatched, [0, 2, 1]);
+                var gradThroughAdj = Engine.BatchMatMul(adjTMean, aggGradient);
                 var safeDegrees = Engine.TensorMax(_lastDegrees!, NumOps.One);
                 var degExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
-                return Engine.TensorDivide(gradThroughAdj, degExpanded);
+                // Broadcast degree to match feature dimension
+                int featureDim = aggGradient.Shape[2];
+                var degBroadcast = Engine.TensorTile(degExpanded, [1, 1, featureDim]);
+                return Engine.TensorDivide(gradThroughAdj, degBroadcast);
 
             case SAGEAggregatorType.MaxPool:
                 // For max pooling: gradient only flows to the max elements
@@ -545,13 +617,13 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 else
                 {
                     // Fallback if indices not available (shouldn't happen in normal flow)
-                    var adjTMax = Engine.TensorTranspose(_adjacencyMatrix!);
-                    return Engine.TensorMatMul(adjTMax, aggGradient);
+                    var adjTMax = Engine.TensorPermute(adjBatched, [0, 2, 1]);
+                    return Engine.BatchMatMul(adjTMax, aggGradient);
                 }
 
             default:
-                var adjTDefault = Engine.TensorTranspose(_adjacencyMatrix!);
-                return Engine.TensorMatMul(adjTDefault, aggGradient);
+                var adjTDefault = Engine.TensorPermute(adjBatched, [0, 2, 1]);
+                return Engine.BatchMatMul(adjTDefault, aggGradient);
         }
     }
 
@@ -566,7 +638,14 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             throw new InvalidOperationException("Forward pass must be called before Backward.");
         }
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        // Reshape outputGradient to match _lastOutput's 3D shape if needed
+        var gradForBackward = outputGradient;
+        if (_originalInputShape != null && _originalInputShape.Length != 3 && outputGradient.Shape.Length != _lastOutput.Shape.Length)
+        {
+            gradForBackward = outputGradient.Reshape(_lastOutput.Shape);
+        }
+
+        var activationGradient = ApplyActivationDerivative(_lastOutput, gradForBackward);
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
 
@@ -688,6 +767,13 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         // Extract input gradient
         var inputGradient = inputNode.Gradient ?? new Tensor<T>(_lastInput.Shape);
+
+        // Reshape back to original input shape if it was not 3D
+        if (_originalInputShape != null && _originalInputShape.Length != 3)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
+
         return inputGradient;
     }
 
@@ -777,6 +863,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _lastDegrees = null;
         _lastMaxIndices = null;
         _lastMaxInputShape = null;
+        _adjForBatch = null;
         _selfWeightsGradient = null;
         _neighborWeightsGradient = null;
         _biasGradient = null;

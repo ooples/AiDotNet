@@ -621,10 +621,15 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (input.Shape != new[] { _inputDimension })
+        // Handle any rank input - flatten to 1D if needed
+        var flatInput = input.Rank == 1 ? input : input.Reshape([input.Length]);
+
+        if (flatInput.Length != _inputDimension)
         {
-            throw new ArgumentException($"Input shape must be [{_inputDimension}], but got {string.Join(", ", input.Shape)}");
+            throw new ArgumentException($"Input must have {_inputDimension} elements, but got {flatInput.Length}");
         }
+
+        input = flatInput;
 
         int bmu = FindBestMatchingUnit(input.ToVector());
 
@@ -664,10 +669,15 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (input.Shape != new[] { _inputDimension })
+        // Handle any rank input - flatten to 1D if needed
+        var flatInput = input.Rank == 1 ? input : input.Reshape([input.Length]);
+
+        if (flatInput.Length != _inputDimension)
         {
-            throw new ArgumentException($"Input shape must be [{_inputDimension}], but got {string.Join(", ", input.Shape)}");
+            throw new ArgumentException($"Input must have {_inputDimension} elements, but got {flatInput.Length}");
         }
+
+        input = flatInput;
 
         // SOM training doesn't use expectedOutput, so we ignore it
 

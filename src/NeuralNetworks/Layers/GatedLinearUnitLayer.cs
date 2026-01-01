@@ -283,17 +283,40 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// that are updated during the training process.
     /// </para>
     /// <para><b>For Beginners:</b> This property tells you that this layer can learn from data.
-    /// 
+    ///
     /// A value of true means:
     /// - The layer adjusts its weights and biases during training
     /// - It improves its performance as it sees more data
     /// - It has parameters for both the linear and gating paths that adapt
-    /// 
+    ///
     /// GLU layers are powerful learning components because they can learn
     /// both what features to extract and which ones are important in context.
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in this layer.
+    /// </summary>
+    /// <value>
+    /// The sum of elements in all weight and bias tensors (linear weights, gate weights, linear bias, gate bias).
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property returns the total count of learnable parameters across all four parameter tensors:
+    /// linear weights, gate weights, linear biases, and gate biases.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you how many numbers the layer can adjust during training.
+    /// For a GLU layer with 100 inputs and 50 outputs, you would have:
+    /// - 5,000 linear weights (100 x 50)
+    /// - 5,000 gate weights (100 x 50)
+    /// - 50 linear biases
+    /// - 50 gate biases
+    /// - Total: 10,100 parameters
+    /// </para>
+    /// </remarks>
+    public override int ParameterCount =>
+        _linearWeights.Length + _gateWeights.Length + _linearBias.Length + _gateBias.Length;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GatedLinearUnitLayer{T}"/> class with a scalar activation function.

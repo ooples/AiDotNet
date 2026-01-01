@@ -657,6 +657,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <exception cref="ArgumentException">Thrown when the layer configuration is invalid.</exception>
     protected virtual void ValidateCustomLayers(List<ILayer<T>> layers)
     {
+        ValidateCustomLayersInternal(layers);
+    }
+
+    protected void ValidateCustomLayersInternal(List<ILayer<T>> layers)
+    {
         if (layers == null || layers.Count == 0)
         {
             throw new ArgumentException("Neural network must have at least 1 layer.");
@@ -2617,3 +2622,4 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     #endregion
 
 }
+

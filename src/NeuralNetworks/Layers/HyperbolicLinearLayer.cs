@@ -56,6 +56,11 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// Stored pre-activation output for gradient computation.
     /// </summary>
     private Tensor<T>? _lastOutput;
@@ -158,29 +163,36 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor with shape [inputFeatures] or [batch, inputFeatures].</param>
     /// <returns>Output tensor with shape [outputFeatures] or [batch, outputFeatures].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+        public override Tensor<T> Forward(Tensor<T> input)
     {
-        bool wasSingleSample = input.Rank == 1;
+        _originalInputShape = input.Shape;
+
         int batchSize;
         int inputLen;
         Tensor<T> inputTensor;
 
-        if (wasSingleSample)
+        if (input.Rank == 1)
         {
             batchSize = 1;
             inputLen = input.Shape[0];
-            // Convert 1D to 2D for processing
-            inputTensor = new Tensor<T>([1, inputLen]);
-            for (int i = 0; i < inputLen; i++)
-            {
-                inputTensor[0, i] = input[i];
-            }
+            inputTensor = input.Reshape([1, inputLen]);
         }
-        else
+        else if (input.Rank == 2)
         {
             batchSize = input.Shape[0];
             inputLen = input.Shape[1];
             inputTensor = input;
+        }
+        else
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < input.Rank - 1; d++)
+            {
+                flatBatch *= input.Shape[d];
+            }
+            batchSize = flatBatch;
+            inputLen = input.Shape[input.Rank - 1];
+            inputTensor = input.Reshape([batchSize, inputLen]);
         }
 
         // Validate input shape
@@ -190,7 +202,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
                 $"Input size {inputLen} does not match expected {InputFeatures}.");
         }
 
-        _lastInput = input;
+        _lastInput = inputTensor;
 
         // Output tensor: [batchSize, OutputFeatures]
         var output = new Tensor<T>([batchSize, OutputFeatures]);
@@ -250,50 +262,81 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         // Apply activation function
         var activated = ApplyActivation(output);
 
-        // Return 1D tensor for single sample input to match input rank
-        if (wasSingleSample)
+        if (_originalInputShape == null || _originalInputShape.Length == 2)
         {
-            var result = new Tensor<T>([OutputFeatures]);
-            for (int o = 0; o < OutputFeatures; o++)
-            {
-                result[o] = activated[0, o];
-            }
-            return result;
+            return activated;
         }
 
-        return activated;
+        if (_originalInputShape.Length == 1)
+        {
+            return activated.Reshape([OutputFeatures]);
+        }
+
+        var outputShape = new int[_originalInputShape.Length];
+        for (int d = 0; d < _originalInputShape.Length - 1; d++)
+        {
+            outputShape[d] = _originalInputShape[d];
+        }
+        outputShape[_originalInputShape.Length - 1] = OutputFeatures;
+        return activated.Reshape(outputShape);
     }
 
     /// <summary>
-    /// Performs the backward pass through the layer.
     /// </summary>
     /// <param name="outputGradient">Gradient from the next layer.</param>
     /// <returns>Gradient to pass to the previous layer.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
+        public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null)
         {
             throw new InvalidOperationException("Backward called before Forward.");
         }
 
-        bool wasSingleSample = outputGradient.Rank == 1;
-        int batchSize;
         Tensor<T> gradTensor;
+        int batchSize;
 
-        if (wasSingleSample)
+        if (_originalInputShape == null)
         {
-            batchSize = 1;
-            // Convert 1D to 2D for processing
-            gradTensor = new Tensor<T>([1, OutputFeatures]);
-            for (int o = 0; o < OutputFeatures; o++)
+            if (outputGradient.Rank == 1)
             {
-                gradTensor[0, o] = outputGradient[o];
+                batchSize = 1;
+                gradTensor = outputGradient.Reshape([1, OutputFeatures]);
+            }
+            else if (outputGradient.Rank == 2)
+            {
+                batchSize = outputGradient.Shape[0];
+                gradTensor = outputGradient;
+            }
+            else
+            {
+                int flatBatch = 1;
+                for (int d = 0; d < outputGradient.Rank - 1; d++)
+                {
+                    flatBatch *= outputGradient.Shape[d];
+                }
+                batchSize = flatBatch;
+                gradTensor = outputGradient.Reshape([batchSize, OutputFeatures]);
             }
         }
-        else
+        else if (_originalInputShape.Length == 1)
+        {
+            batchSize = 1;
+            gradTensor = outputGradient.Reshape([1, OutputFeatures]);
+        }
+        else if (_originalInputShape.Length == 2)
         {
             batchSize = outputGradient.Shape[0];
             gradTensor = outputGradient;
+        }
+        else
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < _originalInputShape.Length - 1; d++)
+            {
+                flatBatch *= _originalInputShape[d];
+            }
+            batchSize = flatBatch;
+            gradTensor = outputGradient.Reshape([batchSize, OutputFeatures]);
         }
 
         // Initialize gradients
@@ -315,7 +358,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
             var inputVec = new Vector<T>(InputFeatures);
             for (int i = 0; i < InputFeatures; i++)
             {
-                inputVec[i] = _lastInput.Rank > 1 ? _lastInput[b, i] : _lastInput[i];
+                inputVec[i] = _lastInput[b, i];
             }
             var projectedInput = _engine.PoincareProject(inputVec, _curvature, epsilon);
 
@@ -356,27 +399,27 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
                     _biasesGradient[o, i] = _numOps.Add(existingBGrad, biasContrib);
 
                     // Input gradient: Riemannian gradient scaled by weight direction
-                    var existingIGrad = inputGradient.Rank > 1 ? inputGradient[b, i] : inputGradient[i];
+                    var existingIGrad = inputGradient[b, i];
                     var weightContrib = _numOps.Multiply(riemannianGrad, _weights[o, i]);
-                    if (inputGradient.Rank > 1)
-                    {
-                        inputGradient[b, i] = _numOps.Add(existingIGrad, weightContrib);
-                    }
-                    else
-                    {
-                        inputGradient[i] = _numOps.Add(existingIGrad, weightContrib);
-                    }
+                    inputGradient[b, i] = _numOps.Add(existingIGrad, weightContrib);
                 }
             }
         }
 
-        return inputGradient;
+        if (_originalInputShape == null || _originalInputShape.Length == 2)
+        {
+            return inputGradient;
+        }
+
+        return inputGradient.Reshape(_originalInputShape);
     }
 
     /// <summary>
-    /// Updates the layer's parameters using the calculated gradients.
-    /// Uses Riemannian gradient descent (exponential map of negative gradient).
+    /// Updates the parameters of the layer using the calculated gradients.
     /// </summary>
+    /// <remarks>
+    /// Uses Riemannian gradient descent (exponential map of negative gradient).
+    /// </remarks>
     /// <param name="learningRate">The learning rate to use for the update.</param>
     public override void UpdateParameters(T learningRate)
     {

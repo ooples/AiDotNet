@@ -558,14 +558,22 @@ public class GRULayer<T> : LayerBase<T>
         Tensor<T>? lastR = null;
         Tensor<T>? lastH_candidate = null;
 
+        // Pre-transpose weights for efficiency (weights are [hiddenSize, inputSize], need [inputSize, hiddenSize] for matmul)
+        var WzT = Engine.TensorTranspose(_Wz);
+        var WrT = Engine.TensorTranspose(_Wr);
+        var WhT = Engine.TensorTranspose(_Wh);
+        var UzT = Engine.TensorTranspose(_Uz);
+        var UrT = Engine.TensorTranspose(_Ur);
+        var UhT = Engine.TensorTranspose(_Uh);
+
         for (int t = 0; t < sequenceLength; t++)
         {
-            // Extract current time step input
-            var xt = input.Slice(0, t).Reshape([batchSize, _inputSize]);
+            // Extract current time step input: slice axis 1 (sequence) at timestep t
+            var xt = input3D.Slice(1, t, t + 1).Reshape([batchSize, _inputSize]);
 
-            var z = ApplyActivation(xt.Multiply(_Wz).Add(currentHiddenState.Multiply(_Uz)).Add(_bz), true);
-            var r = ApplyActivation(xt.Multiply(_Wr).Add(currentHiddenState.Multiply(_Ur)).Add(_br), true);
-            var h_candidate = ApplyActivation(xt.Multiply(_Wh).Add(r.ElementwiseMultiply(currentHiddenState.Multiply(_Uh))).Add(_bh), false);
+            var z = ApplyActivation(Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WzT), Engine.TensorMatMul(currentHiddenState, UzT)), _bz), true);
+            var r = ApplyActivation(Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WrT), Engine.TensorMatMul(currentHiddenState, UrT)), _br), true);
+            var h_candidate = ApplyActivation(Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WhT), Engine.TensorMatMul(r.ElementwiseMultiply(currentHiddenState), UhT)), _bh), false);
             // Vectorized: compute (1 - z) using Tensor operations
 
             var ones = new Tensor<T>(z.Shape);
@@ -606,8 +614,9 @@ public class GRULayer<T> : LayerBase<T>
         Tensor<T> output;
         if (_returnSequences && _allHiddenStates != null)
         {
-            // Concatenate all hidden states along time dimension
-            output = Tensor<T>.Concatenate([.. _allHiddenStates], 1);
+            // Each hidden state is [batchSize, hiddenSize]
+            // Concatenate along axis 1, then reshape to [batchSize, sequenceLength, hiddenSize]
+            output = Tensor<T>.Concatenate([.. _allHiddenStates], 1).Reshape([batchSize, sequenceLength, _hiddenSize]);
         }
         else
         {
@@ -788,9 +797,11 @@ public class GRULayer<T> : LayerBase<T>
                 .ElementwiseMultiply(dh_candidate)
                 .ElementwiseMultiply(_lastHiddenState.Multiply(_Uh));
 
-            var dx = dz.Multiply(_Wz.Transpose())
-                    .Add(dr.Multiply(_Wr.Transpose()))
-                    .Add(dh_candidate.Multiply(_Wh.Transpose()));
+            // dx = dz @ Wz + dr @ Wr + dh_candidate @ Wh
+            // Wz is [hiddenSize, inputSize], so dz @ Wz = [batch, hidden] @ [hidden, input] = [batch, input]
+            var dx = dz.Multiply(_Wz)
+                    .Add(dr.Multiply(_Wr))
+                    .Add(dh_candidate.Multiply(_Wh));
 
             // Reshape dx to match input format for the last timestep using Engine.TensorSetSlice
             var dxReshaped = dx.Reshape([batchSize, 1, _inputSize]);
@@ -857,57 +868,37 @@ public class GRULayer<T> : LayerBase<T>
             // Initialize hidden state gradient for the next timestep
             var dhNext = new Tensor<T>([batchSize, _hiddenSize]);
 
-            // We need to store activations for each time step during forward pass
-            // If we haven't stored them, we'll recompute them now
+            // Recompute hidden states and activations for each time step (needed for backward pass)
             List<Tensor<T>> timeStepHidden = new List<Tensor<T>>(sequenceLength);
             List<Tensor<T>> timeStepZ = new List<Tensor<T>>(sequenceLength);
             List<Tensor<T>> timeStepR = new List<Tensor<T>>(sequenceLength);
             List<Tensor<T>> timeStepHCandidate = new List<Tensor<T>>(sequenceLength);
+            var currentH = new Tensor<T>([batchSize, _hiddenSize]);
 
-            // We know the last state values
-            timeStepHidden.Add(_lastHiddenState);
-            timeStepZ.Add(_lastZ);
-            timeStepR.Add(_lastR);
-            timeStepHCandidate.Add(_lastH);
-
-            // If we have _allHiddenStates, use those states
-            if (_allHiddenStates != null && _allHiddenStates.Count == sequenceLength)
+            for (int t = 0; t < sequenceLength; t++)
             {
-                timeStepHidden = _allHiddenStates;
-            }
-            else
-            {
-                // Recompute hidden states for each time step
-                // This is computationally expensive but ensures correctness
-                var currentH = new Tensor<T>([batchSize, _hiddenSize]);
+                var xt = _lastInput.Slice(1, t, t + 1).Reshape([batchSize, _inputSize]);
 
-                for (int t = 0; t < sequenceLength; t++)
-                {
-                    var xt = _lastInput.Slice(1, t, t + 1).Reshape([batchSize, _inputSize]);
+                var z = ComputeGate(xt, currentH, _Wz, _Uz, _bz, true);
+                var r = ComputeGate(xt, currentH, _Wr, _Ur, _br, true);
+                var h_candidate = ComputeGate(xt, r.ElementwiseMultiply(currentH), _Wh, _Uh, _bh, false);
 
-                    var z = ComputeGate(xt, currentH, _Wz, _Uz, _bz, true);
-                    var r = ComputeGate(xt, currentH, _Wr, _Ur, _br, true);
-                    var h_candidate = ComputeGate(xt, r.ElementwiseMultiply(currentH), _Wh, _Uh, _bh, false);
+                // Vectorized: compute (1 - z) using Tensor operations
+                var ones2 = new Tensor<T>(z.Shape);
+                ones2.Fill(NumOps.One);
+                var oneMinusZ2 = ones2.Subtract(z);
 
-                    // Vectorized: compute (1 - z) using Tensor operations
-                    var ones2 = new Tensor<T>(z.Shape);
-                    ones2.Fill(NumOps.One);
-                    var oneMinusZ2 = ones2.Subtract(z);
+                var newH = z.ElementwiseMultiply(currentH).Add(
+                    oneMinusZ2.ElementwiseMultiply(h_candidate)
+                );
 
-                    var newH = z.ElementwiseMultiply(currentH).Add(
-                        oneMinusZ2.ElementwiseMultiply(h_candidate)
-                    );
+                currentH = newH;
 
-                    currentH = newH;
-
-                    if (t < sequenceLength - 1)
-                    {
-                        timeStepHidden[t] = currentH.Clone();
-                        timeStepZ[t] = z.Clone();
-                        timeStepR[t] = r.Clone();
-                        timeStepHCandidate[t] = h_candidate.Clone();
-                    }
-                }
+                // Add to lists (not assign by index)
+                timeStepHidden.Add(currentH.Clone());
+                timeStepZ.Add(z.Clone());
+                timeStepR.Add(r.Clone());
+                timeStepHCandidate.Add(h_candidate.Clone());
             }
 
             // Backpropagate through time
@@ -939,10 +930,11 @@ public class GRULayer<T> : LayerBase<T>
                     .ElementwiseMultiply(dh_candidate)
                     .ElementwiseMultiply(h_prev.Multiply(_Uh));
 
-                // Input gradient for this timestep
-                var dxt = dz.Multiply(_Wz.Transpose())
-                        .Add(dr.Multiply(_Wr.Transpose()))
-                        .Add(dh_candidate.Multiply(_Wh.Transpose()));
+                // Input gradient for this timestep: dxt = dz @ Wz + dr @ Wr + dh_candidate @ Wh
+                // Wz is [hiddenSize, inputSize], so dz @ Wz = [batch, hidden] @ [hidden, input] = [batch, input]
+                var dxt = dz.Multiply(_Wz)
+                        .Add(dr.Multiply(_Wr))
+                        .Add(dh_candidate.Multiply(_Wh));
 
                 // Store input gradients using Engine.TensorSetSlice
                 var dxtReshaped = dxt.Reshape([batchSize, 1, _inputSize]);
@@ -988,7 +980,12 @@ public class GRULayer<T> : LayerBase<T>
     /// <returns>The computed gate activation.</returns>
     private Tensor<T> ComputeGate(Tensor<T> input, Tensor<T> hidden, Tensor<T> W, Tensor<T> U, Tensor<T> b, bool isRecurrent)
     {
-        var gate = input.Multiply(W).Add(hidden.Multiply(U)).Add(b);
+        // W is [hiddenSize, inputSize], U is [hiddenSize, hiddenSize]
+        // input is [batch, inputSize], hidden is [batch, hiddenSize]
+        // Need to transpose to get [inputSize, hiddenSize] and [hiddenSize, hiddenSize]
+        var WT = Engine.TensorTranspose(W);
+        var UT = Engine.TensorTranspose(U);
+        var gate = Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(input, WT), Engine.TensorMatMul(hidden, UT)), b);
         return ApplyActivation(gate, isRecurrent);
     }
 
@@ -1563,5 +1560,47 @@ public class GRULayer<T> : LayerBase<T>
         var ones = new Tensor<T>(tensor.Shape);
         ones.Fill(NumOps.One);
         return ones;
+    }
+
+    /// <summary>
+    /// Creates a deep copy of this GRU layer with independent weights and reset state.
+    /// </summary>
+    /// <returns>A new GRULayer with the same weights but independent of the original.</returns>
+    public override LayerBase<T> Clone()
+    {
+        var clone = (GRULayer<T>)base.Clone();
+
+        // Deep copy all weight tensors
+        clone._Wz = _Wz.Clone();
+        clone._Wr = _Wr.Clone();
+        clone._Wh = _Wh.Clone();
+        clone._Uz = _Uz.Clone();
+        clone._Ur = _Ur.Clone();
+        clone._Uh = _Uh.Clone();
+        clone._bz = _bz.Clone();
+        clone._br = _br.Clone();
+        clone._bh = _bh.Clone();
+
+        // Reset internal state (don't share state between original and clone)
+        clone._lastInput = null;
+        clone._lastHiddenState = null;
+        clone._lastZ = null;
+        clone._lastR = null;
+        clone._lastH = null;
+        clone._allHiddenStates = null;
+        clone._originalInputShape = null;
+
+        // Reset gradients
+        clone._dWz = null;
+        clone._dWr = null;
+        clone._dWh = null;
+        clone._dUz = null;
+        clone._dUr = null;
+        clone._dUh = null;
+        clone._dbz = null;
+        clone._dbr = null;
+        clone._dbh = null;
+
+        return clone;
     }
 }

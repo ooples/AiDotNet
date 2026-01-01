@@ -12870,6 +12870,38 @@ public class GpuEngine : IEngine, IDisposable
     }
 
     /// <inheritdoc/>
+    public Tensor<T> TensorBroadcastSubtract<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+
+        // Fast path: same shapes - use regular TensorSubtract
+        if (a.Shape.SequenceEqual(b.Shape))
+        {
+            return TensorSubtract(a, b);
+        }
+
+        // General case: fallback to CPU which uses Tensor.BroadcastSubtract
+        return _cpuFallback.TensorBroadcastSubtract(a, b);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorBroadcastDivide<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+
+        // Fast path: same shapes - use regular TensorDivide
+        if (a.Shape.SequenceEqual(b.Shape))
+        {
+            return TensorDivide(a, b);
+        }
+
+        // General case: fallback to CPU which uses Tensor.BroadcastDivide
+        return _cpuFallback.TensorBroadcastDivide(a, b);
+    }
+
+    /// <inheritdoc/>
     public Tensor<T> TensorBroadcastMultiply<T>(Tensor<T> a, Tensor<T> b)
     {
         if (a == null) throw new ArgumentNullException(nameof(a));

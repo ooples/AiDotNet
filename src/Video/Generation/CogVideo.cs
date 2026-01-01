@@ -92,32 +92,82 @@ public class CogVideo<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Embedding dimension for the model.
     /// </summary>
-    private readonly int _embedDim;
+    private int _embedDim;
 
     /// <summary>
     /// Number of transformer layers.
     /// </summary>
-    private readonly int _numLayers;
+    private int _numLayers;
 
     /// <summary>
     /// Number of video frames to generate.
     /// </summary>
-    private readonly int _numFrames;
+    private int _numFrames;
 
     /// <summary>
     /// Latent space height.
     /// </summary>
-    private readonly int _latentHeight;
+    private int _latentHeight;
 
     /// <summary>
     /// Latent space width.
     /// </summary>
-    private readonly int _latentWidth;
+    private int _latentWidth;
 
     /// <summary>
     /// Number of latent channels.
     /// </summary>
-    private readonly int _latentChannels;
+    private int _latentChannels;
+
+    /// <summary>
+    /// Number of diffusion timesteps.
+    /// </summary>
+    private int _numTimesteps;
+
+    /// <summary>
+    /// Beta schedule (variance at each timestep).
+    /// </summary>
+    private double[]? _betas;
+
+    /// <summary>
+    /// Alpha values (1 - beta).
+    /// </summary>
+    private double[]? _alphas;
+
+    /// <summary>
+    /// Cumulative product of alphas (alpha_bar).
+    /// </summary>
+    private double[]? _alphaBars;
+
+    /// <summary>
+    /// Cumulative product of alphas for t-1 (alpha_bar_prev).
+    /// </summary>
+    private double[]? _alphaBarsPrev;
+
+    /// <summary>
+    /// Square root of alpha_bar.
+    /// </summary>
+    private double[]? _sqrtAlphaBars;
+
+    /// <summary>
+    /// Square root of 1 - alpha_bar.
+    /// </summary>
+    private double[]? _sqrtOneMinusAlphaBars;
+
+    /// <summary>
+    /// Posterior variance for DDPM sampling.
+    /// </summary>
+    private double[]? _posteriorVariances;
+
+    /// <summary>
+    /// Posterior mean coefficient 1: sqrt(alpha_bar_prev) * beta / (1 - alpha_bar).
+    /// </summary>
+    private double[]? _posteriorMeanCoef1;
+
+    /// <summary>
+    /// Posterior mean coefficient 2: sqrt(alpha) * (1 - alpha_bar_prev) / (1 - alpha_bar).
+    /// </summary>
+    private double[]? _posteriorMeanCoef2;
 
     #endregion
 
@@ -173,7 +223,8 @@ public class CogVideo<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         int embedDim = 1024,
         int numLayers = 24,
-        int numFrames = 16)
+        int numFrames = 16,
+        int numTimesteps = 1000)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         if (embedDim < 1)
@@ -182,11 +233,14 @@ public class CogVideo<T> : NeuralNetworkBase<T>
             throw new ArgumentOutOfRangeException(nameof(numLayers), numLayers, "Number of layers must be at least 1.");
         if (numFrames < 1)
             throw new ArgumentOutOfRangeException(nameof(numFrames), numFrames, "Number of frames must be at least 1.");
+        if (numTimesteps < 1)
+            throw new ArgumentOutOfRangeException(nameof(numTimesteps), numTimesteps, "Number of timesteps must be at least 1.");
 
         _useNativeMode = true;
         _embedDim = embedDim;
         _numLayers = numLayers;
         _numFrames = numFrames;
+        _numTimesteps = numTimesteps;
         _latentHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 32;
         _latentWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 32;
         _latentChannels = architecture.InputDepth > 0 ? architecture.InputDepth : 4;
@@ -194,6 +248,7 @@ public class CogVideo<T> : NeuralNetworkBase<T>
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
+        InitializeNoiseSchedule();
         InitializeLayers();
     }
 
@@ -220,7 +275,8 @@ public class CogVideo<T> : NeuralNetworkBase<T>
     public CogVideo(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numFrames = 16)
+        int numFrames = 16,
+        int numTimesteps = 1000)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
         if (string.IsNullOrWhiteSpace(onnxModelPath))
@@ -233,6 +289,7 @@ public class CogVideo<T> : NeuralNetworkBase<T>
         _embedDim = 1024;
         _numLayers = 24;
         _numFrames = numFrames;
+        _numTimesteps = numTimesteps;
         _latentHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 32;
         _latentWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 32;
         _latentChannels = architecture.InputDepth > 0 ? architecture.InputDepth : 4;
@@ -247,6 +304,7 @@ public class CogVideo<T> : NeuralNetworkBase<T>
             throw new InvalidOperationException($"Failed to load ONNX model: {ex.Message}", ex);
         }
 
+        InitializeNoiseSchedule();
         InitializeLayers();
     }
 
@@ -353,17 +411,34 @@ public class CogVideo<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Creates a timestep embedding using sinusoidal encoding.
     /// </summary>
+    /// <remarks>
+    /// Handles both even and odd embedding dimensions properly:
+    /// - For even dimensions: sin fills first half, cos fills second half
+    /// - For odd dimensions: sin/cos pairs interleaved, last element uses cos at highest frequency
+    /// </remarks>
     private Tensor<T> CreateTimestepEmbedding(double timestep)
     {
         // Use sinusoidal position encoding for timestep
         int embedDim = _latentChannels;
         var embedding = new T[embedDim];
 
-        for (int i = 0; i < embedDim / 2; i++)
+        // Handle both even and odd dimensions properly
+        int halfDim = embedDim / 2;
+        bool isOdd = embedDim % 2 == 1;
+
+        for (int i = 0; i < halfDim; i++)
         {
-            double freq = Math.Exp(-Math.Log(10000.0) * i / (embedDim / 2));
+            // Frequency for this position (exponential decay from 1 to 1/10000)
+            double freq = Math.Exp(-Math.Log(10000.0) * i / Math.Max(1, halfDim - 1));
             embedding[i] = NumOps.FromDouble(Math.Sin(timestep * freq));
-            embedding[i + embedDim / 2] = NumOps.FromDouble(Math.Cos(timestep * freq));
+            embedding[i + halfDim] = NumOps.FromDouble(Math.Cos(timestep * freq));
+        }
+
+        // For odd dimensions, fill the last element with highest frequency cosine
+        if (isOdd)
+        {
+            double highestFreq = Math.Exp(-Math.Log(10000.0) * halfDim / Math.Max(1, halfDim));
+            embedding[embedDim - 1] = NumOps.FromDouble(Math.Cos(timestep * highestFreq));
         }
 
         return new Tensor<T>([1, embedDim], new Vector<T>(embedding));
@@ -398,22 +473,144 @@ public class CogVideo<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs a single denoising step.
+    /// Initializes the DDPM noise schedule using a linear beta schedule.
     /// </summary>
+    /// <remarks>
+    /// The noise schedule follows the DDPM paper (Ho et al., 2020):
+    /// - Linear beta schedule from beta_start to beta_end
+    /// - Precomputed alpha, alpha_bar, and posterior coefficients
+    /// </remarks>
+    private void InitializeNoiseSchedule()
+    {
+        const double betaStart = 0.0001;
+        const double betaEnd = 0.02;
+
+        _betas = new double[_numTimesteps];
+        _alphas = new double[_numTimesteps];
+        _alphaBars = new double[_numTimesteps];
+        _alphaBarsPrev = new double[_numTimesteps];
+        _sqrtAlphaBars = new double[_numTimesteps];
+        _sqrtOneMinusAlphaBars = new double[_numTimesteps];
+        _posteriorVariances = new double[_numTimesteps];
+        _posteriorMeanCoef1 = new double[_numTimesteps];
+        _posteriorMeanCoef2 = new double[_numTimesteps];
+
+        // Linear beta schedule
+        for (int t = 0; t < _numTimesteps; t++)
+        {
+            _betas[t] = betaStart + (betaEnd - betaStart) * t / (_numTimesteps - 1);
+            _alphas[t] = 1.0 - _betas[t];
+        }
+
+        // Compute cumulative products of alphas (alpha_bar)
+        double cumulativeProduct = 1.0;
+        for (int t = 0; t < _numTimesteps; t++)
+        {
+            cumulativeProduct *= _alphas[t];
+            _alphaBars[t] = cumulativeProduct;
+            _alphaBarsPrev[t] = t > 0 ? _alphaBars[t - 1] : 1.0;
+            _sqrtAlphaBars[t] = Math.Sqrt(_alphaBars[t]);
+            _sqrtOneMinusAlphaBars[t] = Math.Sqrt(1.0 - _alphaBars[t]);
+        }
+
+        // Compute posterior coefficients for DDPM sampling
+        // β̃_t = β_t * (1 - α̅_{t-1}) / (1 - α̅_t)
+        // μ̃_t = √(α̅_{t-1}) * β_t / (1 - α̅_t) * x_0 + √(α_t) * (1 - α̅_{t-1}) / (1 - α̅_t) * x_t
+        for (int t = 0; t < _numTimesteps; t++)
+        {
+            double oneMinusAlphaBar = 1.0 - _alphaBars[t];
+            double oneMinusAlphaBarPrev = 1.0 - _alphaBarsPrev[t];
+
+            // Posterior variance: β̃_t = β_t * (1 - α̅_{t-1}) / (1 - α̅_t)
+            // For t=0, use a small value to avoid division issues
+            if (t == 0)
+            {
+                _posteriorVariances[t] = _betas[t];
+            }
+            else
+            {
+                _posteriorVariances[t] = _betas[t] * oneMinusAlphaBarPrev / Math.Max(oneMinusAlphaBar, 1e-20);
+            }
+
+            // Posterior mean coefficient 1: sqrt(alpha_bar_prev) * beta / (1 - alpha_bar)
+            _posteriorMeanCoef1[t] = Math.Sqrt(_alphaBarsPrev[t]) * _betas[t] / Math.Max(oneMinusAlphaBar, 1e-20);
+
+            // Posterior mean coefficient 2: sqrt(alpha) * (1 - alpha_bar_prev) / (1 - alpha_bar)
+            _posteriorMeanCoef2[t] = Math.Sqrt(_alphas[t]) * oneMinusAlphaBarPrev / Math.Max(oneMinusAlphaBar, 1e-20);
+        }
+    }
+
+    /// <summary>
+    /// Performs a single DDPM denoising step following Ho et al. (2020).
+    /// </summary>
+    /// <param name="noisyLatent">The noisy latent at timestep t.</param>
+    /// <param name="noisePrediction">The predicted noise ε_θ(x_t, t).</param>
+    /// <param name="timestep">The normalized timestep (0 to 1).</param>
+    /// <returns>The denoised latent at timestep t-1.</returns>
+    /// <remarks>
+    /// DDPM denoising follows:
+    /// 1. Predict x_0 from x_t: x_0 = (x_t - √(1-α̅_t) * ε_θ) / √(α̅_t)
+    /// 2. Compute posterior mean: μ̃_t = coef1 * x_0 + coef2 * x_t
+    /// 3. Sample: x_{t-1} = μ̃_t + σ_t * z (z ~ N(0,I), except at t=0)
+    /// </remarks>
     private Tensor<T> DenoisingStep(Tensor<T> noisyLatent, Tensor<T> noisePrediction, double timestep)
     {
-        // DDPM-style denoising step (simplified)
-        // Clamp to prevent division by zero when timestep == 1.0
-        double alpha = Math.Sqrt(MathHelper.Clamp(1.0 - timestep * timestep, 1e-8, double.MaxValue));
-        double sigma = timestep;
+        if (_betas == null || _alphaBars == null || _sqrtAlphaBars == null ||
+            _sqrtOneMinusAlphaBars == null || _posteriorVariances == null ||
+            _posteriorMeanCoef1 == null || _posteriorMeanCoef2 == null)
+        {
+            throw new InvalidOperationException("Noise schedule not initialized. Call InitializeNoiseSchedule first.");
+        }
+
+        // Convert normalized timestep to discrete index
+        int t = (int)Math.Round(timestep * (_numTimesteps - 1));
+        t = Math.Max(0, Math.Min(t, _numTimesteps - 1));
+
+        double sqrtAlphaBar = _sqrtAlphaBars[t];
+        double sqrtOneMinusAlphaBar = _sqrtOneMinusAlphaBars[t];
+        double posteriorMeanCoef1 = _posteriorMeanCoef1[t];
+        double posteriorMeanCoef2 = _posteriorMeanCoef2[t];
+        double posteriorVariance = _posteriorVariances[t];
 
         var resultData = new T[noisyLatent.Length];
+
+        // Step 1: Predict x_0 from x_t and ε_θ
+        // x_0 = (x_t - √(1-α̅_t) * ε_θ) / √(α̅_t)
+        // Step 2: Compute posterior mean
+        // μ̃_t = posteriorMeanCoef1 * x_0 + posteriorMeanCoef2 * x_t
         for (int i = 0; i < noisyLatent.Length; i++)
         {
-            double noisy = NumOps.ToDouble(noisyLatent.Data[i]);
-            double predicted = NumOps.ToDouble(noisePrediction.Data[i]);
-            double denoised = (noisy - sigma * predicted) / alpha;
-            resultData[i] = NumOps.FromDouble(denoised);
+            double xt = NumOps.ToDouble(noisyLatent.Data[i]);
+            double eps = NumOps.ToDouble(noisePrediction.Data[i]);
+
+            // Predict x_0
+            double x0 = (xt - sqrtOneMinusAlphaBar * eps) / Math.Max(sqrtAlphaBar, 1e-20);
+
+            // Clip x0 to reasonable range for stability
+            x0 = MathHelper.Clamp(x0, -10.0, 10.0);
+
+            // Compute posterior mean
+            double mean = posteriorMeanCoef1 * x0 + posteriorMeanCoef2 * xt;
+
+            resultData[i] = NumOps.FromDouble(mean);
+        }
+
+        // Step 3: Add noise (stochastic sampling) except at t=0
+        if (t > 0 && posteriorVariance > 1e-20)
+        {
+            double stdDev = Math.Sqrt(posteriorVariance);
+            var random = new Random();
+
+            for (int i = 0; i < resultData.Length; i++)
+            {
+                // Sample from standard normal using Box-Muller transform
+                double u1 = random.NextDouble();
+                double u2 = random.NextDouble();
+                double z = Math.Sqrt(-2.0 * Math.Log(Math.Max(u1, 1e-20))) * Math.Cos(2.0 * Math.PI * u2);
+
+                double mean = NumOps.ToDouble(resultData[i]);
+                resultData[i] = NumOps.FromDouble(mean + stdDev * z);
+            }
         }
 
         return new Tensor<T>(noisyLatent.Shape, new Vector<T>(resultData));
@@ -598,17 +795,28 @@ public class CogVideo<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Restores all model configuration fields and reinitializes layers to match
+    /// the deserialized state. This ensures the model structure is properly
+    /// reconstructed after loading from a serialized format.
+    /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         if (!_useNativeMode)
             throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
 
-        _ = reader.ReadInt32(); // embedDim
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadInt32(); // numFrames
-        _ = reader.ReadInt32(); // latentHeight
-        _ = reader.ReadInt32(); // latentWidth
-        _ = reader.ReadInt32(); // latentChannels
+        // Read serialized configuration values
+        _embedDim = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _numFrames = reader.ReadInt32();
+        _latentHeight = reader.ReadInt32();
+        _latentWidth = reader.ReadInt32();
+        _latentChannels = reader.ReadInt32();
+
+        // Reinitialize layers with the restored configuration
+        // This is necessary because the layer structure depends on these parameters
+        ClearLayers();
+        InitializeLayers();
     }
 
     /// <inheritdoc/>

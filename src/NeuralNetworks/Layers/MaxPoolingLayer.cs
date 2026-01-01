@@ -88,6 +88,11 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     private bool _addedBatchDimension;
 
     /// <summary>
+    /// Stores the actual output shape for 3D inputs (may differ from pre-computed OutputShape).
+    /// </summary>
+    private int[]? _lastOutputShape;
+
+    /// <summary>
     /// Creates a new max pooling layer with the specified parameters.
     /// </summary>
     /// <param name="inputShape">The shape of the input data (channels, height, width).</param>
@@ -189,7 +194,14 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         var output4D = Engine.MaxPool2DWithIndices(input4D, poolSizeArr, strideArr, out _maxIndices);
 
         // Return with matching dimensions (3D if batch was added, 4D otherwise)
-        return _addedBatchDimension ? output4D.Reshape(OutputShape) : output4D;
+        if (_addedBatchDimension)
+        {
+            // Use actual output shape from pooling, not pre-computed OutputShape
+            var actualOutputShape = new int[] { output4D.Shape[1], output4D.Shape[2], output4D.Shape[3] };
+            _lastOutputShape = actualOutputShape;
+            return output4D.Reshape(actualOutputShape);
+        }
+        return output4D;
     }
 
     /// <summary>

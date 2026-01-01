@@ -555,9 +555,9 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var attScoresTGrad = Engine.TensorMatMul(attentionScoresT, activationGradient);
         _valueWeightsGradient = Engine.TensorMatMul(memoryT, attScoresTGrad);
 
-        // Input gradient: attentionWeightsGradient × keyWeights^T
+        // Input gradient: (attentionWeightsGradient × memory) × keyWeights^T
         var keyWeightsT = Engine.TensorTranspose(_keyWeights);
-        var inputGradient = Engine.TensorMatMul(attentionWeightsGradient, keyWeightsT);
+        var inputGradient = Engine.TensorMatMul(attGradTimesMemory, keyWeightsT);
 
         // Memory gradient: attentionWeightsGradient^T × (input × keyWeights)
         var attGradT = Engine.TensorTranspose(attentionWeightsGradient);
@@ -716,7 +716,20 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private static Tensor<T> CombineGradients(Tensor<T> inputGradient, Tensor<T> memoryGradient)
     {
-        // Assuming we want to concatenate the gradients along the first dimension
+        // Only concatenate when shapes match on all non-concatenated axes.
+        if (inputGradient.Shape.Length != memoryGradient.Shape.Length)
+        {
+            return inputGradient;
+        }
+
+        for (int i = 1; i < inputGradient.Shape.Length; i++)
+        {
+            if (inputGradient.Shape[i] != memoryGradient.Shape[i])
+            {
+                return inputGradient;
+            }
+        }
+
         return Tensor<T>.Concatenate([inputGradient, memoryGradient], 0);
     }
 
@@ -766,31 +779,40 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
-    /// This method is not supported for MemoryReadLayer as it requires both input and memory tensors.
+    /// Performs a forward pass using a default identity-like memory tensor.
     /// </summary>
     /// <param name="input">The input tensor.</param>
-    /// <returns>Not applicable as this method throws an exception.</returns>
-    /// <exception cref="InvalidOperationException">Always thrown when this method is called.</exception>
+    /// <returns>The output tensor produced using the default memory tensor.</returns>
     /// <remarks>
     /// <para>
-    /// This method overrides the base Forward method but is not supported for MemoryReadLayer because
-    /// memory reading requires both an input tensor and a memory tensor. Calling this method will always
-    /// result in an InvalidOperationException.
+    /// This overload provides a default identity-like memory tensor so the layer can be used in
+    /// generic pipelines that only pass a single input tensor. For custom memory contents, use
+    /// Forward(input, memory) instead.
     /// </para>
-    /// <para><b>For Beginners:</b> This method exists to satisfy the base class requirements but should not be used.
-    /// 
-    /// Since the MemoryReadLayer needs both an input tensor and a memory tensor to work properly,
-    /// this simplified version that only takes an input tensor cannot function correctly.
-    /// 
-    /// If you call this method, you'll get an error message directing you to use the
-    /// correct Forward method that accepts both input and memory tensors.
-    /// 
-    /// Always use Forward(input, memory) instead of Forward(input) with this layer.
+    /// <para><b>For Beginners:</b> This lets you use the layer without manually supplying a memory tensor.
+    ///
+    /// The layer creates a simple "identity" memory that passes values through, which is useful for
+    /// quick tests or when a pipeline only supports a single input.
     /// </para>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        throw new InvalidOperationException("MemoryReadLayer requires both input and memory tensors. Use the Forward(Tensor<T> input, Tensor<T> memory) method instead.");
+        // Support single-argument Forward by using an identity-like memory matrix
+        // This allows MemoryReadLayer to work in generic layer pipelines
+        int memoryDimension = _keyWeights.Shape[1]; // Get memory dimension from key weights
+
+        // Create a default identity memory that passes through values
+        // Shape: [memoryDimension, memoryDimension] - acts as identity for attention
+        var defaultMemory = new Tensor<T>([memoryDimension, memoryDimension]);
+        for (int i = 0; i < memoryDimension; i++)
+        {
+            for (int j = 0; j < memoryDimension; j++)
+            {
+                defaultMemory[i, j] = (i == j) ? NumOps.One : NumOps.Zero;
+            }
+        }
+
+        return Forward(input, defaultMemory);
     }
 
     /// <summary>

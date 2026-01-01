@@ -337,9 +337,19 @@ public class GMFlow<T> : NeuralNetworkBase<T>
         return (f1, f2);
     }
 
+    /// <summary>
+    /// Applies scaled dot-product attention following the Transformer mechanism.
+    /// </summary>
+    /// <param name="query">Query tensor [batch, channels, height, width].</param>
+    /// <param name="key">Key tensor [batch, channels, height, width].</param>
+    /// <param name="value">Value tensor [batch, channels, height, width].</param>
+    /// <returns>Attention output tensor [batch, channels, height, width].</returns>
+    /// <remarks>
+    /// Implements: Attention(Q, K, V) = softmax(Q * K^T / sqrt(d_k)) * V
+    /// Uses a local window attention pattern for efficiency on high-resolution feature maps.
+    /// </remarks>
     private Tensor<T> ApplyAttention(Tensor<T> query, Tensor<T> key, Tensor<T> value)
     {
-        // Simplified attention
         int batchSize = query.Shape[0];
         int channels = query.Shape[1];
         int height = query.Shape[2];
@@ -348,32 +358,80 @@ public class GMFlow<T> : NeuralNetworkBase<T>
         var output = new Tensor<T>(value.Shape);
         double scale = 1.0 / Math.Sqrt(channels);
 
+        // Use local window attention for efficiency (window size based on feature resolution)
+        int windowSize = Math.Min(Math.Min(height, width), 8);
+        int halfWindow = windowSize / 2;
+
         for (int b = 0; b < batchSize; b++)
         {
             for (int h = 0; h < height; h++)
             {
                 for (int w = 0; w < width; w++)
                 {
-                    // Compute attention weights
+                    // Define local attention window
+                    int hStart = Math.Max(0, h - halfWindow);
+                    int hEnd = Math.Min(height, h + halfWindow + 1);
+                    int wStart = Math.Max(0, w - halfWindow);
+                    int wEnd = Math.Min(width, w + halfWindow + 1);
+
+                    int windowH = hEnd - hStart;
+                    int windowW = wEnd - wStart;
+                    int numPositions = windowH * windowW;
+
+                    // Compute attention scores for all positions in window
+                    var scores = new double[numPositions];
                     double maxScore = double.MinValue;
-                    for (int h2 = 0; h2 < height; h2++)
+
+                    int pos = 0;
+                    for (int h2 = hStart; h2 < hEnd; h2++)
                     {
-                        for (int w2 = 0; w2 < width; w2++)
+                        for (int w2 = wStart; w2 < wEnd; w2++)
                         {
                             double score = 0;
                             for (int c = 0; c < channels; c++)
                             {
-                                score += Convert.ToDouble(query[b, c, h, w]) * Convert.ToDouble(key[b, c, h2, w2]);
+                                double qVal = Convert.ToDouble(query[b, c, h, w]);
+                                double kVal = Convert.ToDouble(key[b, c, h2, w2]);
+                                score += qVal * kVal;
                             }
                             score *= scale;
+                            scores[pos] = score;
                             if (score > maxScore) maxScore = score;
+                            pos++;
                         }
                     }
 
-                    // Apply softmax and weighted sum (simplified to local window)
+                    // Apply softmax to attention scores
+                    double sumExp = 0;
+                    var expScores = new double[numPositions];
+                    for (int i = 0; i < numPositions; i++)
+                    {
+                        // Subtract max for numerical stability
+                        expScores[i] = Math.Exp(scores[i] - maxScore);
+                        sumExp += expScores[i];
+                    }
+
+                    // Normalize to get attention weights
+                    for (int i = 0; i < numPositions; i++)
+                    {
+                        expScores[i] /= Math.Max(sumExp, 1e-12);
+                    }
+
+                    // Apply attention weights to value vectors
                     for (int c = 0; c < channels; c++)
                     {
-                        output[b, c, h, w] = value[b, c, h, w];
+                        double weightedSum = 0;
+                        pos = 0;
+                        for (int h2 = hStart; h2 < hEnd; h2++)
+                        {
+                            for (int w2 = wStart; w2 < wEnd; w2++)
+                            {
+                                double vVal = Convert.ToDouble(value[b, c, h2, w2]);
+                                weightedSum += expScores[pos] * vVal;
+                                pos++;
+                            }
+                        }
+                        output[b, c, h, w] = NumOps.FromDouble(weightedSum);
                     }
                 }
             }

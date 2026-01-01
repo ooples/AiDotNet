@@ -227,15 +227,37 @@ public class SAGAN<T> : NeuralNetworkBase<T>
         Generator.SetTrainingMode(false);
         var noise = GenerateNoise(numImages);
 
+        // Reshape noise to 4D format for CNN generator: [batch, latent_size] -> [batch, 1, h, w]
+        int h = (int)Math.Ceiling(Math.Sqrt(LatentSize));
+        int w = h;
+        int padSize = h * w - LatentSize;
+        Tensor<T> reshapedNoise;
+        if (padSize > 0)
+        {
+            var padded = new Tensor<T>([numImages, h * w]);
+            for (int b = 0; b < numImages; b++)
+            {
+                for (int i = 0; i < LatentSize; i++)
+                    padded[b, i] = noise[b, i];
+                for (int i = LatentSize; i < h * w; i++)
+                    padded[b, i] = NumOps.Zero;
+            }
+            reshapedNoise = padded.Reshape(numImages, 1, h, w);
+        }
+        else
+        {
+            reshapedNoise = noise.Reshape(numImages, 1, h, w);
+        }
+
         if (_isConditional && classIndices != null)
         {
             // Concatenate class information (simplified)
             var classEmbeddings = CreateClassEmbeddings(classIndices);
-            var input = ConcatenateTensors(noise, classEmbeddings);
+            var input = ConcatenateTensors(reshapedNoise, classEmbeddings);
             return Generator.Predict(input);
         }
 
-        return Generator.Predict(noise);
+        return Generator.Predict(reshapedNoise);
     }
 
     /// <summary>
@@ -248,14 +270,69 @@ public class SAGAN<T> : NeuralNetworkBase<T>
     {
         Generator.SetTrainingMode(false);
 
+        // Reshape latent codes to 3D/4D format for CNN generator
+        Tensor<T> reshapedLatent;
+        if (latentCodes.Shape.Length == 1)
+        {
+            // 1D [latent_size] -> 3D [1, height, width] where height*width >= latent_size
+            int latentLen = latentCodes.Shape[0];
+            int h = (int)Math.Ceiling(Math.Sqrt(latentLen));
+            int w = h;
+            int padSize = h * w - latentLen;
+            if (padSize > 0)
+            {
+                // Pad latent code to fit h*w
+                var padded = new Tensor<T>([h * w]);
+                for (int i = 0; i < latentLen; i++)
+                    padded.Data[i] = latentCodes.Data[i];
+                for (int i = latentLen; i < h * w; i++)
+                    padded.Data[i] = NumOps.Zero;
+                reshapedLatent = padded.Reshape(1, h, w);
+            }
+            else
+            {
+                reshapedLatent = latentCodes.Reshape(1, h, w);
+            }
+        }
+        else if (latentCodes.Shape.Length == 2)
+        {
+            // 2D [batch, latent_size] -> 4D [batch, 1, height, width]
+            int batchSize = latentCodes.Shape[0];
+            int latentLen = latentCodes.Shape[1];
+            int h = (int)Math.Ceiling(Math.Sqrt(latentLen));
+            int w = h;
+            int padSize = h * w - latentLen;
+            if (padSize > 0)
+            {
+                var padded = new Tensor<T>([batchSize, h * w]);
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int i = 0; i < latentLen; i++)
+                        padded[b, i] = latentCodes[b, i];
+                    for (int i = latentLen; i < h * w; i++)
+                        padded[b, i] = NumOps.Zero;
+                }
+                reshapedLatent = padded.Reshape(batchSize, 1, h, w);
+            }
+            else
+            {
+                reshapedLatent = latentCodes.Reshape(batchSize, 1, h, w);
+            }
+        }
+        else
+        {
+            // Already 3D or 4D, use as-is
+            reshapedLatent = latentCodes;
+        }
+
         if (_isConditional && classIndices != null)
         {
             var classEmbeddings = CreateClassEmbeddings(classIndices);
-            var input = ConcatenateTensors(latentCodes, classEmbeddings);
+            var input = ConcatenateTensors(reshapedLatent, classEmbeddings);
             return Generator.Predict(input);
         }
 
-        return Generator.Predict(latentCodes);
+        return Generator.Predict(reshapedLatent);
     }
 
     /// <summary>
@@ -600,6 +677,14 @@ public class SAGAN<T> : NeuralNetworkBase<T>
             return gradient;
         }
     }
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in the SAGAN.
+    /// </summary>
+    /// <remarks>
+    /// This includes all parameters from both the Generator and Discriminator networks.
+    /// </remarks>
+    public override int ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount();
 
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
