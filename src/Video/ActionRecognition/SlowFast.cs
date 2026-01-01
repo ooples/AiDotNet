@@ -166,6 +166,10 @@ public class SlowFast<T> : NeuralNetworkBase<T>
             throw new ArgumentOutOfRangeException(nameof(numClasses), "Number of classes must be at least 1.");
         if (slowFrames < 1)
             throw new ArgumentOutOfRangeException(nameof(slowFrames), "Slow frames must be at least 1.");
+        if (slowChannels < 1)
+            throw new ArgumentOutOfRangeException(nameof(slowChannels), "Slow channels must be at least 1.");
+        if (fastChannels < 1)
+            throw new ArgumentOutOfRangeException(nameof(fastChannels), "Fast channels must be at least 1.");
         if (alpha < 1)
             throw new ArgumentOutOfRangeException(nameof(alpha), "Alpha must be at least 1.");
 
