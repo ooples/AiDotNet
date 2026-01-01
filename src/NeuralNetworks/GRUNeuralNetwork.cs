@@ -89,7 +89,7 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             // Use the layers provided by the user
             Layers.AddRange(Architecture.Layers);
-            base.ValidateCustomLayers(Layers);
+            ValidateCustomLayersInternal(Layers);
         }
         else
         {

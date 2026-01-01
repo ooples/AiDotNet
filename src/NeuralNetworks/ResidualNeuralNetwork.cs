@@ -296,7 +296,7 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
         {
             // Use the layers provided by the user
             Layers.AddRange(Architecture.Layers);
-            base.ValidateCustomLayers(Layers);
+            ValidateCustomLayersInternal(Layers);
         }
         else
         {
