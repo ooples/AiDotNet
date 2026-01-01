@@ -1319,7 +1319,7 @@ void Xgemm(const int kSizeM, const int kSizeN, const int kSizeK,
 
 """;
 
-        public static string BuildSource(GemmConfig config, int gemmK)
+        public static string BuildSource(GemmConfig config, int gemmK, int ldsPad = 4)
         {
             int MWG = config.TileM;
             int NWG = config.TileN;
@@ -1360,12 +1360,32 @@ void Xgemm(const int kSizeM, const int kSizeN, const int kSizeK,
             sb.AppendLine("#define GLOBAL_MEM_FENCE 0");
             sb.AppendLine("#define RELAX_WORKGROUP_SIZE 0");
             sb.AppendLine("#define Xgemm clblast_xgemm");
+
+            // LDS bank conflict avoidance padding for RDNA1 (32 LDS banks)
+            // Default MWG/VWM = 64/2 = 32 causes maximum conflicts. Adding 4 padding
+            // gives stride 36, which shifts 8 banks per row (gcd(36*2, 32) = 8).
+            sb.AppendLine($"#define LDS_PAD {ldsPad}");
+            sb.AppendLine("#define LDS_STRIDE_A ((MWG/VWM) + LDS_PAD)");
+            sb.AppendLine("#define LDS_STRIDE_B ((NWG/VWN) + LDS_PAD)");
+
             sb.AppendLine(CommonOpenCl);
             sb.AppendLine(Level3OpenCl);
-            sb.AppendLine(XgemmPart1);
+
+            // Apply LDS padding to kernel source by replacing stride expressions
+            string part1 = XgemmPart1
+                .Replace("KWG * MWG/VWM", "KWG * LDS_STRIDE_A")
+                .Replace("kg*(MWG/VWM)", "kg*LDS_STRIDE_A")
+                .Replace("KWG * NWG/VWN", "KWG * LDS_STRIDE_B")
+                .Replace("kg*(NWG/VWN)", "kg*LDS_STRIDE_B");
+            sb.AppendLine(part1);
             sb.AppendLine(XgemmPart2);
             sb.AppendLine(XgemmPart3);
-            sb.AppendLine(XgemmPart4);
+
+            string part4 = XgemmPart4
+                .Replace("KWG * MWG/VWM", "KWG * LDS_STRIDE_A")
+                .Replace("KWG * NWG/VWN", "KWG * LDS_STRIDE_B");
+            sb.AppendLine(part4);
+
             return sb.ToString();
         }
     }
