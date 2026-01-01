@@ -492,12 +492,48 @@ public sealed class CudaBackend : IDirectGpuBackend
 
     public float Sum(IGpuBuffer A, int size)
     {
-        throw new NotSupportedException("CUDA reduction kernels are not implemented yet.");
+        if (!IsAvailable)
+            throw new InvalidOperationException("CUDA backend is not available.");
+
+        if (size <= 0)
+            return 0.0f;
+
+        using var _ = PushContext();
+        int blockSize = DefaultBlockSize;
+        int gridSize = (size + blockSize - 1) / blockSize;
+
+        using var partialBuffer = AllocateBuffer(gridSize);
+        LaunchReductionKernel("reduce_sum", A, partialBuffer, size, blockSize);
+        Synchronize();
+
+        var partials = DownloadBuffer(partialBuffer);
+        float sum = 0.0f;
+        for (int i = 0; i < partials.Length; i++)
+            sum += partials[i];
+        return sum;
     }
 
     public float Max(IGpuBuffer A, int size)
     {
-        throw new NotSupportedException("CUDA reduction kernels are not implemented yet.");
+        if (!IsAvailable)
+            throw new InvalidOperationException("CUDA backend is not available.");
+
+        if (size <= 0)
+            return float.MinValue;
+
+        using var _ = PushContext();
+        int blockSize = DefaultBlockSize;
+        int gridSize = (size + blockSize - 1) / blockSize;
+
+        using var partialBuffer = AllocateBuffer(gridSize);
+        LaunchReductionKernel("reduce_max", A, partialBuffer, size, blockSize);
+        Synchronize();
+
+        var partials = DownloadBuffer(partialBuffer);
+        float max = float.MinValue;
+        for (int i = 0; i < partials.Length; i++)
+            if (partials[i] > max) max = partials[i];
+        return max;
     }
 
     public void SumAxis(IGpuBuffer A, IGpuBuffer B, int outerSize, int reduceSize)
@@ -607,6 +643,24 @@ public sealed class CudaBackend : IDirectGpuBackend
         LaunchKernel(kernel, grid, DefaultBlockSize, args);
     }
 
+    private unsafe void LaunchReductionKernel(string kernelName, IGpuBuffer input, IGpuBuffer output, int size, int blockSize)
+    {
+        if (!_kernelCache.TryGetValue(kernelName, out var kernel))
+            throw new InvalidOperationException($"CUDA kernel not found: {kernelName}");
+
+        uint grid = (uint)((size + blockSize - 1) / blockSize);
+        IntPtr inputPtr = input.Handle;
+        IntPtr outputPtr = output.Handle;
+        int n = size;
+        void** args = stackalloc void*[3];
+        args[0] = &inputPtr;
+        args[1] = &outputPtr;
+        args[2] = &n;
+
+        uint sharedBytes = (uint)(blockSize * sizeof(float));
+        LaunchKernelWithSharedMem(kernel, grid, (uint)blockSize, sharedBytes, args);
+    }
+
     private unsafe void ApplyBiasInPlace(IGpuBuffer data, IGpuBuffer bias, int rows, int cols)
     {
         if (!_kernelCache.TryGetValue("bias_add", out var kernel))
@@ -629,12 +683,17 @@ public sealed class CudaBackend : IDirectGpuBackend
 
     private unsafe void LaunchKernel(IntPtr kernel, uint gridX, uint blockX, void** args)
     {
+        LaunchKernelWithSharedMem(kernel, gridX, blockX, 0, args);
+    }
+
+    private unsafe void LaunchKernelWithSharedMem(IntPtr kernel, uint gridX, uint blockX, uint sharedMemBytes, void** args)
+    {
         CuBlasNative.CheckCudaResult(
             CudaNativeBindings.cuLaunchKernel(
                 kernel,
                 gridX, 1, 1,
                 blockX, 1, 1,
-                0,
+                sharedMemBytes,
                 _stream,
                 (IntPtr)args,
                 IntPtr.Zero),

@@ -211,6 +211,50 @@ extern "C" __global__ void power_scalar(const float* A, float* B, float exponent
     if (idx >= size) return;
     B[idx] = powf(A[idx], exponent);
 }
+extern "C" __global__ void reduce_sum(const float* input, float* output, int size)
+{
+    extern __shared__ float scratch[];
+    unsigned int tid = threadIdx.x;
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    float val = (idx < (unsigned int)size) ? input[idx] : 0.0f;
+    scratch[tid] = val;
+    __syncthreads();
+
+    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1)
+    {
+        if (tid < s)
+            scratch[tid] += scratch[tid + s];
+        __syncthreads();
+    }
+
+    if (tid == 0)
+        output[blockIdx.x] = scratch[0];
+}
+
+extern "C" __global__ void reduce_max(const float* input, float* output, int size)
+{
+    extern __shared__ float scratch[];
+    unsigned int tid = threadIdx.x;
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    float val = (idx < (unsigned int)size) ? input[idx] : -INFINITY;
+    scratch[tid] = val;
+    __syncthreads();
+
+    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1)
+    {
+        if (tid < s)
+        {
+            float other = scratch[tid + s];
+            if (other > scratch[tid])
+                scratch[tid] = other;
+        }
+        __syncthreads();
+    }
+
+    if (tid == 0)
+        output[blockIdx.x] = scratch[0];
+}
+
 extern "C" __global__ void bias_add(float* data, const float* bias, int rows, int cols)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -250,6 +294,8 @@ extern "C" __global__ void bias_add(float* data, const float* bias, int rows, in
                 "sqrt_vector",
                 "sign_vector",
                 "power_scalar",
+                "reduce_sum",
+                "reduce_max",
                 "bias_add"
             };
         }

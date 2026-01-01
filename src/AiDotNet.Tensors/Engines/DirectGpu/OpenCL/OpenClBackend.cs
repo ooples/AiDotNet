@@ -1269,20 +1269,57 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
         public float Sum(IGpuBuffer A, int size)
         {
-            // For now, use CPU reduction (GPU reduction requires multiple passes)
-            var data = DownloadBuffer(A);
-            float sum = 0;
-            for (int i = 0; i < size; i++)
-                sum += data[i];
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var bufferA = ((DirectOpenClGpuBuffer)A).Buffer;
+            int localSize = CalculateOptimalWorkGroupSize1D(size);
+            int groupCount = (size + localSize - 1) / localSize;
+
+            using var partialBuffer = AllocateBuffer(groupCount);
+            var partial = ((DirectOpenClGpuBuffer)partialBuffer).Buffer;
+
+            var kernel = _kernelCache["reduce_sum"];
+            kernel.SetArg(0, bufferA.Handle);
+            kernel.SetArg(1, partial.Handle);
+            kernel.SetLocalArg(2, localSize * sizeof(float));
+            kernel.SetArg(3, size);
+
+            kernel.Execute1D(size, localSize);
+            _context.Finish();
+
+            var partials = DownloadBuffer(partialBuffer);
+            float sum = 0.0f;
+            for (int i = 0; i < partials.Length; i++)
+                sum += partials[i];
             return sum;
         }
 
         public float Max(IGpuBuffer A, int size)
         {
-            var data = DownloadBuffer(A);
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var bufferA = ((DirectOpenClGpuBuffer)A).Buffer;
+            int localSize = CalculateOptimalWorkGroupSize1D(size);
+            int groupCount = (size + localSize - 1) / localSize;
+
+            using var partialBuffer = AllocateBuffer(groupCount);
+            var partial = ((DirectOpenClGpuBuffer)partialBuffer).Buffer;
+
+            var kernel = _kernelCache["reduce_max"];
+            kernel.SetArg(0, bufferA.Handle);
+            kernel.SetArg(1, partial.Handle);
+            kernel.SetLocalArg(2, localSize * sizeof(float));
+            kernel.SetArg(3, size);
+
+            kernel.Execute1D(size, localSize);
+            _context.Finish();
+
+            var partials = DownloadBuffer(partialBuffer);
             float max = float.MinValue;
-            for (int i = 0; i < size; i++)
-                if (data[i] > max) max = data[i];
+            for (int i = 0; i < partials.Length; i++)
+                if (partials[i] > max) max = partials[i];
             return max;
         }
 

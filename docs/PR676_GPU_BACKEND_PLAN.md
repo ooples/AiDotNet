@@ -10,6 +10,7 @@
 - CUDA backend scaffolded with cuBLAS GEMM + NVRTC kernels.
 - NVRTC fallback probing added for multiple DLL/SO names.
 - Elementwise/unary kernel coverage expanded for CUDA + OpenCL (HIP uses CPU fallback).
+- OpenCL/CUDA sum/max reductions now use GPU partial reduction kernels.
 
 ## Non-goals
 - Multi-node/distributed GPU execution.
