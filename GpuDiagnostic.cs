@@ -32,14 +32,17 @@ class GpuDiagnostic
         // Try to detect available backends
         Console.WriteLine("\n--- Backend Detection ---");
 
-        // Check HIP
+        // Check HIP (enable diagnostics for DLL path resolution)
         try
         {
+            HipBackend.EnableDiagnostics = true;
             var hipBackend = new HipBackend();
             Console.WriteLine($"HIP Backend Available: {hipBackend.IsAvailable}");
             if (hipBackend.IsAvailable)
             {
-                Console.WriteLine($"  - HIP Backend initialized successfully");
+                Console.WriteLine($"  - HIP Backend: {hipBackend.BackendName}");
+                Console.WriteLine($"  - Device: {hipBackend.DeviceName}");
+                Console.WriteLine($"  - Compute Units: {hipBackend.ComputeUnits}");
             }
         }
         catch (Exception ex)

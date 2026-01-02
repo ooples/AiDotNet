@@ -175,7 +175,117 @@ internal static class HipNativeBindings
 
     private static bool _isAvailable;
     private static bool _availabilityChecked;
+    private static bool _dllPathInitialized;
     public static bool EnableDiagnostics { get; set; }
+
+#if WINDOWS
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr AddDllDirectory(string lpPathName);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetDefaultDllDirectories(uint directoryFlags);
+
+    private const uint LOAD_LIBRARY_SEARCH_DEFAULT_DIRS = 0x00001000;
+    private const uint LOAD_LIBRARY_SEARCH_USER_DIRS = 0x00000400;
+#endif
+
+    /// <summary>
+    /// Ensures the ROCm bin directory is added to the DLL search path.
+    /// Must be called before any HIP P/Invoke calls.
+    /// </summary>
+    private static void InitializeDllSearchPath()
+    {
+        if (_dllPathInitialized) return;
+        _dllPathInitialized = true;
+
+#if WINDOWS
+        try
+        {
+            // Find ROCm installation directory
+            string? rocmPath = FindRocmPath();
+            if (rocmPath is not null)
+            {
+                string binPath = System.IO.Path.Combine(rocmPath, "bin");
+                if (System.IO.Directory.Exists(binPath))
+                {
+                    // Enable user-defined DLL directories
+                    SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_USER_DIRS);
+
+                    // Add ROCm bin directory to search path
+                    var result = AddDllDirectory(binPath);
+                    if (result != IntPtr.Zero)
+                    {
+                        LogDiagnostic($"[HIP Diagnostics] Added ROCm bin directory to DLL search path: {binPath}");
+                    }
+                    else
+                    {
+                        int error = Marshal.GetLastWin32Error();
+                        LogDiagnostic($"[HIP Diagnostics] Failed to add ROCm bin directory (error {error}): {binPath}");
+                    }
+                }
+            }
+            else
+            {
+                LogDiagnostic("[HIP Diagnostics] ROCm installation not found. HIP will not be available.");
+            }
+        }
+        catch (Exception ex)
+        {
+            LogDiagnostic($"[HIP Diagnostics] Error initializing DLL search path: {ex.Message}");
+        }
+#endif
+    }
+
+    /// <summary>
+    /// Finds the ROCm installation path on Windows.
+    /// </summary>
+    private static string? FindRocmPath()
+    {
+#if WINDOWS
+        // Check common ROCm installation paths
+        string[] basePaths = new[]
+        {
+            @"C:\Program Files\AMD\ROCm",
+            Environment.GetEnvironmentVariable("HIP_PATH") ?? "",
+            Environment.GetEnvironmentVariable("ROCM_PATH") ?? ""
+        };
+
+        foreach (var basePath in basePaths)
+        {
+            if (string.IsNullOrEmpty(basePath)) continue;
+
+            if (System.IO.Directory.Exists(basePath))
+            {
+                // Check if it's a versioned path (e.g., C:\Program Files\AMD\ROCm\6.4)
+                string hipDll = System.IO.Path.Combine(basePath, "bin", "amdhip64_6.dll");
+                if (System.IO.File.Exists(hipDll))
+                {
+                    LogDiagnostic($"[HIP Diagnostics] Found ROCm at: {basePath}");
+                    return basePath;
+                }
+
+                // Check for versioned subdirectories (e.g., 6.4, 5.7, etc.)
+                try
+                {
+                    foreach (var versionDir in System.IO.Directory.GetDirectories(basePath))
+                    {
+                        hipDll = System.IO.Path.Combine(versionDir, "bin", "amdhip64_6.dll");
+                        if (System.IO.File.Exists(hipDll))
+                        {
+                            LogDiagnostic($"[HIP Diagnostics] Found ROCm at: {versionDir}");
+                            return versionDir;
+                        }
+                    }
+                }
+                catch
+                {
+                    // Ignore directory enumeration errors
+                }
+            }
+        }
+#endif
+        return null;
+    }
 
     private static void LogDiagnostic(string message)
     {
@@ -193,6 +303,10 @@ internal static class HipNativeBindings
             if (!_availabilityChecked)
             {
                 _availabilityChecked = true;
+
+                // Initialize DLL search path before any P/Invoke calls
+                InitializeDllSearchPath();
+
                 try
                 {
                     int count = 0;
