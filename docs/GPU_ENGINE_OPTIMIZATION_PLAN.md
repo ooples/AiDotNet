@@ -313,6 +313,105 @@ protected override void Dispose(bool disposing)
 - **With trainable parameters: ~85 layers**
 - **Without trainable parameters: ~32 layers**
 
+## Critical Findings: Missing IEngine Operations
+
+### Missing Standard Operations (Per Research Papers)
+
+| Operation | Reference | Current Status | Impact |
+|-----------|-----------|----------------|--------|
+| ScaledDotProductAttention | "Attention Is All You Need" (Vaswani 2017) | **MISSING** | All attention layers do manual matmul+softmax |
+| FlashAttention | FlashAttention papers (2022-2023) | **MISSING** | No memory-efficient attention |
+| GroupedQueryAttention | "GQA" (Ainslie 2023) | **MISSING** | Manual implementation |
+| RMSNorm | "Root Mean Square Layer Normalization" | **MISSING** | LayerNorm without mean subtraction |
+| SiLU/Swish | "Swish: A Self-Gated Activation Function" | Partial | In activations, not fused |
+| GeGLU | "GLU Variants Improve Transformer" | **MISSING** | Used in modern transformers |
+
+### Layers Using Manual Implementations Instead of IEngine
+
+| Layer | Issue | Manual Loop Count | Should Use |
+|-------|-------|-------------------|------------|
+| CrossAttentionLayer | Manual 4-nested matmul | 20+ loops | Engine.TensorMatMul, Engine.Softmax |
+| GraphAttentionLayer | Manual attention | 85 loops | Engine.ScaledDotProductAttention |
+| GraphTransformerLayer | Manual loops | 75+ NumOps | Engine operations |
+| MessagePassingLayer | Manual aggregation | 73+ NumOps | Engine.Scatter/Gather |
+| DiffusionConvLayer | Manual convolution | 43+ NumOps | Engine.Conv operations |
+| SpikingLayer | Mixed (uses 130 Engine calls) | 95 NumOps | More Engine ops possible |
+| AnomalyDetectorLayer | Manual multiply-accumulate | High | Engine.TensorMatMul |
+
+### Proposed New IEngine Operations
+
+```csharp
+/// <summary>
+/// Scaled dot-product attention as per "Attention Is All You Need".
+/// attention(Q,K,V) = softmax(Q @ K.T / sqrt(d_k)) @ V
+/// </summary>
+Tensor<T> ScaledDotProductAttention<T>(
+    Tensor<T> query,    // [batch, heads, seq_q, d_k]
+    Tensor<T> key,      // [batch, heads, seq_k, d_k]
+    Tensor<T> value,    // [batch, heads, seq_k, d_v]
+    Tensor<T>? mask = null,
+    float dropout = 0.0f);
+
+Tensor<T> ScaledDotProductAttentionBackward<T>(
+    Tensor<T> gradOutput,
+    Tensor<T> query,
+    Tensor<T> key,
+    Tensor<T> value,
+    Tensor<T> attentionWeights,
+    out Tensor<T> gradQuery,
+    out Tensor<T> gradKey,
+    out Tensor<T> gradValue);
+
+/// <summary>
+/// Root Mean Square Layer Normalization (faster than LayerNorm).
+/// RMSNorm(x) = x / sqrt(mean(x^2) + eps) * gamma
+/// </summary>
+Tensor<T> RMSNorm<T>(Tensor<T> input, Tensor<T> gamma, double epsilon);
+
+Tensor<T> RMSNormBackward<T>(
+    Tensor<T> gradOutput,
+    Tensor<T> input,
+    Tensor<T> gamma,
+    double epsilon,
+    out Tensor<T> gradGamma);
+
+/// <summary>
+/// Gated Linear Unit variants (GeGLU, SwiGLU, ReGLU).
+/// GLU(x) = (x @ W1 + b1) * activation(x @ W2 + b2)
+/// </summary>
+Tensor<T> GatedLinearUnit<T>(
+    Tensor<T> input,
+    Tensor<T> gateWeights,
+    Tensor<T> valueWeights,
+    Tensor<T>? gateBias,
+    Tensor<T>? valueBias,
+    GatedActivationType activation);
+
+/// <summary>
+/// Graph message passing scatter operation.
+/// Efficiently aggregates neighbor messages by destination node.
+/// </summary>
+Tensor<T> ScatterAdd<T>(Tensor<T> source, Tensor<int> indices, int dimSize);
+Tensor<T> ScatterMean<T>(Tensor<T> source, Tensor<int> indices, int dimSize);
+Tensor<T> ScatterMax<T>(Tensor<T> source, Tensor<int> indices, int dimSize);
+```
+
+## Layers Requiring Immediate Refactoring
+
+These layers have significant manual implementations that should use IEngine:
+
+### High Priority (Performance Critical)
+1. **CrossAttentionLayer** - Core diffusion model component, manual matmul
+2. **GraphAttentionLayer** - 85 manual loops
+3. **GraphTransformerLayer** - Graph + Attention, 75+ NumOps calls
+4. **MessagePassingLayer** - GNN core, 73+ NumOps calls
+
+### Medium Priority
+5. **DiffusionConvLayer** - 43+ NumOps calls
+6. **SpatialTransformerLayer** - Combines attention with spatial ops
+7. **TimeEmbeddingLayer** - 30+ NumOps calls
+8. **HeterogeneousGraphLayer** - 30+ NumOps calls
+
 ## Implementation Order
 
 1. **Phase 1: IEngine Interface**
