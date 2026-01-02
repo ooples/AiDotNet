@@ -937,36 +937,53 @@ public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
         // Encode input to feature space
         var features = _featureEncoder.Predict(input);
 
-        // Convert to vector
-        var featureVector = ConvertToVector(features);
-
-        if (featureVector == null || _classPrototypes.Count == 0)
+        if (_classPrototypes.Count == 0)
         {
             return features; // Return encoder output if no prototypes
         }
 
-        // Normalize if configured
-        if (_options.NormalizeFeatures)
+        // Convert to matrix to handle batch inputs properly
+        var featureMatrix = ConvertToMatrix(features);
+        if (featureMatrix == null || featureMatrix.Rows == 0)
         {
-            featureVector = NormalizeVector(featureVector);
+            return features;
         }
 
-        // Compute distances to all prototypes
-        var distances = new List<T>();
         var classLabels = _classPrototypes.Keys.ToList();
         classLabels.Sort();
+        int numClasses = classLabels.Count;
+        int batchSize = featureMatrix.Rows;
 
-        foreach (var label in classLabels)
+        // Create output tensor for all predictions [batchSize] or [batchSize, numClasses]
+        var allProbabilities = new List<List<T>>();
+
+        // Process each sample in the batch
+        for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
         {
-            T distance = ComputeDistance(featureVector, _classPrototypes[label]);
-            distances.Add(distance);
+            // Extract feature vector for this sample
+            var featureVector = GetRow(featureMatrix, sampleIdx);
+
+            // Normalize if configured
+            if (_options.NormalizeFeatures)
+            {
+                featureVector = NormalizeVector(featureVector);
+            }
+
+            // Compute distances to all prototypes
+            var distances = new List<T>();
+            foreach (var label in classLabels)
+            {
+                T distance = ComputeDistance(featureVector, _classPrototypes[label]);
+                distances.Add(distance);
+            }
+
+            // Apply softmax to distances to get probabilities
+            var probabilities = ApplySoftmax(distances);
+            allProbabilities.Add(probabilities);
         }
 
-        // Apply softmax to distances to get probabilities
-        var probabilities = ApplySoftmax(distances);
-
         // Convert to appropriate output format
-        return ConvertToOutput(probabilities, classLabels);
+        return ConvertBatchToOutput(allProbabilities, classLabels, batchSize);
     }
 
     /// <summary>
@@ -1273,6 +1290,60 @@ public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
         else if (typeof(TOutput) == typeof(Vector<T>))
         {
             return (TOutput)(object)tensor.ToVector();
+        }
+        else
+        {
+            throw new NotSupportedException($"Output type {typeof(TOutput).Name} is not supported.");
+        }
+    }
+
+    private TOutput ConvertBatchToOutput(List<List<T>> allProbabilities, List<int> classLabels, int batchSize)
+    {
+        int numClasses = classLabels.Count;
+
+        // Create output as 2D tensor [batchSize, numClasses]
+        var tensor = new Tensor<T>(new int[] { batchSize, numClasses });
+        for (int i = 0; i < batchSize; i++)
+        {
+            for (int j = 0; j < numClasses; j++)
+            {
+                tensor[new int[] { i, j }] = allProbabilities[i][j];
+            }
+        }
+
+        if (typeof(TOutput) == typeof(Tensor<T>))
+        {
+            return (TOutput)(object)tensor;
+        }
+        else if (typeof(TOutput) == typeof(Matrix<T>))
+        {
+            var matrix = new Matrix<T>(batchSize, numClasses);
+            for (int i = 0; i < batchSize; i++)
+            {
+                for (int j = 0; j < numClasses; j++)
+                {
+                    matrix[i, j] = allProbabilities[i][j];
+                }
+            }
+            return (TOutput)(object)matrix;
+        }
+        else if (typeof(TOutput) == typeof(Vector<T>))
+        {
+            // Flatten to vector if single sample
+            if (batchSize == 1)
+            {
+                return (TOutput)(object)new Vector<T>(allProbabilities[0].ToArray());
+            }
+            // For multiple samples, flatten all probabilities
+            var flattened = new Vector<T>(batchSize * numClasses);
+            for (int i = 0; i < batchSize; i++)
+            {
+                for (int j = 0; j < numClasses; j++)
+                {
+                    flattened[i * numClasses + j] = allProbabilities[i][j];
+                }
+            }
+            return (TOutput)(object)flattened;
         }
         else
         {
