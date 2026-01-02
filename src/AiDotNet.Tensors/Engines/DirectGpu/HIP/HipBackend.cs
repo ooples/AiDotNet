@@ -905,6 +905,246 @@ public sealed class HipBackend : IDirectGpuBackend
         UploadToBuffer(B, bData);
     }
 
+    #region Trigonometric Operations
+
+    public void Sin(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Sin(aData[i]);
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Cos(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Cos(aData[i]);
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Tan(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Tan(aData[i]);
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Asin(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Asin(aData[i]);
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Acos(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Acos(aData[i]);
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Atan(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Atan(aData[i]);
+
+        UploadToBuffer(B, bData);
+    }
+
+    #endregion
+
+    #region Hyperbolic Operations
+
+    public void Sinh(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Sinh(aData[i]);
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Cosh(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Cosh(aData[i]);
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Asinh(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        // asinh(x) = ln(x + sqrt(x^2 + 1))
+        for (int i = 0; i < size; i++)
+        {
+            float x = aData[i];
+            bData[i] = MathF.Log(x + MathF.Sqrt(x * x + 1.0f));
+        }
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Acosh(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        // acosh(x) = ln(x + sqrt(x^2 - 1)), x >= 1
+        for (int i = 0; i < size; i++)
+        {
+            float x = aData[i];
+            bData[i] = MathF.Log(x + MathF.Sqrt(x * x - 1.0f));
+        }
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Atanh(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        // atanh(x) = 0.5 * ln((1+x) / (1-x)), |x| < 1
+        for (int i = 0; i < size; i++)
+        {
+            float x = aData[i];
+            bData[i] = 0.5f * MathF.Log((1.0f + x) / (1.0f - x));
+        }
+
+        UploadToBuffer(B, bData);
+    }
+
+    #endregion
+
+    #region Additional Unary Operations
+
+    public void Reciprocal(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = 1.0f / aData[i];
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Cbrt(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        // cbrt(x) = sign(x) * |x|^(1/3)
+        const float oneThird = 1.0f / 3.0f;
+        for (int i = 0; i < size; i++)
+        {
+            float x = aData[i];
+            float absX = MathF.Abs(x);
+            float sign = x >= 0.0f ? 1.0f : -1.0f;
+            bData[i] = sign * MathF.Pow(absX, oneThird);
+        }
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Log10(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Log10(aData[i]);
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Negate(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = -aData[i];
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Floor(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Floor(aData[i]);
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Ceiling(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Ceiling(aData[i]);
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Round(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Round(aData[i]);
+
+        UploadToBuffer(B, bData);
+    }
+
+    public void Truncate(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        var aData = DownloadBuffer(A);
+        var bData = new float[size];
+
+        for (int i = 0; i < size; i++)
+            bData[i] = MathF.Truncate(aData[i]);
+
+        UploadToBuffer(B, bData);
+    }
+
+    #endregion
+
     public void Softmax(IGpuBuffer A, IGpuBuffer B, int batchSize, int features)
     {
         var aData = DownloadBuffer(A);

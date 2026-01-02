@@ -628,16 +628,47 @@ public sealed class GemmAutoTuner
         }
     }
 
-    // Predefined configurations for different matrix sizes (AMD-tuned)
+    // Predefined configurations for different matrix sizes (AMD RDNA1/RDNA2 optimized via A/B testing)
+    // These configs achieved 78% efficiency on RX 5500 XT (gfx1012) - will need per-GPU tuning
     private static readonly GemmConfig[] _smallConfigs = new[]
     {
+        // Small matrices (512): tile64x64_k32 - 25% efficiency (memory/launch limited)
+        new GemmConfig
+        {
+            TileM = 64, TileN = 64, TileK = 32,
+            ThreadTileM = 8, ThreadTileN = 8,
+            VectorWidthM = 4, VectorWidthN = 4,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 1, KUnroll = 2, UseSubgroupOps = false,
+            StrideM = true, StrideN = true,
+            CacheA = true, CacheB = true,
+            MdimaSize = 8, NdimbSize = 8,
+            UseTrueVectorLDS = true,
+            UseColumnMajorA = true,
+            KernelName = "clblast_baseline_k0_small"
+        },
+        // Fallback for very small matrices
         new GemmConfig { TileM = 16, TileN = 16, TileK = 16, ThreadTileM = 2, ThreadTileN = 2, UseDoubleBuffering = false, UseVectorizedLoads = false, KernelName = "gemm_small" },
-        new GemmConfig { TileM = 32, TileN = 32, TileK = 8, ThreadTileM = 2, ThreadTileN = 2, UseDoubleBuffering = false, UseVectorizedLoads = false, KernelName = "gemm_warp_small" },
     };
 
     private static readonly GemmConfig[] _mediumConfigs = new[]
     {
-        // CLBlast baseline for medium matrices - proven 2300+ GFLOPS performance
+        // Medium matrices (768-1024): tile64x64_k16_ku4 - 42-54% efficiency
+        new GemmConfig
+        {
+            TileM = 64, TileN = 64, TileK = 16,
+            ThreadTileM = 8, ThreadTileN = 8,
+            VectorWidthM = 4, VectorWidthN = 4,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 1, KUnroll = 4, UseSubgroupOps = false,
+            StrideM = true, StrideN = true,
+            CacheA = true, CacheB = true,
+            MdimaSize = 8, NdimbSize = 8,
+            UseTrueVectorLDS = true,
+            UseColumnMajorA = true,
+            KernelName = "clblast_baseline_k0_medium"
+        },
+        // Original baseline for comparison
         new GemmConfig
         {
             TileM = 64, TileN = 64, TileK = 16,
@@ -652,14 +683,28 @@ public sealed class GemmAutoTuner
             UseColumnMajorA = true,
             KernelName = "clblast_baseline_k0"
         },
-        // Fallback to double-buffered for occupancy
-        new GemmConfig { TileM = 32, TileN = 32, TileK = 16, ThreadTileM = 4, ThreadTileN = 4, UseDoubleBuffering = true, UseVectorizedLoads = false, KernelName = "gemm_double_buffered" },
     };
 
     private static readonly GemmConfig[] _largeConfigs = new[]
     {
-        // CLBlast baseline kernel 0 - THE PERFORMANCE FLOOR (2300+ GFLOPS)
-        // GEMMK=0, MWG=64, NWG=64, KWG=16, MDIMC=8, NDIMC=8, VWM=2, VWN=2
+        // Large matrices (1024+): tile64x128_k8_ku8 - 78% efficiency (A/B tested winner)
+        // TileM=64, TileN=128 provides optimal memory coalescing on RDNA
+        // TileK=8 with KUnroll=8 reduces LDS pressure while maintaining compute efficiency
+        new GemmConfig
+        {
+            TileM = 64, TileN = 128, TileK = 8,
+            ThreadTileM = 8, ThreadTileN = 8,
+            VectorWidthM = 4, VectorWidthN = 4,
+            UseDoubleBuffering = false, UseVectorizedLoads = true,
+            KReg = 1, KUnroll = 8, UseSubgroupOps = false,
+            StrideM = true, StrideN = true,
+            CacheA = true, CacheB = true,
+            MdimaSize = 8, NdimbSize = 16,
+            UseTrueVectorLDS = true,
+            UseColumnMajorA = true,
+            KernelName = "clblast_baseline_k0_large"
+        },
+        // Original CLBlast baseline for fallback/comparison
         new GemmConfig
         {
             TileM = 64, TileN = 64, TileK = 16,
@@ -674,23 +719,21 @@ public sealed class GemmAutoTuner
             UseColumnMajorA = true,
             KernelName = "clblast_baseline_k0"
         },
-        // Alternative: larger tiles for very large matrices (may exceed baseline)
+        // Alternative: 128x64 for M-dominant shapes
         new GemmConfig
         {
-            TileM = 128, TileN = 64, TileK = 32,
-            ThreadTileM = 16, ThreadTileN = 8,
-            VectorWidthM = 4, VectorWidthN = 1,
+            TileM = 128, TileN = 64, TileK = 8,
+            ThreadTileM = 8, ThreadTileN = 8,
+            VectorWidthM = 4, VectorWidthN = 4,
             UseDoubleBuffering = false, UseVectorizedLoads = true,
-            KReg = 1, KUnroll = 2, UseSubgroupOps = false,
-            StrideM = true, StrideN = false,
+            KReg = 1, KUnroll = 8, UseSubgroupOps = false,
+            StrideM = true, StrideN = true,
             CacheA = true, CacheB = true,
-            MdimaSize = 16, NdimbSize = 16,
+            MdimaSize = 16, NdimbSize = 8,
             UseTrueVectorLDS = true,
             UseColumnMajorA = true,
-            KernelName = "clblast_true_vec_128x64"
+            KernelName = "clblast_baseline_k0_large_m"
         },
-        // Mixed precision fallback
-        new GemmConfig { TileM = 64, TileN = 64, TileK = 32, ThreadTileM = 8, ThreadTileN = 8, UseDoubleBuffering = true, UseVectorizedLoads = true, KernelName = "gemm_mixed_precision" },
     };
 
     /// <summary>
@@ -719,34 +762,41 @@ public sealed class GemmAutoTuner
 
     /// <summary>
     /// Heuristic-based configuration selection (no runtime tuning needed).
-    /// Based on AMD GCN/RDNA architecture characteristics.
+    /// Based on A/B testing results on AMD RDNA1 (RX 5500 XT gfx1012).
+    /// Thresholds optimized for maximum efficiency at each size range.
     /// </summary>
     private GemmConfig SelectConfigHeuristic(int M, int N, int K, GpuCapabilities capabilities)
     {
         long totalOps = 2L * M * N * K;  // FLOPs for GEMM
         int maxDim = Math.Max(Math.Max(M, N), K);
 
-        // Small matrices: overhead-sensitive
+        // Very small matrices: overhead-sensitive, use simple kernel
         if (maxDim <= 64 || totalOps < 100_000)
         {
-            // Very small: use warp-level kernel
             if (maxDim <= 32)
-                return _smallConfigs[1];  // gemm_warp_small
+                return _smallConfigs[1];  // gemm_small fallback
 
-            return _smallConfigs[0];  // gemm_small
+            return _smallConfigs[1];  // gemm_small for tiny matrices
         }
 
-        // Medium matrices: use CLBlast baseline for proven 2300+ GFLOPS performance
-        if (maxDim <= 512 || totalOps < 10_000_000)
+        // Small matrices (65-512): tile64x64_k32 - 25% efficiency (launch overhead limited)
+        // A/B tested: TileK=32 with minimal unroll works best for memory-bound small sizes
+        if (maxDim <= 512)
         {
-            // CLBlast baseline is the performance floor for all medium matrices
-            return _mediumConfigs[0];  // clblast_baseline_k0
+            return _smallConfigs[0];  // tile64x64_k32
         }
 
-        // Large matrices: CLBlast baseline is our performance floor
-        // All shapes use the proven CLBlast baseline kernel by default
-        // A/B testing will identify when alternatives are faster
-        return _largeConfigs[0];  // clblast_baseline_k0 - THE PERFORMANCE FLOOR
+        // Medium matrices (513-1023): tile64x64_k16_ku4 - 42-54% efficiency
+        // A/B tested: TileK=16 with KUnroll=4 balances LDS pressure and compute
+        if (maxDim < 1024)
+        {
+            return _mediumConfigs[0];  // tile64x64_k16_ku4
+        }
+
+        // Large matrices (1024+): tile64x128_k8_ku8 - 73-78% efficiency
+        // A/B tested winner: asymmetric 64x128 tiles with aggressive K unrolling
+        // TileK=8 reduces LDS pressure, KUnroll=8 maintains high throughput
+        return _largeConfigs[0];  // tile64x128_k8_ku8 - THE PERFORMANCE WINNER
     }
 
     /// <summary>

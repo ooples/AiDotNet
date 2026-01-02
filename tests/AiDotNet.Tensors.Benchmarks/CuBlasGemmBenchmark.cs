@@ -8,7 +8,7 @@ namespace AiDotNet.Tensors.Benchmarks;
 
 /// <summary>
 /// Benchmark comparing cuBLAS GEMM vs DirectGpu for matrix multiplication.
-/// Target: ~30,000 GFLOPS for cuBLAS vs legacy ~52-86 GFLOPS (ILGPU baseline).
+/// Target: ~30,000 GFLOPS for cuBLAS.
 /// </summary>
 public static class CuBlasGemmBenchmark
 {
@@ -251,7 +251,6 @@ public static class CuBlasGemmBenchmark
         Console.WriteLine("Performance Analysis:");
         Console.WriteLine($"  Target: ~30,000 GFLOPS (cuBLAS theoretical)");
         Console.WriteLine($"  PyTorch/TorchSharp baseline: ~10,000 GFLOPS");
-        Console.WriteLine("  Legacy ILGPU ceiling: ~52-86 GFLOPS");
 
         if (cublasGflops > 1000)
         {

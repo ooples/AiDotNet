@@ -515,7 +515,6 @@ public class GpuMetrics
 
 ## References
 
-- **Legacy ILGPU Error Handling**: https://github.com/m4rs-mt/ILGPU/wiki/Error-Handling
 - **CUDA Error Handling**: https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__ERROR.html
 - **Exponential Backoff**: https://en.wikipedia.org/wiki/Exponential_backoff
 

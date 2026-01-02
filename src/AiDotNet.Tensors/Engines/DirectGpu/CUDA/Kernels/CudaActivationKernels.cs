@@ -276,6 +276,151 @@ extern ""C"" __global__ void bias_add(float* data, const float* bias, int rows, 
     int col = idx % cols;
     data[idx] += bias[col];
 }
+
+// ===========================================================================
+// TRIGONOMETRIC KERNELS
+// ===========================================================================
+
+extern ""C"" __global__ void sin_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    B[idx] = sinf(A[idx]);
+}
+
+extern ""C"" __global__ void cos_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    B[idx] = cosf(A[idx]);
+}
+
+extern ""C"" __global__ void tan_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    B[idx] = tanf(A[idx]);
+}
+
+extern ""C"" __global__ void asin_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    B[idx] = asinf(A[idx]);
+}
+
+extern ""C"" __global__ void acos_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    B[idx] = acosf(A[idx]);
+}
+
+extern ""C"" __global__ void atan_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    B[idx] = atanf(A[idx]);
+}
+
+// ===========================================================================
+// HYPERBOLIC KERNELS
+// ===========================================================================
+
+extern ""C"" __global__ void sinh_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    B[idx] = sinhf(A[idx]);
+}
+
+extern ""C"" __global__ void cosh_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    B[idx] = coshf(A[idx]);
+}
+
+extern ""C"" __global__ void asinh_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    B[idx] = asinhf(A[idx]);
+}
+
+extern ""C"" __global__ void acosh_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    B[idx] = acoshf(A[idx]);
+}
+
+extern ""C"" __global__ void atanh_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    B[idx] = atanhf(A[idx]);
+}
+
+// ===========================================================================
+// ADDITIONAL UNARY KERNELS
+// ===========================================================================
+
+extern ""C"" __global__ void reciprocal_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    B[idx] = 1.0f / A[idx];
+}
+
+extern ""C"" __global__ void cbrt_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    B[idx] = cbrtf(A[idx]);
+}
+
+extern ""C"" __global__ void log10_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    B[idx] = log10f(A[idx]);
+}
+
+extern ""C"" __global__ void negate_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    B[idx] = -A[idx];
+}
+
+extern ""C"" __global__ void floor_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    B[idx] = floorf(A[idx]);
+}
+
+extern ""C"" __global__ void ceil_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    B[idx] = ceilf(A[idx]);
+}
+
+extern ""C"" __global__ void round_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    B[idx] = roundf(A[idx]);
+}
+
+extern ""C"" __global__ void trunc_vector(const float* A, float* B, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    B[idx] = truncf(A[idx]);
+}
 ";
         }
 
@@ -283,19 +428,24 @@ extern ""C"" __global__ void bias_add(float* data, const float* bias, int rows, 
         {
             return new[]
             {
+                // Activations
                 "relu",
                 "sigmoid",
                 "tanh_activation",
                 "gelu",
                 "swish",
                 "softmax",
+                // Element-wise binary
                 "add_vectors",
                 "subtract_vectors",
                 "multiply_vectors",
                 "divide_vectors",
                 "min_vectors",
                 "max_vectors",
+                // Scalar ops
                 "scale_vector",
+                "power_scalar",
+                // Unary math
                 "abs_vector",
                 "exp_vector",
                 "log_vector",
@@ -306,7 +456,29 @@ extern ""C"" __global__ void bias_add(float* data, const float* bias, int rows, 
                 "log1p_vector",
                 "sqrt_vector",
                 "sign_vector",
-                "power_scalar",
+                // Trigonometric
+                "sin_vector",
+                "cos_vector",
+                "tan_vector",
+                "asin_vector",
+                "acos_vector",
+                "atan_vector",
+                // Hyperbolic
+                "sinh_vector",
+                "cosh_vector",
+                "asinh_vector",
+                "acosh_vector",
+                "atanh_vector",
+                // Additional unary
+                "reciprocal_vector",
+                "cbrt_vector",
+                "log10_vector",
+                "negate_vector",
+                "floor_vector",
+                "ceil_vector",
+                "round_vector",
+                "trunc_vector",
+                // Reductions
                 "reduce_sum",
                 "reduce_max",
                 "sum_axis",

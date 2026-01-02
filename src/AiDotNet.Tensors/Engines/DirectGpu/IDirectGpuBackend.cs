@@ -284,6 +284,113 @@ public interface IDirectGpuBackend : IDisposable
 
     #endregion
 
+    #region Trigonometric Operations
+
+    /// <summary>
+    /// Sine: B = sin(A)
+    /// </summary>
+    void Sin(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Cosine: B = cos(A)
+    /// </summary>
+    void Cos(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Tangent: B = tan(A)
+    /// </summary>
+    void Tan(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Arc sine: B = asin(A)
+    /// </summary>
+    void Asin(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Arc cosine: B = acos(A)
+    /// </summary>
+    void Acos(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Arc tangent: B = atan(A)
+    /// </summary>
+    void Atan(IGpuBuffer A, IGpuBuffer B, int size);
+
+    #endregion
+
+    #region Hyperbolic Operations
+
+    /// <summary>
+    /// Hyperbolic sine: B = sinh(A)
+    /// </summary>
+    void Sinh(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Hyperbolic cosine: B = cosh(A)
+    /// </summary>
+    void Cosh(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Inverse hyperbolic sine: B = asinh(A)
+    /// </summary>
+    void Asinh(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Inverse hyperbolic cosine: B = acosh(A)
+    /// </summary>
+    void Acosh(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Inverse hyperbolic tangent: B = atanh(A)
+    /// </summary>
+    void Atanh(IGpuBuffer A, IGpuBuffer B, int size);
+
+    #endregion
+
+    #region Additional Unary Operations
+
+    /// <summary>
+    /// Reciprocal: B = 1/A
+    /// </summary>
+    void Reciprocal(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Cube root: B = cbrt(A)
+    /// </summary>
+    void Cbrt(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Base-10 logarithm: B = log10(A)
+    /// </summary>
+    void Log10(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Negate: B = -A
+    /// </summary>
+    void Negate(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Floor: B = floor(A)
+    /// </summary>
+    void Floor(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Ceiling: B = ceil(A)
+    /// </summary>
+    void Ceiling(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Round: B = round(A)
+    /// </summary>
+    void Round(IGpuBuffer A, IGpuBuffer B, int size);
+
+    /// <summary>
+    /// Truncate: B = trunc(A)
+    /// </summary>
+    void Truncate(IGpuBuffer A, IGpuBuffer B, int size);
+
+    #endregion
+
     #region Sparse Operations (2:4 Structured Sparsity)
 
     /// <summary>

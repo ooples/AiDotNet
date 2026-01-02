@@ -1909,6 +1909,104 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             ExecuteUnary("sign_vector", A, B, size);
         }
 
+        // Trigonometric operations
+        public void Sin(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("sin_vector", A, B, size);
+        }
+
+        public void Cos(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("cos_vector", A, B, size);
+        }
+
+        public void Tan(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("tan_vector", A, B, size);
+        }
+
+        public void Asin(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("asin_vector", A, B, size);
+        }
+
+        public void Acos(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("acos_vector", A, B, size);
+        }
+
+        public void Atan(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("atan_vector", A, B, size);
+        }
+
+        // Hyperbolic operations
+        public void Sinh(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("sinh_vector", A, B, size);
+        }
+
+        public void Cosh(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("cosh_vector", A, B, size);
+        }
+
+        public void Asinh(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("asinh_vector", A, B, size);
+        }
+
+        public void Acosh(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("acosh_vector", A, B, size);
+        }
+
+        public void Atanh(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("atanh_vector", A, B, size);
+        }
+
+        // Additional unary operations
+        public void Reciprocal(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("reciprocal_vector", A, B, size);
+        }
+
+        public void Cbrt(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("cbrt_vector", A, B, size);
+        }
+
+        public void Log10(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("log10_vector", A, B, size);
+        }
+
+        public void Negate(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("negate_vector", A, B, size);
+        }
+
+        public void Floor(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("floor_vector", A, B, size);
+        }
+
+        public void Ceiling(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("ceil_vector", A, B, size);
+        }
+
+        public void Round(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("round_vector", A, B, size);
+        }
+
+        public void Truncate(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            ExecuteUnary("trunc_vector", A, B, size);
+        }
+
         private void ExecuteElementwise(string kernelName, IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
         {
             if (_context == null)

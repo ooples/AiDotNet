@@ -17,7 +17,6 @@ public static class DirectGpuGemmBenchmark
     // Performance targets from plan
     private const double TargetGflops = 25000.0;
     private const double ClBlastGflops = 2500.0;
-    private const double LegacyIlgpuGflops = 86.0;
 
     public static void Run()
     {
@@ -25,7 +24,7 @@ public static class DirectGpuGemmBenchmark
         Console.WriteLine("║              DirectGpu GEMM Benchmark - Custom Optimized Kernels             ║");
         Console.WriteLine("╠══════════════════════════════════════════════════════════════════════════════╣");
         Console.WriteLine("║ Target: 25,000+ GFLOPS (25 TFLOPS) on AMD RX 6800+                           ║");
-        Console.WriteLine("║ Baseline: CLBlast ~2,500 GFLOPS, legacy ILGPU ~52-86 GFLOPS (retired)        ║");
+        Console.WriteLine("║ Baseline: CLBlast ~2,500 GFLOPS                                             ║");
         Console.WriteLine("╚══════════════════════════════════════════════════════════════════════════════╝");
         Console.WriteLine();
 
@@ -252,8 +251,6 @@ public static class DirectGpuGemmBenchmark
             status = "NEAR TARGET";
         else if (result.GFlops >= ClBlastGflops)
             status = "BEAT CLBLAST";
-        else if (result.GFlops >= LegacyIlgpuGflops * 10)
-            status = "10x legacy ILGPU";
         else
             status = "OPTIMIZING";
 
@@ -271,10 +268,8 @@ public static class DirectGpuGemmBenchmark
         Console.WriteLine("╠══════════════════════════════════════════════════════════════════════════════╣");
 
         double clblastSpeedup = peakGflops / ClBlastGflops;
-        double ilgpuSpeedup = peakGflops / LegacyIlgpuGflops;
 
         Console.WriteLine($"║ vs CLBlast (~2,500 GFLOPS):  {clblastSpeedup,6:F1}x faster                                    ║");
-        Console.WriteLine($"║ vs legacy ILGPU (~86 GFLOPS): {ilgpuSpeedup,6:F1}x faster                                   ║");
         Console.WriteLine("╠══════════════════════════════════════════════════════════════════════════════╣");
 
         if (peakGflops >= TargetGflops)

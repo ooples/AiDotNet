@@ -8,7 +8,7 @@ namespace AiDotNet.Tensors.Engines;
 /// <summary>
 /// IEngine implementation that routes supported ops to DirectGpuEngine and falls back to CPU.
 /// </summary>
-public sealed class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
+public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
 {
     private readonly DirectGpuEngine? _directGpu;
     private readonly bool _ownsDirectGpu;

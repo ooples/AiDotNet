@@ -361,6 +361,246 @@ __kernel void power_scalar(
 
     B[idx] = pow(A[idx], exponent);
 }
+
+// ===========================================================================
+// TRIGONOMETRIC OPERATIONS
+// ===========================================================================
+
+// Sine
+__kernel void sin_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = sin(A[idx]);
+}
+
+// Cosine
+__kernel void cos_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = cos(A[idx]);
+}
+
+// Tangent
+__kernel void tan_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = tan(A[idx]);
+}
+
+// Arc sine
+__kernel void asin_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = asin(A[idx]);
+}
+
+// Arc cosine
+__kernel void acos_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = acos(A[idx]);
+}
+
+// Arc tangent
+__kernel void atan_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = atan(A[idx]);
+}
+
+// ===========================================================================
+// HYPERBOLIC OPERATIONS
+// ===========================================================================
+
+// Hyperbolic sine
+__kernel void sinh_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = sinh(A[idx]);
+}
+
+// Hyperbolic cosine
+__kernel void cosh_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = cosh(A[idx]);
+}
+
+// Inverse hyperbolic sine
+__kernel void asinh_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = asinh(A[idx]);
+}
+
+// Inverse hyperbolic cosine
+__kernel void acosh_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = acosh(A[idx]);
+}
+
+// Inverse hyperbolic tangent
+__kernel void atanh_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = atanh(A[idx]);
+}
+
+// ===========================================================================
+// ADDITIONAL UNARY OPERATIONS
+// ===========================================================================
+
+// Reciprocal: 1/x
+__kernel void reciprocal_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = 1.0f / A[idx];
+}
+
+// Cube root
+__kernel void cbrt_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = cbrt(A[idx]);
+}
+
+// Base-10 log
+__kernel void log10_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = log10(A[idx]);
+}
+
+// Negate
+__kernel void negate_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = -A[idx];
+}
+
+// Floor
+__kernel void floor_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = floor(A[idx]);
+}
+
+// Ceiling
+__kernel void ceil_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = ceil(A[idx]);
+}
+
+// Round
+__kernel void round_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = round(A[idx]);
+}
+
+// Truncate
+__kernel void trunc_vector(
+    __global const float* A,
+    __global float* B,
+    const int size)
+{
+    const int idx = get_global_id(0);
+    if (idx >= size) return;
+
+    B[idx] = trunc(A[idx]);
+}
 ";
         }
 
@@ -371,14 +611,29 @@ __kernel void power_scalar(
         {
             return new string[]
             {
+                // Activations
                 "relu", "leaky_relu", "sigmoid", "tanh_activation",
                 "gelu", "swish", "softmax",
+                // Element-wise binary
                 "add_vectors", "subtract_vectors", "multiply_vectors",
                 "divide_vectors", "min_vectors", "max_vectors",
-                "scale_vector", "abs_vector", "exp_vector", "log_vector",
+                // Scalar ops
+                "scale_vector", "power_scalar",
+                // Unary math
+                "abs_vector", "exp_vector", "log_vector",
                 "log2_vector", "exp2_vector", "exp10_vector",
                 "expm1_vector", "log1p_vector", "sqrt_vector",
-                "sign_vector", "power_scalar"
+                "sign_vector",
+                // Trigonometric
+                "sin_vector", "cos_vector", "tan_vector",
+                "asin_vector", "acos_vector", "atan_vector",
+                // Hyperbolic
+                "sinh_vector", "cosh_vector",
+                "asinh_vector", "acosh_vector", "atanh_vector",
+                // Additional unary
+                "reciprocal_vector", "cbrt_vector", "log10_vector",
+                "negate_vector", "floor_vector", "ceil_vector",
+                "round_vector", "trunc_vector"
             };
         }
     }

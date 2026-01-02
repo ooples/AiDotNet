@@ -65,7 +65,6 @@ public enum CudaResult
 /// <remarks>
 /// <para><b>Why Direct P/Invoke?</b></para>
 /// <para>
-/// Legacy ILGPU kernels were limited to ~52-86 GFLOPS for GEMM.
 /// cuBLAS achieves ~30,000 GFLOPS through:
 /// - Hand-tuned PTX/SASS assembly for each GPU architecture
 /// - Tensor core utilization (WMMA instructions)

@@ -500,6 +500,113 @@ public sealed class CudaBackend : IDirectGpuBackend
         LaunchSoftmaxKernel(A, B, batchSize, features);
     }
 
+    #region Trigonometric Operations
+
+    public void Sin(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("sin_vector", A, B, size);
+    }
+
+    public void Cos(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("cos_vector", A, B, size);
+    }
+
+    public void Tan(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("tan_vector", A, B, size);
+    }
+
+    public void Asin(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("asin_vector", A, B, size);
+    }
+
+    public void Acos(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("acos_vector", A, B, size);
+    }
+
+    public void Atan(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("atan_vector", A, B, size);
+    }
+
+    #endregion
+
+    #region Hyperbolic Operations
+
+    public void Sinh(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("sinh_vector", A, B, size);
+    }
+
+    public void Cosh(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("cosh_vector", A, B, size);
+    }
+
+    public void Asinh(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("asinh_vector", A, B, size);
+    }
+
+    public void Acosh(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("acosh_vector", A, B, size);
+    }
+
+    public void Atanh(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("atanh_vector", A, B, size);
+    }
+
+    #endregion
+
+    #region Additional Unary Operations
+
+    public void Reciprocal(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("reciprocal_vector", A, B, size);
+    }
+
+    public void Cbrt(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("cbrt_vector", A, B, size);
+    }
+
+    public void Log10(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("log10_vector", A, B, size);
+    }
+
+    public void Negate(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("negate_vector", A, B, size);
+    }
+
+    public void Floor(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("floor_vector", A, B, size);
+    }
+
+    public void Ceiling(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("ceil_vector", A, B, size);
+    }
+
+    public void Round(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("round_vector", A, B, size);
+    }
+
+    public void Truncate(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        LaunchUnaryKernel("trunc_vector", A, B, size);
+    }
+
+    #endregion
+
     public void Enforce2x4Sparsity(IGpuBuffer denseInput, IGpuBuffer sparseValues, IGpuBuffer sparseIndices, int M, int K)
     {
         throw new NotSupportedException("CUDA sparse 2:4 kernels are not implemented yet.");

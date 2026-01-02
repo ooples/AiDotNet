@@ -33,9 +33,11 @@ class Program
             Console.WriteLine("   Example: AiDotNetTestConsole.exe 9 100 --diag");
             Console.WriteLine("10. Comprehensive GEMM A/B Testing (All Sizes & Variants)");
             Console.WriteLine("   Tests CLBlast vs XOR Swizzle vs RDNA1 Opt across all sizes");
+            Console.WriteLine("11. Tile Configuration A/B Testing (Find Optimal Tile Sizes)");
+            Console.WriteLine("   Tests different tile configurations to maximize GFLOPS");
             Console.WriteLine("0. Exit");
             Console.WriteLine();
-            Console.Write("Select an example to run (0-10): ");
+            Console.Write("Select an example to run (0-11): ");
 
             int.TryParse(Console.ReadLine(), out choice);
         }
@@ -97,8 +99,11 @@ class Program
                 case 10:
                     ComprehensiveGemmAbTest.Run();
                     break;
+                case 11:
+                    TileConfigAbTest.Run();
+                    break;
                 default:
-                    Console.WriteLine("Invalid choice. Please select a number between 0 and 10.");
+                    Console.WriteLine("Invalid choice. Please select a number between 0 and 11.");
                     break;
             }
         }

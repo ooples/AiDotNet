@@ -100,14 +100,8 @@ dotnet run -c Release --filter "*GEMM_Large_GPU*"
 
 Direct benchmarking against PyTorch/TensorFlow requires Python interop. However, we can estimate comparative performance:
 
-#### Legacy ILGPU vs cuBLAS/cuDNN (historical baseline)
-
-| Operation | AiDotNet (legacy ILGPU) | PyTorch (cuBLAS/cuDNN) | Relative Performance |
-|-----------|------------------|------------------------|----------------------|
-| GEMM | Legacy ILGPU kernels | cuBLAS | **0.5-0.8x** (legacy ILGPU slightly slower) |
-| Conv2D | Custom kernels | cuDNN | **0.3-0.6x** (cuDNN more optimized) |
-| Pooling | Custom kernels | cuDNN | **0.5-0.9x** (Similar performance) |
-
+#### DirectGpu vs cuBLAS/cuDNN
+Run the DirectGpu benchmarks to compare against vendor libraries on your hardware.
 #### Key Differences
 
 **AiDotNet Advantages**:

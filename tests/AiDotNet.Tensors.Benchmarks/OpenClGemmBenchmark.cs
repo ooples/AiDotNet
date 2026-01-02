@@ -180,7 +180,7 @@ public static class OpenClGemmBenchmark
                 }
                 else if (gflops > 1000)
                 {
-                    Console.WriteLine($"  ★ {gflops:F0} GFLOPS - Room for improvement, but beating legacy ILGPU baseline");
+                    Console.WriteLine($"  ★ {gflops:F0} GFLOPS - Room for improvement");
                 }
                 else
                 {

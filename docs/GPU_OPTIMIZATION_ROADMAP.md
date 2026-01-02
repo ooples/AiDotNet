@@ -1,17 +1,20 @@
 # GPU GEMM Optimization Roadmap for AMD RDNA1 (RX 5500 XT)
 
-## Current State (2026-01-01, Phase 1 Complete)
+## Current State (2026-01-01, Phase 1.5 Complete - NOW FASTER THAN CLBLAST!)
 
 | Metric | Value |
 |--------|-------|
 | GPU | AMD RX 5500 XT (gfx1012, 11 CUs) |
 | Theoretical Peak | ~5,196 GFLOPS |
-| CLBlast Performance | 2,290 GFLOPS @ 2048x2048 |
-| Our Performance | **1,636 GFLOPS @ 2048x2048 (71%)** |
-| 256x256 | **AiDotNet is 1.9x FASTER than CLBlast!** |
-| 4096x4096 | **AiDotNet is 1.3x FASTER than CLBlast!** |
+| CLBlast Performance | 2,258 GFLOPS @ 2048x2048 |
+| **Our Performance** | **3,137 GFLOPS @ 2048x2048 (139% of CLBlast!)** |
+| 1024x1024 | **2,605 GFLOPS (1.43x FASTER than CLBlast!)** |
+| 2048x2048 | **3,137 GFLOPS (1.39x FASTER than CLBlast!)** |
+| 4096x4096 | **2,334 GFLOPS (5.4x FASTER than CLBlast!)** |
+| DenseLayer | **1,235 GFLOPS (1.22x FASTER than CLBlast!)** |
 | Phase 1 Status | **COMPLETE** - All low-complexity optimizations applied |
-| Next Target | Phase 2: Larger Thread Tiles & Wave32 Mode |
+| Phase 1.5 Status | **COMPLETE** - Row-major swap eliminates 48% transpose overhead! |
+| Current Achievement | **60% of theoretical peak, 40% faster than CLBlast!** |
 
 ## Key Discoveries
 
@@ -25,9 +28,12 @@
 - 512x512: 1349 GFLOPS (1.4x faster than CLBlast)
 - DenseLayer: 1350 GFLOPS (1.16x faster than CLBlast)
 
-**3. Indirect Xgemm path still needed for large square matrices**
-- 2048x2048: Direct gives 1428, Indirect gives 1502 GFLOPS
-- Hybrid approach: Use direct for small/medium/non-square, indirect for 2048-class matrices
+**3. Row-Major Swap Trick (BREAKTHROUGH!)**
+- Previous approach: Physical transpose of A and C matrices (48% overhead!)
+- New approach: Swap A↔B and M↔N, no data movement at all
+- For row-major C = A × B, compute column-major C^T = B^T × A^T
+- Result: GEMM kernel alone runs at 2800-3200 GFLOPS, matching raw compute!
+- 2048x2048: From 1,636 GFLOPS (71% CLBlast) to 3,137 GFLOPS (139% CLBlast)!
 
 ---
 
@@ -44,13 +50,54 @@ These optimizations should bring us from 1,000 to 2,300+ GFLOPS.
 | 3 | **VWM=4, VWN=4** (wider vectorization) | +2% | Low | Low | **DONE** ✓ |
 | 4 | **K-loop Unrolling (KWI>2)** | -2% (regression!) | Low | Low | **SKIP** ✗ |
 
-**Phase 1 COMPLETE - Final Performance:**
+**Phase 1 COMPLETE - Final Performance (before row-major swap):**
 - **2048x2048: 1,636 GFLOPS (71% of CLBlast)**
-- **256x256: 405 GFLOPS (1.9x FASTER than CLBlast!)**
-- **4096x4096: 564 GFLOPS (1.3x FASTER than CLBlast!)**
 - K-loop unrolling (KWI=4, KWI=8) tested but caused register pressure regression on 11-CU RDNA1
 - LDS padding: +6%, Vectorization: +2% - both kept
-- **Phase 2 needed for 2048x2048 performance parity**
+
+---
+
+## Phase 1.5: Row-Major Swap Trick (BREAKTHROUGH!)
+
+Target: Eliminate 48% transpose overhead discovered in Phase 1.
+
+| # | Optimization | Expected Gain | Complexity | Risk | Status |
+|---|-------------|---------------|------------|------|--------|
+| 5 | **Row-Major Swap Trick** | +92% (2x) | Medium | Low | **DONE** ✓ |
+
+**The Problem:**
+- CLBlast Xgemm kernel expects column-major data layout
+- Our row-major data required physical transpose of A and C matrices
+- Timing showed: GEMM kernel = 52% of time, Transpose = 48% of time!
+- GEMM kernel alone achieved 2800-3200 GFLOPS - faster than CLBlast!
+
+**The Solution - Row-Major Swap Trick:**
+For row-major GEMM `C = A × B`:
+1. Row-major data reinterpreted as column-major is already transposed
+2. So: `C^T = (A × B)^T = B^T × A^T`
+3. Swap A↔B and M↔N in kernel call
+4. Kernel produces column-major result = row-major result (no data movement!)
+
+**Implementation:**
+```csharp
+// Instead of:
+// 1. Transpose A (row-major M×K) to A' (column-major K×M) [EXPENSIVE]
+// 2. Call kernel: C' = A' × B
+// 3. Transpose C' (column-major) to C (row-major) [EXPENSIVE]
+
+// We do:
+// 1. Swap arguments: aBuf = B, bBuf = A (zero cost)
+// 2. Swap dimensions: swappedM = N, swappedN = M (zero cost)
+// 3. Call kernel: C' = B' × A' where ' means row-major as column-major
+// 4. Result is directly in correct row-major layout! (no transpose)
+```
+
+**Phase 1.5 COMPLETE - Final Performance:**
+- **1024x1024: 2,605 GFLOPS (1.43x FASTER than CLBlast!)**
+- **2048x2048: 3,137 GFLOPS (1.39x FASTER than CLBlast!)**
+- **4096x4096: 2,334 GFLOPS (5.4x FASTER than CLBlast!)**
+- **DenseLayer: 1,235 GFLOPS (1.22x FASTER than CLBlast!)**
+- **Overall: 60% of theoretical peak, 40% faster than CLBlast!**
 
 ### Implementation Details
 
@@ -289,4 +336,10 @@ For each benchmark run, capture:
 | 2026-01-01 | Implemented VWM=4, VWN=4 wider vectorization | 2048x2048: 1632 GFLOPS (+2%, 70% of CLBlast) |
 | 2026-01-01 | Tested K-loop unrolling (KWI=4, KWI=8) | **REGRESSION** - reverted to KWI=2 |
 | 2026-01-01 | **PHASE 1 COMPLETE** | 2048x2048: 1636 GFLOPS (71%), 256x256: 1.9x faster than CLBlast |
+| 2026-01-01 | **CRITICAL BUG FIX**: MinIndirectSize threshold not being used! | Direct path was used for ALL sizes! |
+| 2026-01-01 | Fixed path selection: use indirect for M/N >= 448 | 2048x2048: 550→1657 GFLOPS (3x improvement, now 71% of CLBlast) |
+| 2026-01-01 | Current status: DenseLayer 1.17x faster, Large matrices 1.09x faster than CLBlast | Key workloads optimized! |
+| 2026-01-01 | Discovered 48% transpose overhead in indirect path | GEMM kernel alone: 2800+ GFLOPS! |
+| 2026-01-01 | **PHASE 1.5: Row-Major Swap Trick** | Eliminates ALL transpose overhead! |
+| 2026-01-01 | **NOW FASTER THAN CLBLAST!** | 1024: 2605 GFLOPS (1.43x), 2048: 3137 GFLOPS (1.39x), 4096: 2334 GFLOPS (5.4x) |
 

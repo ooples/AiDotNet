@@ -27,7 +27,6 @@
 - ILGPU package references removed from `src/AiDotNet.csproj` and `src/AiDotNet.Tensors/AiDotNet.Tensors.csproj`.
 - ILGPU detection removed from Engine selection; GpuEngine now wraps DirectGpuTensorEngine.
 - ILGPU-specific data structures (GpuTensorHandle/GpuMemoryPool) removed.
-- Docs/benchmarks updated to label legacy ILGPU baselines.
 
 ## Non-goals
 - Multi-node/distributed GPU execution.
