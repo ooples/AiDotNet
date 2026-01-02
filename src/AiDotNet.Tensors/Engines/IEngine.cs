@@ -1444,6 +1444,15 @@ public interface IEngine
     Tensor<T> Swish<T>(Tensor<T> tensor);
 
     /// <summary>
+    /// Computes the Leaky ReLU of each element in the tensor: f(x) = max(alpha * x, x).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="alpha">The slope for negative values (typically 0.01).</param>
+    /// <returns>A new tensor with Leaky ReLU applied element-wise.</returns>
+    Tensor<T> LeakyReLU<T>(Tensor<T> tensor, T alpha);
+
+    /// <summary>
     /// Computes the ELU of each element in the tensor.
     /// </summary>
     Tensor<T> ELU<T>(Tensor<T> tensor, double alpha = 1.0);

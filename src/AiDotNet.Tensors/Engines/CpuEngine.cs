@@ -3643,6 +3643,20 @@ public class CpuEngine : IEngine
         var resultVector = TensorPrimitivesHelper<T>.ELU(flatVector, alpha);
         return new Tensor<T>(tensor.Shape, resultVector);
     }
+
+    /// <inheritdoc/>
+    public Tensor<T> LeakyReLU<T>(Tensor<T> tensor, T alpha)
+    {
+        if (tensor == null)
+            throw new ArgumentNullException(nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        double alphaDouble = numOps.ToDouble(alpha);
+        var flatVector = tensor.ToVector();
+        var resultVector = TensorPrimitivesHelper<T>.LeakyReLU(flatVector, alphaDouble);
+        return new Tensor<T>(tensor.Shape, resultVector);
+    }
+
     /// <summary>
     /// Gated Linear Unit: GLU(a, b) = a * sigmoid(b)
     /// Splits input in half along specified dimension and applies sigmoid gating.
@@ -14509,26 +14523,6 @@ public class CpuEngine : IEngine
 
         // Step 2: Apply activation
         result = ApplyFusedActivation(result, activation);
-
-        return result;
-    }
-
-    /// <summary>
-    /// Applies Leaky ReLU activation: f(x) = max(alpha * x, x)
-    /// </summary>
-    private Tensor<T> LeakyReLU<T>(Tensor<T> input, T alpha)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(input.Shape);
-        int totalElements = input.Length;
-
-        Parallel.For(0, totalElements, i =>
-        {
-            T val = input.GetFlat(i);
-            double x = numOps.ToDouble(val);
-            double a = numOps.ToDouble(alpha);
-            result.SetFlat(i, numOps.FromDouble(x > 0 ? x : a * x));
-        });
 
         return result;
     }
