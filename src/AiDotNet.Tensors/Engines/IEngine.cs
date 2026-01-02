@@ -1448,6 +1448,123 @@ public interface IEngine
     /// </summary>
     Tensor<T> ELU<T>(Tensor<T> tensor, double alpha = 1.0);
 
+    /// <summary>
+    /// Applies the Gated Linear Unit (GLU) activation: GLU(a, b) = a * sigmoid(b).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Input tensor with shape [..., 2*dim] where the last dimension will be split in half.</param>
+    /// <param name="dim">The dimension to split (default: -1, last dimension).</param>
+    /// <returns>Output tensor with shape [..., dim].</returns>
+    /// <remarks>
+    /// <para>
+    /// GLU splits the input along the specified dimension into two halves (a and b),
+    /// then computes: output = a * sigmoid(b)
+    /// </para>
+    /// <para>
+    /// Introduced in "Language Modeling with Gated Convolutional Networks" (Dauphin et al., 2017).
+    /// </para>
+    /// </remarks>
+    Tensor<T> GLU<T>(Tensor<T> input, int dim = -1);
+
+    /// <summary>
+    /// Computes the backward pass for GLU.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer.</param>
+    /// <param name="input">Original input tensor from forward pass.</param>
+    /// <param name="dim">The dimension that was split.</param>
+    /// <returns>Gradient with respect to the input.</returns>
+    Tensor<T> GLUBackward<T>(Tensor<T> gradOutput, Tensor<T> input, int dim = -1);
+
+    /// <summary>
+    /// Applies GeGLU activation: GeGLU(a, b) = a * GELU(b).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Input tensor with shape [..., 2*dim].</param>
+    /// <param name="dim">The dimension to split (default: -1, last dimension).</param>
+    /// <returns>Output tensor with shape [..., dim].</returns>
+    /// <remarks>
+    /// <para>
+    /// GeGLU splits the input and applies: output = a * GELU(b)
+    /// </para>
+    /// <para>
+    /// Used in PaLM, Gemma, and other modern transformers.
+    /// Provides better gradient flow than standard GLU.
+    /// </para>
+    /// <para>
+    /// Reference: "GLU Variants Improve Transformer" (Shazeer, 2020).
+    /// </para>
+    /// </remarks>
+    Tensor<T> GeGLU<T>(Tensor<T> input, int dim = -1);
+
+    /// <summary>
+    /// Computes the backward pass for GeGLU.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer.</param>
+    /// <param name="input">Original input tensor from forward pass.</param>
+    /// <param name="dim">The dimension that was split.</param>
+    /// <returns>Gradient with respect to the input.</returns>
+    Tensor<T> GeGLUBackward<T>(Tensor<T> gradOutput, Tensor<T> input, int dim = -1);
+
+    /// <summary>
+    /// Applies SwiGLU activation: SwiGLU(a, b) = a * Swish(b) = a * (b * sigmoid(b)).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Input tensor with shape [..., 2*dim].</param>
+    /// <param name="dim">The dimension to split (default: -1, last dimension).</param>
+    /// <returns>Output tensor with shape [..., dim].</returns>
+    /// <remarks>
+    /// <para>
+    /// SwiGLU splits the input and applies: output = a * Swish(b) = a * b * sigmoid(b)
+    /// </para>
+    /// <para>
+    /// Used in LLaMA, LLaMA-2, Mistral, and other modern LLMs.
+    /// Generally outperforms GELU and ReLU in transformer feed-forward networks.
+    /// </para>
+    /// <para>
+    /// Reference: "GLU Variants Improve Transformer" (Shazeer, 2020).
+    /// </para>
+    /// </remarks>
+    Tensor<T> SwiGLU<T>(Tensor<T> input, int dim = -1);
+
+    /// <summary>
+    /// Computes the backward pass for SwiGLU.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer.</param>
+    /// <param name="input">Original input tensor from forward pass.</param>
+    /// <param name="dim">The dimension that was split.</param>
+    /// <returns>Gradient with respect to the input.</returns>
+    Tensor<T> SwiGLUBackward<T>(Tensor<T> gradOutput, Tensor<T> input, int dim = -1);
+
+    /// <summary>
+    /// Applies ReGLU activation: ReGLU(a, b) = a * ReLU(b).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Input tensor with shape [..., 2*dim].</param>
+    /// <param name="dim">The dimension to split (default: -1, last dimension).</param>
+    /// <returns>Output tensor with shape [..., dim].</returns>
+    /// <remarks>
+    /// <para>
+    /// ReGLU splits the input and applies: output = a * ReLU(b)
+    /// </para>
+    /// <para>
+    /// Simpler than GeGLU/SwiGLU but can still outperform standard activations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> ReGLU<T>(Tensor<T> input, int dim = -1);
+
+    /// <summary>
+    /// Computes the backward pass for ReGLU.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer.</param>
+    /// <param name="input">Original input tensor from forward pass.</param>
+    /// <param name="dim">The dimension that was split.</param>
+    /// <returns>Gradient with respect to the input.</returns>
+    Tensor<T> ReGLUBackward<T>(Tensor<T> gradOutput, Tensor<T> input, int dim = -1);
+
     #endregion
 
     #region Matrix Operations (Phase B: Epic 2)
@@ -3265,6 +3382,87 @@ public interface IEngine
     /// <returns>The gradient with respect to the input.</returns>
     Tensor<T> SphericalSoftmaxBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> output, int axis = -1);
 
+    #endregion
+
+    #region Attention Operations
+
+    /// <summary>
+    /// Computes scaled dot-product attention as defined in "Attention Is All You Need" (Vaswani et al., 2017).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="query">Query tensor with shape [batch, heads, seq_q, d_k].</param>
+    /// <param name="key">Key tensor with shape [batch, heads, seq_k, d_k].</param>
+    /// <param name="value">Value tensor with shape [batch, heads, seq_k, d_v].</param>
+    /// <param name="mask">Optional attention mask with shape broadcastable to [batch, heads, seq_q, seq_k].
+    /// True values indicate positions to attend to, false values are masked out (set to -infinity before softmax).</param>
+    /// <param name="scale">Optional scaling factor. If null, uses 1/sqrt(d_k) as per the paper.</param>
+    /// <param name="attentionWeights">Output: the attention weights after softmax with shape [batch, heads, seq_q, seq_k].
+    /// Useful for visualization and backward pass.</param>
+    /// <returns>The attention output with shape [batch, heads, seq_q, d_v].</returns>
+    /// <remarks>
+    /// <para>
+    /// Implements the formula: Attention(Q, K, V) = softmax(Q @ K^T / sqrt(d_k)) @ V
+    /// </para>
+    /// <para><b>Usage in multi-head attention:</b></para>
+    /// <list type="bullet">
+    /// <item><description>Split input into heads: [batch, seq, embed] -> [batch, heads, seq, head_dim]</description></item>
+    /// <item><description>Apply linear projections to get Q, K, V</description></item>
+    /// <item><description>Call ScaledDotProductAttention</description></item>
+    /// <item><description>Concatenate heads and apply output projection</description></item>
+    /// </list>
+    /// <para><b>Mask conventions:</b></para>
+    /// <list type="bullet">
+    /// <item><description>Causal mask: Lower triangular matrix (for autoregressive models)</description></item>
+    /// <item><description>Padding mask: False for padded positions</description></item>
+    /// <item><description>Combined: Element-wise AND of causal and padding masks</description></item>
+    /// </list>
+    /// </remarks>
+    Tensor<T> ScaledDotProductAttention<T>(
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        Tensor<bool>? mask,
+        double? scale,
+        out Tensor<T> attentionWeights);
+
+    /// <summary>
+    /// Computes the backward pass for scaled dot-product attention.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer with shape [batch, heads, seq_q, d_v].</param>
+    /// <param name="query">Original query tensor from forward pass.</param>
+    /// <param name="key">Original key tensor from forward pass.</param>
+    /// <param name="value">Original value tensor from forward pass.</param>
+    /// <param name="attentionWeights">Attention weights from forward pass (after softmax).</param>
+    /// <param name="scale">The scale factor used in forward pass.</param>
+    /// <param name="gradQuery">Output: gradient with respect to query.</param>
+    /// <param name="gradKey">Output: gradient with respect to key.</param>
+    /// <param name="gradValue">Output: gradient with respect to value.</param>
+    /// <returns>The gradient with respect to the output (same as gradOutput for chaining).</returns>
+    /// <remarks>
+    /// <para>
+    /// Gradient computation follows the chain rule through:
+    /// 1. V @ attention_weights^T for gradValue
+    /// 2. Softmax backward for attention score gradients
+    /// 3. Q @ grad_scores^T / scale for gradKey
+    /// 4. grad_scores @ K / scale for gradQuery
+    /// </para>
+    /// </remarks>
+    Tensor<T> ScaledDotProductAttentionBackward<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        Tensor<T> attentionWeights,
+        double scale,
+        out Tensor<T> gradQuery,
+        out Tensor<T> gradKey,
+        out Tensor<T> gradValue);
+
+    #endregion
+
+    #region Normalization Operations
+
     /// <summary>
     /// Applies batch normalization to a 2D tensor [batch, features].
     /// </summary>
@@ -3338,6 +3536,57 @@ public interface IEngine
     /// This backward pass supports the same any-rank tensor semantics as the forward pass.
     /// </remarks>
     Tensor<T> LayerNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta);
+
+    /// <summary>
+    /// Applies Root Mean Square Layer Normalization (RMSNorm) as introduced in "Root Mean Square Layer Normalization" (Zhang &amp; Sennrich, 2019).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor with shape [batch, seq, features] or any rank.</param>
+    /// <param name="gamma">Scale parameter (gain) with shape matching the last dimension(s) to normalize over.</param>
+    /// <param name="epsilon">Small constant for numerical stability (typically 1e-6 or 1e-8).</param>
+    /// <param name="rms">Output: the computed root mean square values for backward pass.</param>
+    /// <returns>The normalized tensor with the same shape as input.</returns>
+    /// <remarks>
+    /// <para>
+    /// RMSNorm is computationally simpler than LayerNorm as it omits the mean centering step:
+    /// <code>
+    /// RMSNorm(x) = x / RMS(x) * gamma
+    /// where RMS(x) = sqrt(mean(x^2) + epsilon)
+    /// </code>
+    /// </para>
+    /// <para><b>Advantages over LayerNorm:</b></para>
+    /// <list type="bullet">
+    /// <item><description>~7-64% faster than LayerNorm (no mean computation/subtraction)</description></item>
+    /// <item><description>Simpler backward pass (fewer operations)</description></item>
+    /// <item><description>Used in LLaMA, T5, and other modern transformers</description></item>
+    /// <item><description>Empirically shows comparable or better performance</description></item>
+    /// </list>
+    /// <para><b>Key differences from LayerNorm:</b></para>
+    /// <list type="bullet">
+    /// <item><description>No mean subtraction (no re-centering)</description></item>
+    /// <item><description>No beta/bias parameter (only gamma/gain)</description></item>
+    /// <item><description>Normalizes by RMS instead of standard deviation</description></item>
+    /// </list>
+    /// </remarks>
+    Tensor<T> RMSNorm<T>(Tensor<T> input, Tensor<T> gamma, double epsilon, out Tensor<T> rms);
+
+    /// <summary>
+    /// Computes the backward pass for RMSNorm.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="input">The original input tensor.</param>
+    /// <param name="gamma">Scale parameter (gain).</param>
+    /// <param name="rms">The RMS values computed during forward pass.</param>
+    /// <param name="epsilon">Small constant used during forward pass.</param>
+    /// <param name="gradGamma">Output: gradient with respect to gamma.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// The gradient computation is simpler than LayerNorm due to no mean centering.
+    /// </para>
+    /// </remarks>
+    Tensor<T> RMSNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> rms, double epsilon, out Tensor<T> gradGamma);
 
     /// <summary>
     /// Applies group normalization to a tensor with shape [batch, channels, ...spatial].
@@ -3457,6 +3706,141 @@ public interface IEngine
     /// <param name="axes">The axes that were reduced.</param>
     /// <returns>The gradient with respect to the input.</returns>
     Tensor<T> ReduceLogVarianceBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> mean, Tensor<T> variance, int[] axes);
+
+    #endregion
+
+    #region Scatter Operations (Graph Neural Networks)
+
+    /// <summary>
+    /// Performs scatter-add operation: aggregates source values into output by adding at indices.
+    /// Essential for Graph Neural Network message passing and sparse tensor operations.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="source">Source tensor with values to scatter.</param>
+    /// <param name="indices">Index tensor specifying where to scatter values along the given dimension.
+    /// Shape must be broadcastable to source shape.</param>
+    /// <param name="dim">The dimension along which to scatter (default: 0).</param>
+    /// <param name="outputSize">Size of the output along the scatter dimension.
+    /// If null, uses max(indices) + 1.</param>
+    /// <returns>Output tensor with scattered (summed) values.</returns>
+    /// <remarks>
+    /// <para>
+    /// For each index i in the index tensor:
+    /// <code>output[indices[i], ...] += source[i, ...]</code>
+    /// </para>
+    /// <para><b>Common GNN uses:</b></para>
+    /// <list type="bullet">
+    /// <item><description>Aggregating neighbor messages to nodes</description></item>
+    /// <item><description>Edge-to-node aggregation in MessagePassingLayer</description></item>
+    /// <item><description>Pooling operations in graph classification</description></item>
+    /// </list>
+    /// </remarks>
+    Tensor<T> ScatterAdd<T>(Tensor<T> source, Tensor<int> indices, int dim = 0, int? outputSize = null);
+
+    /// <summary>
+    /// Computes the backward pass for scatter-add.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer.</param>
+    /// <param name="indices">The indices used in forward pass.</param>
+    /// <param name="sourceShape">The original source tensor shape.</param>
+    /// <param name="dim">The dimension along which scatter was performed.</param>
+    /// <returns>Gradient with respect to the source tensor.</returns>
+    Tensor<T> ScatterAddBackward<T>(Tensor<T> gradOutput, Tensor<int> indices, int[] sourceShape, int dim = 0);
+
+    /// <summary>
+    /// Performs scatter-mean operation: computes mean of scattered values at each index.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="source">Source tensor with values to scatter.</param>
+    /// <param name="indices">Index tensor specifying where to scatter values.</param>
+    /// <param name="dim">The dimension along which to scatter (default: 0).</param>
+    /// <param name="outputSize">Size of the output along the scatter dimension.</param>
+    /// <param name="counts">Output: count of elements at each index (for backward pass).</param>
+    /// <returns>Output tensor with mean values at each scattered position.</returns>
+    /// <remarks>
+    /// <para>
+    /// Computes: output[i] = sum(source[indices == i]) / count(indices == i)
+    /// </para>
+    /// <para>
+    /// Useful for mean aggregation in GNNs where node degree varies.
+    /// </para>
+    /// </remarks>
+    Tensor<T> ScatterMean<T>(Tensor<T> source, Tensor<int> indices, out Tensor<int>? counts, int dim = 0, int? outputSize = null);
+
+    /// <summary>
+    /// Computes the backward pass for scatter-mean.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer.</param>
+    /// <param name="indices">The indices used in forward pass.</param>
+    /// <param name="counts">The counts computed during forward pass.</param>
+    /// <param name="sourceShape">The original source tensor shape.</param>
+    /// <param name="dim">The dimension along which scatter was performed.</param>
+    /// <returns>Gradient with respect to the source tensor.</returns>
+    Tensor<T> ScatterMeanBackward<T>(Tensor<T> gradOutput, Tensor<int> indices, Tensor<int> counts, int[] sourceShape, int dim = 0);
+
+    /// <summary>
+    /// Performs scatter-max operation: takes maximum of scattered values at each index.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="source">Source tensor with values to scatter.</param>
+    /// <param name="indices">Index tensor specifying where to scatter values.</param>
+    /// <param name="dim">The dimension along which to scatter (default: 0).</param>
+    /// <param name="outputSize">Size of the output along the scatter dimension.</param>
+    /// <param name="argmax">Output: indices of maximum values (for backward pass).</param>
+    /// <returns>Output tensor with maximum values at each scattered position.</returns>
+    /// <remarks>
+    /// <para>
+    /// Computes: output[i] = max(source[indices == i])
+    /// </para>
+    /// <para>
+    /// Useful for max-pooling aggregation in GNNs.
+    /// </para>
+    /// </remarks>
+    Tensor<T> ScatterMax<T>(Tensor<T> source, Tensor<int> indices, out Tensor<int>? argmax, int dim = 0, int? outputSize = null);
+
+    /// <summary>
+    /// Computes the backward pass for scatter-max.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer.</param>
+    /// <param name="argmax">The argmax indices from forward pass.</param>
+    /// <param name="sourceShape">The original source tensor shape.</param>
+    /// <param name="dim">The dimension along which scatter was performed.</param>
+    /// <returns>Gradient with respect to the source tensor.</returns>
+    Tensor<T> ScatterMaxBackward<T>(Tensor<T> gradOutput, Tensor<int> argmax, int[] sourceShape, int dim = 0);
+
+    /// <summary>
+    /// Performs scatter-softmax operation: applies softmax over scattered groups.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="source">Source tensor with values to scatter.</param>
+    /// <param name="indices">Index tensor specifying group membership.</param>
+    /// <param name="dim">The dimension along which to scatter (default: 0).</param>
+    /// <param name="outputSize">Size of the output along the scatter dimension.</param>
+    /// <returns>Output tensor with softmax applied within each scatter group.</returns>
+    /// <remarks>
+    /// <para>
+    /// For each unique index i, computes softmax over all source values with that index:
+    /// <code>output[j] = exp(source[j]) / sum(exp(source[indices == indices[j]]))</code>
+    /// </para>
+    /// <para>
+    /// Essential for attention mechanisms in Graph Attention Networks (GAT).
+    /// </para>
+    /// </remarks>
+    Tensor<T> ScatterSoftmax<T>(Tensor<T> source, Tensor<int> indices, int dim = 0, int? outputSize = null);
+
+    /// <summary>
+    /// Computes the backward pass for scatter-softmax.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer.</param>
+    /// <param name="output">The output from forward scatter-softmax (softmax values).</param>
+    /// <param name="indices">The indices used in forward pass.</param>
+    /// <param name="dim">The dimension along which scatter was performed.</param>
+    /// <returns>Gradient with respect to the source tensor.</returns>
+    Tensor<T> ScatterSoftmaxBackward<T>(Tensor<T> gradOutput, Tensor<T> output, Tensor<int> indices, int dim = 0);
 
     #endregion
 
