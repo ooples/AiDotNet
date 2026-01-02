@@ -92,10 +92,15 @@ public enum CudaResult
 public static class CuBlasNative
 {
     // cuBLAS library name varies by platform and CUDA version
-    // Windows: cublas64_12.dll (CUDA 12.x)
-    // Linux: libcublas.so.12
+    // Windows: cublas64_12.dll (CUDA 12.x), nvcuda.dll
+    // Linux: libcublas.so.12, libcuda.so.1
+#if WINDOWS
     private const string CublasLibrary = "cublas64_12";
     private const string CudaLibrary = "nvcuda";
+#else
+    private const string CublasLibrary = "libcublas.so.12";
+    private const string CudaLibrary = "libcuda.so.1";
+#endif
 
     #region CUDA Driver API
 
@@ -862,8 +867,9 @@ public sealed class CuBlasMatMul : IDisposable
                 _initialized = true;
                 return true;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"CuBlasMatMul initialization failed: {ex.Message}");
                 _initialized = true; // Mark as attempted even if failed
                 return false;
             }

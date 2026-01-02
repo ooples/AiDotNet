@@ -76,7 +76,11 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         /// </summary>
         public static bool IsOpenClAvailable => DirectOpenClContext.IsAvailable;
 
-        public OpenClBackend(ILogger? logger = null)
+        public OpenClBackend(ILogger? logger = null) : this(0, logger)
+        {
+        }
+
+        public OpenClBackend(int deviceIndex, ILogger? logger = null)
         {
             _logger = logger;
             _kernelCache = new Dictionary<string, DirectOpenClKernel>();
@@ -93,8 +97,8 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
             try
             {
-                Console.WriteLine("[OpenClBackend] Creating DirectOpenClContext...");
-                _context = new DirectOpenClContext();
+                Console.WriteLine($"[OpenClBackend] Creating DirectOpenClContext for device {deviceIndex}...");
+                _context = new DirectOpenClContext(deviceIndex);
                 Console.WriteLine($"[OpenClBackend] Context created: Device={_context.DeviceName}, Vendor={_context.DeviceVendor}");
 
                 IsAvailable = true;
@@ -1742,6 +1746,11 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             return ExecuteFusedGemm("gemm_bias_tanh", A, B, bias, M, N, K);
         }
 
+        public IGpuBuffer GemmBias(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, int M, int N, int K)
+        {
+            return ExecuteFusedGemm("gemm_bias", A, B, bias, M, N, K);
+        }
+
         private IGpuBuffer ExecuteFusedGemm(string kernelName, IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, int M, int N, int K)
         {
             if (_context == null)
@@ -1786,6 +1795,48 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             _context.Finish();  // Sync when returning buffer for immediate use
 
             return C;
+        }
+
+        #endregion
+
+        #region Broadcast Operations
+
+        public void BiasAdd(IGpuBuffer A, IGpuBuffer bias, IGpuBuffer C, int M, int N)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var bufferA = ((DirectOpenClGpuBuffer)A).Buffer;
+            var bufferBias = ((DirectOpenClGpuBuffer)bias).Buffer;
+            var bufferC = ((DirectOpenClGpuBuffer)C).Buffer;
+
+            var kernel = _kernelCache["bias_add"];
+
+            kernel.SetArg(0, bufferA.Handle);
+            kernel.SetArg(1, bufferBias.Handle);
+            kernel.SetArg(2, bufferC.Handle);
+            kernel.SetArg(3, M);
+            kernel.SetArg(4, N);
+
+            // Use 2D dispatch: one thread per output element
+            const int localSize = 16;
+            int localSizeX = Math.Min(localSize, M);
+            int localSizeY = Math.Min(localSize, N);
+
+            // Ensure local sizes fit within GPU limits
+            while ((ulong)(localSizeX * localSizeY) > _maxWorkGroupSize && localSizeX > 1 && localSizeY > 1)
+            {
+                if (localSizeX >= localSizeY)
+                    localSizeX /= 2;
+                else
+                    localSizeY /= 2;
+            }
+
+            // Global size padded to local size
+            int globalSizeX = ((M + localSizeX - 1) / localSizeX) * localSizeX;
+            int globalSizeY = ((N + localSizeY - 1) / localSizeY) * localSizeY;
+
+            kernel.Execute2D(globalSizeX, globalSizeY, localSizeX, localSizeY);
         }
 
         #endregion

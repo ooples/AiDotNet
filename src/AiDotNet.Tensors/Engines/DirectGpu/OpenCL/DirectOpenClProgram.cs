@@ -15,7 +15,15 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         private readonly DirectOpenClContext _context;
         private bool _disposed;
 
-        public IntPtr Handle => _program;
+        public IntPtr Handle
+        {
+            get
+            {
+                if (_disposed)
+                    throw new ObjectDisposedException(nameof(DirectOpenClProgram));
+                return _program;
+            }
+        }
 
         public DirectOpenClProgram(DirectOpenClContext context, string source)
         {
@@ -40,6 +48,9 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         /// </summary>
         public void Build(string options = "")
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(DirectOpenClProgram));
+
             var devices = new IntPtr[] { _context.Device };
             int err = OpenClNativeBindings.BuildProgram(_program, 1, devices, options, IntPtr.Zero, IntPtr.Zero);
 

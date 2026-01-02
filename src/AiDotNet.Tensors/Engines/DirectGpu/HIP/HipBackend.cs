@@ -68,7 +68,18 @@ public sealed class HipBackend : IDirectGpuBackend
     /// </summary>
     public static bool IsHipAvailable => HipNativeBindings.IsAvailable;
 
-    public HipBackend()
+    /// <summary>
+    /// Gets whether elementwise operations are GPU-accelerated.
+    /// Returns false for HipBackend as elementwise operations currently use CPU fallback.
+    /// Only GEMM (matrix multiply) is GPU-accelerated via rocBLAS.
+    /// </summary>
+    public bool SupportsElementwiseGpu => false;
+
+    public HipBackend() : this(0)
+    {
+    }
+
+    public HipBackend(int deviceIndex)
     {
         _kernelCache = new Dictionary<string, IntPtr>();
 
@@ -82,7 +93,7 @@ public sealed class HipBackend : IDirectGpuBackend
         try
         {
             // Initialize HIP and get device info
-            var result = HipNativeBindings.hipSetDevice(0);
+            var result = HipNativeBindings.hipSetDevice(deviceIndex);
             if (result != HipError.Success)
             {
                 IsAvailable = false;
@@ -92,7 +103,7 @@ public sealed class HipBackend : IDirectGpuBackend
 
             // Get device properties
             _deviceProps = new HipDeviceProperties();
-            result = HipNativeBindings.hipGetDeviceProperties(ref _deviceProps, 0);
+            result = HipNativeBindings.hipGetDeviceProperties(ref _deviceProps, deviceIndex);
             if (result != HipError.Success)
             {
                 IsAvailable = false;
@@ -600,6 +611,47 @@ public sealed class HipBackend : IDirectGpuBackend
         return C;
     }
 
+    public IGpuBuffer GemmBias(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, int M, int N, int K)
+    {
+        var C = MatMul(A, B, M, N, K);
+        ApplyBiasAndActivation(C, bias, M, N, ActivationType.None);
+        return C;
+    }
+
+    public void BiasAdd(IGpuBuffer A, IGpuBuffer bias, IGpuBuffer C, int M, int N)
+    {
+        // Apply bias broadcast using GPU kernel
+        var aData = DownloadBuffer(A);
+        var biasData = DownloadBuffer(bias);
+
+        for (int row = 0; row < M; row++)
+        {
+            for (int col = 0; col < N; col++)
+            {
+                int idx = row * N + col;
+                aData[idx] += biasData[col];
+            }
+        }
+
+        // Upload result to C
+        var hipBuffer = (HipGpuBuffer)C;
+        var size = (UIntPtr)(aData.Length * sizeof(float));
+        GCHandle handle = GCHandle.Alloc(aData, GCHandleType.Pinned);
+        try
+        {
+            var result = HipNativeBindings.hipMemcpy(
+                hipBuffer.Handle,
+                handle.AddrOfPinnedObject(),
+                size,
+                HipMemcpyKind.HostToDevice);
+            HipNativeBindings.CheckError(result, "hipMemcpy H2D (bias_add)");
+        }
+        finally
+        {
+            handle.Free();
+        }
+    }
+
     private void ApplyBiasAndActivation(IGpuBuffer C, IGpuBuffer bias, int M, int N, ActivationType activation)
     {
         // Download, apply on CPU, upload (temporary until fused kernel is ready)
@@ -649,7 +701,8 @@ public sealed class HipBackend : IDirectGpuBackend
 
     public void Add(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
     {
-        // Simple CPU fallback for now - TODO: Add HIP elementwise kernels
+        // CPU fallback - HIP elementwise kernels not yet implemented.
+        // Only GEMM is GPU-accelerated. Check SupportsElementwiseGpu property.
         var aData = DownloadBuffer(A);
         var bData = DownloadBuffer(B);
         var cData = new float[size];

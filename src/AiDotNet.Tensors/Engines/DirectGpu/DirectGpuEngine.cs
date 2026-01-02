@@ -436,21 +436,9 @@ public sealed class DirectGpuEngine : IDisposable
                     break;
                 case ActivationType.None:
                 default:
-                    // No activation - just GEMM + bias (still fused)
-                    using (var bufferC = _backend.MatMul(bufferInput, bufferWeights, batchSize, outputFeatures, inputFeatures))
-                    {
-                        // TODO: Add bias (for now, just return GEMM result)
-                        float[] tempResult = _backend.DownloadBuffer(bufferC);
-                        // Add bias on CPU for now
-                        for (int b = 0; b < batchSize; b++)
-                        {
-                            for (int o = 0; o < outputFeatures; o++)
-                            {
-                                tempResult[b * outputFeatures + o] += biasFloat[o];
-                            }
-                        }
-                        return FromFloatArray<T>(tempResult);
-                    }
+                    // No activation - use fused GEMM + bias kernel
+                    resultBuffer = _backend.GemmBias(bufferInput, bufferWeights, bufferBias, batchSize, outputFeatures, inputFeatures);
+                    break;
             }
 
             using (resultBuffer)
@@ -479,42 +467,36 @@ public sealed class DirectGpuEngine : IDisposable
         // Step 1: GEMM
         using var bufferC = _backend.MatMul(bufferInput, bufferWeights, batchSize, outputFeatures, inputFeatures);
 
-        // Step 2: Download and add bias (CPU for now)
-        float[] result = _backend.DownloadBuffer(bufferC);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int o = 0; o < outputFeatures; o++)
-            {
-                result[b * outputFeatures + o] += biasFloat[o];
-            }
-        }
+        // Step 2: Add bias on GPU using BiasAdd kernel
+        using var bufferBias = _backend.AllocateBuffer(biasFloat);
+        using var bufferWithBias = _backend.AllocateBuffer(batchSize * outputFeatures);
+        _backend.BiasAdd(bufferC, bufferBias, bufferWithBias, batchSize, outputFeatures);
 
         // Step 3: Apply activation (if any)
         if (activation != ActivationType.None)
         {
-            using var bufferResult = _backend.AllocateBuffer(result);
-            using var bufferOutput = _backend.AllocateBuffer(result.Length);
+            using var bufferOutput = _backend.AllocateBuffer(batchSize * outputFeatures);
 
             switch (activation)
             {
                 case ActivationType.ReLU:
-                    _backend.Relu(bufferResult, bufferOutput, result.Length);
+                    _backend.Relu(bufferWithBias, bufferOutput, batchSize * outputFeatures);
                     break;
                 case ActivationType.GELU:
-                    _backend.Gelu(bufferResult, bufferOutput, result.Length);
+                    _backend.Gelu(bufferWithBias, bufferOutput, batchSize * outputFeatures);
                     break;
                 case ActivationType.Sigmoid:
-                    _backend.Sigmoid(bufferResult, bufferOutput, result.Length);
+                    _backend.Sigmoid(bufferWithBias, bufferOutput, batchSize * outputFeatures);
                     break;
                 case ActivationType.Tanh:
-                    _backend.Tanh(bufferResult, bufferOutput, result.Length);
+                    _backend.Tanh(bufferWithBias, bufferOutput, batchSize * outputFeatures);
                     break;
             }
 
-            result = _backend.DownloadBuffer(bufferOutput);
+            return _backend.DownloadBuffer(bufferOutput);
         }
 
-        return result;
+        return _backend.DownloadBuffer(bufferWithBias);
     }
 
     /// <summary>

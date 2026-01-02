@@ -277,6 +277,16 @@ extern ""C"" __global__ void bias_add(float* data, const float* bias, int rows, 
     data[idx] += bias[col];
 }
 
+// Bias add with separate output: C[i,j] = A[i,j] + bias[j]
+extern ""C"" __global__ void bias_add_out(const float* A, const float* bias, float* C, int rows, int cols)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int size = rows * cols;
+    if (idx >= size) return;
+    int col = idx % cols;
+    C[idx] = A[idx] + bias[col];
+}
+
 // ===========================================================================
 // TRIGONOMETRIC KERNELS
 // ===========================================================================
@@ -482,7 +492,8 @@ extern ""C"" __global__ void trunc_vector(const float* A, float* B, int size)
                 "reduce_sum",
                 "reduce_max",
                 "sum_axis",
-                "bias_add"
+                "bias_add",
+                "bias_add_out"
             };
         }
     }

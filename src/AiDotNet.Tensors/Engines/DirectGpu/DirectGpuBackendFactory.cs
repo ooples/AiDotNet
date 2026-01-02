@@ -235,7 +235,7 @@ public static class DirectGpuBackendFactory
 
         try
         {
-            var backend = new CudaBackend();
+            var backend = new CudaBackend(deviceIndex);
             if (backend.IsAvailable)
             {
                 return backend;
@@ -244,7 +244,7 @@ public static class DirectGpuBackendFactory
         }
         catch (Exception ex)
         {
-            logger?.LogWarning(ex, "Failed to initialize CUDA backend.");
+            logger?.LogWarning(ex, "Failed to initialize CUDA backend on device {DeviceIndex}.", deviceIndex);
         }
 
         return null;
@@ -259,7 +259,7 @@ public static class DirectGpuBackendFactory
 
         try
         {
-            var backend = new HipBackend();
+            var backend = new HipBackend(deviceIndex);
             if (backend.IsAvailable)
             {
                 return backend;
@@ -268,7 +268,7 @@ public static class DirectGpuBackendFactory
         }
         catch (Exception ex)
         {
-            logger?.LogWarning(ex, "Failed to initialize HIP backend.");
+            logger?.LogWarning(ex, "Failed to initialize HIP backend on device {DeviceIndex}.", deviceIndex);
         }
 
         return null;
@@ -283,7 +283,7 @@ public static class DirectGpuBackendFactory
 
         try
         {
-            var backend = new OpenClBackend(logger);
+            var backend = new OpenClBackend(deviceIndex, logger);
             if (backend.IsAvailable)
             {
                 return backend;
@@ -292,7 +292,7 @@ public static class DirectGpuBackendFactory
         }
         catch (Exception ex)
         {
-            logger?.LogWarning(ex, "Failed to initialize OpenCL backend.");
+            logger?.LogWarning(ex, "Failed to initialize OpenCL backend on device {DeviceIndex}.", deviceIndex);
         }
 
         return null;
