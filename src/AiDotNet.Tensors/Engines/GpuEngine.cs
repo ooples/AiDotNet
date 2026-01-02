@@ -19624,6 +19624,98 @@ public class GpuEngine : IEngine, IDisposable
 
     #endregion
 
+    #region Deformable Convolution Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> DeformableConv2D<T>(
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T> offset,
+        Tensor<T>? mask,
+        int[] stride,
+        int[] padding,
+        int[] dilation)
+    {
+        // Deformable convolution uses bilinear sampling which is memory-bound.
+        // CPU implementation provides full functionality; GPU optimization requires custom CUDA kernels.
+        return _cpuFallback.DeformableConv2D(input, kernel, offset, mask, stride, padding, dilation);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> DeformableConv2DBackwardInput<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T> offset,
+        Tensor<T>? mask,
+        int[] inputShape,
+        int[] stride,
+        int[] padding,
+        int[] dilation)
+    {
+        return _cpuFallback.DeformableConv2DBackwardInput(gradOutput, input, kernel, offset, mask, inputShape, stride, padding, dilation);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> DeformableConv2DBackwardKernel<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> input,
+        Tensor<T> offset,
+        Tensor<T>? mask,
+        int[] kernelShape,
+        int[] stride,
+        int[] padding,
+        int[] dilation)
+    {
+        return _cpuFallback.DeformableConv2DBackwardKernel(gradOutput, input, offset, mask, kernelShape, stride, padding, dilation);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> DeformableConv2DBackwardOffset<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T> offset,
+        Tensor<T>? mask,
+        int[] stride,
+        int[] padding,
+        int[] dilation)
+    {
+        return _cpuFallback.DeformableConv2DBackwardOffset(gradOutput, input, kernel, offset, mask, stride, padding, dilation);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> DeformableConv2DBackwardMask<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T> offset,
+        Tensor<T>? mask,
+        int[] stride,
+        int[] padding,
+        int[] dilation)
+    {
+        return _cpuFallback.DeformableConv2DBackwardMask(gradOutput, input, kernel, offset, mask, stride, padding, dilation);
+    }
+
+    #endregion
+
+    #region Grid Sample Backward Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> GridSampleBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> grid, int[] inputShape)
+    {
+        return _cpuFallback.GridSampleBackwardInput(gradOutput, grid, inputShape);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> GridSampleBackwardGrid<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> grid)
+    {
+        return _cpuFallback.GridSampleBackwardGrid(gradOutput, input, grid);
+    }
+
+    #endregion
+
     #region 3D Convolution and Pooling Operations
 
     /// <inheritdoc/>

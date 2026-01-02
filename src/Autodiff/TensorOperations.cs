@@ -6085,6 +6085,185 @@ public static class TensorOperations<T>
             tape.RecordOperation(node);
         return node;
     }
+
+    /// <summary>
+    /// Performs 2D deformable convolution with learnable offsets and optional modulation mask.
+    /// </summary>
+    /// <param name="input">Input tensor [batch, inChannels, height, width].</param>
+    /// <param name="kernel">Convolution kernel [outChannels, inChannels, kernelH, kernelW].</param>
+    /// <param name="offset">Spatial offsets [batch, 2*kernelH*kernelW, outH, outW].</param>
+    /// <param name="mask">Optional modulation mask [batch, kernelH*kernelW, outH, outW]. If null, uses uniform weights.</param>
+    /// <param name="bias">Optional bias [outChannels]. If null, no bias is added.</param>
+    /// <param name="stride">Stride [strideH, strideW]. Default is [1, 1].</param>
+    /// <param name="padding">Padding [padH, padW]. Default is [0, 0].</param>
+    /// <param name="dilation">Dilation [dilationH, dilationW]. Default is [1, 1].</param>
+    /// <returns>Output tensor [batch, outChannels, outH, outW].</returns>
+    /// <remarks>
+    /// <para>
+    /// Deformable convolution augments standard convolution with learnable 2D offsets for each
+    /// sampling position in the kernel. This allows the network to adaptively adjust its receptive
+    /// field based on the input, enabling better modeling of geometric transformations.
+    /// </para>
+    /// <para><b>For Beginners:</b> Standard convolution samples at fixed grid positions.
+    /// Deformable convolution learns where to sample, allowing it to handle objects of various
+    /// shapes and scales more effectively.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> DeformableConv2D(
+        ComputationNode<T> input,
+        ComputationNode<T> kernel,
+        ComputationNode<T> offset,
+        ComputationNode<T>? mask = null,
+        ComputationNode<T>? bias = null,
+        int[]? stride = null,
+        int[]? padding = null,
+        int[]? dilation = null)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputShape = input.Value.Shape;
+        var kernelShape = kernel.Value.Shape;
+
+        if (inputShape.Length != 4)
+            throw new ArgumentException("DeformableConv2D requires 4D input [batch, inChannels, height, width]");
+        if (kernelShape.Length != 4)
+            throw new ArgumentException("DeformableConv2D requires 4D kernel [outChannels, inChannels, kernelH, kernelW]");
+
+        stride ??= new int[] { 1, 1 };
+        padding ??= new int[] { 0, 0 };
+        dilation ??= new int[] { 1, 1 };
+
+        int outChannels = kernelShape[0];
+
+        // Forward pass using engine
+        var result = engine.DeformableConv2D(
+            input.Value,
+            kernel.Value,
+            offset.Value,
+            mask?.Value,
+            stride,
+            padding,
+            dilation);
+
+        // Add bias if provided
+        if (bias != null)
+        {
+            int batch = result.Shape[0];
+            int outH = result.Shape[2];
+            int outW = result.Shape[3];
+            for (int b = 0; b < batch; b++)
+            {
+                for (int oc = 0; oc < outChannels; oc++)
+                {
+                    var biasVal = bias.Value[oc];
+                    for (int oh = 0; oh < outH; oh++)
+                    {
+                        for (int ow = 0; ow < outW; ow++)
+                        {
+                            result[b, oc, oh, ow] = numOps.Add(result[b, oc, oh, ow], biasVal);
+                        }
+                    }
+                }
+            }
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            // Gradient w.r.t. input
+            if (input.RequiresGradient)
+            {
+                var gradInput = engine.DeformableConv2DBackwardInput(
+                    gradient, input.Value, kernel.Value, offset.Value, mask?.Value,
+                    inputShape, stride, padding, dilation);
+                var existingGrad = input.Gradient;
+                input.Gradient = existingGrad == null ? gradInput : engine.TensorAdd(existingGrad, gradInput);
+            }
+
+            // Gradient w.r.t. kernel
+            if (kernel.RequiresGradient)
+            {
+                var gradKernel = engine.DeformableConv2DBackwardKernel(
+                    gradient, input.Value, offset.Value, mask?.Value,
+                    kernelShape, stride, padding, dilation);
+                var existingGrad = kernel.Gradient;
+                kernel.Gradient = existingGrad == null ? gradKernel : engine.TensorAdd(existingGrad, gradKernel);
+            }
+
+            // Gradient w.r.t. offset
+            if (offset.RequiresGradient)
+            {
+                var gradOffset = engine.DeformableConv2DBackwardOffset(
+                    gradient, input.Value, kernel.Value, offset.Value, mask?.Value,
+                    stride, padding, dilation);
+                var existingGrad = offset.Gradient;
+                offset.Gradient = existingGrad == null ? gradOffset : engine.TensorAdd(existingGrad, gradOffset);
+            }
+
+            // Gradient w.r.t. mask (if provided)
+            if (mask != null && mask.RequiresGradient)
+            {
+                var gradMask = engine.DeformableConv2DBackwardMask(
+                    gradient, input.Value, kernel.Value, offset.Value, mask.Value,
+                    stride, padding, dilation);
+                var existingGrad = mask.Gradient;
+                mask.Gradient = existingGrad == null ? gradMask : engine.TensorAdd(existingGrad, gradMask);
+            }
+
+            // Gradient w.r.t. bias
+            if (bias != null && bias.RequiresGradient)
+            {
+                var gradBias = new Tensor<T>(new int[] { outChannels });
+                int batch = gradient.Shape[0];
+                int outH = gradient.Shape[2];
+                int outW = gradient.Shape[3];
+                for (int oc = 0; oc < outChannels; oc++)
+                {
+                    var sum = numOps.Zero;
+                    for (int b = 0; b < batch; b++)
+                    {
+                        for (int oh = 0; oh < outH; oh++)
+                        {
+                            for (int ow = 0; ow < outW; ow++)
+                            {
+                                sum = numOps.Add(sum, gradient[b, oc, oh, ow]);
+                            }
+                        }
+                    }
+                    gradBias[oc] = sum;
+                }
+                var existingGrad = bias.Gradient;
+                bias.Gradient = existingGrad == null ? gradBias : existingGrad.Add(gradBias);
+            }
+        }
+
+        var parents = new List<ComputationNode<T>> { input, kernel, offset };
+        if (mask != null) parents.Add(mask);
+        if (bias != null) parents.Add(bias);
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient || kernel.RequiresGradient ||
+                              offset.RequiresGradient || (mask?.RequiresGradient ?? false) ||
+                              (bias?.RequiresGradient ?? false),
+            parents: parents,
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.DeformableConv2D;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Stride", stride },
+            { "Padding", padding },
+            { "Dilation", dilation }
+        };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
     /// <summary>
     /// Computes the natural logarithm of variance along the specified axis.
     /// </summary>
