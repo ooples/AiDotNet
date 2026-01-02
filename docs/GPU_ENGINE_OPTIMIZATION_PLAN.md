@@ -330,13 +330,24 @@ protected override void Dispose(bool disposing)
 
 | Layer | Issue | Manual Loop Count | Should Use |
 |-------|-------|-------------------|------------|
-| CrossAttentionLayer | Manual 4-nested matmul | 20+ loops | Engine.TensorMatMul, Engine.Softmax |
-| GraphAttentionLayer | Manual attention | 85 loops | Engine.ScaledDotProductAttention |
-| GraphTransformerLayer | Manual loops | 75+ NumOps | Engine operations |
-| MessagePassingLayer | Manual aggregation | 73+ NumOps | Engine.Scatter/Gather |
-| DiffusionConvLayer | Manual convolution | 43+ NumOps | Engine.Conv operations |
+| **CrossAttentionLayer** | Manual 4-nested matmul for all ops | 20+ loops | Engine.TensorMatMul, Engine.Softmax |
+| **GraphAttentionLayer** | Manual attention despite 24 Engine calls | 85 loops | Engine.ScaledDotProductAttention |
+| **GraphTransformerLayer** | Manual loops | 75+ NumOps | Engine operations |
+| **MessagePassingLayer** | Manual aggregation | 73+ NumOps | Engine.Scatter/Gather |
+| **DiffusionConvLayer** | Manual convolution | 43+ NumOps | Engine.Conv operations |
 | SpikingLayer | Mixed (uses 130 Engine calls) | 95 NumOps | More Engine ops possible |
 | AnomalyDetectorLayer | Manual multiply-accumulate | High | Engine.TensorMatMul |
+
+### Layers Correctly Using IEngine (Good Examples)
+
+| Layer | Engine Calls | Manual Loops | Status |
+|-------|--------------|--------------|--------|
+| AttentionLayer | 40+ | Few | Good - uses Engine.BatchMatMul, TensorMatMul |
+| LSTMLayer | 48 | 11 | Good - mostly Engine operations |
+| GRULayer | 32 | 16 | Good - mostly Engine operations |
+| ConvolutionalLayer | Many | Few | Good - uses Engine.Conv2D |
+| BatchNormalizationLayer | Many | 5 | Good - uses Engine.BatchNorm |
+| SelfAttentionLayer | Many | Few | Good - uses Engine.Softmax |
 
 ### Proposed New IEngine Operations
 
