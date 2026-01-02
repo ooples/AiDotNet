@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -276,6 +277,12 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// Tracks whether Dispose has been called.
     /// </summary>
     private bool _disposed;
+
+    /// <summary>
+    /// Collection of tensors that have been registered as persistent with the engine.
+    /// These will be unregistered when the layer is disposed.
+    /// </summary>
+    private readonly List<object> _registeredTensors = new();
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -1824,6 +1831,96 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         return metadata;
     }
 
+    #region GPU Persistent Tensor Registration
+
+    /// <summary>
+    /// Registers a trainable parameter tensor with the engine for GPU memory optimization.
+    /// </summary>
+    /// <param name="tensor">The tensor to register (typically weights or biases).</param>
+    /// <param name="role">The role of the tensor for optimization hints.</param>
+    /// <remarks>
+    /// <para>
+    /// This method hints to the engine that the tensor will be reused across many operations
+    /// and should be kept resident in GPU memory when a GPU engine is active. This avoids
+    /// expensive CPU-GPU data transfers on every forward pass.
+    /// </para>
+    /// <para><b>Performance Impact:</b></para>
+    /// <para>
+    /// Without registration: Layer weights (e.g., 285MB for a large Dense layer) are
+    /// transferred to GPU on every forward pass.
+    /// </para>
+    /// <para>
+    /// With registration: Weights are transferred once and cached on GPU. Only activations
+    /// (much smaller) are transferred per pass. Expected speedup: 100-1000x for large layers.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method tells the GPU to keep certain data (like learned weights)
+    /// in its fast memory instead of copying it back and forth every time. Think of it like keeping
+    /// frequently used books on your desk instead of walking to the library each time.
+    /// </para>
+    /// <para><b>Usage Pattern:</b></para>
+    /// <para>
+    /// Call this method in the layer's constructor after initializing weight tensors:
+    /// <code>
+    /// public DenseLayer(int inputSize, int outputSize)
+    /// {
+    ///     _weights = new Tensor&lt;T&gt;(outputSize, inputSize);
+    ///     _biases = new Tensor&lt;T&gt;(outputSize);
+    ///     InitializeWeights();
+    ///
+    ///     // Register for GPU persistence
+    ///     RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+    ///     RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    protected void RegisterTrainableParameter(Tensor<T> tensor, PersistentTensorRole role)
+    {
+        if (tensor is null)
+            throw new ArgumentNullException(nameof(tensor));
+
+        Engine.RegisterPersistentTensor(tensor, role);
+        _registeredTensors.Add(tensor);
+    }
+
+    /// <summary>
+    /// Notifies the engine that a registered persistent tensor's data has changed.
+    /// </summary>
+    /// <param name="tensor">The tensor whose data has been modified.</param>
+    /// <remarks>
+    /// <para>
+    /// Call this method after modifying a registered tensor's data (e.g., during parameter updates).
+    /// The engine will re-upload the data to GPU on the next operation that uses the tensor.
+    /// </para>
+    /// <para><b>For Beginners:</b> When you change the values in a registered tensor (like updating
+    /// weights during training), you need to tell the GPU that the copy it has is outdated.
+    /// This method does that - it tells the GPU "hey, this data changed, please get a fresh copy."
+    /// </para>
+    /// <para><b>Usage Pattern:</b></para>
+    /// <para>
+    /// Call after UpdateParameters modifies weights:
+    /// <code>
+    /// public override void UpdateParameters(T learningRate)
+    /// {
+    ///     // Update weights using gradients
+    ///     _weights = _weights.Subtract(_weightGradients.Multiply(learningRate));
+    ///
+    ///     // Notify engine that GPU copy is stale
+    ///     InvalidateTrainableParameter(_weights);
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    protected void InvalidateTrainableParameter(Tensor<T> tensor)
+    {
+        if (tensor is null)
+            throw new ArgumentNullException(nameof(tensor));
+
+        Engine.InvalidatePersistentTensor(tensor);
+    }
+
+    #endregion
+
     /// <summary>
     /// Releases all resources used by this layer, including any GPU resources.
     /// </summary>
@@ -1886,8 +1983,18 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
 
         if (disposing)
         {
-            // Base class has no managed resources that need explicit disposal
-            // Derived classes should override to dispose their GPU handles
+            // Unregister all persistent tensors from the engine
+            // This releases GPU memory that was cached for these tensors
+            foreach (var tensorObj in _registeredTensors)
+            {
+                // Use reflection to call the generic UnregisterPersistentTensor method
+                // since we stored tensors as object to support multiple generic types
+                if (tensorObj is Tensor<T> tensor)
+                {
+                    Engine.UnregisterPersistentTensor(tensor);
+                }
+            }
+            _registeredTensors.Clear();
         }
 
         _disposed = true;
