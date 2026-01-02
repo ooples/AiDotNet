@@ -3550,6 +3550,84 @@ public interface IEngine
 
     #endregion
 
+    #region Fused Operations
+
+    /// <summary>
+    /// Performs a fused linear transformation: output = activation(input @ weights + bias).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">Input tensor with shape [..., inputFeatures].</param>
+    /// <param name="weights">Weight matrix with shape [inputFeatures, outputFeatures].</param>
+    /// <param name="bias">Optional bias vector with shape [outputFeatures].</param>
+    /// <param name="activation">Activation function to apply.</param>
+    /// <returns>Output tensor with shape [..., outputFeatures].</returns>
+    Tensor<T> FusedLinear<T>(
+        Tensor<T> input,
+        Tensor<T> weights,
+        Tensor<T>? bias,
+        FusedActivationType activation);
+
+    /// <summary>
+    /// Computes the backward pass for fused linear transformation.
+    /// </summary>
+    Tensor<T> FusedLinearBackward<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> input,
+        Tensor<T> weights,
+        Tensor<T> preActivation,
+        FusedActivationType activation,
+        out Tensor<T> gradWeights,
+        out Tensor<T>? gradBias);
+
+    /// <summary>
+    /// Performs a fused 2D convolution: output = activation(conv2d(input, kernel) + bias).
+    /// </summary>
+    Tensor<T> FusedConv2D<T>(
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T>? bias,
+        int strideH, int strideW,
+        int padH, int padW,
+        int dilationH, int dilationW,
+        FusedActivationType activation);
+
+    /// <summary>
+    /// Performs fused batch normalization with activation.
+    /// </summary>
+    Tensor<T> FusedBatchNorm<T>(
+        Tensor<T> input,
+        Tensor<T> gamma,
+        Tensor<T> beta,
+        Tensor<T> runningMean,
+        Tensor<T> runningVar,
+        double epsilon,
+        double momentum,
+        bool training,
+        FusedActivationType activation,
+        out Tensor<T> saveMean,
+        out Tensor<T> saveVar);
+
+    #endregion
+
+    #region Persistent Tensor Management
+
+    /// <summary>
+    /// Registers a tensor as persistent for GPU memory optimization.
+    /// </summary>
+    void RegisterPersistentTensor<T>(Tensor<T> tensor, PersistentTensorRole role);
+
+    /// <summary>
+    /// Unregisters a previously registered persistent tensor.
+    /// </summary>
+    void UnregisterPersistentTensor<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Notifies the engine that a persistent tensor's contents have been updated.
+    /// </summary>
+    void InvalidatePersistentTensor<T>(Tensor<T> tensor);
+
+    #endregion
+
     #region Normalization Operations
 
     /// <summary>

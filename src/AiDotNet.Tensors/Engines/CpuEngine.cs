@@ -14371,4 +14371,307 @@ public class CpuEngine : IEngine
     }
 
     #endregion
+
+    #region Fused Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> FusedLinear<T>(Tensor<T> input, Tensor<T> weights, Tensor<T>? bias, FusedActivationType activation)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
+
+        // CPU implementation: sequential operations (no fusion benefit, just correctness)
+        // Step 1: MatMul
+        var result = TensorMatMul(input, weights);
+
+        // Step 2: Add bias if provided
+        if (bias != null)
+        {
+            result = TensorBroadcastAdd(result, bias);
+        }
+
+        // Step 3: Apply activation
+        result = ApplyFusedActivation(result, activation);
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> FusedLinearBackward<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> input,
+        Tensor<T> weights,
+        Tensor<T> preActivation,
+        FusedActivationType activation,
+        out Tensor<T> gradWeights,
+        out Tensor<T>? gradBias)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
+        if (preActivation == null) throw new ArgumentNullException(nameof(preActivation));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Step 1: Compute activation gradient
+        var gradActivation = ApplyFusedActivationBackward(gradOutput, preActivation, activation);
+
+        // Step 2: Compute bias gradient (sum along batch dimension)
+        if (gradActivation.Shape.Length == 2)
+        {
+            int batchSize = gradActivation.Shape[0];
+            int outputSize = gradActivation.Shape[1];
+            var biasGrad = new Tensor<T>([outputSize]);
+
+            for (int j = 0; j < outputSize; j++)
+            {
+                T sum = numOps.Zero;
+                for (int i = 0; i < batchSize; i++)
+                {
+                    sum = numOps.Add(sum, gradActivation[i, j]);
+                }
+                biasGrad[j] = sum;
+            }
+            gradBias = biasGrad;
+        }
+        else
+        {
+            gradBias = null;
+        }
+
+        // Step 3: Compute weight gradient: input^T @ gradActivation
+        var inputT = TensorTranspose(input);
+        gradWeights = TensorMatMul(inputT, gradActivation);
+
+        // Step 4: Compute input gradient: gradActivation @ weights^T
+        var weightsT = TensorTranspose(weights);
+        var gradInput = TensorMatMul(gradActivation, weightsT);
+
+        return gradInput;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> FusedConv2D<T>(
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T>? bias,
+        int strideH,
+        int strideW,
+        int padH,
+        int padW,
+        int dilationH,
+        int dilationW,
+        FusedActivationType activation)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+
+        // CPU implementation: sequential operations
+        // Step 1: Conv2D
+        var result = Conv2D(input, kernel, new[] { strideH, strideW }, new[] { padH, padW }, new[] { dilationH, dilationW });
+
+        // Step 2: Add bias if provided
+        if (bias != null)
+        {
+            result = TensorBroadcastAdd(result, bias);
+        }
+
+        // Step 3: Apply activation
+        result = ApplyFusedActivation(result, activation);
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> FusedBatchNorm<T>(
+        Tensor<T> input,
+        Tensor<T> gamma,
+        Tensor<T> beta,
+        Tensor<T> runningMean,
+        Tensor<T> runningVar,
+        double epsilon,
+        double momentum,
+        bool training,
+        FusedActivationType activation,
+        out Tensor<T> saveMean,
+        out Tensor<T> saveVar)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (gamma == null) throw new ArgumentNullException(nameof(gamma));
+        if (beta == null) throw new ArgumentNullException(nameof(beta));
+        if (runningMean == null) throw new ArgumentNullException(nameof(runningMean));
+        if (runningVar == null) throw new ArgumentNullException(nameof(runningVar));
+
+        // CPU implementation: sequential operations
+        // Note: Running mean/var and momentum are handled externally in training mode
+        // This CPU implementation just does the batch normalization
+        var result = BatchNorm(input, gamma, beta, epsilon, out saveMean, out saveVar);
+
+        // Step 2: Apply activation
+        result = ApplyFusedActivation(result, activation);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Applies Leaky ReLU activation: f(x) = max(alpha * x, x)
+    /// </summary>
+    private Tensor<T> LeakyReLU<T>(Tensor<T> input, T alpha)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(input.Shape);
+        int totalElements = input.Length;
+
+        Parallel.For(0, totalElements, i =>
+        {
+            T val = input.GetFlat(i);
+            double x = numOps.ToDouble(val);
+            double a = numOps.ToDouble(alpha);
+            result.SetFlat(i, numOps.FromDouble(x > 0 ? x : a * x));
+        });
+
+        return result;
+    }
+
+    /// <summary>
+    /// Applies the specified activation function to the tensor.
+    /// </summary>
+    private Tensor<T> ApplyFusedActivation<T>(Tensor<T> input, FusedActivationType activation)
+    {
+        return activation switch
+        {
+            FusedActivationType.None => input,
+            FusedActivationType.ReLU => ReLU(input),
+            FusedActivationType.GELU => GELU(input),
+            FusedActivationType.Sigmoid => Sigmoid(input),
+            FusedActivationType.Tanh => Tanh(input),
+            FusedActivationType.LeakyReLU => LeakyReLU(input, MathHelper.GetNumericOperations<T>().FromDouble(0.01)),
+            FusedActivationType.Swish => Swish(input),
+            FusedActivationType.Softmax => Softmax(input, -1),
+            _ => throw new ArgumentException($"Unknown activation type: {activation}")
+        };
+    }
+
+    /// <summary>
+    /// Computes the backward pass for the specified activation function.
+    /// </summary>
+    private Tensor<T> ApplyFusedActivationBackward<T>(Tensor<T> gradOutput, Tensor<T> preActivation, FusedActivationType activation)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        return activation switch
+        {
+            FusedActivationType.None => gradOutput,
+            FusedActivationType.ReLU => TensorMultiply(gradOutput, ReLUDerivative(preActivation)),
+            FusedActivationType.GELU => TensorMultiply(gradOutput, GELUDerivative(preActivation)),
+            FusedActivationType.Sigmoid => TensorMultiply(gradOutput, SigmoidDerivative(Sigmoid(preActivation))),
+            FusedActivationType.Tanh => TensorMultiply(gradOutput, TanhDerivative(Tanh(preActivation))),
+            FusedActivationType.LeakyReLU => TensorMultiply(gradOutput, LeakyReLUDerivative(preActivation, numOps.FromDouble(0.01))),
+            FusedActivationType.Swish => TensorMultiply(gradOutput, SwishDerivative(preActivation)),
+            FusedActivationType.Softmax => throw new NotSupportedException("Softmax backward requires special handling via cross-entropy"),
+            _ => throw new ArgumentException($"Unknown activation type: {activation}")
+        };
+    }
+
+    /// <summary>
+    /// Computes the derivative of Swish activation: f'(x) = f(x) + sigmoid(x) * (1 - f(x))
+    /// </summary>
+    private Tensor<T> SwishDerivative<T>(Tensor<T> input)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(input.Shape);
+        int totalElements = input.Length;
+
+        Parallel.For(0, totalElements, i =>
+        {
+            double x = numOps.ToDouble(input.GetFlat(i));
+            double sigmoid = 1.0 / (1.0 + Math.Exp(-x));
+            double swish = x * sigmoid;
+            double derivative = swish + sigmoid * (1.0 - swish);
+            result.SetFlat(i, numOps.FromDouble(derivative));
+        });
+
+        return result;
+    }
+
+    /// <summary>
+    /// Computes the derivative of Leaky ReLU activation.
+    /// </summary>
+    private Tensor<T> LeakyReLUDerivative<T>(Tensor<T> input, T alpha)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(input.Shape);
+        int totalElements = input.Length;
+
+        Parallel.For(0, totalElements, i =>
+        {
+            T val = input.GetFlat(i);
+            bool positive = numOps.ToDouble(val) > 0;
+            result.SetFlat(i, positive ? numOps.One : alpha);
+        });
+
+        return result;
+    }
+
+    /// <summary>
+    /// Computes the derivative of GELU activation.
+    /// </summary>
+    private Tensor<T> GELUDerivative<T>(Tensor<T> input)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(input.Shape);
+        int totalElements = input.Length;
+
+        const double sqrtTwoOverPi = 0.7978845608028654; // sqrt(2/pi)
+        const double coeff = 0.044715;
+
+        Parallel.For(0, totalElements, i =>
+        {
+            double x = numOps.ToDouble(input.GetFlat(i));
+            double x3 = x * x * x;
+            double inner = sqrtTwoOverPi * (x + coeff * x3);
+            double tanh = Math.Tanh(inner);
+            double sech2 = 1.0 - tanh * tanh;
+            double innerDeriv = sqrtTwoOverPi * (1.0 + 3.0 * coeff * x * x);
+            double derivative = 0.5 * (1.0 + tanh) + 0.5 * x * sech2 * innerDeriv;
+            result.SetFlat(i, numOps.FromDouble(derivative));
+        });
+
+        return result;
+    }
+
+    #endregion
+
+    #region Persistent Tensor Management
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// On CPU, this is a no-op. Persistent tensor management only provides benefits
+    /// on GPU where data transfer between host and device is expensive.
+    /// </remarks>
+    public void RegisterPersistentTensor<T>(Tensor<T> tensor, PersistentTensorRole role)
+    {
+        // No-op on CPU: persistence only benefits GPU by avoiding repeated transfers
+        // The tensor is already in CPU memory, so there's nothing to cache
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// On CPU, this is a no-op. See <see cref="RegisterPersistentTensor{T}"/>.
+    /// </remarks>
+    public void UnregisterPersistentTensor<T>(Tensor<T> tensor)
+    {
+        // No-op on CPU
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// On CPU, this is a no-op. See <see cref="RegisterPersistentTensor{T}"/>.
+    /// </remarks>
+    public void InvalidatePersistentTensor<T>(Tensor<T> tensor)
+    {
+        // No-op on CPU
+    }
+
+    #endregion
 }
