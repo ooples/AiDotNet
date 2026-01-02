@@ -425,13 +425,15 @@ These layers have significant manual implementations that should use IEngine:
 
 ## Implementation Order
 
-1. **Phase 1: IEngine Interface**
-   - Add `PersistentTensorRole` enum
-   - Add `FusedActivationType` enum
-   - Add `RegisterPersistentTensor`/`UnregisterPersistentTensor` to IEngine
-   - Add `FusedLinear` to IEngine
-   - Implement in CpuEngine (standard path)
-   - Implement in GpuEngine (DirectGpu path)
+1. **Phase 1: IEngine Interface** ✅ (Partially Complete)
+   - [x] Add `PersistentTensorRole` enum - `src/AiDotNet.Tensors/Engines/PersistentTensorRole.cs`
+   - [x] Add `FusedActivationType` enum - `src/AiDotNet.Tensors/Engines/FusedActivationType.cs`
+   - [x] Add `RegisterPersistentTensor`/`UnregisterPersistentTensor`/`InvalidatePersistentTensor` to IEngine
+   - [x] Add `FusedLinear`, `FusedLinearBackward` to IEngine
+   - [x] Add `FusedConv2D`, `FusedBatchNorm` to IEngine
+   - [x] Add `LeakyReLU` tensor operation to IEngine
+   - [x] Implement in CpuEngine (CPU fallback path)
+   - [ ] Implement in GpuEngine (DirectGpu path) - pending
 
 2. **Phase 2: LayerBase Integration**
    - Add `RegisterTrainableParameter` helper
@@ -464,5 +466,33 @@ These layers have significant manual implementations that should use IEngine:
 - [ ] No layer directly references DirectGpu, CUDA, OpenCL, or HIP
 - [ ] All trainable parameters registered via LayerBase helper
 - [ ] GPU acceleration works transparently when available
-- [ ] CPU fallback works correctly when GPU unavailable
+- [x] CPU fallback works correctly when GPU unavailable (implemented in CpuEngine)
 - [ ] Performance improvement measurable in benchmarks
+
+## Implementation Progress Log
+
+### 2025-01-02: Phase 1 IEngine Additions Complete
+
+**Files Created:**
+- `src/AiDotNet.Tensors/Engines/FusedActivationType.cs` - Enum for fused operation activation types
+- `src/AiDotNet.Tensors/Engines/PersistentTensorRole.cs` - Enum for GPU memory management hints
+
+**IEngine.cs Additions:**
+- `FusedLinear<T>` - Fused MatMul + Bias + Activation
+- `FusedLinearBackward<T>` - Backward pass for fused linear
+- `FusedConv2D<T>` - Fused Conv2D + Bias + Activation
+- `FusedBatchNorm<T>` - Fused BatchNorm + Activation
+- `RegisterPersistentTensor<T>` - Register tensor for GPU residency
+- `UnregisterPersistentTensor<T>` - Remove from GPU cache
+- `InvalidatePersistentTensor<T>` - Mark tensor data as stale
+- `LeakyReLU<T>` - Tensor operation for Leaky ReLU activation
+
+**CpuEngine.cs Implementations:**
+- All fused operations implemented as sequential CPU operations
+- Persistent tensor methods are no-ops (CPU doesn't need caching)
+- LeakyReLU uses TensorPrimitivesHelper for optimized implementation
+
+**Next Steps:**
+- Implement GpuEngine versions using DirectGpu fused kernels
+- Add RmsNormBackward to IDirectGpuBackend
+- Add ScatterAddBackward to IDirectGpuBackend
