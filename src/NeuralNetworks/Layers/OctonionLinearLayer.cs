@@ -170,7 +170,7 @@ public class OctonionLinearLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor with shape [inputFeatures * 8] or [batch, inputFeatures * 8].</param>
     /// <returns>Output tensor with shape [outputFeatures * 8] or [batch, outputFeatures * 8].</returns>
-        public override Tensor<T> Forward(Tensor<T> input)
+    public override Tensor<T> Forward(Tensor<T> input)
     {
         _originalInputShape = input.Shape;
 
@@ -257,7 +257,7 @@ public class OctonionLinearLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="outputGradient">Gradient from the next layer.</param>
     /// <returns>Gradient to pass to the previous layer.</returns>
-        public override Tensor<T> Backward(Tensor<T> outputGradient)
+    public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null)
         {

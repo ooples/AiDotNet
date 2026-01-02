@@ -117,7 +117,7 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         if (groups != 1) throw new NotSupportedException("Grouped deformable convolution is not supported; set groups to 1 or implement engine support.");
         if (deformGroups < 1) throw new ArgumentOutOfRangeException(nameof(deformGroups), "Deformable groups must be at least 1.");
         if (inputChannels % groups != 0) throw new ArgumentException($"Input channels ({inputChannels}) must be divisible by groups ({groups}).", nameof(groups));
-        
+
         // Validate output dimensions are positive
         int outputHeight = (inputHeight + 2 * padding - kernelSize) / stride + 1;
         int outputWidth = (inputWidth + 2 * padding - kernelSize) / stride + 1;
