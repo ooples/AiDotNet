@@ -172,6 +172,16 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// Gradients for parameters.
     /// </summary>
     private Tensor<T>? _messageWeights1Gradient;
+
+    /// <summary>
+    /// Helper to get adjacency value - supports both 2D [nodes, nodes] and 3D [batch, nodes, nodes].
+    /// </summary>
+    private T GetAdjacency(int b, int i, int j)
+    {
+        if (_adjacencyMatrix == null)
+            throw new InvalidOperationException("Adjacency matrix is not set.");
+        return _adjacencyMatrix.Shape.Length == 3 ? _adjacencyMatrix[b, i, j] : _adjacencyMatrix[i, j];
+    }
     private Tensor<T>? _messageWeights2Gradient;
     private Tensor<T>? _messageBias1Gradient;
     private Tensor<T>? _messageBias2Gradient;
@@ -438,31 +448,36 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _originalInputShape = input.Shape;
         int rank = input.Shape.Length;
 
-        // Handle any-rank tensor: collapse to 2D for processing
+        // Handle any-rank tensor: reshape to 3D [batch, nodes, features]
+        // Consistent with GraphConvolutionalLayer pattern
         Tensor<T> processInput;
         int batchSize;
 
-        if (rank == 1)
+        if (rank == 2)
         {
+            // 2D input [nodes, features] -> [1, nodes, features]
             batchSize = 1;
-            processInput = input.Reshape([1, input.Shape[0]]);
+            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
         }
-        else if (rank == 2)
+        else if (rank == 3)
         {
+            // 3D input [batch, nodes, features]
             batchSize = input.Shape[0];
             processInput = input;
         }
         else
         {
+            // Higher rank: collapse leading dimensions
             int flatBatch = 1;
-            for (int d = 0; d < rank - 1; d++)
+            for (int d = 0; d < rank - 2; d++)
                 flatBatch *= input.Shape[d];
             batchSize = flatBatch;
-            processInput = input.Reshape([flatBatch, input.Shape[rank - 1]]);
+            processInput = input.Reshape([flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
         _lastInput = processInput;
-        int numNodes = input.Shape[1];
+        int numNodes = processInput.Shape[1];
+
 
         // Step 1: Compute messages
         _lastMessages = new Tensor<T>([batchSize, numNodes, numNodes, _messageFeatures]);
@@ -475,7 +490,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 for (int j = 0; j < numNodes; j++)
                 {
                     // Only compute messages for connected nodes
-                    if (NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero))
+                    if (NumOps.Equals(GetAdjacency(b, i, j), NumOps.Zero))
                         continue;
 
                     // Concatenate source and target features
@@ -485,13 +500,13 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                     // Source node features
                     for (int f = 0; f < _inputFeatures; f++)
                     {
-                        messageInput[idx++] = input[b, j, f];
+                        messageInput[idx++] = processInput[b, j, f];
                     }
 
                     // Target node features
                     for (int f = 0; f < _inputFeatures; f++)
                     {
-                        messageInput[idx++] = input[b, i, f];
+                        messageInput[idx++] = processInput[b, i, f];
                     }
 
                     // Edge features (if applicable)
@@ -556,7 +571,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                     T sum = NumOps.Zero;
                     for (int j = 0; j < numNodes; j++)
                     {
-                        if (!NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero))
+                        if (!NumOps.Equals(GetAdjacency(b, i, j), NumOps.Zero))
                         {
                             sum = NumOps.Add(sum, _lastMessages[b, i, j, h]);
                         }
@@ -583,7 +598,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                     // Contribution from node features
                     for (int k = 0; k < _inputFeatures; k++)
                     {
-                        sum = NumOps.Add(sum, NumOps.Multiply(input[b, i, k], _resetWeights[k, f]));
+                        sum = NumOps.Add(sum, NumOps.Multiply(processInput[b, i, k], _resetWeights[k, f]));
                     }
 
                     // Contribution from aggregated message
@@ -602,7 +617,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
                     for (int k = 0; k < _inputFeatures; k++)
                     {
-                        sum = NumOps.Add(sum, NumOps.Multiply(input[b, i, k], _updateWeights[k, f]));
+                        sum = NumOps.Add(sum, NumOps.Multiply(processInput[b, i, k], _updateWeights[k, f]));
                     }
 
                     for (int k = 0; k < _messageFeatures; k++)
@@ -619,7 +634,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 {
                     T oldContribution = NumOps.Multiply(
                         NumOps.Subtract(NumOps.FromDouble(1.0), _lastUpdateGate[b, i, f]),
-                        f < _inputFeatures ? input[b, i, f] : NumOps.Zero);
+                        f < _inputFeatures ? processInput[b, i, f] : NumOps.Zero);
 
                     T newContribution = NumOps.Multiply(
                         _lastUpdateGate[b, i, f],
@@ -763,7 +778,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             {
                 for (int j = 0; j < numNodes; j++)
                 {
-                    if (!NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero))
+                    if (!NumOps.Equals(GetAdjacency(b, i, j), NumOps.Zero))
                     {
                         for (int h = 0; h < _messageFeatures; h++)
                         {
@@ -784,7 +799,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             {
                 for (int j = 0; j < numNodes; j++)
                 {
-                    if (NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero))
+                    if (NumOps.Equals(GetAdjacency(b, i, j), NumOps.Zero))
                         continue;
 
                     for (int h = 0; h < _messageFeatures; h++)
@@ -816,7 +831,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             {
                 for (int j = 0; j < numNodes; j++)
                 {
-                    if (NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero))
+                    if (NumOps.Equals(GetAdjacency(b, i, j), NumOps.Zero))
                         continue;
 
                     // Build message input for this edge
