@@ -45,6 +45,8 @@ public sealed class HipBackend : IDirectGpuBackend
     private IntPtr _convolutionModule;
     private IntPtr _poolingModule;
     private IntPtr _normalizationModule;
+    private IntPtr _fusedModule;
+    private IntPtr _attentionModule;
 
     private const int DefaultBlockSize = 256;
 
@@ -239,6 +241,14 @@ public sealed class HipBackend : IDirectGpuBackend
             CompileKernelModule(HipNormalizationKernels.GetSource(), "normalization", ref _normalizationModule,
                 HipNormalizationKernels.GetKernelNames());
 
+            // Compile Fused kernels (GEMM + Bias + Activation in single pass)
+            CompileKernelModule(HipFusedKernels.GetSource(), "fused", ref _fusedModule,
+                HipFusedKernels.GetKernelNames());
+
+            // Compile Attention kernels (FlashAttention, GQA, ScaledDotProduct)
+            CompileKernelModule(HipAttentionKernels.GetSource(), "attention", ref _attentionModule,
+                HipAttentionKernels.GetKernelNames());
+
             Console.WriteLine($"[HipBackend] Kernel compilation complete. Available kernels: {_kernelCache.Count}");
             System.Diagnostics.Debug.WriteLine($"HIP kernels compiled successfully for {_architecture}. Total: {_kernelCache.Count}");
         }
@@ -368,6 +378,48 @@ public sealed class HipBackend : IDirectGpuBackend
         finally
         {
             argsHandle.Free();
+        }
+    }
+
+    private unsafe void ExecuteFusedGemm(string kernelName, IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, IGpuBuffer output, int M, int N, int K)
+    {
+        if (!_kernelCache.TryGetValue(kernelName, out var kernel))
+            throw new InvalidOperationException($"HIP fused kernel not found: {kernelName}");
+
+        const int TILE_SIZE = 16;
+        uint gridX = (uint)((N + TILE_SIZE - 1) / TILE_SIZE);
+        uint gridY = (uint)((M + TILE_SIZE - 1) / TILE_SIZE);
+
+        var handles = new GCHandle[7];
+        try
+        {
+            handles[0] = GCHandle.Alloc(A.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(B.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(bias.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(M, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(N, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(K, GCHandleType.Pinned);
+
+            var args = new IntPtr[]
+            {
+                handles[0].AddrOfPinnedObject(),
+                handles[1].AddrOfPinnedObject(),
+                handles[2].AddrOfPinnedObject(),
+                handles[3].AddrOfPinnedObject(),
+                handles[4].AddrOfPinnedObject(),
+                handles[5].AddrOfPinnedObject(),
+                handles[6].AddrOfPinnedObject()
+            };
+
+            LaunchKernel2D(kernel, gridX, gridY, TILE_SIZE, TILE_SIZE, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles)
+                if (h.IsAllocated)
+                    h.Free();
         }
     }
 
@@ -653,79 +705,30 @@ public sealed class HipBackend : IDirectGpuBackend
 
     public IGpuBuffer GemmBiasRelu(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, int M, int N, int K)
     {
-        // For now, execute as separate operations
-        // TODO: Implement fused HIP kernel for GEMM+Bias+ReLU
-        var C = MatMul(A, B, M, N, K);
-
-        // Apply bias + ReLU on GPU
-        // This is a placeholder - in production, use a fused kernel
-        ApplyBiasAndActivation(C, bias, M, N, ActivationType.ReLU);
-
-        return C;
+        var output = AllocateBuffer(M * N);
+        ExecuteFusedGemm("gemm_bias_relu", A, B, bias, output, M, N, K);
+        return output;
     }
 
     public IGpuBuffer GemmBiasGelu(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, int M, int N, int K)
     {
-        var C = MatMul(A, B, M, N, K);
-        ApplyBiasAndActivation(C, bias, M, N, ActivationType.GELU);
-        return C;
+        var output = AllocateBuffer(M * N);
+        ExecuteFusedGemm("gemm_bias_gelu", A, B, bias, output, M, N, K);
+        return output;
     }
 
     public IGpuBuffer GemmBiasSigmoid(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, int M, int N, int K)
     {
-        var C = MatMul(A, B, M, N, K);
-        ApplyBiasAndActivation(C, bias, M, N, ActivationType.Sigmoid);
-        return C;
+        var output = AllocateBuffer(M * N);
+        ExecuteFusedGemm("gemm_bias_sigmoid", A, B, bias, output, M, N, K);
+        return output;
     }
 
     public IGpuBuffer GemmBiasTanh(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, int M, int N, int K)
     {
-        var C = MatMul(A, B, M, N, K);
-        ApplyBiasAndActivation(C, bias, M, N, ActivationType.Tanh);
-        return C;
-    }
-
-    private void ApplyBiasAndActivation(IGpuBuffer C, IGpuBuffer bias, int M, int N, ActivationType activation)
-    {
-        // Download, apply on CPU, upload (temporary until fused kernel is ready)
-        var cData = DownloadBuffer(C);
-        var biasData = DownloadBuffer(bias);
-
-        for (int row = 0; row < M; row++)
-        {
-            for (int col = 0; col < N; col++)
-            {
-                int idx = row * N + col;
-                float val = cData[idx] + biasData[col];
-
-                cData[idx] = activation switch
-                {
-                    ActivationType.ReLU => Math.Max(0, val),
-                    ActivationType.Sigmoid => 1.0f / (1.0f + MathF.Exp(-val)),
-                    ActivationType.Tanh => MathF.Tanh(val),
-                    ActivationType.GELU => val * 0.5f * (1.0f + MathF.Tanh(0.7978845608f * (val + 0.044715f * val * val * val))),
-                    _ => val
-                };
-            }
-        }
-
-        // Upload back
-        var hipBuffer = (HipGpuBuffer)C;
-        var size = (UIntPtr)(cData.Length * sizeof(float));
-        GCHandle handle = GCHandle.Alloc(cData, GCHandleType.Pinned);
-        try
-        {
-            var result = HipNativeBindings.hipMemcpy(
-                hipBuffer.Handle,
-                handle.AddrOfPinnedObject(),
-                size,
-                HipMemcpyKind.HostToDevice);
-            HipNativeBindings.CheckError(result, "hipMemcpy H2D (bias+activation)");
-        }
-        finally
-        {
-            handle.Free();
-        }
+        var output = AllocateBuffer(M * N);
+        ExecuteFusedGemm("gemm_bias_tanh", A, B, bias, output, M, N, K);
+        return output;
     }
 
     #endregion
@@ -2349,6 +2352,64 @@ public sealed class HipBackend : IDirectGpuBackend
         }
     }
 
+    public unsafe void RmsNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma, IGpuBuffer saveRms,
+        IGpuBuffer gradInput, IGpuBuffer gradGamma, int batchSize, int normalizedSize, float epsilon)
+    {
+        if (!_kernelCache.TryGetValue("rmsnorm_backward", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: rmsnorm_backward");
+
+        var handles = new GCHandle[9];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(gamma.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(saveRms.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(gradInput.Handle, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(gradGamma.Handle, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(batchSize, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(normalizedSize, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(epsilon, GCHandleType.Pinned);
+
+            var args = new IntPtr[9];
+            for (int i = 0; i < 9; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint grid = (uint)batchSize;
+            LaunchKernel(krnl, grid, DefaultBlockSize, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+
+        // Compute gradGamma
+        if (!_kernelCache.TryGetValue("rmsnorm_grad_gamma", out var krnl2))
+            throw new InvalidOperationException("HIP kernel not found: rmsnorm_grad_gamma");
+
+        var handles2 = new GCHandle[6];
+        try
+        {
+            handles2[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles2[1] = GCHandle.Alloc(input.Handle, GCHandleType.Pinned);
+            handles2[2] = GCHandle.Alloc(saveRms.Handle, GCHandleType.Pinned);
+            handles2[3] = GCHandle.Alloc(gradGamma.Handle, GCHandleType.Pinned);
+            handles2[4] = GCHandle.Alloc(batchSize, GCHandleType.Pinned);
+            handles2[5] = GCHandle.Alloc(normalizedSize, GCHandleType.Pinned);
+
+            var args2 = new IntPtr[6];
+            for (int i = 0; i < 6; i++) args2[i] = handles2[i].AddrOfPinnedObject();
+
+            uint grid2 = (uint)((normalizedSize + DefaultBlockSize - 1) / DefaultBlockSize);
+            LaunchKernel(krnl2, grid2, DefaultBlockSize, args2);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles2) if (h.IsAllocated) h.Free();
+        }
+    }
+
     #endregion
 
     #region Dropout Operations
@@ -2638,6 +2699,176 @@ public sealed class HipBackend : IDirectGpuBackend
     {
         // Flash attention is a memory-efficient algorithm - fall back to standard for now
         ScaledDotProductAttention(query, key, value, output, null, mask, batch, numHeads, seqLen, headDim, scale, isCausal);
+    }
+
+    public unsafe void FlashAttentionV2(IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+        IGpuBuffer output, IGpuBuffer softmaxStats,
+        int batch, int numHeads, int seqQ, int seqK, int headDim, float scale, bool isCausal)
+    {
+        if (!_kernelCache.TryGetValue("flash_attention_v2", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: flash_attention_v2");
+
+        int causalFlag = isCausal ? 1 : 0;
+        var handles = new GCHandle[12];
+        try
+        {
+            handles[0] = GCHandle.Alloc(query.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(key.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(value.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(softmaxStats.Handle, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(numHeads, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(seqQ, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(seqK, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(headDim, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(scale, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(causalFlag, GCHandleType.Pinned);
+
+            var args = new IntPtr[12];
+            for (int i = 0; i < 12; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint gridX = (uint)((seqQ + 31) / 32);
+            uint gridY = (uint)(batch * numHeads);
+            LaunchKernel2D(krnl, gridX, gridY, 32, 1, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void FlashAttentionBackward(IGpuBuffer gradOutput, IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+        IGpuBuffer output, IGpuBuffer softmaxStats,
+        IGpuBuffer gradQuery, IGpuBuffer gradKey, IGpuBuffer gradValue,
+        int batch, int numHeads, int seqQ, int seqK, int headDim, float scale, bool isCausal)
+    {
+        if (!_kernelCache.TryGetValue("flash_attention_backward", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: flash_attention_backward");
+
+        int causalFlag = isCausal ? 1 : 0;
+        var handles = new GCHandle[16];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(query.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(key.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(value.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(softmaxStats.Handle, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(gradQuery.Handle, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(gradKey.Handle, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(gradValue.Handle, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(numHeads, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(seqQ, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(seqK, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(headDim, GCHandleType.Pinned);
+            handles[14] = GCHandle.Alloc(scale, GCHandleType.Pinned);
+            handles[15] = GCHandle.Alloc(causalFlag, GCHandleType.Pinned);
+
+            var args = new IntPtr[16];
+            for (int i = 0; i < 16; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint gridX = (uint)((seqQ + 63) / 64);
+            uint gridY = (uint)(batch * numHeads);
+            LaunchKernel2D(krnl, gridX, gridY, 64, 1, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void GroupedQueryAttention(IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+        IGpuBuffer output, IGpuBuffer? attentionWeights,
+        int batch, int numQHeads, int numKVHeads, int seqQ, int seqK, int headDim, float scale, bool isCausal)
+    {
+        if (!_kernelCache.TryGetValue("grouped_query_attention", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: grouped_query_attention");
+
+        int queriesPerKV = numQHeads / numKVHeads;
+        int causalFlag = isCausal ? 1 : 0;
+        int storeWeights = attentionWeights != null ? 1 : 0;
+        IntPtr wPtr = attentionWeights?.Handle ?? IntPtr.Zero;
+
+        var handles = new GCHandle[15];
+        try
+        {
+            handles[0] = GCHandle.Alloc(query.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(key.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(value.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(output.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(wPtr, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(numQHeads, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(numKVHeads, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(queriesPerKV, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(seqQ, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(seqK, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(headDim, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(scale, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(causalFlag, GCHandleType.Pinned);
+            handles[14] = GCHandle.Alloc(storeWeights, GCHandleType.Pinned);
+
+            var args = new IntPtr[15];
+            for (int i = 0; i < 15; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint gridX = (uint)((seqQ + 31) / 32);
+            uint gridY = (uint)(batch * numQHeads);
+            LaunchKernel2D(krnl, gridX, gridY, 32, 1, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
+    }
+
+    public unsafe void GroupedQueryAttentionBackward(IGpuBuffer gradOutput, IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+        IGpuBuffer attentionWeights,
+        IGpuBuffer gradQuery, IGpuBuffer gradKey, IGpuBuffer gradValue,
+        int batch, int numQHeads, int numKVHeads, int seqQ, int seqK, int headDim, float scale)
+    {
+        if (!_kernelCache.TryGetValue("grouped_query_attention_backward", out var krnl))
+            throw new InvalidOperationException("HIP kernel not found: grouped_query_attention_backward");
+
+        int queriesPerKV = numQHeads / numKVHeads;
+
+        var handles = new GCHandle[16];
+        try
+        {
+            handles[0] = GCHandle.Alloc(gradOutput.Handle, GCHandleType.Pinned);
+            handles[1] = GCHandle.Alloc(query.Handle, GCHandleType.Pinned);
+            handles[2] = GCHandle.Alloc(key.Handle, GCHandleType.Pinned);
+            handles[3] = GCHandle.Alloc(value.Handle, GCHandleType.Pinned);
+            handles[4] = GCHandle.Alloc(attentionWeights.Handle, GCHandleType.Pinned);
+            handles[5] = GCHandle.Alloc(gradQuery.Handle, GCHandleType.Pinned);
+            handles[6] = GCHandle.Alloc(gradKey.Handle, GCHandleType.Pinned);
+            handles[7] = GCHandle.Alloc(gradValue.Handle, GCHandleType.Pinned);
+            handles[8] = GCHandle.Alloc(batch, GCHandleType.Pinned);
+            handles[9] = GCHandle.Alloc(numQHeads, GCHandleType.Pinned);
+            handles[10] = GCHandle.Alloc(numKVHeads, GCHandleType.Pinned);
+            handles[11] = GCHandle.Alloc(queriesPerKV, GCHandleType.Pinned);
+            handles[12] = GCHandle.Alloc(seqQ, GCHandleType.Pinned);
+            handles[13] = GCHandle.Alloc(seqK, GCHandleType.Pinned);
+            handles[14] = GCHandle.Alloc(headDim, GCHandleType.Pinned);
+            handles[15] = GCHandle.Alloc(scale, GCHandleType.Pinned);
+
+            var args = new IntPtr[16];
+            for (int i = 0; i < 16; i++) args[i] = handles[i].AddrOfPinnedObject();
+
+            uint gridX = (uint)((seqQ + 31) / 32);
+            uint gridY = (uint)(batch * numQHeads);
+            LaunchKernel2D(krnl, gridX, gridY, 32, 1, args);
+            Synchronize();
+        }
+        finally
+        {
+            foreach (var h in handles) if (h.IsAllocated) h.Free();
+        }
     }
 
     #endregion
@@ -3331,6 +3562,14 @@ public sealed class HipBackend : IDirectGpuBackend
         }
 
         UploadToBuffer(destination, dstData);
+    }
+
+    public unsafe void ScatterAddBackward(IGpuBuffer gradDestination, IGpuBuffer indices, IGpuBuffer gradSource,
+        int numIndices, int featureSize)
+    {
+        // ScatterAddBackward is essentially a Gather operation
+        // Uses the embedding forward kernel since it's equivalent
+        Embedding(indices, gradDestination, gradSource, numIndices, featureSize);
     }
 
     public unsafe void Gather(IGpuBuffer source, IGpuBuffer indices, IGpuBuffer output, int numIndices, int featureSize)

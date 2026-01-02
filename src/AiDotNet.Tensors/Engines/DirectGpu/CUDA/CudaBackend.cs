@@ -21,6 +21,8 @@ public sealed class CudaBackend : IDirectGpuBackend
     private IntPtr _poolingModule;
     private IntPtr _normalizationModule;
     private IntPtr _neuralNetModule;
+    private IntPtr _fusedModule;
+    private IntPtr _attentionModule;
     private bool _disposed;
 
     public bool IsAvailable { get; }
@@ -250,6 +252,8 @@ public sealed class CudaBackend : IDirectGpuBackend
         _poolingModule = CompileKernelModule(device, CudaPoolingKernels.GetSource(), "pooling_kernels", CudaPoolingKernels.GetKernelNames());
         _normalizationModule = CompileKernelModule(device, CudaNormalizationKernels.GetSource(), "normalization_kernels", CudaNormalizationKernels.GetKernelNames());
         _neuralNetModule = CompileKernelModule(device, CudaNeuralNetKernels.GetSource(), "neuralnet_kernels", CudaNeuralNetKernels.GetKernelNames());
+        _fusedModule = CompileKernelModule(device, CudaFusedKernels.GetSource(), "fused_kernels", CudaFusedKernels.GetKernelNames());
+        _attentionModule = CompileKernelModule(device, CudaAttentionKernels.GetSource(), "attention_kernels", CudaAttentionKernels.GetKernelNames());
     }
 
     private static string GetNvrtcLog(IntPtr program)
@@ -423,36 +427,32 @@ public sealed class CudaBackend : IDirectGpuBackend
     public IGpuBuffer GemmBiasRelu(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, int M, int N, int K)
     {
         ValidateBiasBuffer(bias, N);
-        var output = MatMul(A, B, M, N, K);
-        ApplyBiasInPlace(output, bias, M, N);
-        Relu(output, output, M * N);
+        var output = AllocateBuffer(M * N);
+        ExecuteFusedGemm("gemm_bias_relu", A, B, bias, output, M, N, K);
         return output;
     }
 
     public IGpuBuffer GemmBiasGelu(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, int M, int N, int K)
     {
         ValidateBiasBuffer(bias, N);
-        var output = MatMul(A, B, M, N, K);
-        ApplyBiasInPlace(output, bias, M, N);
-        Gelu(output, output, M * N);
+        var output = AllocateBuffer(M * N);
+        ExecuteFusedGemm("gemm_bias_gelu", A, B, bias, output, M, N, K);
         return output;
     }
 
     public IGpuBuffer GemmBiasSigmoid(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, int M, int N, int K)
     {
         ValidateBiasBuffer(bias, N);
-        var output = MatMul(A, B, M, N, K);
-        ApplyBiasInPlace(output, bias, M, N);
-        Sigmoid(output, output, M * N);
+        var output = AllocateBuffer(M * N);
+        ExecuteFusedGemm("gemm_bias_sigmoid", A, B, bias, output, M, N, K);
         return output;
     }
 
     public IGpuBuffer GemmBiasTanh(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, int M, int N, int K)
     {
         ValidateBiasBuffer(bias, N);
-        var output = MatMul(A, B, M, N, K);
-        ApplyBiasInPlace(output, bias, M, N);
-        Tanh(output, output, M * N);
+        var output = AllocateBuffer(M * N);
+        ExecuteFusedGemm("gemm_bias_tanh", A, B, bias, output, M, N, K);
         return output;
     }
 
@@ -980,6 +980,35 @@ public sealed class CudaBackend : IDirectGpuBackend
             throw new ArgumentOutOfRangeException(nameof(n), "N must be positive.");
         if (bias.Size < n)
             throw new ArgumentException("Bias buffer size must be at least N.", nameof(bias));
+    }
+
+    private unsafe void ExecuteFusedGemm(string kernelName, IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, IGpuBuffer output, int M, int N, int K)
+    {
+        if (!_kernelCache.TryGetValue(kernelName, out var kernel))
+            throw new InvalidOperationException($"CUDA fused kernel not found: {kernelName}");
+
+        using var _ = PushContext();
+
+        const int TILE_SIZE = 16;
+        uint gridX = (uint)((N + TILE_SIZE - 1) / TILE_SIZE);
+        uint gridY = (uint)((M + TILE_SIZE - 1) / TILE_SIZE);
+
+        IntPtr aPtr = A.Handle;
+        IntPtr bPtr = B.Handle;
+        IntPtr biasPtr = bias.Handle;
+        IntPtr outPtr = output.Handle;
+        int m = M, n = N, k = K;
+
+        void** args = stackalloc void*[7];
+        args[0] = &aPtr;
+        args[1] = &bPtr;
+        args[2] = &biasPtr;
+        args[3] = &outPtr;
+        args[4] = &m;
+        args[5] = &n;
+        args[6] = &k;
+
+        LaunchKernel2D(kernel, gridX, gridY, 1, TILE_SIZE, TILE_SIZE, args);
     }
 
     private static void ValidateBatchedGemmArgs(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, int batchCount)
@@ -1655,6 +1684,48 @@ public sealed class CudaBackend : IDirectGpuBackend
         LaunchKernel(kernel, gridX, DefaultBlockSize, args);
     }
 
+    public unsafe void RmsNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma, IGpuBuffer saveRms,
+        IGpuBuffer gradInput, IGpuBuffer gradGamma, int batchSize, int normalizedSize, float epsilon)
+    {
+        // Compute gradInput using rmsnorm_backward kernel
+        if (!_kernelCache.TryGetValue("rmsnorm_backward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: rmsnorm_backward");
+
+        using var _ = PushContext();
+        uint gridX = (uint)batchSize;
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gammaPtr = gamma.Handle;
+        IntPtr saveRmsPtr = saveRms.Handle;
+        IntPtr gradInputPtr = gradInput.Handle;
+        IntPtr gradGammaPtr = gradGamma.Handle;
+        void** args = stackalloc void*[9];
+        args[0] = &gradOutputPtr;
+        args[1] = &inputPtr;
+        args[2] = &gammaPtr;
+        args[3] = &saveRmsPtr;
+        args[4] = &gradInputPtr;
+        args[5] = &gradGammaPtr;
+        args[6] = &batchSize;
+        args[7] = &normalizedSize;
+        args[8] = &epsilon;
+        LaunchKernel(kernel, gridX, DefaultBlockSize, args);
+
+        // Compute gradGamma using rmsnorm_grad_gamma kernel
+        if (!_kernelCache.TryGetValue("rmsnorm_grad_gamma", out var kernel2))
+            throw new InvalidOperationException("CUDA kernel not found: rmsnorm_grad_gamma");
+
+        uint gridGamma = (uint)((normalizedSize + DefaultBlockSize - 1) / DefaultBlockSize);
+        void** args2 = stackalloc void*[6];
+        args2[0] = &gradOutputPtr;
+        args2[1] = &inputPtr;
+        args2[2] = &saveRmsPtr;
+        args2[3] = &gradGammaPtr;
+        args2[4] = &batchSize;
+        args2[5] = &normalizedSize;
+        LaunchKernel(kernel2, gridGamma, DefaultBlockSize, args2);
+    }
+
     #endregion
 
 
@@ -1887,6 +1958,164 @@ public sealed class CudaBackend : IDirectGpuBackend
         // Flash attention requires specialized memory-efficient implementation
         // For now, fall back to standard attention
         ScaledDotProductAttention(query, key, value, output, null, mask, batch, numHeads, seqLen, headDim, scale, isCausal);
+    }
+
+    public unsafe void FlashAttentionV2(IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+        IGpuBuffer output, IGpuBuffer softmaxStats,
+        int batch, int numHeads, int seqQ, int seqK, int headDim, float scale, bool isCausal)
+    {
+        using var _ = PushContext();
+        var kernel = _kernelCache["flash_attention_v2"];
+        uint gridX = (uint)((seqQ + 31) / 32);
+        uint gridY = (uint)(batch * numHeads);
+        int causalFlag = isCausal ? 1 : 0;
+
+        void** args = stackalloc void*[12];
+        IntPtr qPtr = query.Handle;
+        IntPtr kPtr = key.Handle;
+        IntPtr vPtr = value.Handle;
+        IntPtr oPtr = output.Handle;
+        IntPtr sPtr = softmaxStats.Handle;
+        args[0] = &qPtr;
+        args[1] = &kPtr;
+        args[2] = &vPtr;
+        args[3] = &oPtr;
+        args[4] = &sPtr;
+        args[5] = &batch;
+        args[6] = &numHeads;
+        args[7] = &seqQ;
+        args[8] = &seqK;
+        args[9] = &headDim;
+        args[10] = &scale;
+        args[11] = &causalFlag;
+
+        LaunchKernel2D(kernel, gridX, gridY, 1, 32, 1, args);
+    }
+
+    public unsafe void FlashAttentionBackward(IGpuBuffer gradOutput, IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+        IGpuBuffer output, IGpuBuffer softmaxStats,
+        IGpuBuffer gradQuery, IGpuBuffer gradKey, IGpuBuffer gradValue,
+        int batch, int numHeads, int seqQ, int seqK, int headDim, float scale, bool isCausal)
+    {
+        using var _ = PushContext();
+        var kernel = _kernelCache["flash_attention_backward"];
+        uint gridX = (uint)((seqQ + 63) / 64);
+        uint gridY = (uint)(batch * numHeads);
+        int causalFlag = isCausal ? 1 : 0;
+
+        void** args = stackalloc void*[15];
+        IntPtr goPtr = gradOutput.Handle;
+        IntPtr qPtr = query.Handle;
+        IntPtr kPtr = key.Handle;
+        IntPtr vPtr = value.Handle;
+        IntPtr oPtr = output.Handle;
+        IntPtr sPtr = softmaxStats.Handle;
+        IntPtr gqPtr = gradQuery.Handle;
+        IntPtr gkPtr = gradKey.Handle;
+        IntPtr gvPtr = gradValue.Handle;
+        args[0] = &goPtr;
+        args[1] = &qPtr;
+        args[2] = &kPtr;
+        args[3] = &vPtr;
+        args[4] = &oPtr;
+        args[5] = &sPtr;
+        args[6] = &gqPtr;
+        args[7] = &gkPtr;
+        args[8] = &gvPtr;
+        args[9] = &batch;
+        args[10] = &numHeads;
+        args[11] = &seqQ;
+        args[12] = &seqK;
+        args[13] = &headDim;
+        args[14] = &scale;
+
+        // Note: args[15] would be causalFlag but signature in kernel expects 15 args
+        // Need to adjust - let me fix kernel arg count
+        void** args2 = stackalloc void*[16];
+        for (int i = 0; i < 15; i++) args2[i] = args[i];
+        args2[15] = &causalFlag;
+
+        LaunchKernel2D(kernel, gridX, gridY, 1, 64, 1, args2);
+    }
+
+    public unsafe void GroupedQueryAttention(IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+        IGpuBuffer output, IGpuBuffer? attentionWeights,
+        int batch, int numQHeads, int numKVHeads, int seqQ, int seqK, int headDim, float scale, bool isCausal)
+    {
+        using var _ = PushContext();
+        var kernel = _kernelCache["grouped_query_attention"];
+        uint gridX = (uint)((seqQ + 31) / 32);
+        uint gridY = (uint)(batch * numQHeads);
+        int queriesPerKV = numQHeads / numKVHeads;
+        int causalFlag = isCausal ? 1 : 0;
+        int storeWeights = attentionWeights != null ? 1 : 0;
+        IntPtr wPtr = attentionWeights?.Handle ?? IntPtr.Zero;
+
+        void** args = stackalloc void*[14];
+        IntPtr qPtr = query.Handle;
+        IntPtr kPtr = key.Handle;
+        IntPtr vPtr = value.Handle;
+        IntPtr oPtr = output.Handle;
+        args[0] = &qPtr;
+        args[1] = &kPtr;
+        args[2] = &vPtr;
+        args[3] = &oPtr;
+        args[4] = &wPtr;
+        args[5] = &batch;
+        args[6] = &numQHeads;
+        args[7] = &numKVHeads;
+        args[8] = &queriesPerKV;
+        args[9] = &seqQ;
+        args[10] = &seqK;
+        args[11] = &headDim;
+        args[12] = &scale;
+        args[13] = &causalFlag;
+
+        void** args2 = stackalloc void*[15];
+        for (int i = 0; i < 14; i++) args2[i] = args[i];
+        args2[14] = &storeWeights;
+
+        LaunchKernel2D(kernel, gridX, gridY, 1, 32, 1, args2);
+    }
+
+    public unsafe void GroupedQueryAttentionBackward(IGpuBuffer gradOutput, IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+        IGpuBuffer attentionWeights,
+        IGpuBuffer gradQuery, IGpuBuffer gradKey, IGpuBuffer gradValue,
+        int batch, int numQHeads, int numKVHeads, int seqQ, int seqK, int headDim, float scale)
+    {
+        using var _ = PushContext();
+        var kernel = _kernelCache["grouped_query_attention_backward"];
+        uint gridX = (uint)((seqQ + 31) / 32);
+        uint gridY = (uint)(batch * numQHeads);
+        int queriesPerKV = numQHeads / numKVHeads;
+
+        void** args = stackalloc void*[16];
+        IntPtr goPtr = gradOutput.Handle;
+        IntPtr qPtr = query.Handle;
+        IntPtr kPtr = key.Handle;
+        IntPtr vPtr = value.Handle;
+        IntPtr wPtr = attentionWeights.Handle;
+        IntPtr gqPtr = gradQuery.Handle;
+        IntPtr gkPtr = gradKey.Handle;
+        IntPtr gvPtr = gradValue.Handle;
+        args[0] = &goPtr;
+        args[1] = &qPtr;
+        args[2] = &kPtr;
+        args[3] = &vPtr;
+        args[4] = &wPtr;
+        args[5] = &gqPtr;
+        args[6] = &gkPtr;
+        args[7] = &gvPtr;
+        args[8] = &batch;
+        args[9] = &numQHeads;
+        args[10] = &numKVHeads;
+        args[11] = &queriesPerKV;
+        args[12] = &seqQ;
+        args[13] = &seqK;
+        args[14] = &headDim;
+        args[15] = &scale;
+
+        LaunchKernel2D(kernel, gridX, gridY, 1, 32, 1, args);
     }
 
     #endregion
@@ -2506,6 +2735,27 @@ public sealed class CudaBackend : IDirectGpuBackend
         args[2] = &dstPtr;
         args[3] = &sourceSize;
         args[4] = &embDim;
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void ScatterAddBackward(IGpuBuffer gradDestination, IGpuBuffer indices, IGpuBuffer gradSource,
+        int numIndices, int featureSize)
+    {
+        // ScatterAddBackward is essentially a Gather operation
+        if (!_kernelCache.TryGetValue("embedding_forward", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: embedding_forward");
+
+        using var _ = PushContext();
+        uint grid = (uint)((numIndices + DefaultBlockSize - 1) / DefaultBlockSize);
+        IntPtr idxPtr = indices.Handle;
+        IntPtr gradDstPtr = gradDestination.Handle;
+        IntPtr gradSrcPtr = gradSource.Handle;
+        void** args = stackalloc void*[5];
+        args[0] = &idxPtr;
+        args[1] = &gradDstPtr;
+        args[2] = &gradSrcPtr;
+        args[3] = &numIndices;
+        args[4] = &featureSize;
         LaunchKernel(kernel, grid, DefaultBlockSize, args);
     }
 

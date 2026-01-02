@@ -280,6 +280,17 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                     _kernelCache[name] = new DirectOpenClKernel(_context, nnProgram, name);
                 }
                 Console.WriteLine($"[OpenClBackend] Neural network kernels compiled: {NeuralNetKernels.GetKernelNames().Length} kernels");
+
+                // Compile attention kernels (FlashAttention, GQA, ScaledDotProduct)
+                Console.WriteLine("[OpenClBackend] Compiling attention kernels...");
+                var attnProgram = new DirectOpenClProgram(_context, AttentionKernels.GetSource());
+                attnProgram.Build(optimizationFlags);
+                _programs.Add(attnProgram);
+                foreach (var name in AttentionKernels.GetKernelNames())
+                {
+                    _kernelCache[name] = new DirectOpenClKernel(_context, attnProgram, name);
+                }
+                Console.WriteLine($"[OpenClBackend] Attention kernels compiled: {AttentionKernels.GetKernelNames().Length} kernels");
             }
             catch (Exception ex)
             {
@@ -4426,6 +4437,37 @@ KERNEL VARIANTS (A/B testing):
             k.Execute1D(batchSize, Math.Min(64, batchSize));
         }
 
+        public void RmsNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma, IGpuBuffer saveRms,
+            IGpuBuffer gradInput, IGpuBuffer gradGamma, int batchSize, int normalizedSize, float epsilon)
+        {
+            // Compute gradInput
+            var k = _kernelCache["rmsnorm_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gamma).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)saveRms).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradGamma).Buffer.Handle);
+            k.SetArg(arg++, batchSize);
+            k.SetArg(arg++, normalizedSize);
+            k.SetArg(arg++, epsilon);
+
+            k.Execute1D(batchSize, Math.Min(64, batchSize));
+
+            // Compute gradGamma
+            var k2 = _kernelCache["rmsnorm_grad_gamma"];
+            arg = 0;
+            k2.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k2.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k2.SetArg(arg++, ((DirectOpenClGpuBuffer)saveRms).Buffer.Handle);
+            k2.SetArg(arg++, ((DirectOpenClGpuBuffer)gradGamma).Buffer.Handle);
+            k2.SetArg(arg++, batchSize);
+            k2.SetArg(arg++, normalizedSize);
+
+            k2.Execute1D(normalizedSize, Math.Min(256, normalizedSize));
+        }
+
         #endregion
 
         #region Dropout Operations
@@ -4596,6 +4638,122 @@ KERNEL VARIANTS (A/B testing):
 
             int localX = Math.Min(32, seqLen);
             k.Execute2D(seqLen, batch * numHeads, localX, 1);
+        }
+
+        public void FlashAttentionV2(IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+            IGpuBuffer output, IGpuBuffer softmaxStats,
+            int batch, int numHeads, int seqQ, int seqK, int headDim, float scale, bool isCausal)
+        {
+            // FlashAttention V2 with online softmax and log-sum-exp statistics
+            // Uses tiled computation for O(N) memory complexity
+            var k = _kernelCache["flash_attention_v2"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)query).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)key).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)value).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)softmaxStats).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, numHeads);
+            k.SetArg(arg++, seqQ);
+            k.SetArg(arg++, seqK);
+            k.SetArg(arg++, headDim);
+            k.SetArg(arg++, scale);
+            k.SetArg(arg++, isCausal ? 1 : 0);
+
+            // Each work item handles one query position
+            int localX = Math.Min(64, seqQ);
+            k.Execute2D(seqQ, batch * numHeads, localX, 1);
+        }
+
+        public void FlashAttentionBackward(IGpuBuffer gradOutput, IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+            IGpuBuffer output, IGpuBuffer softmaxStats,
+            IGpuBuffer gradQuery, IGpuBuffer gradKey, IGpuBuffer gradValue,
+            int batch, int numHeads, int seqQ, int seqK, int headDim, float scale, bool isCausal)
+        {
+            // FlashAttention backward with recomputation for memory efficiency
+            var k = _kernelCache["flash_attention_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)query).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)key).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)value).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)softmaxStats).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradQuery).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradKey).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradValue).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, numHeads);
+            k.SetArg(arg++, seqQ);
+            k.SetArg(arg++, seqK);
+            k.SetArg(arg++, headDim);
+            k.SetArg(arg++, scale);
+            k.SetArg(arg++, isCausal ? 1 : 0);
+
+            // Process in blocks
+            int localX = Math.Min(64, seqQ);
+            k.Execute2D(seqQ, batch * numHeads, localX, 1);
+        }
+
+        public void GroupedQueryAttention(IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+            IGpuBuffer output, IGpuBuffer? attentionWeights,
+            int batch, int numQHeads, int numKVHeads, int seqQ, int seqK, int headDim, float scale, bool isCausal)
+        {
+            // GQA: Multiple query heads share same KV heads
+            // numQHeads must be divisible by numKVHeads
+            var k = _kernelCache["grouped_query_attention"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)query).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)key).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)value).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, attentionWeights != null ? ((DirectOpenClGpuBuffer)attentionWeights).Buffer.Handle : IntPtr.Zero);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, numQHeads);
+            k.SetArg(arg++, numKVHeads);
+            k.SetArg(arg++, numQHeads / numKVHeads); // queries per KV head
+            k.SetArg(arg++, seqQ);
+            k.SetArg(arg++, seqK);
+            k.SetArg(arg++, headDim);
+            k.SetArg(arg++, scale);
+            k.SetArg(arg++, isCausal ? 1 : 0);
+            k.SetArg(arg++, attentionWeights != null ? 1 : 0);
+
+            // Each work item handles one query head position
+            int localX = Math.Min(16, headDim);
+            int localY = Math.Min(8, seqQ);
+            k.Execute3D(headDim, seqQ, batch * numQHeads, localX, localY, 1);
+        }
+
+        public void GroupedQueryAttentionBackward(IGpuBuffer gradOutput, IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+            IGpuBuffer attentionWeights,
+            IGpuBuffer gradQuery, IGpuBuffer gradKey, IGpuBuffer gradValue,
+            int batch, int numQHeads, int numKVHeads, int seqQ, int seqK, int headDim, float scale)
+        {
+            // GQA backward - accumulate gradients for K,V across shared query heads
+            var k = _kernelCache["grouped_query_attention_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)query).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)key).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)value).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)attentionWeights).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradQuery).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradKey).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradValue).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, numQHeads);
+            k.SetArg(arg++, numKVHeads);
+            k.SetArg(arg++, numQHeads / numKVHeads);
+            k.SetArg(arg++, seqQ);
+            k.SetArg(arg++, seqK);
+            k.SetArg(arg++, headDim);
+            k.SetArg(arg++, scale);
+
+            int localX = Math.Min(16, headDim);
+            int localY = Math.Min(8, seqQ);
+            k.Execute3D(headDim, seqQ, batch * numQHeads, localX, localY, 1);
         }
 
         #endregion
@@ -5122,6 +5280,20 @@ KERNEL VARIANTS (A/B testing):
             k.SetArg(arg++, destSize);
 
             k.Execute1D(sourceSize, Math.Min(256, sourceSize));
+        }
+
+        public void ScatterAddBackward(IGpuBuffer gradDestination, IGpuBuffer indices, IGpuBuffer gradSource,
+            int numIndices, int featureSize)
+        {
+            var k = _kernelCache["scatter_add_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradDestination).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)indices).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradSource).Buffer.Handle);
+            k.SetArg(arg++, numIndices);
+            k.SetArg(arg++, featureSize);
+
+            k.Execute1D(numIndices, Math.Min(256, numIndices));
         }
 
         public void Gather(IGpuBuffer source, IGpuBuffer indices, IGpuBuffer output, int numIndices, int featureSize)

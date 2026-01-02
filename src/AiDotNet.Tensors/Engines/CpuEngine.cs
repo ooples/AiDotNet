@@ -9472,6 +9472,607 @@ public class CpuEngine : IEngine
     }
 
     /// <summary>
+    /// Computes memory-efficient attention using the FlashAttention algorithm.
+    /// </summary>
+    /// <remarks>
+    /// This is a CPU implementation of FlashAttention that uses tiling and online softmax
+    /// to achieve O(N) memory complexity instead of O(N²) for standard attention.
+    /// While the CPU version doesn't benefit as much from the memory hierarchy optimizations
+    /// as GPU, it still provides memory savings for long sequences.
+    /// </remarks>
+    public Tensor<T> FlashAttention<T>(
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        double? scale,
+        bool isCausal,
+        out Tensor<T> softmaxStats)
+    {
+        if (query == null) throw new ArgumentNullException(nameof(query));
+        if (key == null) throw new ArgumentNullException(nameof(key));
+        if (value == null) throw new ArgumentNullException(nameof(value));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = query.Shape[0];
+        int heads = query.Shape[1];
+        int seqQ = query.Shape[2];
+        int headDim = query.Shape[3];
+        int seqK = key.Shape[2];
+
+        // Compute scale if not provided
+        double scaleValue = scale ?? 1.0 / Math.Sqrt(headDim);
+        T scaleFactor = numOps.FromDouble(scaleValue);
+
+        // Block sizes for tiling (tuned for CPU cache)
+        const int BLOCK_Q = 64;
+        const int BLOCK_KV = 64;
+
+        var queryData = query.ToVector().Data;
+        var keyData = key.ToVector().Data;
+        var valueData = value.ToVector().Data;
+
+        // Output and statistics
+        var outputData = new T[batch * heads * seqQ * headDim];
+        var statsData = new T[batch * heads * seqQ]; // log-sum-exp statistics
+
+        // Initialize output to zero and stats to negative infinity
+        T negInf = numOps.FromDouble(double.NegativeInfinity);
+        numOps.Fill(outputData.AsSpan(), numOps.Zero);
+        numOps.Fill(statsData.AsSpan(), negInf);
+
+        Parallel.For(0, batch * heads, bh =>
+        {
+            int b = bh / heads;
+            int h = bh % heads;
+            int qOffset = (b * heads + h) * seqQ * headDim;
+            int kOffset = (b * heads + h) * seqK * headDim;
+            int vOffset = (b * heads + h) * seqK * headDim;
+            int oOffset = (b * heads + h) * seqQ * headDim;
+            int sOffset = (b * heads + h) * seqQ;
+
+            // Local accumulators per query position
+            var rowMax = new T[seqQ];
+            var rowSum = new T[seqQ];
+            numOps.Fill(rowMax.AsSpan(), negInf);
+            numOps.Fill(rowSum.AsSpan(), numOps.Zero);
+
+            // Process KV blocks
+            for (int kvBlockStart = 0; kvBlockStart < seqK; kvBlockStart += BLOCK_KV)
+            {
+                int kvBlockEnd = Math.Min(kvBlockStart + BLOCK_KV, seqK);
+
+                // Process Q blocks
+                for (int qBlockStart = 0; qBlockStart < seqQ; qBlockStart += BLOCK_Q)
+                {
+                    int qBlockEnd = Math.Min(qBlockStart + BLOCK_Q, seqQ);
+
+                    // Compute attention scores for this tile
+                    for (int qi = qBlockStart; qi < qBlockEnd; qi++)
+                    {
+                        // Causal: skip if all keys in block are after query
+                        if (isCausal && kvBlockStart > qi)
+                            continue;
+
+                        T localMax = rowMax[qi];
+                        T localSum = rowSum[qi];
+
+                        // Temporary storage for this row's scores in the block
+                        var blockScores = new T[kvBlockEnd - kvBlockStart];
+                        var blockMaxScore = negInf;
+
+                        // Compute scores: Q @ K^T * scale
+                        for (int ki = kvBlockStart; ki < kvBlockEnd; ki++)
+                        {
+                            // Causal mask
+                            if (isCausal && ki > qi)
+                            {
+                                blockScores[ki - kvBlockStart] = negInf;
+                                continue;
+                            }
+
+                            T score = numOps.Zero;
+                            for (int d = 0; d < headDim; d++)
+                            {
+                                score = numOps.Add(score, numOps.Multiply(
+                                    queryData[qOffset + qi * headDim + d],
+                                    keyData[kOffset + ki * headDim + d]));
+                            }
+                            score = numOps.Multiply(score, scaleFactor);
+                            blockScores[ki - kvBlockStart] = score;
+
+                            if (numOps.ToDouble(score) > numOps.ToDouble(blockMaxScore))
+                                blockMaxScore = score;
+                        }
+
+                        // Online softmax: compute new max
+                        T newMax = numOps.ToDouble(blockMaxScore) > numOps.ToDouble(localMax) ? blockMaxScore : localMax;
+
+                        // Rescale previous accumulator
+                        T scale1 = numOps.Exp(numOps.Subtract(localMax, newMax));
+                        T newSum = numOps.Multiply(localSum, scale1);
+
+                        // Add new contributions
+                        for (int ki = kvBlockStart; ki < kvBlockEnd; ki++)
+                        {
+                            if (isCausal && ki > qi)
+                                continue;
+
+                            T expScore = numOps.Exp(numOps.Subtract(blockScores[ki - kvBlockStart], newMax));
+                            newSum = numOps.Add(newSum, expScore);
+
+                            // Update output: O = O * scale1 + exp(score - newMax) * V
+                            for (int d = 0; d < headDim; d++)
+                            {
+                                T vVal = valueData[vOffset + ki * headDim + d];
+                                T oVal = outputData[oOffset + qi * headDim + d];
+
+                                // First time rescaling for this block
+                                if (ki == kvBlockStart)
+                                    oVal = numOps.Multiply(oVal, scale1);
+
+                                outputData[oOffset + qi * headDim + d] = numOps.Add(oVal, numOps.Multiply(expScore, vVal));
+                            }
+                        }
+
+                        rowMax[qi] = newMax;
+                        rowSum[qi] = newSum;
+                    }
+                }
+            }
+
+            // Final normalization: O = O / rowSum
+            for (int qi = 0; qi < seqQ; qi++)
+            {
+                T invSum = numOps.Divide(numOps.One, rowSum[qi]);
+                for (int d = 0; d < headDim; d++)
+                {
+                    outputData[oOffset + qi * headDim + d] = numOps.Multiply(
+                        outputData[oOffset + qi * headDim + d], invSum);
+                }
+                // Store log-sum-exp: logsumexp = max + log(sum)
+                statsData[sOffset + qi] = numOps.Add(rowMax[qi], numOps.Log(rowSum[qi]));
+            }
+        });
+
+        softmaxStats = new Tensor<T>([batch, heads, seqQ], new Vector<T>(statsData));
+        return new Tensor<T>([batch, heads, seqQ, headDim], new Vector<T>(outputData));
+    }
+
+    /// <summary>
+    /// Computes the backward pass for FlashAttention.
+    /// </summary>
+    public Tensor<T> FlashAttentionBackward<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        Tensor<T> output,
+        Tensor<T> softmaxStats,
+        double scale,
+        bool isCausal,
+        out Tensor<T> gradQuery,
+        out Tensor<T> gradKey,
+        out Tensor<T> gradValue)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (query == null) throw new ArgumentNullException(nameof(query));
+        if (key == null) throw new ArgumentNullException(nameof(key));
+        if (value == null) throw new ArgumentNullException(nameof(value));
+        if (output == null) throw new ArgumentNullException(nameof(output));
+        if (softmaxStats == null) throw new ArgumentNullException(nameof(softmaxStats));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = query.Shape[0];
+        int heads = query.Shape[1];
+        int seqQ = query.Shape[2];
+        int headDim = query.Shape[3];
+        int seqK = key.Shape[2];
+
+        T scaleFactor = numOps.FromDouble(scale);
+
+        const int BLOCK_Q = 64;
+        const int BLOCK_KV = 64;
+
+        var queryData = query.ToVector().Data;
+        var keyData = key.ToVector().Data;
+        var valueData = value.ToVector().Data;
+        var outputData = output.ToVector().Data;
+        var gradOutData = gradOutput.ToVector().Data;
+        var statsData = softmaxStats.ToVector().Data;
+
+        var gradQData = new T[batch * heads * seqQ * headDim];
+        var gradKData = new T[batch * heads * seqK * headDim];
+        var gradVData = new T[batch * heads * seqK * headDim];
+
+        T negInf = numOps.FromDouble(double.NegativeInfinity);
+
+        Parallel.For(0, batch * heads, bh =>
+        {
+            int b = bh / heads;
+            int h = bh % heads;
+            int qOffset = (b * heads + h) * seqQ * headDim;
+            int kOffset = (b * heads + h) * seqK * headDim;
+            int vOffset = (b * heads + h) * seqK * headDim;
+            int oOffset = (b * heads + h) * seqQ * headDim;
+            int sOffset = (b * heads + h) * seqQ;
+
+            // Process in blocks (similar to forward, but recomputing attention)
+            for (int kvBlockStart = 0; kvBlockStart < seqK; kvBlockStart += BLOCK_KV)
+            {
+                int kvBlockEnd = Math.Min(kvBlockStart + BLOCK_KV, seqK);
+
+                for (int qBlockStart = 0; qBlockStart < seqQ; qBlockStart += BLOCK_Q)
+                {
+                    int qBlockEnd = Math.Min(qBlockStart + BLOCK_Q, seqQ);
+
+                    for (int qi = qBlockStart; qi < qBlockEnd; qi++)
+                    {
+                        if (isCausal && kvBlockStart > qi)
+                            continue;
+
+                        T logsumexp = statsData[sOffset + qi];
+
+                        // Recompute attention weights for this row segment
+                        for (int ki = kvBlockStart; ki < kvBlockEnd; ki++)
+                        {
+                            if (isCausal && ki > qi)
+                                continue;
+
+                            // Recompute score
+                            T score = numOps.Zero;
+                            for (int d = 0; d < headDim; d++)
+                            {
+                                score = numOps.Add(score, numOps.Multiply(
+                                    queryData[qOffset + qi * headDim + d],
+                                    keyData[kOffset + ki * headDim + d]));
+                            }
+                            score = numOps.Multiply(score, scaleFactor);
+
+                            // Recompute attention weight: exp(score - logsumexp)
+                            T attnWeight = numOps.Exp(numOps.Subtract(score, logsumexp));
+
+                            // Gradient w.r.t. V: attnWeight * gradOutput
+                            for (int d = 0; d < headDim; d++)
+                            {
+                                T gradO = gradOutData[oOffset + qi * headDim + d];
+                                int vIdx = vOffset + ki * headDim + d;
+                                lock (gradVData) // Thread safety for accumulation
+                                {
+                                    gradVData[vIdx] = numOps.Add(gradVData[vIdx], numOps.Multiply(attnWeight, gradO));
+                                }
+                            }
+
+                            // Compute dS = attnWeight * (dO @ V - sum(attnWeight * dO @ V))
+                            // First compute dO @ v for this position
+                            T doV = numOps.Zero;
+                            for (int d = 0; d < headDim; d++)
+                            {
+                                doV = numOps.Add(doV, numOps.Multiply(
+                                    gradOutData[oOffset + qi * headDim + d],
+                                    valueData[vOffset + ki * headDim + d]));
+                            }
+
+                            // Compute dO @ O for the full row (dot product with output)
+                            T doO = numOps.Zero;
+                            for (int d = 0; d < headDim; d++)
+                            {
+                                doO = numOps.Add(doO, numOps.Multiply(
+                                    gradOutData[oOffset + qi * headDim + d],
+                                    outputData[oOffset + qi * headDim + d]));
+                            }
+
+                            // dS = attnWeight * (doV - doO)
+                            T dS = numOps.Multiply(attnWeight, numOps.Subtract(doV, doO));
+                            dS = numOps.Multiply(dS, scaleFactor);
+
+                            // Gradient w.r.t. Q: dS * K
+                            for (int d = 0; d < headDim; d++)
+                            {
+                                int qIdx = qOffset + qi * headDim + d;
+                                gradQData[qIdx] = numOps.Add(gradQData[qIdx],
+                                    numOps.Multiply(dS, keyData[kOffset + ki * headDim + d]));
+                            }
+
+                            // Gradient w.r.t. K: dS * Q
+                            for (int d = 0; d < headDim; d++)
+                            {
+                                int kIdx = kOffset + ki * headDim + d;
+                                lock (gradKData) // Thread safety for accumulation
+                                {
+                                    gradKData[kIdx] = numOps.Add(gradKData[kIdx],
+                                        numOps.Multiply(dS, queryData[qOffset + qi * headDim + d]));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        gradQuery = new Tensor<T>(query.Shape, new Vector<T>(gradQData));
+        gradKey = new Tensor<T>(key.Shape, new Vector<T>(gradKData));
+        gradValue = new Tensor<T>(value.Shape, new Vector<T>(gradVData));
+
+        return gradOutput;
+    }
+
+    /// <summary>
+    /// Computes Grouped Query Attention (GQA) for efficient inference.
+    /// </summary>
+    /// <remarks>
+    /// GQA allows multiple query heads to share the same key-value head,
+    /// reducing memory bandwidth and KV-cache size during inference.
+    /// </remarks>
+    public Tensor<T> GroupedQueryAttention<T>(
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        int numQueriesPerKV,
+        double? scale,
+        bool isCausal,
+        out Tensor<T> attentionWeights)
+    {
+        if (query == null) throw new ArgumentNullException(nameof(query));
+        if (key == null) throw new ArgumentNullException(nameof(key));
+        if (value == null) throw new ArgumentNullException(nameof(value));
+        if (numQueriesPerKV <= 0) throw new ArgumentOutOfRangeException(nameof(numQueriesPerKV));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = query.Shape[0];
+        int numQHeads = query.Shape[1];
+        int seqQ = query.Shape[2];
+        int headDim = query.Shape[3];
+        int numKVHeads = key.Shape[1];
+        int seqK = key.Shape[2];
+
+        if (numQHeads != numKVHeads * numQueriesPerKV)
+            throw new ArgumentException($"Query heads ({numQHeads}) must equal KV heads ({numKVHeads}) * numQueriesPerKV ({numQueriesPerKV})");
+
+        // Compute scale
+        double scaleValue = scale ?? 1.0 / Math.Sqrt(headDim);
+        T scaleFactor = numOps.FromDouble(scaleValue);
+        T negInf = numOps.FromDouble(double.NegativeInfinity);
+
+        var queryData = query.ToVector().Data;
+        var keyData = key.ToVector().Data;
+        var valueData = value.ToVector().Data;
+
+        var outputData = new T[batch * numQHeads * seqQ * headDim];
+        var weightsData = new T[batch * numQHeads * seqQ * seqK];
+
+        Parallel.For(0, batch * numQHeads, bqh =>
+        {
+            int b = bqh / numQHeads;
+            int qh = bqh % numQHeads;
+            int kvh = qh / numQueriesPerKV; // Which KV head this query head uses
+
+            int qOffset = (b * numQHeads + qh) * seqQ * headDim;
+            int kOffset = (b * numKVHeads + kvh) * seqK * headDim;
+            int vOffset = (b * numKVHeads + kvh) * seqK * headDim;
+            int oOffset = (b * numQHeads + qh) * seqQ * headDim;
+            int wOffset = (b * numQHeads + qh) * seqQ * seqK;
+
+            for (int qi = 0; qi < seqQ; qi++)
+            {
+                // Compute attention scores: Q @ K^T * scale
+                var scores = new T[seqK];
+                T maxScore = negInf;
+
+                for (int ki = 0; ki < seqK; ki++)
+                {
+                    // Causal mask
+                    if (isCausal && ki > qi)
+                    {
+                        scores[ki] = negInf;
+                        continue;
+                    }
+
+                    T score = numOps.Zero;
+                    for (int d = 0; d < headDim; d++)
+                    {
+                        score = numOps.Add(score, numOps.Multiply(
+                            queryData[qOffset + qi * headDim + d],
+                            keyData[kOffset + ki * headDim + d]));
+                    }
+                    score = numOps.Multiply(score, scaleFactor);
+                    scores[ki] = score;
+
+                    if (numOps.ToDouble(score) > numOps.ToDouble(maxScore))
+                        maxScore = score;
+                }
+
+                // Softmax
+                T sumExp = numOps.Zero;
+                for (int ki = 0; ki < seqK; ki++)
+                {
+                    if (isCausal && ki > qi)
+                    {
+                        weightsData[wOffset + qi * seqK + ki] = numOps.Zero;
+                        continue;
+                    }
+                    T expScore = numOps.Exp(numOps.Subtract(scores[ki], maxScore));
+                    weightsData[wOffset + qi * seqK + ki] = expScore;
+                    sumExp = numOps.Add(sumExp, expScore);
+                }
+
+                // Normalize
+                T invSum = numOps.Divide(numOps.One, sumExp);
+                for (int ki = 0; ki < seqK; ki++)
+                {
+                    weightsData[wOffset + qi * seqK + ki] = numOps.Multiply(
+                        weightsData[wOffset + qi * seqK + ki], invSum);
+                }
+
+                // Compute output: weights @ V
+                for (int d = 0; d < headDim; d++)
+                {
+                    T val = numOps.Zero;
+                    for (int ki = 0; ki < seqK; ki++)
+                    {
+                        val = numOps.Add(val, numOps.Multiply(
+                            weightsData[wOffset + qi * seqK + ki],
+                            valueData[vOffset + ki * headDim + d]));
+                    }
+                    outputData[oOffset + qi * headDim + d] = val;
+                }
+            }
+        });
+
+        attentionWeights = new Tensor<T>([batch, numQHeads, seqQ, seqK], new Vector<T>(weightsData));
+        return new Tensor<T>([batch, numQHeads, seqQ, headDim], new Vector<T>(outputData));
+    }
+
+    /// <summary>
+    /// Computes the backward pass for Grouped Query Attention.
+    /// </summary>
+    public Tensor<T> GroupedQueryAttentionBackward<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        Tensor<T> attentionWeights,
+        int numQueriesPerKV,
+        double scale,
+        out Tensor<T> gradQuery,
+        out Tensor<T> gradKey,
+        out Tensor<T> gradValue)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (query == null) throw new ArgumentNullException(nameof(query));
+        if (key == null) throw new ArgumentNullException(nameof(key));
+        if (value == null) throw new ArgumentNullException(nameof(value));
+        if (attentionWeights == null) throw new ArgumentNullException(nameof(attentionWeights));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = query.Shape[0];
+        int numQHeads = query.Shape[1];
+        int seqQ = query.Shape[2];
+        int headDim = query.Shape[3];
+        int numKVHeads = key.Shape[1];
+        int seqK = key.Shape[2];
+
+        T scaleFactor = numOps.FromDouble(scale);
+
+        var queryData = query.ToVector().Data;
+        var keyData = key.ToVector().Data;
+        var valueData = value.ToVector().Data;
+        var weightsData = attentionWeights.ToVector().Data;
+        var gradOutData = gradOutput.ToVector().Data;
+
+        var gradQData = new T[batch * numQHeads * seqQ * headDim];
+        var gradKData = new T[batch * numKVHeads * seqK * headDim];
+        var gradVData = new T[batch * numKVHeads * seqK * headDim];
+
+        // Lock objects for thread-safe accumulation of gradK and gradV
+        var gradKLocks = new object[batch * numKVHeads * seqK];
+        var gradVLocks = new object[batch * numKVHeads * seqK];
+        for (int i = 0; i < gradKLocks.Length; i++)
+        {
+            gradKLocks[i] = new object();
+            gradVLocks[i] = new object();
+        }
+
+        Parallel.For(0, batch * numQHeads, bqh =>
+        {
+            int b = bqh / numQHeads;
+            int qh = bqh % numQHeads;
+            int kvh = qh / numQueriesPerKV;
+
+            int qOffset = (b * numQHeads + qh) * seqQ * headDim;
+            int kOffset = (b * numKVHeads + kvh) * seqK * headDim;
+            int vOffset = (b * numKVHeads + kvh) * seqK * headDim;
+            int gOffset = (b * numQHeads + qh) * seqQ * headDim;
+            int wOffset = (b * numQHeads + qh) * seqQ * seqK;
+
+            for (int qi = 0; qi < seqQ; qi++)
+            {
+                // Gradient w.r.t. V: weights^T @ gradOutput
+                for (int ki = 0; ki < seqK; ki++)
+                {
+                    T weight = weightsData[wOffset + qi * seqK + ki];
+                    int lockIdx = (b * numKVHeads + kvh) * seqK + ki;
+
+                    for (int d = 0; d < headDim; d++)
+                    {
+                        T gradV = numOps.Multiply(weight, gradOutData[gOffset + qi * headDim + d]);
+                        lock (gradVLocks[lockIdx])
+                        {
+                            gradVData[vOffset + ki * headDim + d] = numOps.Add(
+                                gradVData[vOffset + ki * headDim + d], gradV);
+                        }
+                    }
+                }
+
+                // Gradient w.r.t. attention weights: gradOutput @ V^T
+                var gradWeights = new T[seqK];
+                for (int ki = 0; ki < seqK; ki++)
+                {
+                    T sum = numOps.Zero;
+                    for (int d = 0; d < headDim; d++)
+                    {
+                        sum = numOps.Add(sum, numOps.Multiply(
+                            gradOutData[gOffset + qi * headDim + d],
+                            valueData[vOffset + ki * headDim + d]));
+                    }
+                    gradWeights[ki] = sum;
+                }
+
+                // Softmax backward: gradScores = weights * (gradWeights - sum(weights * gradWeights))
+                T dotProduct = numOps.Zero;
+                for (int ki = 0; ki < seqK; ki++)
+                {
+                    dotProduct = numOps.Add(dotProduct, numOps.Multiply(
+                        weightsData[wOffset + qi * seqK + ki], gradWeights[ki]));
+                }
+
+                var gradScores = new T[seqK];
+                for (int ki = 0; ki < seqK; ki++)
+                {
+                    T w = weightsData[wOffset + qi * seqK + ki];
+                    gradScores[ki] = numOps.Multiply(w, numOps.Subtract(gradWeights[ki], dotProduct));
+                    gradScores[ki] = numOps.Multiply(gradScores[ki], scaleFactor);
+                }
+
+                // Gradient w.r.t. Q: gradScores @ K
+                for (int d = 0; d < headDim; d++)
+                {
+                    T sum = numOps.Zero;
+                    for (int ki = 0; ki < seqK; ki++)
+                    {
+                        sum = numOps.Add(sum, numOps.Multiply(gradScores[ki], keyData[kOffset + ki * headDim + d]));
+                    }
+                    gradQData[qOffset + qi * headDim + d] = sum;
+                }
+
+                // Gradient w.r.t. K: gradScores^T @ Q (accumulated across query heads sharing this KV)
+                for (int ki = 0; ki < seqK; ki++)
+                {
+                    int lockIdx = (b * numKVHeads + kvh) * seqK + ki;
+                    for (int d = 0; d < headDim; d++)
+                    {
+                        T gradK = numOps.Multiply(gradScores[ki], queryData[qOffset + qi * headDim + d]);
+                        lock (gradKLocks[lockIdx])
+                        {
+                            gradKData[kOffset + ki * headDim + d] = numOps.Add(
+                                gradKData[kOffset + ki * headDim + d], gradK);
+                        }
+                    }
+                }
+            }
+        });
+
+        gradQuery = new Tensor<T>(query.Shape, new Vector<T>(gradQData));
+        gradKey = new Tensor<T>(key.Shape, new Vector<T>(gradKData));
+        gradValue = new Tensor<T>(value.Shape, new Vector<T>(gradVData));
+
+        return gradOutput;
+    }
+
+    /// <summary>
     /// Computes Graph Attention Network (GAT) style attention over graph nodes.
     /// </summary>
     public Tensor<T> GraphAttention<T>(
@@ -14394,20 +14995,61 @@ public class CpuEngine : IEngine
         if (input == null) throw new ArgumentNullException(nameof(input));
         if (weights == null) throw new ArgumentNullException(nameof(weights));
 
-        // CPU implementation: sequential operations (no fusion benefit, just correctness)
-        // Step 1: MatMul
-        var result = TensorMatMul(input, weights);
-
-        // Step 2: Add bias if provided
-        if (bias != null)
+        // For 2D inputs (batch x features), use optimized fused GEMM for float/double
+        if (input.Rank == 2 && weights.Rank == 2)
         {
-            result = TensorBroadcastAdd(result, bias);
+            int M = input.Shape[0];  // Batch size
+            int K = input.Shape[1];  // Input features
+            int N = weights.Shape[1]; // Output features
+
+            if (weights.Shape[0] != K)
+                throw new ArgumentException($"Weight matrix shape mismatch: expected [{K}, N], got [{weights.Shape[0]}, {weights.Shape[1]}]");
+
+            var result = new Tensor<T>([M, N]);
+
+            // Use optimized fused operations for float type
+            if (typeof(T) == typeof(float))
+            {
+                // Cast arrays directly (boxing avoids generic constraint issues)
+                var inputArray = (float[])(object)input.Data;
+                var weightsArray = (float[])(object)weights.Data;
+                var biasArray = bias != null ? (float[])(object)bias.Data : null;
+                var outputArray = (float[])(object)result.Data;
+
+                CpuFusedOperations.FusedGemmBiasActivation(
+                    inputArray, weightsArray, biasArray, outputArray,
+                    M, N, K, activation);
+
+                return result;
+            }
+
+            // Use optimized fused operations for double type
+            if (typeof(T) == typeof(double))
+            {
+                var inputArray = (double[])(object)input.Data;
+                var weightsArray = (double[])(object)weights.Data;
+                var biasArray = bias != null ? (double[])(object)bias.Data : null;
+                var outputArray = (double[])(object)result.Data;
+
+                CpuFusedOperations.FusedGemmBiasActivation(
+                    inputArray, weightsArray, biasArray, outputArray,
+                    M, N, K, activation);
+
+                return result;
+            }
         }
 
-        // Step 3: Apply activation
-        result = ApplyFusedActivation(result, activation);
+        // Fallback: sequential operations for other types or higher-rank tensors
+        var fallbackResult = TensorMatMul(input, weights);
 
-        return result;
+        if (bias != null)
+        {
+            fallbackResult = TensorBroadcastAdd(fallbackResult, bias);
+        }
+
+        fallbackResult = ApplyFusedActivation(fallbackResult, activation);
+
+        return fallbackResult;
     }
 
     /// <inheritdoc/>

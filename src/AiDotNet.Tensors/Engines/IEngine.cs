@@ -3469,6 +3469,162 @@ public interface IEngine
         out Tensor<T> gradValue);
 
     /// <summary>
+    /// Computes memory-efficient attention using the FlashAttention algorithm.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="query">Query tensor with shape [batch, heads, seq_q, head_dim].</param>
+    /// <param name="key">Key tensor with shape [batch, heads, seq_kv, head_dim].</param>
+    /// <param name="value">Value tensor with shape [batch, heads, seq_kv, head_dim].</param>
+    /// <param name="scale">Optional scale factor. If null, uses 1/sqrt(head_dim).</param>
+    /// <param name="isCausal">If true, applies causal masking (lower triangular).</param>
+    /// <param name="softmaxStats">Output: log-sum-exp statistics for backward pass [batch, heads, seq_q].</param>
+    /// <returns>The attention output with shape [batch, heads, seq_q, head_dim].</returns>
+    /// <remarks>
+    /// <para><b>FlashAttention Algorithm (Dao et al., 2022):</b></para>
+    /// <para>
+    /// FlashAttention is a memory-efficient and IO-aware attention algorithm that:
+    /// - Uses tiling to compute attention in SRAM without materializing the full attention matrix
+    /// - Reduces memory usage from O(N²) to O(N) where N is sequence length
+    /// - Provides significant speedup on long sequences by minimizing HBM (GPU memory) accesses
+    /// </para>
+    /// <para><b>Key Benefits:</b></para>
+    /// <list type="bullet">
+    /// <item><description>O(N) memory vs O(N²) for standard attention</description></item>
+    /// <item><description>2-4x faster than standard attention for long sequences</description></item>
+    /// <item><description>Enables training on much longer sequences (16K-64K tokens)</description></item>
+    /// <item><description>Numerically equivalent to standard attention (uses online softmax)</description></item>
+    /// </list>
+    /// <para><b>Algorithm Overview:</b></para>
+    /// <list type="number">
+    /// <item><description>Tile Q, K, V into blocks that fit in SRAM</description></item>
+    /// <item><description>For each Q block, iterate over K,V blocks computing partial attention</description></item>
+    /// <item><description>Use online softmax to accumulate results without full materialization</description></item>
+    /// <item><description>Store softmax statistics (log-sum-exp) for backward pass</description></item>
+    /// </list>
+    /// <para><b>For Beginners:</b> Standard attention requires storing a huge attention matrix
+    /// (N×N for sequence length N). For a 4096-token sequence, that's 16 million values per head!
+    /// FlashAttention cleverly avoids this by computing attention in small chunks, dramatically
+    /// reducing memory usage while still getting the exact same results.</para>
+    /// </remarks>
+    Tensor<T> FlashAttention<T>(
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        double? scale,
+        bool isCausal,
+        out Tensor<T> softmaxStats);
+
+    /// <summary>
+    /// Computes the backward pass for FlashAttention.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer with shape [batch, heads, seq_q, head_dim].</param>
+    /// <param name="query">Original query tensor from forward pass.</param>
+    /// <param name="key">Original key tensor from forward pass.</param>
+    /// <param name="value">Original value tensor from forward pass.</param>
+    /// <param name="output">The output from the forward pass.</param>
+    /// <param name="softmaxStats">The log-sum-exp statistics from forward pass.</param>
+    /// <param name="scale">The scale factor used in forward pass.</param>
+    /// <param name="isCausal">Whether causal masking was used in forward pass.</param>
+    /// <param name="gradQuery">Output: gradient with respect to query.</param>
+    /// <param name="gradKey">Output: gradient with respect to key.</param>
+    /// <param name="gradValue">Output: gradient with respect to value.</param>
+    /// <returns>The gradient with respect to the output (same as gradOutput for chaining).</returns>
+    /// <remarks>
+    /// <para>
+    /// The backward pass also uses tiling and recomputes attention weights from Q, K, and
+    /// the stored softmax statistics, maintaining the O(N) memory complexity.
+    /// </para>
+    /// </remarks>
+    Tensor<T> FlashAttentionBackward<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        Tensor<T> output,
+        Tensor<T> softmaxStats,
+        double scale,
+        bool isCausal,
+        out Tensor<T> gradQuery,
+        out Tensor<T> gradKey,
+        out Tensor<T> gradValue);
+
+    /// <summary>
+    /// Computes Grouped Query Attention (GQA) for efficient inference.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="query">Query tensor with shape [batch, num_q_heads, seq, head_dim].</param>
+    /// <param name="key">Key tensor with shape [batch, num_kv_heads, seq, head_dim].</param>
+    /// <param name="value">Value tensor with shape [batch, num_kv_heads, seq, head_dim].</param>
+    /// <param name="numQueriesPerKV">Number of query heads per key-value head (num_q_heads / num_kv_heads).</param>
+    /// <param name="scale">Optional scale factor. If null, uses 1/sqrt(head_dim).</param>
+    /// <param name="isCausal">If true, applies causal masking.</param>
+    /// <param name="attentionWeights">Output: attention weights [batch, num_q_heads, seq_q, seq_kv].</param>
+    /// <returns>The attention output with shape [batch, num_q_heads, seq, head_dim].</returns>
+    /// <remarks>
+    /// <para><b>Grouped Query Attention (Ainslie et al., 2023):</b></para>
+    /// <para>
+    /// GQA is a variant of multi-head attention that groups multiple query heads to share
+    /// the same key-value head. This reduces memory bandwidth and KV-cache size during inference
+    /// while maintaining most of the model quality.
+    /// </para>
+    /// <para><b>Key Benefits:</b></para>
+    /// <list type="bullet">
+    /// <item><description>Reduces KV-cache memory by num_q_heads/num_kv_heads factor</description></item>
+    /// <item><description>Faster inference due to reduced memory bandwidth</description></item>
+    /// <item><description>Interpolates between MHA (all unique) and MQA (all shared)</description></item>
+    /// <item><description>Used in LLaMA 2, Mistral, and other modern LLMs</description></item>
+    /// </list>
+    /// <para><b>Example:</b> With 32 query heads and 8 KV heads, each KV head is shared by
+    /// 4 query heads, reducing KV-cache size by 4x compared to standard MHA.</para>
+    /// <para><b>For Beginners:</b> In standard attention, each query has its own key-value pair.
+    /// GQA is more efficient because multiple queries share the same key-value pair. It's like
+    /// having 32 students (queries) but only 8 teachers (key-value pairs) - each teacher handles
+    /// 4 students, using less resources while still providing good education.</para>
+    /// </remarks>
+    Tensor<T> GroupedQueryAttention<T>(
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        int numQueriesPerKV,
+        double? scale,
+        bool isCausal,
+        out Tensor<T> attentionWeights);
+
+    /// <summary>
+    /// Computes the backward pass for Grouped Query Attention.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer with shape [batch, num_q_heads, seq, head_dim].</param>
+    /// <param name="query">Original query tensor from forward pass.</param>
+    /// <param name="key">Original key tensor from forward pass.</param>
+    /// <param name="value">Original value tensor from forward pass.</param>
+    /// <param name="attentionWeights">Attention weights from forward pass.</param>
+    /// <param name="numQueriesPerKV">Number of query heads per key-value head.</param>
+    /// <param name="scale">The scale factor used in forward pass.</param>
+    /// <param name="gradQuery">Output: gradient with respect to query [batch, num_q_heads, seq, head_dim].</param>
+    /// <param name="gradKey">Output: gradient with respect to key [batch, num_kv_heads, seq, head_dim].</param>
+    /// <param name="gradValue">Output: gradient with respect to value [batch, num_kv_heads, seq, head_dim].</param>
+    /// <returns>The gradient with respect to the output (same as gradOutput for chaining).</returns>
+    /// <remarks>
+    /// <para>
+    /// The gradients for K and V are accumulated across all query heads that share them.
+    /// This is the reverse of the forward pass where K and V are broadcast to multiple query heads.
+    /// </para>
+    /// </remarks>
+    Tensor<T> GroupedQueryAttentionBackward<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        Tensor<T> attentionWeights,
+        int numQueriesPerKV,
+        double scale,
+        out Tensor<T> gradQuery,
+        out Tensor<T> gradKey,
+        out Tensor<T> gradValue);
+
+    /// <summary>
     /// Computes Graph Attention Network (GAT) style attention over graph nodes.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
