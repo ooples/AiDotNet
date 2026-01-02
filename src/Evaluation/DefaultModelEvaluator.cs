@@ -59,15 +59,36 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
             ?? TryInferPredictionType(input.InputData.YTrain);
 
         var trainingSet = CalculateDataSetStats(input.InputData.XTrain, input.InputData.YTrain, input.Model, inferredPredictionType);
-        var validationSet = CalculateDataSetStats(input.InputData.XValidation, input.InputData.YValidation, input.Model, inferredPredictionType);
-        var testSet = CalculateDataSetStats(input.InputData.XTest, input.InputData.YTest, input.Model, inferredPredictionType);
 
+        // Only calculate validation stats if validation data is provided and has content
+        DataSetStats<T, TInput, TOutput>? validationSet = null;
+        if (input.InputData.XValidation != null && InputHelper<T, TInput>.GetInputSize(input.InputData.XValidation) > 0)
+        {
+            validationSet = CalculateDataSetStats(input.InputData.XValidation, input.InputData.YValidation, input.Model, inferredPredictionType);
+        }
+
+        // Only calculate test stats if test data is provided and has content
+        DataSetStats<T, TInput, TOutput>? testSet = null;
+        if (input.InputData.XTest != null && InputHelper<T, TInput>.GetInputSize(input.InputData.XTest) > 0)
+        {
+            testSet = CalculateDataSetStats(input.InputData.XTest, input.InputData.YTest, input.Model, inferredPredictionType);
+        }
+
+        // ModelStats (R-squared, AIC, BIC, etc.) uses validation data if available, otherwise training data.
+        // This fallback is intentional because model-level statistics like information criteria still provide
+        // value when computed on training data, even if they're less reliable for generalization assessment.
+        var statsForModelCalc = validationSet ?? trainingSet;
+
+        // Note: We do NOT fall back to training data for ValidationSet/TestSet properties.
+        // Showing training metrics as validation/test would mislead users about model generalization.
+        // When validation or test data is not provided, the returned DataSetStats has IsDataProvided = false,
+        // allowing users to distinguish between "data not provided" vs "data provided but empty".
         var evaluationData = new ModelEvaluationData<T, TInput, TOutput>
         {
             TrainingSet = trainingSet,
-            ValidationSet = validationSet,
-            TestSet = testSet,
-            ModelStats = TryCalculateModelStats(input.Model, validationSet.Features, validationSet.Actual, validationSet.Predicted, input.NormInfo)
+            ValidationSet = validationSet ?? new DataSetStats<T, TInput, TOutput>(),
+            TestSet = testSet ?? new DataSetStats<T, TInput, TOutput>(),
+            ModelStats = TryCalculateModelStats(input.Model, statsForModelCalc.Features, statsForModelCalc.Actual, statsForModelCalc.Predicted, input.NormInfo)
         };
 
         return evaluationData;
@@ -152,7 +173,8 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
                 PredictionStats = PredictionStats<T>.Empty(),
                 Predicted = predictions,
                 Features = X,
-                Actual = y
+                Actual = y,
+                IsDataProvided = true  // Data was provided but couldn't be aligned to vectors
             };
 
             TryPopulateUncertaintyStats(emptyStats, X, model);
@@ -167,7 +189,8 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
             PredictionStats = CalculatePredictionStats(actual, predicted, inputSize, predictionType),
             Predicted = predictions,
             Features = X,
-            Actual = y
+            Actual = y,
+            IsDataProvided = true  // Data was provided and successfully evaluated
         };
 
         TryPopulateUncertaintyStats(stats, X, model);

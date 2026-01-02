@@ -513,8 +513,11 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     public override Tensor<T> Predict(Tensor<T> input)
     {
         // Get batch size and sequence length from input shape
-        int batchSize = input.Shape[0];
-        int sequenceLength = input.Shape.Length > 1 ? input.Shape[1] : 1;
+        // For 1D input: treat as single sample, no sequence
+        // For 2D input [batch, features]: no sequence dimension
+        // For 3D+ input [batch, sequence, ...]: use second dimension as sequence
+        int batchSize = input.Rank >= 1 ? input.Shape[0] : 1;
+        int sequenceLength = input.Rank >= 3 ? input.Shape[1] : 1;
 
         // Setup memories for this batch
         SetupBatchMemories(batchSize);
@@ -561,21 +564,52 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// <returns>The input tensor for the specified time step.</returns>
     private Tensor<T> ExtractTimeStepInput(Tensor<T> input, int timeStep, int sequenceLength)
     {
-        if (sequenceLength <= 1)
+        // Handle various input ranks flexibly
+        if (sequenceLength <= 1 || input.Rank < 2)
         {
             return input;
         }
 
-        int batchSize = input.Shape[0];
-        int featureSize = input.Shape[2];
+        // For 2D input [batch, features], return as-is (no sequence dimension)
+        if (input.Rank == 2)
+        {
+            return input;
+        }
 
-        var result = new Tensor<T>(new int[] { batchSize, featureSize });
+        // For 3D+ input [batch, sequence, features, ...], extract the time step
+        int batchSize = input.Shape[0];
+
+        // Get the remaining dimensions after batch and sequence
+        var remainingDims = new int[input.Rank - 2];
+        for (int i = 2; i < input.Rank; i++)
+        {
+            remainingDims[i - 2] = input.Shape[i];
+        }
+
+        // Create output shape: [batch] + remaining dimensions
+        var resultShape = new int[input.Rank - 1];
+        resultShape[0] = batchSize;
+        for (int i = 0; i < remainingDims.Length; i++)
+        {
+            resultShape[i + 1] = remainingDims[i];
+        }
+
+        var result = new Tensor<T>(resultShape);
+
+        // Copy data for this time step
+        int featureSize = 1;
+        for (int i = 0; i < remainingDims.Length; i++)
+        {
+            featureSize *= remainingDims[i];
+        }
 
         for (int b = 0; b < batchSize; b++)
         {
+            int sourceOffset = (b * sequenceLength + timeStep) * featureSize;
+            int destOffset = b * featureSize;
             for (int f = 0; f < featureSize; f++)
             {
-                result[b, f] = input[b, timeStep, f];
+                result.SetFlat(destOffset + f, input.GetFlat(sourceOffset + f));
             }
         }
 
@@ -754,11 +788,39 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
         var numOps = MathHelper.GetNumericOperations<T>();
 
         // Determine how many parameters we need for each part of the addressing mechanism
+        // We need: keyVector (keyVectorSize) + keyStrength (1) + gate (1) + shifts (3) + sharpening (1)
+        // Total = keyVectorSize + 6, so keyVectorSize <= parameterCount - 6
         int parameterCount = parameters.Length;
-        int keyVectorSize = Math.Min(_memoryVectorSize, parameterCount / 4);
+        int availableForKey = Math.Max(1, parameterCount - 6);
+        int keyVectorSize = Math.Min(_memoryVectorSize, availableForKey);
+
+        // If not enough parameters, use minimal addressing and return content weights directly
+        if (parameterCount < keyVectorSize + 6)
+        {
+            // Use whatever parameters we have as the key, return simple content-based weights
+            var simpleKey = parameters.Subvector(0, Math.Min(parameterCount, _memoryVectorSize));
+            // Pad with zeros if needed
+            if (simpleKey.Length < _memoryVectorSize)
+            {
+                var paddedKey = new Vector<T>(_memoryVectorSize);
+                for (int i = 0; i < simpleKey.Length; i++)
+                    paddedKey[i] = simpleKey[i];
+                simpleKey = paddedKey;
+            }
+            return ContentAddressing(memory, simpleKey, numOps.One);
+        }
 
         // Extract key vector (for content addressing)
         var keyVector = parameters.Subvector(0, keyVectorSize);
+
+        // Pad key vector to match memory vector size if needed
+        if (keyVector.Length < _memoryVectorSize)
+        {
+            var paddedKey = new Vector<T>(_memoryVectorSize);
+            for (int i = 0; i < keyVector.Length; i++)
+                paddedKey[i] = keyVector[i];
+            keyVector = paddedKey;
+        }
 
         // Extract key strength (focus sharpness parameter) - typically just one value after key vector
         // Apply softplus using activation functions instead of direct call

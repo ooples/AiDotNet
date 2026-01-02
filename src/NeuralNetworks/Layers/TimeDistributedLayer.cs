@@ -302,82 +302,44 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Store original shape for any-rank tensor support
         _originalInputShape = input.Shape;
         int rank = input.Shape.Length;
 
-        // Handle any-rank tensor: need at least 2D [timeSteps, batchSize, ...]
-        Tensor<T> processInput;
-        int timeSteps;
-        int batchSize;
-
-        if (rank == 1)
-        {
+        if (rank < 2)
             throw new ArgumentException($"TimeDistributedLayer requires at least 2D input, got {rank}D");
-        }
-        else if (rank == 2)
-        {
-            // 2D: [timeSteps, features] -> add batch dim
-            timeSteps = input.Shape[0];
-            batchSize = 1;
-            int features = input.Shape[1];
-            processInput = input.Reshape([timeSteps, 1, features]);
-        }
-        else if (rank == 3)
-        {
-            // Standard 3D: [timeSteps, batchSize, features]
-            timeSteps = input.Shape[0];
-            batchSize = input.Shape[1];
-            processInput = input;
-        }
-        else
-        {
-            // Higher-rank: collapse middle dims into batch
-            timeSteps = input.Shape[0];
-            int flatBatch = 1;
-            for (int d = 1; d < rank - 1; d++)
-                flatBatch *= input.Shape[d];
-            batchSize = flatBatch;
-            int lastDim = input.Shape[rank - 1];
-            processInput = input.Reshape([timeSteps, flatBatch, lastDim]);
-        }
+
+        int batchSize = input.Shape[0];
+        int timeSteps = rank == 2 ? 1 : input.Shape[1];
+
+        var processInput = rank == 2
+            ? input.Reshape([batchSize, 1, input.Shape[1]])
+            : input;
 
         _lastInput = processInput;
 
         var innerOutputShape = _innerLayer.GetOutputShape();
-        var outputShape = new[] { timeSteps, batchSize }.Concat(innerOutputShape).ToArray();
+        var outputShape = new[] { batchSize, timeSteps }.Concat(innerOutputShape).ToArray();
         var output = new Tensor<T>(outputShape);
 
         for (int t = 0; t < timeSteps; t++)
         {
-            var stepInput = processInput.Slice(0, t, 1);
+            var stepInput = processInput.Slice(1, t, t + 1);
+            stepInput = SqueezeAxis(stepInput, 1);
             var stepOutput = _innerLayer.Forward(stepInput);
-            output.SetSlice(0, t, stepOutput);
+            output.SetSlice(1, t, stepOutput);
         }
 
         var activated = ApplyActivation(output);
 
-        // Restore original batch dimensions for any-rank support
-        if (_originalInputShape != null && _originalInputShape.Length > 3)
+        if (_originalInputShape != null && _originalInputShape.Length == 2)
         {
-            // Restore shape: [timeSteps, ...middleDims, ...innerOutputShape]
-            int[] newShape = new int[_originalInputShape.Length - 1 + innerOutputShape.Length];
-            newShape[0] = timeSteps;
-            for (int d = 1; d < _originalInputShape.Length - 1; d++)
-                newShape[d] = _originalInputShape[d];
-            for (int d = 0; d < innerOutputShape.Length; d++)
-                newShape[_originalInputShape.Length - 1 + d] = innerOutputShape[d];
-            activated = activated.Reshape(newShape);
-        }
-        else if (_originalInputShape != null && _originalInputShape.Length == 2)
-        {
-            // 2D input -> remove added batch dim
-            activated = activated.Reshape(new[] { timeSteps }.Concat(innerOutputShape).ToArray());
+            activated = activated.Reshape(new[] { batchSize }.Concat(innerOutputShape).ToArray());
         }
 
         _lastOutput = activated;
         return _lastOutput;
     }
+
 
     /// <summary>
     /// Performs the backward pass of the time distributed layer.
@@ -429,38 +391,51 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        // Note: TimeDistributedLayer delegates backward pass to the inner layer at each time step.
-        // Autodiff support is handled by the inner layer. This wrapper layer simply manages
-        // time-step-wise gradient propagation without temporal dependencies between steps.
-
         if (_lastInput == null || _lastOutput == null)
         {
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        int timeSteps = _lastInput.Shape[0];
-        int batchSize = _lastInput.Shape[1];
+        int batchSize = _lastInput.Shape[0];
+        int timeSteps = _lastInput.Shape[1];
 
         var inputGradient = new Tensor<T>(_lastInput.Shape);
 
+        Tensor<T> outputGrad = outputGradient;
+        Tensor<T> lastOutput = _lastOutput;
+        if (_originalInputShape != null && _originalInputShape.Length == 2)
+        {
+            var innerOutputShape = _innerLayer.GetOutputShape();
+            var expandedShape = new[] { batchSize, 1 }.Concat(innerOutputShape).ToArray();
+            outputGrad = outputGradient.Reshape(expandedShape);
+            lastOutput = _lastOutput.Reshape(expandedShape);
+        }
+
         if (ScalarActivation != null)
         {
-            outputGradient = outputGradient.ElementwiseMultiply(_lastOutput.Transform((x, _) => ScalarActivation.Derivative(x)));
+            outputGrad = outputGrad.ElementwiseMultiply(lastOutput.Transform((x, _) => ScalarActivation.Derivative(x)));
         }
         else if (VectorActivation != null)
         {
-            outputGradient = outputGradient.ElementwiseMultiply(VectorActivation.Derivative(_lastOutput));
+            outputGrad = outputGrad.ElementwiseMultiply(VectorActivation.Derivative(lastOutput));
         }
 
         for (int t = 0; t < timeSteps; t++)
         {
-            var stepOutputGradient = outputGradient.Slice(0, t, 1);
+            var stepOutputGradient = outputGrad.Slice(1, t, t + 1);
+            stepOutputGradient = SqueezeAxis(stepOutputGradient, 1);
             var stepInputGradient = _innerLayer.Backward(stepOutputGradient);
-            inputGradient.SetSlice(0, t, stepInputGradient);
+            inputGradient.SetSlice(1, t, stepInputGradient);
+        }
+
+        if (_originalInputShape != null && _originalInputShape.Length == 2)
+        {
+            return inputGradient.Reshape(_originalInputShape);
         }
 
         return inputGradient;
     }
+
 
     /// <summary>
     /// Performs the backward pass using automatic differentiation.
@@ -492,36 +467,66 @@ public class TimeDistributedLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        int timeSteps = _lastInput.Shape[0];
-        int batchSize = _lastInput.Shape[1];
+        int batchSize = _lastInput.Shape[0];
+        int timeSteps = _lastInput.Shape[1];
 
-        // Allocate input gradient tensor
         var inputGradient = new Tensor<T>(_lastInput.Shape);
 
-        // Apply activation derivative to output gradient
+        Tensor<T> outputGrad = outputGradient;
+        Tensor<T> lastOutput = _lastOutput;
+        if (_originalInputShape != null && _originalInputShape.Length == 2)
+        {
+            var innerOutputShape = _innerLayer.GetOutputShape();
+            var expandedShape = new[] { batchSize, 1 }.Concat(innerOutputShape).ToArray();
+            outputGrad = outputGradient.Reshape(expandedShape);
+            lastOutput = _lastOutput.Reshape(expandedShape);
+        }
+
         if (ScalarActivation != null)
         {
-            outputGradient = outputGradient.ElementwiseMultiply(_lastOutput.Transform((x, _) => ScalarActivation.Derivative(x)));
+            outputGrad = outputGrad.ElementwiseMultiply(lastOutput.Transform((x, _) => ScalarActivation.Derivative(x)));
         }
         else if (VectorActivation != null)
         {
-            outputGradient = outputGradient.ElementwiseMultiply(VectorActivation.Derivative(_lastOutput));
+            outputGrad = outputGrad.ElementwiseMultiply(VectorActivation.Derivative(lastOutput));
         }
 
-        // For each timestep, propagate gradient through inner layer
-        // The inner layer will use autodiff if it has UseAutodiff enabled
         for (int t = 0; t < timeSteps; t++)
         {
-            var stepOutputGradient = outputGradient.Slice(0, t, 1);
-
-            // Delegate to inner layer's Backward, which will use autodiff if enabled
+            var stepOutputGradient = outputGrad.Slice(1, t, t + 1);
+            stepOutputGradient = SqueezeAxis(stepOutputGradient, 1);
             var stepInputGradient = _innerLayer.Backward(stepOutputGradient);
+            inputGradient.SetSlice(1, t, stepInputGradient);
+        }
 
-            inputGradient.SetSlice(0, t, stepInputGradient);
+        if (_originalInputShape != null && _originalInputShape.Length == 2)
+        {
+            return inputGradient.Reshape(_originalInputShape);
         }
 
         return inputGradient;
     }
+
+    private static Tensor<T> SqueezeAxis(Tensor<T> tensor, int axis)
+    {
+        if (axis < 0 || axis >= tensor.Shape.Length)
+            throw new ArgumentOutOfRangeException(nameof(axis));
+
+        if (tensor.Shape[axis] != 1)
+            return tensor;
+
+        int[] newShape = new int[tensor.Shape.Length - 1];
+        for (int d = 0, nd = 0; d < tensor.Shape.Length; d++)
+        {
+            if (d == axis)
+                continue;
+            newShape[nd++] = tensor.Shape[d];
+        }
+
+        return newShape.Length == 0 ? tensor.Reshape([1]) : tensor.Reshape(newShape);
+    }
+
+
 
     /// <summary>
     /// Updates the parameters of the inner layer.

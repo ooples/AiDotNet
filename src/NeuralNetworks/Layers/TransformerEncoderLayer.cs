@@ -274,6 +274,19 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets the total number of trainable parameters in this layer.
+    /// </summary>
+    /// <remarks>
+    /// This returns the sum of all parameters from sublayers: self-attention, layer norms, and feed-forward layers.
+    /// </remarks>
+    public override int ParameterCount =>
+        _selfAttention.ParameterCount +
+        _norm1.ParameterCount +
+        _feedForward1.ParameterCount +
+        _feedForward2.ParameterCount +
+        _norm2.ParameterCount;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="TransformerEncoderLayer{T}"/> class.
     /// </summary>
     /// <param name="embeddingSize">The size of the embeddings.</param>

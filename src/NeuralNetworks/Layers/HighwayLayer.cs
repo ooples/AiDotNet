@@ -267,16 +267,39 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// The HighwayLayer always returns true because it contains trainable weights and biases.
     /// </para>
     /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
-    /// 
+    ///
     /// A value of true means:
     /// - The layer can adjust its internal values during training
     /// - It will improve its performance as it sees more data
     /// - It participates in the learning process
-    /// 
+    ///
     /// The Highway layer always supports training because it has weights and biases that can be updated.
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in this layer.
+    /// </summary>
+    /// <value>
+    /// The sum of elements in all weight and bias tensors (transform weights, transform bias, gate weights, gate bias).
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property returns the total count of learnable parameters across all four parameter tensors:
+    /// transform weights, transform biases, gate weights, and gate biases.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you how many numbers the layer can adjust during training.
+    /// For a Highway layer with 100 input/output dimensions, you would have:
+    /// - 10,000 transform weights (100 x 100)
+    /// - 100 transform biases
+    /// - 10,000 gate weights (100 x 100)
+    /// - 100 gate biases
+    /// - Total: 20,200 parameters
+    /// </para>
+    /// </remarks>
+    public override int ParameterCount =>
+        _transformWeights.Length + _transformBias.Length + _gateWeights.Length + _gateBias.Length;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="HighwayLayer{T}"/> class with the specified dimensions and element-wise activation functions.

@@ -352,7 +352,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
                 var sumAgg = Engine.TensorMatMul(_adjacencyMatrix!, transformed);
                 // Expand degrees for broadcasting: [batch, nodes] -> [batch, nodes, 1]
                 var degreesExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
-                return Engine.TensorDivide(sumAgg, degreesExpanded);
+                return Engine.TensorBroadcastDivide(sumAgg, degreesExpanded);
 
             case PNAAggregator.Max:
                 // Max aggregation requires masking non-neighbors with -inf then taking max
@@ -451,12 +451,12 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         // Mean: E[X] = (A @ X) / degree
         var sumAgg = Engine.TensorMatMul(_adjacencyMatrix!, transformed);
         var degreesExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
-        var mean = Engine.TensorDivide(sumAgg, degreesExpanded);
+        var mean = Engine.TensorBroadcastDivide(sumAgg, degreesExpanded);
 
         // E[X^2] = (A @ X^2) / degree
         var transformedSquared = Engine.TensorMultiply(transformed, transformed);
         var sumSquared = Engine.TensorMatMul(_adjacencyMatrix!, transformedSquared);
-        var meanSquared = Engine.TensorDivide(sumSquared, degreesExpanded);
+        var meanSquared = Engine.TensorBroadcastDivide(sumSquared, degreesExpanded);
 
         // Variance = E[X^2] - E[X]^2
         var meanSq = Engine.TensorMultiply(mean, mean);
@@ -490,8 +490,8 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
                 var avgDegreeTensor = new Tensor<T>([batchSize, numNodes, 1]);
                 avgDegreeTensor.Fill(NumOps.FromDouble(_avgDegree));
                 var degreesExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
-                var ampFactor = Engine.TensorDivide(degreesExpanded, avgDegreeTensor);
-                return Engine.TensorMultiply(aggregated, ampFactor);
+                var ampFactor = Engine.TensorBroadcastDivide(degreesExpanded, avgDegreeTensor);
+                return Engine.TensorBroadcastMultiply(aggregated, ampFactor);
 
             case PNAScaler.Attenuation:
                 // Scale by avgDegree / degree (attenuate high-degree nodes)
@@ -499,8 +499,8 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
                 var avgDegTensor = new Tensor<T>([batchSize, numNodes, 1]);
                 avgDegTensor.Fill(NumOps.FromDouble(_avgDegree));
                 var degExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
-                var attFactor = Engine.TensorDivide(avgDegTensor, degExpanded);
-                return Engine.TensorMultiply(aggregated, attFactor);
+                var attFactor = Engine.TensorBroadcastDivide(avgDegTensor, degExpanded);
+                return Engine.TensorBroadcastMultiply(aggregated, attFactor);
 
             default:
                 return aggregated;
@@ -545,10 +545,6 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         _biasGradient = Engine.ReduceSum(activationGradient, [0, 1], keepDims: false);
 
         // Gradient through self-loop: selfWeightsGradient = input^T @ grad
-        // Using batched operations
-        var inputT = Engine.TensorTranspose(_lastInput); // [batch, inputFeatures, nodes]
-        var swappedInputT = SwapLastTwoAxes(inputT); // [batch, nodes, inputFeatures] -> [batch, inputFeatures, nodes]
-
         // Sum over batch for weight gradient
         _selfWeightsGradient = new Tensor<T>([_inputFeatures, _outputFeatures]);
         _selfWeightsGradient.Fill(NumOps.Zero);
@@ -689,7 +685,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
 
                 // Backprop through aggregation
                 // For mean/sum: gradient flows back through adjacency transpose
-                var adjT = Engine.TensorTranspose(_adjacencyMatrix!);
+                var adjT = SwapLastTwoAxes(_adjacencyMatrix!);
                 var aggGrad = Engine.TensorMatMul(adjT, scalerGrad);
 
                 // For mean, also divide by degree
@@ -697,7 +693,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
                 {
                     var safeDegrees = Engine.TensorMax(_lastDegrees!, NumOps.One);
                     var degExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
-                    aggGrad = Engine.TensorDivide(aggGrad, degExpanded);
+                    aggGrad = Engine.TensorBroadcastDivide(aggGrad, degExpanded);
                 }
 
                 transformedGrad = Engine.TensorAdd(transformedGrad, aggGrad);
@@ -710,8 +706,28 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
 
     private Tensor<T> SwapLastTwoAxes(Tensor<T> tensor)
     {
-        // Simple swap of last two axes
-        return Engine.TensorTranspose(tensor);
+        int rank = tensor.Shape.Length;
+        if (rank < 2)
+        {
+            return tensor;
+        }
+
+        if (rank == 2)
+        {
+            return Engine.TensorTranspose(tensor);
+        }
+
+        var permutation = new int[rank];
+        for (int i = 0; i < rank; i++)
+        {
+            permutation[i] = i;
+        }
+
+        int last = rank - 1;
+        permutation[last] = rank - 2;
+        permutation[last - 1] = rank - 1;
+
+        return tensor.Transpose(permutation);
     }
 
     /// <summary>

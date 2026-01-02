@@ -80,10 +80,11 @@ public abstract class VectorBase<T>
     /// <remarks>
     /// <para>
     /// This property exists for performance-sensitive internal code paths (e.g., kernels and SIMD routines) that require direct array access.
+    /// External consumers should use ToArray() to get a copy of the data.
     /// </para>
-    /// <para><b>For Beginners:</b> This exposes the raw list of numbers inside the vector.</para>
+    /// <para><b>For Beginners:</b> This exposes the raw list of numbers inside the vector for internal use only.</para>
     /// </remarks>
-    public T[] Data => _data;
+    internal T[] Data => _data;
 
     /// <summary>
     /// Gets a value indicating whether the vector contains no elements.

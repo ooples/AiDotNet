@@ -648,16 +648,16 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> This is the main method for using a trained GAT network.
     /// Pass in node features and get predictions back. For classification, the output
-    /// will be class probabilities for each node.
+    /// will be class probabilities for each node. If no adjacency matrix has been set,
+    /// a fully-connected adjacency matrix is generated for convenience. Note that this
+    /// treats every node as connected to every other node, which can mask real graph
+    /// structure; call <see cref="SetAdjacencyMatrix"/> to supply the true graph.
     /// </para>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (_cachedAdjacencyMatrix == null)
-        {
-            throw new InvalidOperationException(
-                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Predict.");
-        }
+        Tensor<T> normalizedInput = NormalizeSingleNodeInput(input, out bool wasReshaped);
+        var adjacencyMatrix = EnsureAdjacencyMatrix(normalizedInput);
 
         // Set all layers to inference mode
         foreach (var layer in Layers)
@@ -665,16 +665,67 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
             layer.SetTrainingMode(false);
         }
 
-        return Forward(input, _cachedAdjacencyMatrix);
+        var output = Forward(normalizedInput, adjacencyMatrix);
+        return wasReshaped ? output.Reshape([output.Shape[^1]]) : output;
     }
 
     /// <summary>
     /// Sets the adjacency matrix for graph operations.
     /// </summary>
-    /// <param name="adjacencyMatrix">The adjacency matrix defining graph structure.</param>
+    /// <param name="adjacencyMatrix">The adjacency matrix defining graph structure (shape [numNodes, numNodes]).</param>
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
         _cachedAdjacencyMatrix = adjacencyMatrix;
+    }
+
+    private Tensor<T> EnsureAdjacencyMatrix(Tensor<T> input)
+    {
+        if (input.Rank < 2)
+        {
+            throw new ArgumentException(
+                $"Input must be at least rank 2 ([numNodes, featureDim] or [batch, numNodes, featureDim]). Got rank {input.Rank}.",
+                nameof(input));
+        }
+
+        int numNodes = input.Shape[input.Rank - 2];
+
+        if (_cachedAdjacencyMatrix != null)
+        {
+            if (_cachedAdjacencyMatrix.Shape.Length != 2 ||
+                _cachedAdjacencyMatrix.Shape[0] != numNodes ||
+                _cachedAdjacencyMatrix.Shape[1] != numNodes)
+            {
+                throw new ArgumentException(
+                    $"Adjacency matrix shape [{string.Join(", ", _cachedAdjacencyMatrix.Shape)}] does not match node count {numNodes}.",
+                    nameof(_cachedAdjacencyMatrix));
+            }
+
+            return _cachedAdjacencyMatrix;
+        }
+
+        var adjacencyMatrix = new Tensor<T>([numNodes, numNodes]);
+        for (int i = 0; i < numNodes; i++)
+        {
+            for (int j = 0; j < numNodes; j++)
+            {
+                adjacencyMatrix.SetFlat(i * numNodes + j, NumOps.One);
+            }
+        }
+
+        _cachedAdjacencyMatrix = adjacencyMatrix;
+        return adjacencyMatrix;
+    }
+
+    private static Tensor<T> NormalizeSingleNodeInput(Tensor<T> input, out bool wasReshaped)
+    {
+        if (input.Rank == 1)
+        {
+            wasReshaped = true;
+            return input.Reshape([1, input.Shape[0]]);
+        }
+
+        wasReshaped = false;
+        return input;
     }
 
     /// <summary>
@@ -685,16 +736,17 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method performs one training step.
     /// For full training, call TrainOnGraph which handles multiple epochs and
-    /// adjacency matrix setup.
+    /// adjacency matrix setup. If no adjacency matrix has been set, a
+    /// fully-connected adjacency matrix is generated for convenience. This means
+    /// every node is treated as connected to every other node, which can hide the
+    /// true graph structure unless you provide an explicit adjacency matrix.
     /// </para>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (_cachedAdjacencyMatrix == null)
-        {
-            throw new InvalidOperationException(
-                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Train.");
-        }
+        Tensor<T> normalizedInput = NormalizeSingleNodeInput(input, out _);
+        Tensor<T> normalizedExpected = NormalizeSingleNodeInput(expectedOutput, out _);
+        var adjacencyMatrix = EnsureAdjacencyMatrix(normalizedInput);
 
         // Set all layers to training mode
         foreach (var layer in Layers)
@@ -703,11 +755,11 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Forward pass
-        var predictions = Forward(input, _cachedAdjacencyMatrix);
+        var predictions = Forward(normalizedInput, adjacencyMatrix);
 
         // Flatten tensors for loss function (which works on vectors)
         var flattenedPredictions = predictions.ToVector();
-        var flattenedExpected = expectedOutput.ToVector();
+        var flattenedExpected = normalizedExpected.ToVector();
 
         // Compute loss
         LastLoss = _lossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);

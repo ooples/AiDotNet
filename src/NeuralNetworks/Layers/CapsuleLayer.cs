@@ -484,12 +484,17 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         _lastInput = input3D;
 
-        // Reshape input for matrix multiplication
-        var reshapedInput = input3D.Reshape(batchSize * inputCapsules, inputDimension);
-
-        // Perform transformation
-        var transformedInput = reshapedInput.Multiply(_transformationMatrix);
-        transformedInput = transformedInput.Reshape(batchSize, inputCapsules, _numCapsules, _capsuleDimension);
+        // Transform input capsules using per-capsule weight matrices
+        var transformedInput = new Tensor<T>([batchSize, inputCapsules, _numCapsules, _capsuleDimension]);
+        for (int i = 0; i < inputCapsules; i++)
+        {
+            var inputSlice = input3D.GetSliceAlongDimension(i, 1);
+            var weightsSlice = _transformationMatrix.GetSliceAlongDimension(i, 0);
+            var weightsFlat = weightsSlice.Reshape([inputDimension, _numCapsules * _capsuleDimension]);
+            var transformed = Engine.TensorMatMul(inputSlice, weightsFlat);
+            var transformedReshaped = transformed.Reshape([batchSize, _numCapsules, _capsuleDimension]);
+            transformedInput.SetSlice(1, i, transformedReshaped);
+        }
 
         // Initialize coupling coefficients
         var couplingCoefficients = new Tensor<T>([batchSize, inputCapsules, _numCapsules]);

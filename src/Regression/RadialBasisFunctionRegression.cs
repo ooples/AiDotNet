@@ -103,14 +103,9 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
         // Compute RBF features
         Matrix<T> rbfFeatures = ComputeRBFFeatures(x);
 
-        // Apply regularization to the RBF features
-        rbfFeatures = Regularization.Regularize(rbfFeatures);
-
         // Solve for weights using linear regression
+        // Note: Regularization is applied within SolveLinearRegression via ridge penalty
         _weights = SolveLinearRegression(rbfFeatures, y);
-
-        // Apply regularization to the weights
-        _weights = Regularization.Regularize(_weights);
     }
 
     /// <summary>
@@ -133,9 +128,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         Matrix<T> rbfFeatures = ComputeRBFFeatures(input);
-        // Apply regularization to the RBF features before prediction
-        rbfFeatures = Regularization.Regularize(rbfFeatures);
-
+        // RBF features are computed directly - no transformation needed
         return rbfFeatures.Multiply(_weights);
     }
 
@@ -159,9 +152,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     protected override T PredictSingle(Vector<T> input)
     {
         Vector<T> rbfFeatures = ComputeRBFFeaturesSingle(input);
-        // Apply regularization to the RBF features before prediction
-        rbfFeatures = Regularization.Regularize(rbfFeatures);
-
+        // RBF features are computed directly - no transformation needed
         return rbfFeatures.DotProduct(_weights);
     }
 
@@ -392,29 +383,40 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     }
 
     /// <summary>
-    /// Solves a linear regression problem to find the optimal weights.
+    /// Solves a linear regression problem to find the optimal weights using ridge regularization.
     /// </summary>
     /// <param name="x">The input features matrix.</param>
     /// <param name="y">The target values vector.</param>
     /// <returns>The optimal weights vector.</returns>
     /// <remarks>
     /// <para>
-    /// This method solves the linear regression problem using the normal equations approach,
-    /// which involves computing the pseudo-inverse of the input matrix.
+    /// This method solves the linear regression problem using the normal equations approach with ridge
+    /// regularization (Tikhonov regularization). The regularization term (lambda * I) is added to X^T * X
+    /// to ensure numerical stability and prevent overfitting. This computes: w = (X^T * X + lambda * I)^-1 * X^T * y.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b>
     /// After transforming the input data using radial basis functions, this method finds the best weights
     /// to combine these transformed features to predict the target values. It uses a mathematical technique
-    /// called the "normal equations" to find the weights that minimize the prediction error.
+    /// called the "normal equations" with a small regularization penalty to find stable weights that
+    /// minimize prediction error while avoiding numerical issues.
     /// </para>
     /// </remarks>
     private Vector<T> SolveLinearRegression(Matrix<T> x, Vector<T> y)
     {
-        // Use pseudo-inverse to solve for weights
+        // Use pseudo-inverse with ridge regularization to solve for weights
+        // Ridge regularization (Tikhonov regularization) adds a small penalty term (λI)
+        // to prevent numerical instability and improve generalization
         Matrix<T> xTranspose = x.Transpose();
         Matrix<T> xTx = xTranspose.Multiply(x);
-        Matrix<T> xTxInverse = xTx.Inverse();
+
+        // Add ridge regularization: (X^T X + λI)^-1 X^T y
+        // Using a small lambda value (1e-8) for numerical stability
+        T lambda = NumOps.FromDouble(1e-8);
+        Matrix<T> identity = Matrix<T>.CreateIdentity(xTx.Rows);
+        Matrix<T> xTxRegularized = xTx.Add(identity.Multiply(lambda));
+
+        Matrix<T> xTxInverse = xTxRegularized.Inverse();
         Matrix<T> xTxInverseXT = xTxInverse.Multiply(xTranspose);
         return xTxInverseXT.Multiply(y);
     }

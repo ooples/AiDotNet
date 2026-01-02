@@ -196,8 +196,10 @@ public class AveragePoolingLayer<T> : LayerBase<T>
         if (_addedBatchDimension)
         {
             // Remove batch dimension: [1, C, H, W] -> [C, H, W]
-            var output = output4D.Reshape(OutputShape);
-            _lastOutputShape = OutputShape;
+            // Use actual output shape from pooling, not pre-computed OutputShape
+            var actualOutputShape = new int[] { output4D.Shape[1], output4D.Shape[2], output4D.Shape[3] };
+            var output = output4D.Reshape(actualOutputShape);
+            _lastOutputShape = actualOutputShape;
             return output;
         }
         else

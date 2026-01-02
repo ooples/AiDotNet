@@ -693,6 +693,17 @@ public abstract class RegressionBase<T> : IRegression<T>
     }
 
     /// <summary>
+    /// Sets the coefficients and intercept directly for deserialization purposes.
+    /// </summary>
+    /// <param name="coefficients">The coefficient vector to set.</param>
+    /// <param name="intercept">The intercept value to set.</param>
+    public virtual void SetCoefficientsAndIntercept(Vector<T> coefficients, T intercept)
+    {
+        Coefficients = coefficients;
+        Intercept = intercept;
+    }
+
+    /// <summary>
     /// Gets the feature importance scores as a dictionary.
     /// </summary>
     /// <returns>A dictionary mapping feature names to their importance scores.</returns>

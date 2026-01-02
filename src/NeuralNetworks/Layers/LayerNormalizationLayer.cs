@@ -451,6 +451,9 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
     /// - Advanced optimization techniques that need access to all parameters
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _gamma.Length + _beta.Length;
+
+    /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(_gamma.ToVector(), _beta.ToVector());

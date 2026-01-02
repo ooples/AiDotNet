@@ -295,41 +295,64 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     private (T loss, List<Matrix<T>> weightGradients, List<Vector<T>> biasGradients) ComputeGradients(Matrix<T> X, Vector<T> y)
     {
         int numLayers = _weights.Count;
-        var activations = new List<Vector<T>>(numLayers + 1);
-        var zs = new List<Vector<T>>(numLayers);
+        int batchSize = X.Rows;
 
-        // Forward pass
-        activations.Add(X.Transpose().GetColumn(0));  // Input layer
+        // Initialize accumulators for gradients
+        List<Matrix<T>> totalWeightGradients = new(numLayers);
+        List<Vector<T>> totalBiasGradients = new(numLayers);
         for (int i = 0; i < numLayers; i++)
         {
-            Vector<T> z = _weights[i].Multiply(activations[i]).Add(_biases[i]);
-            zs.Add(z);
-            activations.Add(ApplyActivation(z, i == numLayers - 1));
+            totalWeightGradients.Add(new Matrix<T>(_weights[i].Rows, _weights[i].Columns));
+            totalBiasGradients.Add(new Vector<T>(_biases[i].Length));
         }
 
-        // Compute loss
-        T loss = ComputeLoss(activations[activations.Count - 1], y);
+        T totalLoss = NumOps.Zero;
 
-        // Backward pass
-        List<Matrix<T>> weightGradients = new(numLayers);
-        List<Vector<T>> biasGradients = new(numLayers);
-
-        Vector<T> delta = ComputeOutputLayerDelta(activations[activations.Count - 1], y, zs[zs.Count - 1]);
-
-        for (int i = numLayers - 1; i >= 0; i--)
+        // Process each sample in the batch
+        for (int sample = 0; sample < batchSize; sample++)
         {
-            Matrix<T> weightGradient = delta.OuterProduct(activations[i]);
-            weightGradients.Insert(0, weightGradient);
-            biasGradients.Insert(0, delta);
+            var activations = new List<Vector<T>>(numLayers + 1);
+            var zs = new List<Vector<T>>(numLayers);
 
-            if (i > 0)
+            // Forward pass for single sample
+            activations.Add(X.GetRow(sample));
+            for (int i = 0; i < numLayers; i++)
             {
-                delta = _weights[i].Transpose().Multiply(delta).Transform((d, index) =>
-                    NumOps.Multiply(d, ApplyActivationDerivative(zs[i - 1], false)[index]));
+                Vector<T> z = _weights[i].Multiply(activations[i]).Add(_biases[i]);
+                zs.Add(z);
+                activations.Add(ApplyActivation(z, i == numLayers - 1));
+            }
+
+            // Compute loss for this sample (output is single value for regression)
+            T sampleTarget = y[sample];
+            T samplePrediction = activations[activations.Count - 1][0];
+            T sampleLoss = NumOps.Multiply(
+                NumOps.Subtract(samplePrediction, sampleTarget),
+                NumOps.Subtract(samplePrediction, sampleTarget));
+            totalLoss = NumOps.Add(totalLoss, sampleLoss);
+
+            // Backward pass
+            Vector<T> targetVec = new Vector<T>([sampleTarget]);
+            Vector<T> delta = ComputeOutputLayerDelta(activations[activations.Count - 1], targetVec, zs[zs.Count - 1]);
+
+            for (int i = numLayers - 1; i >= 0; i--)
+            {
+                Matrix<T> weightGradient = delta.OuterProduct(activations[i]);
+                totalWeightGradients[i] = totalWeightGradients[i].Add(weightGradient);
+                totalBiasGradients[i] = totalBiasGradients[i].Add(delta);
+
+                if (i > 0)
+                {
+                    delta = _weights[i].Transpose().Multiply(delta).Transform((d, index) =>
+                        NumOps.Multiply(d, ApplyActivationDerivative(zs[i - 1], false)[index]));
+                }
             }
         }
 
-        return (loss, weightGradients, biasGradients);
+        // Average loss over batch
+        T avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+
+        return (avgLoss, totalWeightGradients, totalBiasGradients);
     }
 
     /// <summary>

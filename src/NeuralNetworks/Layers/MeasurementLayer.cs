@@ -44,6 +44,8 @@ public class MeasurementLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T>? _lastOutput;
 
+    private int[]? _originalInputShape;
+
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
@@ -124,32 +126,77 @@ public class MeasurementLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-        // Assume input is a complex-valued tensor representing quantum states
-        var probabilities = new Tensor<T>(new[] { input.Shape[0] });
-
-        // Get numeric operations for complex numbers
-        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
-        for (int i = 0; i < input.Shape[0]; i++)
+        _originalInputShape = input.Shape;
+        int stateSize = input.Shape[^1];
+        if (stateSize != InputShape[0])
         {
-            // Get the complex value from the input tensor
-            var complexValue = Tensor<T>.GetComplex(input, i);
-
-            // Calculate |z|² = real² + imag²
-            var realSquared = NumOps.Multiply(complexValue.Real, complexValue.Real);
-            var imagSquared = NumOps.Multiply(complexValue.Imaginary, complexValue.Imaginary);
-            probabilities[i] = NumOps.Add(realSquared, imagSquared);
+            throw new ArgumentException(
+                $"Input size {stateSize} does not match expected {InputShape[0]}.");
         }
-        // Normalize probabilities using engine ops
-        var sumTensor = Engine.ReduceSum(probabilities, new[] { 0 }, keepDims: false);
-        var sumValue = sumTensor[0];
-        var invSum = NumOps.Equals(sumValue, NumOps.Zero)
-            ? NumOps.Zero
-            : NumOps.Divide(NumOps.One, sumValue);
-        _lastOutput = Engine.TensorMultiplyScalar(probabilities, invSum);
-        return _lastOutput;
-    }
 
+        Tensor<T> input2D;
+        if (input.Rank == 1)
+        {
+            input2D = input.Reshape(1, stateSize);
+        }
+        else if (input.Rank == 2)
+        {
+            input2D = input;
+        }
+        else
+        {
+            int batchDim = 1;
+            for (int i = 0; i < input.Rank - 1; i++)
+            {
+                batchDim *= input.Shape[i];
+            }
+            input2D = input.Reshape(batchDim, stateSize);
+        }
+
+        _lastInput = input2D;
+
+        int batchSize = input2D.Shape[0];
+        var probabilities = new Tensor<T>(new[] { batchSize, stateSize });
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int baseIndex = b * stateSize;
+            T sum = NumOps.Zero;
+
+            for (int i = 0; i < stateSize; i++)
+            {
+                var complexValue = Tensor<T>.GetComplex(input2D, baseIndex + i);
+                var realSquared = NumOps.Multiply(complexValue.Real, complexValue.Real);
+                var imagSquared = NumOps.Multiply(complexValue.Imaginary, complexValue.Imaginary);
+                var magnitude = NumOps.Add(realSquared, imagSquared);
+                probabilities[b, i] = magnitude;
+                sum = NumOps.Add(sum, magnitude);
+            }
+
+            T invSum = NumOps.Equals(sum, NumOps.Zero)
+                ? NumOps.Zero
+                : NumOps.Divide(NumOps.One, sum);
+
+            for (int i = 0; i < stateSize; i++)
+            {
+                probabilities[b, i] = NumOps.Multiply(probabilities[b, i], invSum);
+            }
+        }
+
+        _lastOutput = probabilities;
+
+        if (input.Rank == 1)
+        {
+            return probabilities.Reshape([stateSize]);
+        }
+
+        if (input.Rank > 2)
+        {
+            return probabilities.Reshape(_originalInputShape);
+        }
+
+        return probabilities;
+    }
     /// <summary>
     /// Performs the backward pass of the measurement layer.
     /// </summary>
@@ -191,33 +238,86 @@ public class MeasurementLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastOutput == null)
+        if (_lastInput == null || _lastOutput == null || _originalInputShape == null)
         {
             throw new InvalidOperationException("Backward called before Forward.");
         }
-        // The gradient of measurement with respect to input amplitudes
-        var inputGradientData = new Vector<T>(_lastInput.Length);
-        for (int i = 0; i < _lastInput.Shape[0]; i++)
+
+        bool shapeMatches = outputGradient.Shape.Length == _lastOutput.Shape.Length;
+        if (shapeMatches)
         {
-            // Get the complex value from the input tensor
-            var complexValue = Tensor<T>.GetComplex(_lastInput, i);
-            var prob = _lastOutput[i];
-            // Gradient of probability with respect to real and imaginary parts
-            // dP/dReal = 2 * real / prob
-            // dP/dImag = 2 * imag / prob
-            var two = NumOps.FromDouble(2.0);
-            var dProbdReal = NumOps.Divide(NumOps.Multiply(two, complexValue.Real), prob);
-            var dProbdImag = NumOps.Divide(NumOps.Multiply(two, complexValue.Imaginary), prob);
-            // Combine gradients
-            var gradientValue = NumOps.Multiply(outputGradient[i],
-                NumOps.Add(dProbdReal, dProbdImag));
-
-            inputGradientData[i] = gradientValue;
+            for (int i = 0; i < _lastOutput.Shape.Length; i++)
+            {
+                if (outputGradient.Shape[i] != _lastOutput.Shape[i])
+                {
+                    shapeMatches = false;
+                    break;
+                }
+            }
         }
-        // Create a new tensor with the calculated gradients
-        return new Tensor<T>(_lastInput.Shape, inputGradientData);
-    }
 
+        Tensor<T> normalizedOutputGradient = outputGradient;
+        if (!shapeMatches)
+        {
+            if (outputGradient.Length == _lastOutput.Length)
+            {
+                normalizedOutputGradient = outputGradient.Reshape(_lastOutput.Shape);
+            }
+            else
+            {
+                throw new ArgumentException("Output gradient shape does not match measurement output.");
+            }
+        }
+
+        int batchSize = _lastInput.Shape[0];
+        int stateSize = _lastInput.Shape[1];
+        var inputGradient = new Tensor<T>(new int[] { batchSize, stateSize });
+        var two = NumOps.FromDouble(2.0);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int baseIndex = b * stateSize;
+            T sum = NumOps.Zero;
+            var q = new T[stateSize];
+
+            for (int i = 0; i < stateSize; i++)
+            {
+                var complexValue = Tensor<T>.GetComplex(_lastInput, baseIndex + i);
+                var realSquared = NumOps.Multiply(complexValue.Real, complexValue.Real);
+                var imagSquared = NumOps.Multiply(complexValue.Imaginary, complexValue.Imaginary);
+                var magnitude = NumOps.Add(realSquared, imagSquared);
+                q[i] = magnitude;
+                sum = NumOps.Add(sum, magnitude);
+            }
+
+            if (NumOps.Equals(sum, NumOps.Zero))
+            {
+                continue;
+            }
+
+            T gDotQ = NumOps.Zero;
+            for (int i = 0; i < stateSize; i++)
+            {
+                gDotQ = NumOps.Add(gDotQ, NumOps.Multiply(normalizedOutputGradient[b, i], q[i]));
+            }
+
+            var denom = NumOps.Multiply(sum, sum);
+
+            for (int i = 0; i < stateSize; i++)
+            {
+                var numerator = NumOps.Subtract(NumOps.Multiply(normalizedOutputGradient[b, i], sum), gDotQ);
+                var dLdq = NumOps.Divide(numerator, denom);
+
+                var complexValue = Tensor<T>.GetComplex(_lastInput, baseIndex + i);
+                var dReal = NumOps.Multiply(NumOps.Multiply(two, complexValue.Real), dLdq);
+                var dImag = NumOps.Multiply(NumOps.Multiply(two, complexValue.Imaginary), dLdq);
+
+                inputGradient[b, i] = NumOps.Add(dReal, dImag);
+            }
+        }
+
+        return inputGradient.Reshape(_originalInputShape);
+    }
     /// <summary>
     /// Backward pass implementation using automatic differentiation.
     /// </summary>
@@ -233,39 +333,56 @@ public class MeasurementLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        if (_lastInput == null)
+        if (_lastInput == null || _lastOutput == null || _originalInputShape == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // 1. Create input variable
+        bool shapeMatches = outputGradient.Shape.Length == _lastOutput.Shape.Length;
+        if (shapeMatches)
+        {
+            for (int i = 0; i < _lastOutput.Shape.Length; i++)
+            {
+                if (outputGradient.Shape[i] != _lastOutput.Shape[i])
+                {
+                    shapeMatches = false;
+                    break;
+                }
+            }
+        }
+
+        Tensor<T> normalizedOutputGradient = outputGradient;
+        if (!shapeMatches)
+        {
+            if (outputGradient.Length == _lastOutput.Length)
+            {
+                normalizedOutputGradient = outputGradient.Reshape(_lastOutput.Shape);
+            }
+            else
+            {
+                throw new ArgumentException("Output gradient shape does not match measurement output.");
+            }
+        }
+
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-
-        // 2. Build computation graph matching Forward's magnitude computation
-        // Forward uses GetComplex(input, i) which treats each element as a complex value.
-        // For real T: imaginary=0, so |z|² = value²
-        // For complex T: |z|² = real² + imag² (handled by the Complex type itself)
-        // Here we compute for the common real case: magnitudeSquared = input²
         var magnitudeSquared = Autodiff.TensorOperations<T>.Square(inputNode);
+        var sumSquared = Autodiff.TensorOperations<T>.Sum(magnitudeSquared, new int[] { 1 }, keepDims: true);
 
-        // Sum over all elements
-        var sumSquared = Autodiff.TensorOperations<T>.Sum(magnitudeSquared);
-
-        // Add epsilon for numerical stability
         var epsilonTensor = new Tensor<T>(new int[] { 1 });
         epsilonTensor[0] = NumOps.FromDouble(1e-10);
         var epsilonNode = Autodiff.TensorOperations<T>.Constant(epsilonTensor, "epsilon");
         var safeSum = Autodiff.TensorOperations<T>.Add(sumSquared, epsilonNode);
 
-        // Normalize to get probabilities: p = |z|² / sum(|z|²)
         var output = Autodiff.TensorOperations<T>.Divide(magnitudeSquared, safeSum);
 
-        // 3. Set gradient and execute backward
-        output.Gradient = outputGradient;
+        output.Gradient = normalizedOutputGradient;
         output.Backward();
 
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        if (inputNode.Gradient == null)
+        {
+            throw new InvalidOperationException("Gradient computation failed.");
+        }
+
+        return inputNode.Gradient.Reshape(_originalInputShape);
     }
-
-
     /// <summary>
     /// Updates the parameters of the measurement layer using the calculated gradients.
     /// </summary>
@@ -344,6 +461,7 @@ public class MeasurementLayer<T> : LayerBase<T>
         // Clear cached values from forward and backward passes
         _lastInput = null;
         _lastOutput = null;
+        _originalInputShape = null;
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

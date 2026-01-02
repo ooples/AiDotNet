@@ -117,6 +117,23 @@ namespace AiDotNet.NeuralNetworks
         /// </summary>
         public Tensor<T> Predict(Tensor<T> input)
         {
+            // Handle 1D input by reshaping to 2D [1, features]
+            bool was1D = input.Shape.Length == 1;
+            int[] originalShape = input.Shape;
+            if (was1D)
+            {
+                input = input.Reshape([1, input.Shape[0]]);
+            }
+            else if (input.Shape.Length > 2)
+            {
+                // For higher-rank tensors, flatten to 2D [batch, features]
+                int batchSize = 1;
+                for (int i = 0; i < input.Shape.Length - 1; i++)
+                    batchSize *= input.Shape[i];
+                int features = input.Shape[input.Shape.Length - 1];
+                input = input.Reshape([batchSize, features]);
+            }
+
             _inputSize = input.Shape[input.Shape.Length - 1];
             _outputSize = _inputSize; // For simplicity, maintain same dimensions
 
@@ -159,8 +176,18 @@ namespace AiDotNet.NeuralNetworks
                 nodeOutputs.Add(nodeOutput);
             }
 
-            // Return the output of the final node
-            return nodeOutputs[nodeOutputs.Count - 1];
+            // Get final output and restore original shape if needed
+            var result = nodeOutputs[nodeOutputs.Count - 1];
+            if (was1D)
+            {
+                result = result.Reshape(originalShape);
+            }
+            else if (originalShape.Length > 2)
+            {
+                result = result.Reshape(originalShape);
+            }
+
+            return result;
         }
 
         /// <summary>
@@ -558,6 +585,23 @@ namespace AiDotNet.NeuralNetworks
         /// </summary>
         private Tensor<T> ApplyOperation(Tensor<T> input, int opIdx, string weightKey)
         {
+            // Handle 1D input by reshaping to 2D [1, features]
+            bool was1D = input.Shape.Length == 1;
+            int[] originalShape = input.Shape;
+            if (was1D)
+            {
+                input = input.Reshape([1, input.Shape[0]]);
+            }
+            else if (input.Shape.Length > 2)
+            {
+                // For higher-rank tensors, flatten to 2D [batch, features]
+                int batchSize = 1;
+                for (int i = 0; i < input.Shape.Length - 1; i++)
+                    batchSize *= input.Shape[i];
+                int features = input.Shape[input.Shape.Length - 1];
+                input = input.Reshape([batchSize, features]);
+            }
+
             // Initialize weights if needed
             if (!_weights.ContainsKey(weightKey))
             {
@@ -650,6 +694,16 @@ namespace AiDotNet.NeuralNetworks
                         }
                     }
                     break;
+            }
+
+            // Restore original shape if input was 1D or higher-rank
+            if (was1D)
+            {
+                output = output.Reshape(originalShape);
+            }
+            else if (originalShape.Length > 2)
+            {
+                output = output.Reshape(originalShape);
             }
 
             return output;

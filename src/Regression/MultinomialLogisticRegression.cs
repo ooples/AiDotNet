@@ -167,7 +167,7 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
             }
 
             Vector<T> flattenedGradient = gradient.Flatten();
-            Vector<T> update = MatrixSolutionHelper.SolveLinearSystem(hessian, flattenedGradient, MatrixDecompositionFactory.GetDecompositionType(_options.DecompositionMethod));
+            Vector<T> update = MatrixSolutionHelper.SolveLinearSystem(hessian, flattenedGradient, _options.DecompositionType);
 
             Matrix<T> updateMatrix = new Matrix<T>(gradient.Rows, gradient.Columns);
             for (int i = 0; i < update.Length; i++)
@@ -221,7 +221,16 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
         Matrix<T> expScores = scores.Transform((s, i, j) => NumOps.Exp(NumOps.Subtract(s, maxScores[i])));
         Vector<T> sumExpScores = expScores.RowWiseSum();
 
-        return expScores.PointwiseDivide(sumExpScores.ToColumnMatrix());
+        // Normalize: divide each row element by the row sum (broadcast division)
+        var result = new Matrix<T>(expScores.Rows, expScores.Columns);
+        for (int i = 0; i < expScores.Rows; i++)
+        {
+            for (int j = 0; j < expScores.Columns; j++)
+            {
+                result[i, j] = NumOps.Divide(expScores[i, j], sumExpScores[i]);
+            }
+        }
+        return result;
     }
 
     /// <summary>

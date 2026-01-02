@@ -741,9 +741,11 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     {
         return memoryWordSize + // Write vector
                memoryWordSize + // Erase vector
-               readHeads * memoryWordSize + // Read vectors
-               3 + // Write gate, allocation gate, write mode
-               3 * readHeads; // Read modes
+               memoryWordSize + // Write key
+               3 + // Write strength, allocation gate, write gate
+               readHeads * memoryWordSize + // Read keys
+               readHeads + // Read strengths
+               3 * readHeads; // Read modes (backward, content, forward)
     }
 
     /// <summary>
@@ -1424,8 +1426,8 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Convert vector to tensor for vectorized operations
         var inputTensor = new Tensor<T>(vector.ToArray(), [vector.Length]);
 
-        // Find maximum for numerical stability using ReduceMax (empty array = reduce all)
-        var maxTensor = Engine.ReduceMax(inputTensor, [], keepDims: true, out _);
+        // Find maximum for numerical stability using ReduceMax on axis 0 (the only axis)
+        var maxTensor = Engine.ReduceMax(inputTensor, [0], keepDims: true, out _);
         T maxVal = maxTensor[0];
 
         // Create max tensor for broadcasting

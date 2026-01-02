@@ -576,9 +576,16 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                         }
 
                         // Mask non-adjacent nodes (optional - can be commented out for full attention)
-                        if (_useStructuralEncoding && _adjacencyMatrix != null && NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero))
+                        if (_useStructuralEncoding && _adjacencyMatrix != null)
                         {
-                            score = NumOps.FromDouble(double.NegativeInfinity);
+                            // Handle both 2D [N, N] and 3D [B, N, N] adjacency matrices
+                            T adjValue = _adjacencyMatrix.Shape.Length == 2
+                                ? _adjacencyMatrix[new int[] { i, j }]
+                                : _adjacencyMatrix[new int[] { b, i, j }];
+                            if (NumOps.Equals(adjValue, NumOps.Zero))
+                            {
+                                score = NumOps.FromDouble(double.NegativeInfinity);
+                            }
                         }
 
                         _lastAttentionWeights[b, h, i, j] = score;
@@ -754,7 +761,14 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             throw new InvalidOperationException("Forward pass must be called before Backward.");
         }
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        // Reshape outputGradient to match _lastOutput shape if needed
+        var gradForBackward = outputGradient;
+        if (_originalInputShape != null && _originalInputShape.Length != _lastOutput.Shape.Length)
+        {
+            gradForBackward = outputGradient.Reshape(_lastOutput.Shape);
+        }
+
+        var activationGradient = ApplyActivationDerivative(_lastOutput, gradForBackward);
 
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
@@ -844,6 +858,12 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         if (_inputFeatures == _outputFeatures)
         {
             gradInput = Engine.TensorAdd(gradInput, gradInputFromResidual);
+        }
+
+        // Reshape to match original input shape
+        if (_originalInputShape != null && _originalInputShape.Length != gradInput.Shape.Length)
+        {
+            return gradInput.Reshape(_originalInputShape);
         }
 
         return gradInput;

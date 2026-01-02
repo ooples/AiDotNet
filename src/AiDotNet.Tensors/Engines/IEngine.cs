@@ -1721,6 +1721,42 @@ public interface IEngine
     Tensor<T> TensorBroadcastAdd<T>(Tensor<T> a, Tensor<T> b);
 
     /// <summary>
+    /// Subtracts two tensors element-wise with NumPy-style broadcasting.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor.</param>
+    /// <param name="b">The second tensor to subtract (will be broadcast to match a if needed).</param>
+    /// <returns>A new tensor containing the element-wise difference with broadcasting.</returns>
+    /// <remarks>
+    /// <para>
+    /// Broadcasting allows tensors of different shapes to be subtracted by automatically
+    /// expanding the smaller tensor. This is commonly used in operations like normalizing
+    /// by subtracting a mean: [batch, features] - [1, features] broadcasts the mean across the batch.
+    /// </para>
+    /// <para>
+    /// For example, subtracting shapes [batch, channels, H, W] - [1, channels, 1, 1] broadcasts
+    /// the bias subtraction across batch and spatial dimensions.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorBroadcastSubtract<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Divides two tensors element-wise with NumPy-style broadcasting.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The dividend tensor.</param>
+    /// <param name="b">The divisor tensor (will be broadcast to match a if needed).</param>
+    /// <returns>A new tensor containing the element-wise quotient with broadcasting.</returns>
+    /// <remarks>
+    /// <para>
+    /// Broadcasting allows tensors of different shapes to be divided by automatically
+    /// expanding the smaller tensor. This is commonly used in normalization operations
+    /// like dividing by a sum: [batch, features] / [batch, 1] broadcasts the divisor across features.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorBroadcastDivide<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
     /// Multiplies two tensors element-wise with NumPy-style broadcasting.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
@@ -2603,6 +2639,189 @@ public interface IEngine
     /// Computes the gradient of ConvTranspose2D with respect to the kernel.
     /// </summary>
     Tensor<T> ConvTranspose2DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding);
+
+    /// <summary>
+    /// Performs deformable 2D convolution (DCNv2) with learned spatial offsets and modulation.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, in_channels, height, width].</param>
+    /// <param name="kernel">The convolution kernel [out_channels, in_channels, kernel_height, kernel_width].</param>
+    /// <param name="offset">
+    /// The learned offset tensor [batch, 2*kernel_h*kernel_w*deformGroups, out_h, out_w].
+    /// Each kernel position has (dy, dx) offsets for bilinear sampling. When using multiple
+    /// deformable groups, the channel dimension is multiplied by deformGroups.
+    /// </param>
+    /// <param name="mask">
+    /// Optional modulation mask [batch, kernel_h*kernel_w*deformGroups, out_h, out_w].
+    /// Values in [0,1] modulate each kernel position. deformGroups is inferred from the
+    /// offset/mask channel counts. Null uses no modulation (DCNv1).
+    /// </param>
+    /// <param name="stride">The stride [strideH, strideW] of the convolution.</param>
+    /// <param name="padding">The padding [padH, padW] to add to the input.</param>
+    /// <param name="dilation">The dilation [dilationH, dilationW] spacing between kernel elements.</param>
+    /// <returns>The convolved tensor [batch, out_channels, output_height, output_width].</returns>
+    /// <exception cref="ArgumentException">Thrown when tensor dimensions are invalid.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-DCN: Deformable Convolution v2</b></para>
+    /// <para>
+    /// Deformable convolution learns spatial deformations to adapt the sampling grid.
+    /// Unlike standard convolution which samples on a fixed grid, deformable convolution
+    /// adds learned 2D offsets to each sampling position, enabling the network to:
+    /// - Focus on relevant parts of objects regardless of their shape
+    /// - Handle geometric transformations (rotation, scale, deformation)
+    /// - Adapt receptive fields to object structure
+    /// </para>
+    /// <para><b>DCNv2 Features (this implementation):</b></para>
+    /// <list type="bullet">
+    ///   <item>Per-sample offsets learned via backpropagation</item>
+    ///   <item>Modulation mask to weight each sampling position (attention mechanism)</item>
+    ///   <item>Bilinear interpolation for sub-pixel sampling</item>
+    /// </list>
+    /// <para><b>Applications:</b></para>
+    /// <list type="bullet">
+    ///   <item>Object detection (DETR, deformable attention)</item>
+    ///   <item>Video super-resolution (aligning features across frames)</item>
+    ///   <item>Optical flow estimation (SpyNet, PWC-Net)</item>
+    ///   <item>Semantic segmentation with geometric adaptation</item>
+    /// </list>
+    /// <para>
+    /// GPU acceleration provides 20-100x speedup due to parallel bilinear sampling.
+    /// </para>
+    /// </remarks>
+    Tensor<T> DeformableConv2D<T>(
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T> offset,
+        Tensor<T>? mask,
+        int[] stride,
+        int[] padding,
+        int[] dilation);
+
+    /// <summary>
+    /// Computes the gradient of DeformableConv2D with respect to the input tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient flowing back from the output.</param>
+    /// <param name="input">The original input tensor from forward pass.</param>
+    /// <param name="kernel">The convolution kernel from forward pass.</param>
+    /// <param name="offset">The offset tensor from forward pass.</param>
+    /// <param name="mask">The modulation mask from forward pass (null for DCNv1).</param>
+    /// <param name="inputShape">The shape of the original input tensor.</param>
+    /// <param name="stride">The stride used in forward pass.</param>
+    /// <param name="padding">The padding used in forward pass.</param>
+    /// <param name="dilation">The dilation used in forward pass.</param>
+    /// <returns>The gradient with respect to the input tensor.</returns>
+    Tensor<T> DeformableConv2DBackwardInput<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T> offset,
+        Tensor<T>? mask,
+        int[] inputShape,
+        int[] stride,
+        int[] padding,
+        int[] dilation);
+
+    /// <summary>
+    /// Computes the gradient of DeformableConv2D with respect to the kernel (weights).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient flowing back from the output.</param>
+    /// <param name="input">The original input tensor from forward pass.</param>
+    /// <param name="offset">The offset tensor from forward pass.</param>
+    /// <param name="mask">The modulation mask from forward pass (null for DCNv1).</param>
+    /// <param name="kernelShape">The shape of the kernel tensor.</param>
+    /// <param name="stride">The stride used in forward pass.</param>
+    /// <param name="padding">The padding used in forward pass.</param>
+    /// <param name="dilation">The dilation used in forward pass.</param>
+    /// <returns>The gradient with respect to the kernel tensor.</returns>
+    Tensor<T> DeformableConv2DBackwardKernel<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> input,
+        Tensor<T> offset,
+        Tensor<T>? mask,
+        int[] kernelShape,
+        int[] stride,
+        int[] padding,
+        int[] dilation);
+
+    /// <summary>
+    /// Computes the gradient of DeformableConv2D with respect to the offset tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient flowing back from the output.</param>
+    /// <param name="input">The original input tensor from forward pass.</param>
+    /// <param name="kernel">The convolution kernel from forward pass.</param>
+    /// <param name="offset">The offset tensor from forward pass.</param>
+    /// <param name="mask">The modulation mask from forward pass (null for DCNv1).</param>
+    /// <param name="stride">The stride used in forward pass.</param>
+    /// <param name="padding">The padding used in forward pass.</param>
+    /// <param name="dilation">The dilation used in forward pass.</param>
+    /// <returns>The gradient with respect to the offset tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// This gradient enables learning of the spatial deformations.
+    /// The gradient flows through the bilinear interpolation operation.
+    /// </para>
+    /// </remarks>
+    Tensor<T> DeformableConv2DBackwardOffset<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T> offset,
+        Tensor<T>? mask,
+        int[] stride,
+        int[] padding,
+        int[] dilation);
+
+    /// <summary>
+    /// Computes the gradient of DeformableConv2D with respect to the modulation mask.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient flowing back from the output.</param>
+    /// <param name="input">The original input tensor from forward pass.</param>
+    /// <param name="kernel">The convolution kernel from forward pass.</param>
+    /// <param name="offset">The offset tensor from forward pass.</param>
+    /// <param name="mask">The modulation mask from forward pass.</param>
+    /// <param name="stride">The stride used in forward pass.</param>
+    /// <param name="padding">The padding used in forward pass.</param>
+    /// <param name="dilation">The dilation used in forward pass.</param>
+    /// <returns>The gradient with respect to the modulation mask tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// This gradient enables learning of per-position attention weights (DCNv2).
+    /// Returns zero tensor if mask was null in forward pass.
+    /// </para>
+    /// </remarks>
+    Tensor<T> DeformableConv2DBackwardMask<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T> offset,
+        Tensor<T>? mask,
+        int[] stride,
+        int[] padding,
+        int[] dilation);
+
+    /// <summary>
+    /// Computes the gradient of GridSample with respect to the input (NHWC format).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient flowing back from the output [batch, outH, outW, channels].</param>
+    /// <param name="grid">The sampling grid from forward pass [batch, outH, outW, 2].</param>
+    /// <param name="inputShape">The shape of the original input [batch, height, width, channels].</param>
+    /// <returns>The gradient with respect to the input tensor [batch, height, width, channels].</returns>
+    Tensor<T> GridSampleBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> grid, int[] inputShape);
+
+    /// <summary>
+    /// Computes the gradient of GridSample with respect to the grid (NHWC format).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient flowing back from the output [batch, outH, outW, channels].</param>
+    /// <param name="input">The original input tensor [batch, height, width, channels].</param>
+    /// <param name="grid">The sampling grid from forward pass [batch, outH, outW, 2].</param>
+    /// <returns>The gradient with respect to the grid tensor [batch, outH, outW, 2].</returns>
+    Tensor<T> GridSampleBackwardGrid<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> grid);
 
     #endregion
 

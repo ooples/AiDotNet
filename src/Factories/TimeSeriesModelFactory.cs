@@ -46,12 +46,16 @@ public class TimeSeriesModelFactory<T, TInput, TOutput>
     /// </remarks>
     public static ITimeSeriesModel<T> CreateModel(TimeSeriesModelType modelType, TimeSeriesRegressionOptions<T> options)
     {
-        return (modelType, options) switch
+        // If the options are already the correct specific type, use them directly
+        // Otherwise, convert the base options to the appropriate model-specific options
+        var modelOptions = ConvertToModelSpecificOptions(modelType, options);
+
+        return (modelType, modelOptions) switch
         {
             (TimeSeriesModelType.ARIMA, ARIMAOptions<T> arimaOptions) => new ARIMAModel<T>(arimaOptions),
             (TimeSeriesModelType.SARIMA, SARIMAOptions<T> sarimaOptions) => new SARIMAModel<T>(sarimaOptions),
             (TimeSeriesModelType.ARMA, ARMAOptions<T> armaOptions) => new ARMAModel<T>(armaOptions),
-            (TimeSeriesModelType.AR, ARModelOptions<T> arOptions) => new ARModel<T>(arOptions),
+            (TimeSeriesModelType.AutoRegressive, ARModelOptions<T> arOptions) => new ARModel<T>(arOptions),
             (TimeSeriesModelType.MA, MAModelOptions<T> maOptions) => new MAModel<T>(maOptions),
             (TimeSeriesModelType.ExponentialSmoothing, ExponentialSmoothingOptions<T> esOptions) =>
                 new ExponentialSmoothingModel<T>(esOptions),
@@ -81,6 +85,92 @@ public class TimeSeriesModelFactory<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Converts base TimeSeriesRegressionOptions to the appropriate model-specific options type.
+    /// </summary>
+    /// <param name="modelType">The type of time series model.</param>
+    /// <param name="options">The base options to convert.</param>
+    /// <returns>Model-specific options if conversion is needed, or the original options if already correct type.</returns>
+    private static TimeSeriesRegressionOptions<T> ConvertToModelSpecificOptions(TimeSeriesModelType modelType, TimeSeriesRegressionOptions<T> options)
+    {
+        // If options is already the correct specific type, return as-is
+        return modelType switch
+        {
+            TimeSeriesModelType.ARIMA when options is ARIMAOptions<T> => options,
+            TimeSeriesModelType.ARIMA => new ARIMAOptions<T>
+            {
+                LagOrder = options.LagOrder,
+                IncludeTrend = options.IncludeTrend,
+                SeasonalPeriod = options.SeasonalPeriod,
+                AutocorrelationCorrection = options.AutocorrelationCorrection
+            },
+
+            TimeSeriesModelType.SARIMA when options is SARIMAOptions<T> => options,
+            TimeSeriesModelType.SARIMA => new SARIMAOptions<T>
+            {
+                LagOrder = options.LagOrder,
+                SeasonalPeriod = options.SeasonalPeriod > 0 ? options.SeasonalPeriod : 12
+            },
+
+            TimeSeriesModelType.ARMA when options is ARMAOptions<T> => options,
+            TimeSeriesModelType.ARMA => new ARMAOptions<T>
+            {
+                LagOrder = options.LagOrder,
+                IncludeTrend = options.IncludeTrend,
+                SeasonalPeriod = options.SeasonalPeriod
+            },
+
+            TimeSeriesModelType.AutoRegressive when options is ARModelOptions<T> => options,
+            TimeSeriesModelType.AutoRegressive => new ARModelOptions<T>
+            {
+                AROrder = options.LagOrder,
+                LagOrder = options.LagOrder,
+                IncludeTrend = options.IncludeTrend,
+                SeasonalPeriod = options.SeasonalPeriod
+            },
+
+            TimeSeriesModelType.MA when options is MAModelOptions<T> => options,
+            TimeSeriesModelType.MA => new MAModelOptions<T>
+            {
+                LagOrder = options.LagOrder,
+                IncludeTrend = options.IncludeTrend,
+                SeasonalPeriod = options.SeasonalPeriod
+            },
+
+            TimeSeriesModelType.ExponentialSmoothing when options is ExponentialSmoothingOptions<T> => options,
+            TimeSeriesModelType.ExponentialSmoothing => new ExponentialSmoothingOptions<T>
+            {
+                SeasonalPeriod = options.SeasonalPeriod,
+                UseTrend = options.IncludeTrend
+            },
+
+            TimeSeriesModelType.SimpleExponentialSmoothing when options is ExponentialSmoothingOptions<T> => options,
+            TimeSeriesModelType.SimpleExponentialSmoothing => new ExponentialSmoothingOptions<T>
+            {
+                UseTrend = false,
+                UseSeasonal = false
+            },
+
+            TimeSeriesModelType.DoubleExponentialSmoothing when options is ExponentialSmoothingOptions<T> => options,
+            TimeSeriesModelType.DoubleExponentialSmoothing => new ExponentialSmoothingOptions<T>
+            {
+                UseTrend = true,
+                UseSeasonal = false
+            },
+
+            TimeSeriesModelType.TripleExponentialSmoothing when options is ExponentialSmoothingOptions<T> => options,
+            TimeSeriesModelType.TripleExponentialSmoothing => new ExponentialSmoothingOptions<T>
+            {
+                UseTrend = true,
+                UseSeasonal = true,
+                SeasonalPeriod = options.SeasonalPeriod > 0 ? options.SeasonalPeriod : 12
+            },
+
+            // For all other model types, return as-is (they should provide correct options)
+            _ => options
+        };
+    }
+
+    /// <summary>
     /// Creates a time series model of the specified type with default options.
     /// </summary>
     /// <param name="modelType">The type of time series model to create.</param>
@@ -106,7 +196,7 @@ public class TimeSeriesModelFactory<T, TInput, TOutput>
             TimeSeriesModelType.ARIMA => new ARIMAOptions<T>(),
             TimeSeriesModelType.SARIMA => new SARIMAOptions<T>(),
             TimeSeriesModelType.ARMA => new ARMAOptions<T>(),
-            TimeSeriesModelType.AR => new ARModelOptions<T>(),
+            TimeSeriesModelType.AutoRegressive => new ARModelOptions<T>(),
             TimeSeriesModelType.MA => new MAModelOptions<T>(),
             TimeSeriesModelType.ExponentialSmoothing => new ExponentialSmoothingOptions<T>(),
             TimeSeriesModelType.SimpleExponentialSmoothing => new ExponentialSmoothingOptions<T>

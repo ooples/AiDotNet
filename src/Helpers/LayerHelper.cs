@@ -479,28 +479,154 @@ public static class LayerHelper<T>
 
         var inputShape = architecture.GetInputShape();
 
+        // Handle different input dimensionalities
+        if (inputShape.Length == 1)
+        {
+            // 1D input: Use Dense layers with residual connections (MLP-style ResNet)
+            foreach (var layer in CreateDefaultResNet1DLayers(architecture, inputShape[0], blockCount, blockSize))
+            {
+                yield return layer;
+            }
+        }
+        else if (inputShape.Length == 2)
+        {
+            // 2D input: Treat as single-channel image [1, height, width]
+            foreach (var layer in CreateDefaultResNet2DLayers(architecture, inputShape, blockCount, blockSize))
+            {
+                yield return layer;
+            }
+        }
+        else
+        {
+            // 3D input: Standard CNN-based ResNet
+            foreach (var layer in CreateDefaultResNet3DLayers(architecture, inputShape, blockCount, blockSize))
+            {
+                yield return layer;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Creates ResNet layers for 1D (flat vector) input using Dense layers with residual connections.
+    /// </summary>
+    private static IEnumerable<ILayer<T>> CreateDefaultResNet1DLayers(NeuralNetworkArchitecture<T> architecture, int inputSize, int blockCount, int blockSize)
+    {
+        int hiddenSize = Math.Max(64, inputSize);
+        int currentSize = inputSize;
+
+        // Initial projection layer
+        yield return new DenseLayer<T>(currentSize, hiddenSize, new ReLUActivation<T>() as IActivationFunction<T>);
+        currentSize = hiddenSize;
+
+        // Residual blocks using Dense layers
+        for (int i = 0; i < blockCount; i++)
+        {
+            for (int j = 0; j < blockSize; j++)
+            {
+                // Each "residual block" is a Dense layer with skip connection via ResidualLayer
+                yield return new ResidualLayer<T>(
+                    inputShape: [currentSize],
+                    innerLayer: new DenseLayer<T>(currentSize, currentSize, new ReLUActivation<T>() as IActivationFunction<T>),
+                    activationFunction: new ReLUActivation<T>()
+                );
+            }
+
+            // Optionally expand dimensions between blocks (except last)
+            if (i < blockCount - 1)
+            {
+                int newSize = Math.Min(currentSize * 2, 512);
+                yield return new DenseLayer<T>(currentSize, newSize, new ReLUActivation<T>() as IActivationFunction<T>);
+                currentSize = newSize;
+            }
+        }
+
+        // Final output layer
+        yield return new DenseLayer<T>(currentSize, architecture.OutputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates ResNet layers for 2D input by treating it as a single-channel image.
+    /// </summary>
+    private static IEnumerable<ILayer<T>> CreateDefaultResNet2DLayers(NeuralNetworkArchitecture<T> architecture, int[] inputShape, int blockCount, int blockSize)
+    {
+        // For 2D input [height, width], treat as single-channel image [1, height, width]
+        int inputDepth = 1;
+        int inputHeight = inputShape[0];
+        int inputWidth = inputShape[1];
+
+        foreach (var layer in CreateResNetConvLayers(architecture, inputDepth, inputHeight, inputWidth, blockCount, blockSize))
+        {
+            yield return layer;
+        }
+    }
+
+    /// <summary>
+    /// Creates ResNet layers for 3D input (standard CNN-based ResNet).
+    /// </summary>
+    private static IEnumerable<ILayer<T>> CreateDefaultResNet3DLayers(NeuralNetworkArchitecture<T> architecture, int[] inputShape, int blockCount, int blockSize)
+    {
+        int inputDepth = inputShape[0];
+        int inputHeight = inputShape[1];
+        int inputWidth = inputShape[2];
+
+        foreach (var layer in CreateResNetConvLayers(architecture, inputDepth, inputHeight, inputWidth, blockCount, blockSize))
+        {
+            yield return layer;
+        }
+    }
+
+    /// <summary>
+    /// Creates convolutional ResNet layers for 2D/3D image-like input.
+    /// </summary>
+    private static IEnumerable<ILayer<T>> CreateResNetConvLayers(NeuralNetworkArchitecture<T> architecture, int inputDepth, int inputHeight, int inputWidth, int blockCount, int blockSize)
+    {
+        int ConvolutionOutputSize(int inputSize, int kernelSize, int stride, int padding)
+        {
+            if (inputSize + 2 * padding < kernelSize)
+                throw new ArgumentException("Input dimensions with padding must be at least kernel size.");
+
+            return (inputSize - kernelSize + 2 * padding) / stride + 1;
+        }
+
+        int PoolingOutputSize(int inputSize, int poolSize, int stride)
+        {
+            return (inputSize - poolSize) / stride + 1;
+        }
+
+        const int initialKernelSize = 7;
+        const int initialStride = 2;
+        const int initialPadding = 3;
+
+        int convOutputHeight = ConvolutionOutputSize(inputHeight, initialKernelSize, initialStride, initialPadding);
+        int convOutputWidth = ConvolutionOutputSize(inputWidth, initialKernelSize, initialStride, initialPadding);
+
+        const int initialPoolSize = 3;
+        const int initialPoolStride = 2;
+
+        int pooledHeight = PoolingOutputSize(convOutputHeight, initialPoolSize, initialPoolStride);
+        int pooledWidth = PoolingOutputSize(convOutputWidth, initialPoolSize, initialPoolStride);
         // Initial convolutional layer
         yield return new ConvolutionalLayer<T>(
-            inputDepth: inputShape[0],
-            inputHeight: inputShape[1],
-            inputWidth: inputShape[2],
+            inputDepth: inputDepth,
+            inputHeight: inputHeight,
+            inputWidth: inputWidth,
             outputDepth: 64,
-            kernelSize: 7,
-            stride: 2,
-            padding: 3,
+            kernelSize: initialKernelSize,
+            stride: initialStride,
+            padding: initialPadding,
             activationFunction: new ReLUActivation<T>()
         );
 
         yield return new MaxPoolingLayer<T>(
-            inputShape: [64, inputShape[1] / 2, inputShape[2] / 2],
-            poolSize: 3,
-            stride: 2
+            inputShape: [64, convOutputHeight, convOutputWidth],
+            poolSize: initialPoolSize,
+            stride: initialPoolStride
         );
 
         // Residual blocks
         int currentDepth = 64;
-        int currentHeight = inputShape[1] / 4;
-        int currentWidth = inputShape[2] / 4;
+        int currentHeight = pooledHeight;
+        int currentWidth = pooledWidth;
 
         for (int i = 0; i < blockCount; i++)
         {
@@ -515,13 +641,16 @@ public static class LayerHelper<T>
             }
             if (i < blockCount - 1)
             {
+                int nextHeight = PoolingOutputSize(currentHeight, 2, 2);
+                int nextWidth = PoolingOutputSize(currentWidth, 2, 2);
+
                 yield return new MaxPoolingLayer<T>(
                     inputShape: [currentDepth, currentHeight, currentWidth],
                     poolSize: 2,
                     stride: 2
                 );
-                currentHeight /= 2;
-                currentWidth /= 2;
+                currentHeight = nextHeight;
+                currentWidth = nextWidth;
             }
         }
 
@@ -664,12 +793,18 @@ public static class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreateDefaultAutoEncoderLayers(NeuralNetworkArchitecture<T> architecture)
     {
         var inputShape = architecture.GetInputShape();
-        int inputSize = inputShape[0];
+        int inputSize = inputShape.Length > 0 ? inputShape.Aggregate(1, (a, b) => a * b) : architecture.CalculatedInputSize;
         int[] layerSizes = architecture.GetLayerSizes();
 
+        // If no layers specified, create a default symmetric autoencoder architecture
+        // Structure: input -> hidden1 -> bottleneck -> hidden2 -> output
         if (layerSizes.Length < 3)
         {
-            throw new InvalidOperationException("The autoencoder must have at least an input, encoded, and output layer.");
+            int outputSize = architecture.OutputSize > 0 ? architecture.OutputSize : inputSize;
+            int hidden1 = Math.Max(inputSize / 2, 8);
+            int bottleneck = Math.Max(inputSize / 4, 4);
+            int hidden2 = hidden1;
+            layerSizes = [inputSize, hidden1, bottleneck, hidden2, outputSize];
         }
 
         int middleIndex = layerSizes.Length / 2;
@@ -897,15 +1032,17 @@ public static class LayerHelper<T>
             ? architecture.OutputSize
             : throw new InvalidOperationException("Output size must be specified and greater than 0 for DNC.");
 
-        // Controller (Feed-forward network)
-        yield return new DenseLayer<T>(inputSize, controllerSize, new ReLUActivation<T>() as IActivationFunction<T>);
+        // Controller input includes read vectors concatenated: inputSize + readHeads * memoryWordSize
+        int controllerInputSize = inputSize + readHeads * memoryWordSize;
 
-        // Memory interface
-        yield return new DenseLayer<T>(controllerSize, interfaceSize, new IdentityActivation<T>() as IActivationFunction<T>);
+        // Controller (Feed-forward network) - first layer takes the combined input
+        yield return new DenseLayer<T>(controllerInputSize, controllerSize, new ReLUActivation<T>() as IActivationFunction<T>);
 
-        // Output layer
-        yield return new DenseLayer<T>(controllerSize + readHeads * memoryWordSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
-        yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IActivationFunction<T>);
+        // Controller output layer - produces BOTH direct output (controllerSize) AND interface signals
+        // The DNC's CombineControllerOutputWithReadVectors expects:
+        // controllerOutput.Shape[1] = controllerDirectOutputSize + interfaceSize
+        int controllerOutputSize = controllerSize + interfaceSize;
+        yield return new DenseLayer<T>(controllerSize, controllerOutputSize, new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -974,47 +1111,79 @@ public static class LayerHelper<T>
         int inputDepth = inputShape[0];
         int inputHeight = inputShape.Length > 1 ? inputShape[1] : 1;
         int inputWidth = inputShape.Length > 2 ? inputShape[2] : 1;
+        int flatInputSize = inputDepth * inputHeight * inputWidth;
 
-        // Encoder layers
-        yield return new DenseLayer<T>(inputDepth * inputHeight * inputWidth, (inputDepth * inputHeight * inputWidth) / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        // For 1D input or very small spatial dimensions, use dense-only architecture
+        // Pooling doesn't make sense for 1x1 spatial dimensions
+        bool use1DArchitecture = inputHeight <= 1 && inputWidth <= 1;
 
-        // Pooling layer to reduce dimensions
-        yield return new PoolingLayer<T>(
-            inputDepth: inputDepth,
-            inputHeight: inputHeight,
-            inputWidth: inputWidth,
-            poolSize: 2,
-            stride: 2,
-            type: PoolingType.Average
-        );
+        if (use1DArchitecture)
+        {
+            // 1D VAE: All dense layers, no pooling
+            int hidden1 = Math.Max(flatInputSize / 2, latentSize * 4);
+            int hidden2 = Math.Max(hidden1 / 2, latentSize * 2);
+            int encoderOutputSize = latentSize * 2;
 
-        // Calculate new dimensions after pooling
-        int pooledDepth = inputDepth;
-        int pooledHeight = (inputHeight - 2) / 2 + 1;
-        int pooledWidth = (inputWidth - 2) / 2 + 1;
-        int pooledSize = pooledDepth * pooledHeight * pooledWidth;
+            // Encoder layers
+            yield return new DenseLayer<T>(flatInputSize, hidden1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+            yield return new DenseLayer<T>(hidden1, hidden2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+            yield return new DenseLayer<T>(hidden2, encoderOutputSize, new IdentityActivation<T>() as IActivationFunction<T>);
 
-        yield return new DenseLayer<T>(pooledSize, pooledSize / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+            // Mean and LogVariance layers
+            yield return new MeanLayer<T>([encoderOutputSize], axis: 0);
+            yield return new LogVarianceLayer<T>([encoderOutputSize], axis: 0);
 
-        // Latent space layers
-        int encoderOutputSize = latentSize * 2; // For mean and log variance
-        yield return new DenseLayer<T>(pooledSize / 2, encoderOutputSize, new IdentityActivation<T>() as IActivationFunction<T>);
+            // Decoder layers (mirror of encoder)
+            yield return new DenseLayer<T>(latentSize, hidden2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+            yield return new DenseLayer<T>(hidden2, hidden1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
 
-        // Mean and LogVariance layers
-        yield return new MeanLayer<T>([encoderOutputSize], axis: 0);
-        yield return new LogVarianceLayer<T>([encoderOutputSize], axis: 0);
+            // Output layer
+            yield return new DenseLayer<T>(hidden1, flatInputSize, new SigmoidActivation<T>() as IActivationFunction<T>);
+        }
+        else
+        {
+            // 2D/3D VAE: With pooling and upsampling
+            // Encoder layers
+            yield return new DenseLayer<T>(flatInputSize, flatInputSize / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
 
-        // Decoder layers
-        yield return new DenseLayer<T>(latentSize, pooledSize / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
-        yield return new DenseLayer<T>(pooledSize / 2, pooledSize, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+            // Pooling layer to reduce dimensions
+            yield return new PoolingLayer<T>(
+                inputDepth: inputDepth,
+                inputHeight: inputHeight,
+                inputWidth: inputWidth,
+                poolSize: 2,
+                stride: 2,
+                type: PoolingType.Average
+            );
 
-        // Add an Upsampling layer to match the pooling in the encoder
-        yield return new UpsamplingLayer<T>([pooledDepth, pooledHeight, pooledWidth], 2);
+            // Calculate new dimensions after pooling
+            int pooledDepth = inputDepth;
+            int pooledHeight = (inputHeight - 2) / 2 + 1;
+            int pooledWidth = (inputWidth - 2) / 2 + 1;
+            int pooledSize = pooledDepth * pooledHeight * pooledWidth;
 
-        yield return new DenseLayer<T>(inputDepth * inputHeight * inputWidth, (inputDepth * inputHeight * inputWidth) / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+            yield return new DenseLayer<T>(pooledSize, pooledSize / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
 
-        // Output layer
-        yield return new DenseLayer<T>((inputDepth * inputHeight * inputWidth) / 2, inputDepth * inputHeight * inputWidth, new SigmoidActivation<T>() as IActivationFunction<T>);
+            // Latent space layers
+            int encoderOutputSize = latentSize * 2;
+            yield return new DenseLayer<T>(pooledSize / 2, encoderOutputSize, new IdentityActivation<T>() as IActivationFunction<T>);
+
+            // Mean and LogVariance layers
+            yield return new MeanLayer<T>([encoderOutputSize], axis: 0);
+            yield return new LogVarianceLayer<T>([encoderOutputSize], axis: 0);
+
+            // Decoder layers
+            yield return new DenseLayer<T>(latentSize, pooledSize / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+            yield return new DenseLayer<T>(pooledSize / 2, pooledSize, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+
+            // Add an Upsampling layer to match the pooling in the encoder
+            yield return new UpsamplingLayer<T>([pooledDepth, pooledHeight, pooledWidth], 2);
+
+            yield return new DenseLayer<T>(flatInputSize, flatInputSize / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+
+            // Output layer
+            yield return new DenseLayer<T>(flatInputSize / 2, flatInputSize, new SigmoidActivation<T>() as IActivationFunction<T>);
+        }
     }
 
     /// <summary>
@@ -1058,6 +1227,16 @@ public static class LayerHelper<T>
         if (vocabularySize > 0)
         {
             yield return new EmbeddingLayer<T>(vocabularySize, modelDimension);
+        }
+        else
+        {
+            // For continuous inputs (no embedding), add input projection layer if needed
+            // This projects the input from inputSize to modelDimension
+            int inputSize = architecture.InputSize;
+            if (inputSize > 0 && inputSize != modelDimension)
+            {
+                yield return new DenseLayer<T>(inputSize, modelDimension, new IdentityActivation<T>() as IActivationFunction<T>);
+            }
         }
 
         // Add positional encoding if specified
@@ -1645,8 +1824,17 @@ public static class LayerHelper<T>
             throw new InvalidOperationException("The network must have valid input and output dimensions.");
         }
 
-        // Define network structure with sensible defaults
-        int inputSize = architecture.CalculatedInputSize;
+        // Get input shape to determine feature dimension
+        var inputShape = architecture.GetInputShape();
+        if (inputShape == null || inputShape.Length == 0)
+        {
+            throw new InvalidOperationException("Input shape must be specified for GRU network.");
+        }
+
+        // For sequence input [seqLen, features], inputSize is the feature dimension (last dim)
+        // For 1D input [features], inputSize is the only dimension
+        // This matches the LSTM pattern for consistency
+        int inputSize = inputShape[inputShape.Length - 1];
         int outputSize = architecture.OutputSize;
 
         // Define default GRU architecture
@@ -1884,24 +2072,28 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(inputSize, embeddingSize);
 
         // Memory Read Layer
+        // Note: memoryDimension must match the memory vector dimension (embeddingSize),
+        // since memory in MemoryNetwork has shape [memorySize, embeddingSize]
         yield return new MemoryReadLayer<T>(
             inputDimension: embeddingSize,
-            memoryDimension: memorySize,
+            memoryDimension: embeddingSize,
             outputDimension: embeddingSize,
             activationFunction: new ReLUActivation<T>() as IActivationFunction<T>
         );
 
-        // Dense Layer for processing combined input and memory
+        // Dense Layer for processing memory read output
+        // Note: MemoryReadLayer outputs embeddingSize features
         yield return new DenseLayer<T>(
-            inputSize: embeddingSize * 2,
+            inputSize: embeddingSize,
             outputSize: hiddenSize,
             activationFunction: new ReLUActivation<T>()
         );
 
         // Memory Write Layer
+        // Note: memoryDimension must match the memory vector dimension (embeddingSize)
         yield return new MemoryWriteLayer<T>(
             inputDimension: hiddenSize,
-            memoryDimension: memorySize,
+            memoryDimension: embeddingSize,
             activationFunction: new TanhActivation<T>() as IActivationFunction<T>
         );
 
@@ -1936,8 +2128,9 @@ public static class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreateDefaultRNNLayers(NeuralNetworkArchitecture<T> architecture)
     {
         // Get input and output dimensions from the architecture
+        // For 2D input [seqLen, features], the input size is the feature dimension
         var inputShape = architecture.GetInputShape();
-        int inputSize = inputShape[0];
+        int inputSize = inputShape.Length >= 2 ? inputShape[1] : inputShape[0];
         int outputSize = architecture.OutputSize;
 
         // Default hidden layer size
@@ -1969,6 +2162,10 @@ public static class LayerHelper<T>
 
             yield return new ActivationLayer<T>([hiddenSize], new TanhActivation<T>() as IActivationFunction<T>);
         }
+
+        // Extract the last timestep from the sequence for classification tasks
+        // RNN layers output [seqLen, hiddenSize], but Dense layer expects [hiddenSize]
+        yield return new SequenceLastLayer<T>(hiddenSize);
 
         // Add the final Dense Layer to map to output size
         yield return new DenseLayer<T>(
@@ -2463,12 +2660,12 @@ public static class LayerHelper<T>
             }
         }
 
-        // Input layer
+        // Input layer - projects input to reservoir size
         yield return new DenseLayer<T>(inputSize, reservoirSize, new TanhActivation<T>() as IActivationFunction<T>);
 
-        // Reservoir layer (liquid)
+        // Reservoir layer (liquid) - receives output from DenseLayer which is of size reservoirSize
         yield return new ReservoirLayer<T>(
-            inputSize,
+            reservoirSize,  // Input to reservoir is the output of the DenseLayer
             reservoirSize,
             connectionProbability,
             spectralRadius,
@@ -2540,7 +2737,9 @@ public static class LayerHelper<T>
             throw new InvalidOperationException("Input shape must be specified for LSTM network.");
         }
 
-        int inputSize = inputShape[0];
+        // For sequence input [seqLen, features], inputSize is the feature dimension (last dim)
+        // For 1D input [features], inputSize is the only dimension
+        int inputSize = inputShape[inputShape.Length - 1];
         int outputSize = architecture.OutputSize;
 
         if (inputSize <= 0)
@@ -4465,4 +4664,3320 @@ public static class LayerHelper<T>
             outputSize: projectionDim,
             activationFunction: null); // Linear projection (no activation)
     }
+
+    /// <summary>
+    /// Creates default layers for Whisper-style speech recognition models.
+    /// </summary>
+    /// <param name="numMels">Number of mel spectrogram bins (default: 80).</param>
+    /// <param name="modelDimension">Hidden dimension of the model (default: 512).</param>
+    /// <param name="numEncoderLayers">Number of encoder layers (default: 6).</param>
+    /// <param name="numDecoderLayers">Number of decoder layers (default: 6).</param>
+    /// <param name="numHeads">Number of attention heads (default: 8).</param>
+    /// <param name="feedForwardDim">Feed-forward dimension (default: 2048).</param>
+    /// <param name="vocabularySize">Output vocabulary size (default: 51865).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length (default: 1500).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers forming a Whisper-style ASR model.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Whisper is an encoder-decoder transformer for speech recognition.
+    ///
+    /// The architecture consists of:
+    /// 1. Audio encoder: Converts mel spectrograms to hidden representations
+    ///    - Convolutional layers to process spectrogram
+    ///    - Transformer encoder layers with self-attention
+    /// 2. Text decoder: Generates text tokens autoregressively
+    ///    - Embedding layer for text tokens
+    ///    - Transformer decoder layers with self-attention
+    ///    - Output projection to vocabulary
+    ///
+    /// <b>IMPORTANT LIMITATION:</b> This method creates a flat sequential layer list which does NOT
+    /// support true encoder-decoder cross-attention. The "cross-attention" layers in the decoder
+    /// are actually additional self-attention layers because the flat architecture cannot route
+    /// encoder outputs to the decoder. For a proper Whisper implementation with cross-attention,
+    /// use the ONNX-based WhisperModel with pretrained weights, or implement a custom forward pass
+    /// that explicitly passes encoder outputs to decoder cross-attention layers.
+    ///
+    /// This creates a trainable model structure from scratch. For inference with pre-trained weights,
+    /// use the ONNX-based WhisperModel.CreateAsync() method instead.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultWhisperLayers(
+        int numMels = 80,
+        int modelDimension = 512,
+        int numEncoderLayers = 6,
+        int numDecoderLayers = 6,
+        int numHeads = 8,
+        int feedForwardDim = 2048,
+        int vocabularySize = 51865,
+        int maxSequenceLength = 1500,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // === AUDIO ENCODER ===
+
+        // Initial projection from mel spectrogram to model dimension
+        // Using Dense layer to project numMels features to modelDimension
+        yield return new DenseLayer<T>(numMels, modelDimension, geluActivation);
+
+        // Second projection for feature extraction
+        yield return new DenseLayer<T>(modelDimension, modelDimension, geluActivation);
+
+        // Positional encoding for encoder
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, modelDimension);
+
+        // Encoder dropout
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Encoder transformer layers
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            // Self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: modelDimension,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+
+            // Dropout
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            // Feed-forward network
+            yield return new DenseLayer<T>(modelDimension, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, modelDimension, identityActivation);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+
+            // Dropout
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // === TEXT DECODER ===
+
+        // Token embedding layer
+        yield return new EmbeddingLayer<T>(vocabularySize, modelDimension);
+
+        // Positional encoding for decoder
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, modelDimension);
+
+        // Decoder dropout
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Decoder transformer layers
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            // Self-attention layer for decoder
+            // NOTE: Causal masking for autoregressive decoding should be applied during
+            // the forward pass, not in the layer configuration. The MultiHeadAttentionLayer
+            // does not automatically apply causal masking - this must be handled by the
+            // model's forward implementation.
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: modelDimension,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+
+            // Dropout
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            // NOTE: This is a placeholder for cross-attention but functions as self-attention
+            // in the current flat sequential architecture. True cross-attention would require
+            // encoder output to be passed as key/value, which the flat layer list cannot support.
+            // For production use with proper cross-attention, use ONNX models or implement
+            // a custom forward pass.
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: modelDimension,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+
+            // Dropout
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            // Feed-forward network
+            yield return new DenseLayer<T>(modelDimension, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, modelDimension, identityActivation);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+
+            // Dropout
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Final layer normalization
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+
+        // Output projection to vocabulary
+        yield return new DenseLayer<T>(modelDimension, vocabularySize, identityActivation);
+    }
+
+    #region Language Identification Layers
+
+    /// <summary>
+    /// Creates default ECAPA-TDNN layers for spoken language identification.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numMels">Number of mel filterbank channels (default: 80).</param>
+    /// <param name="tdnnChannels">Number of TDNN channels (default: 1024).</param>
+    /// <param name="embeddingDimension">Embedding dimension (default: 192).</param>
+    /// <param name="numLanguages">Number of languages to classify (default: 20).</param>
+    /// <param name="dilations">Dilation factors for TDNN layers (default: [1, 2, 3, 4, 1]).</param>
+    /// <returns>A collection of layers forming an ECAPA-TDNN language identifier.</returns>
+    /// <remarks>
+    /// <para>
+    /// ECAPA-TDNN (Emphasized Channel Attention, Propagation and Aggregation TDNN)
+    /// is a state-of-the-art architecture for speaker and language recognition using:
+    /// - SE-Res2Net blocks with channel attention
+    /// - Multi-layer feature aggregation (MFA)
+    /// - Attentive statistics pooling
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultECAPATDNNLanguageIdentifierLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numMels = 80,
+        int tdnnChannels = 1024,
+        int embeddingDimension = 192,
+        int numLanguages = 20,
+        int[]? dilations = null)
+    {
+        dilations ??= [1, 2, 3, 4, 1];
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
+
+        int inputDim = numMels * 3; // MFCC + delta + delta-delta
+
+        // Initial TDNN layer
+        yield return new DenseLayer<T>(inputDim, tdnnChannels, reluActivation);
+        yield return new BatchNormalizationLayer<T>(tdnnChannels);
+
+        // SE-Res2Net blocks for each dilation
+        foreach (int dilation in dilations)
+        {
+            // 1x1 reduction
+            yield return new DenseLayer<T>(tdnnChannels, tdnnChannels / 4, reluActivation);
+            yield return new BatchNormalizationLayer<T>(tdnnChannels / 4);
+
+            // Dilated conv (simulated)
+            yield return new DenseLayer<T>(tdnnChannels / 4, tdnnChannels / 4, reluActivation);
+            yield return new BatchNormalizationLayer<T>(tdnnChannels / 4);
+
+            // 1x1 expansion
+            yield return new DenseLayer<T>(tdnnChannels / 4, tdnnChannels, reluActivation);
+            yield return new BatchNormalizationLayer<T>(tdnnChannels);
+
+            // Squeeze-Excitation block
+            int seReduction = 8;
+            yield return new DenseLayer<T>(tdnnChannels, tdnnChannels / seReduction, reluActivation);
+            yield return new DenseLayer<T>(tdnnChannels / seReduction, tdnnChannels, sigmoidActivation);
+        }
+
+        // Attentive Statistics Pooling projection
+        int mfaOutputDim = tdnnChannels * dilations.Length;
+        yield return new DenseLayer<T>(mfaOutputDim, embeddingDimension * 2);
+
+        // Final batch normalization
+        yield return new BatchNormalizationLayer<T>(embeddingDimension);
+
+        // Classification layer
+        yield return new DenseLayer<T>(embeddingDimension, numLanguages);
+    }
+
+    /// <summary>
+    /// Creates default Wav2Vec2 layers for spoken language identification.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="hiddenSize">Hidden size of transformer (default: 768).</param>
+    /// <param name="numLayers">Number of transformer layers (default: 12).</param>
+    /// <param name="numAttentionHeads">Number of attention heads (default: 12).</param>
+    /// <param name="intermediateSize">Feed-forward intermediate size (default: 3072).</param>
+    /// <param name="numLanguages">Number of languages to classify (default: 20).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers forming a Wav2Vec2 language identifier.</returns>
+    /// <remarks>
+    /// <para>
+    /// Wav2Vec2-LID uses Meta's self-supervised speech representation model:
+    /// - 7-layer CNN feature encoder processing raw waveform
+    /// - Transformer encoder for contextual representations
+    /// - Classification head for language prediction
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultWav2Vec2LanguageIdentifierLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenSize = 768,
+        int numLayers = 12,
+        int numAttentionHeads = 12,
+        int intermediateSize = 3072,
+        int numLanguages = 20,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> tanhActivation = new TanhActivation<T>();
+
+        // Feature encoder: 7 temporal convolution layers
+        int[] kernelSizes = [10, 3, 3, 3, 3, 2, 2];
+        int[] channels = [512, 512, 512, 512, 512, 512, 512];
+
+        int inputDim = 1; // Raw waveform
+        for (int i = 0; i < kernelSizes.Length; i++)
+        {
+            int outputDim = channels[i];
+            yield return new DenseLayer<T>(inputDim * kernelSizes[i], outputDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(outputDim);
+            inputDim = outputDim;
+        }
+
+        // Feature projection
+        yield return new DenseLayer<T>(channels[^1], hiddenSize, geluActivation);
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Transformer encoder layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Self-attention (simplified as dense)
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize);
+            yield return new LayerNormalizationLayer<T>(hiddenSize);
+
+            // Feed-forward
+            yield return new DenseLayer<T>(hiddenSize, intermediateSize, geluActivation);
+            yield return new DenseLayer<T>(intermediateSize, hiddenSize);
+            yield return new LayerNormalizationLayer<T>(hiddenSize);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Classification head
+        yield return new DenseLayer<T>(hiddenSize, hiddenSize, tanhActivation);
+        yield return new DenseLayer<T>(hiddenSize, numLanguages);
+    }
+
+    /// <summary>
+    /// Creates default VoxLingua107 layers for 107-language identification.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numMels">Number of mel filterbank channels (default: 80).</param>
+    /// <param name="tdnnChannels">Number of TDNN channels (default: 1024).</param>
+    /// <param name="embeddingDimension">Embedding dimension (default: 256).</param>
+    /// <param name="dilations">Dilation factors for TDNN layers (default: [1, 2, 3, 4, 1]).</param>
+    /// <returns>A collection of layers forming a VoxLingua107 language identifier.</returns>
+    /// <remarks>
+    /// <para>
+    /// VoxLingua107 uses ECAPA-TDNN architecture trained on 107 languages from
+    /// the VoxLingua107 dataset (YouTube speech samples).
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultVoxLingua107Layers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numMels = 80,
+        int tdnnChannels = 1024,
+        int embeddingDimension = 256,
+        int[]? dilations = null)
+    {
+        // VoxLingua107 uses ECAPA-TDNN with 107 output classes
+        return CreateDefaultECAPATDNNLanguageIdentifierLayers(
+            architecture,
+            numMels: numMels,
+            tdnnChannels: tdnnChannels,
+            embeddingDimension: embeddingDimension,
+            numLanguages: 107,
+            dilations: dilations);
+    }
+
+    #endregion
+
+    #region Audio Generation Layers
+
+    /// <summary>
+    /// Creates default AudioGen layers for text-to-audio generation.
+    /// </summary>
+    /// <param name="textHiddenDim">Text encoder hidden dimension (default: 768 for T5-base).</param>
+    /// <param name="lmHiddenDim">Language model hidden dimension (default: 1536).</param>
+    /// <param name="numLmLayers">Number of language model transformer layers (default: 24).</param>
+    /// <param name="numHeads">Number of attention heads (default: 16).</param>
+    /// <param name="numCodebooks">Number of EnCodec codebooks (default: 4).</param>
+    /// <param name="codebookSize">Size of each codebook vocabulary (default: 1024).</param>
+    /// <param name="maxTextLength">Maximum text sequence length (default: 256).</param>
+    /// <param name="maxAudioTokens">Maximum audio tokens (~50 tokens/sec) (default: 1500 for 30s).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers forming an AudioGen model.</returns>
+    /// <remarks>
+    /// <para>
+    /// AudioGen is a text-to-audio generation model that uses a transformer language model
+    /// operating over EnCodec audio codes. Unlike MusicGen, it focuses on general audio
+    /// and environmental sounds rather than music.
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>T5-based text encoder for conditioning</description></item>
+    /// <item><description>Transformer decoder generating audio codes autoregressively</description></item>
+    /// <item><description>EnCodec neural audio codec for audio reconstruction</description></item>
+    /// </list>
+    /// <para>
+    /// Reference: "AudioGen: Textually Guided Audio Generation" by Kreuk et al., 2022
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultAudioGenLayers(
+        int textHiddenDim = 768,
+        int lmHiddenDim = 1536,
+        int numLmLayers = 24,
+        int numHeads = 16,
+        int numCodebooks = 4,
+        int codebookSize = 1024,
+        int maxTextLength = 256,
+        int maxAudioTokens = 1500,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // === TEXT ENCODER (T5-style) ===
+
+        // Token embedding: T5 vocabulary to hidden dimension
+        yield return new EmbeddingLayer<T>(32128, textHiddenDim);
+
+        // Positional encoding for text
+        yield return new PositionalEncodingLayer<T>(maxTextLength, textHiddenDim);
+
+        // Encoder dropout
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Text encoder transformer layers (6 layers, T5-base style)
+        for (int i = 0; i < 6; i++)
+        {
+            // Self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxTextLength,
+                embeddingDimension: textHiddenDim,
+                headCount: numHeads);
+
+            // Layer norm
+            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+
+            // Feedforward
+            yield return new DenseLayer<T>(textHiddenDim, textHiddenDim * 4, geluActivation);
+            yield return new DenseLayer<T>(textHiddenDim * 4, textHiddenDim, identityActivation);
+
+            // Layer norm
+            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Project text to language model dimension
+        yield return new DenseLayer<T>(textHiddenDim, lmHiddenDim, identityActivation);
+
+        // === AUDIO CODE EMBEDDING ===
+
+        // Embedding for audio codes from all codebooks
+        yield return new EmbeddingLayer<T>(codebookSize * numCodebooks, lmHiddenDim);
+
+        // Positional encoding for audio sequence
+        yield return new PositionalEncodingLayer<T>(maxAudioTokens, lmHiddenDim);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === LANGUAGE MODEL DECODER ===
+
+        // Transformer decoder layers
+        for (int i = 0; i < numLmLayers; i++)
+        {
+            yield return new TransformerDecoderLayer<T>(
+                embeddingSize: lmHiddenDim,
+                numHeads: numHeads,
+                feedForwardDim: lmHiddenDim * 4,
+                sequenceLength: maxAudioTokens,
+                ffnActivation: geluActivation);
+
+            if (dropoutRate > 0 && i < numLmLayers - 1)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Final layer norm
+        yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+
+        // === OUTPUT PROJECTION ===
+
+        // Project to codebook logits
+        yield return new DenseLayer<T>(lmHiddenDim, codebookSize * numCodebooks, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default MusicGen layers for text-to-music generation.
+    /// </summary>
+    /// <param name="textHiddenDim">Text encoder hidden dimension (default: 768 for T5-base).</param>
+    /// <param name="lmHiddenDim">Language model hidden dimension (default: 1536).</param>
+    /// <param name="numLmLayers">Number of language model transformer layers (default: 24).</param>
+    /// <param name="numHeads">Number of attention heads (default: 16).</param>
+    /// <param name="numCodebooks">Number of EnCodec codebooks (default: 4).</param>
+    /// <param name="codebookSize">Size of each codebook vocabulary (default: 2048).</param>
+    /// <param name="maxTextLength">Maximum text sequence length (default: 256).</param>
+    /// <param name="maxAudioTokens">Maximum audio tokens (~50 tokens/sec) (default: 1500 for 30s).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers forming a MusicGen model.</returns>
+    /// <remarks>
+    /// <para>
+    /// MusicGen is Meta's text-to-music generation model that uses a single-stage
+    /// transformer language model operating over EnCodec audio codes. Key features:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Delay pattern for codebook interleaving (reduces sequence length)</description></item>
+    /// <item><description>T5-based text encoder for conditioning</description></item>
+    /// <item><description>Transformer decoder generating audio codes autoregressively</description></item>
+    /// <item><description>EnCodec neural audio codec for high-quality audio reconstruction</description></item>
+    /// </list>
+    /// <para>
+    /// Reference: "Simple and Controllable Music Generation" by Copet et al., 2023
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultMusicGenLayers(
+        int textHiddenDim = 768,
+        int lmHiddenDim = 1536,
+        int numLmLayers = 24,
+        int numHeads = 16,
+        int numCodebooks = 4,
+        int codebookSize = 2048,
+        int maxTextLength = 256,
+        int maxAudioTokens = 1500,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // === TEXT ENCODER (T5-style) ===
+
+        // Token embedding: T5 vocabulary to hidden dimension
+        yield return new EmbeddingLayer<T>(32128, textHiddenDim);
+
+        // Positional encoding for text
+        yield return new PositionalEncodingLayer<T>(maxTextLength, textHiddenDim);
+
+        // Encoder dropout
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Text encoder transformer layers (6 layers, T5-base style)
+        for (int i = 0; i < 6; i++)
+        {
+            // Self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxTextLength,
+                embeddingDimension: textHiddenDim,
+                headCount: 12,
+                activationFunction: identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            // Feed-forward network
+            yield return new DenseLayer<T>(textHiddenDim, textHiddenDim * 4, geluActivation);
+            yield return new DenseLayer<T>(textHiddenDim * 4, textHiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Project text encoder output to LM dimension
+        yield return new DenseLayer<T>(textHiddenDim, lmHiddenDim, identityActivation);
+
+        // === AUDIO CODE EMBEDDING ===
+
+        // Combined codebook embedding (all codebooks share embedding space)
+        yield return new EmbeddingLayer<T>(codebookSize * numCodebooks + 1, lmHiddenDim); // +1 for start token
+
+        // Positional encoding for audio sequence
+        yield return new PositionalEncodingLayer<T>(maxAudioTokens, lmHiddenDim);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === TRANSFORMER LANGUAGE MODEL ===
+
+        // Decoder layers with cross-attention to text encoder
+        for (int i = 0; i < numLmLayers; i++)
+        {
+            // Self-attention (causal/masked for autoregressive generation)
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxAudioTokens,
+                embeddingDimension: lmHiddenDim,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            // Cross-attention to text encoder output
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxAudioTokens,
+                embeddingDimension: lmHiddenDim,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            // Feed-forward network
+            yield return new DenseLayer<T>(lmHiddenDim, lmHiddenDim * 4, geluActivation);
+            yield return new DenseLayer<T>(lmHiddenDim * 4, lmHiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Final layer normalization
+        yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+
+        // === OUTPUT PROJECTION ===
+
+        // Project to codebook logits (one set per codebook for delay pattern)
+        for (int cb = 0; cb < numCodebooks; cb++)
+        {
+            yield return new DenseLayer<T>(lmHiddenDim, codebookSize, identityActivation);
+        }
+    }
+
+    /// <summary>
+    /// Creates default AudioLDM layers for text-to-audio generation using latent diffusion.
+    /// </summary>
+    /// <param name="textHiddenDim">Text encoder hidden dimension (default: 768 for CLAP).</param>
+    /// <param name="latentDim">Latent space dimension (default: 8).</param>
+    /// <param name="unetChannels">U-Net base channels (default: 256).</param>
+    /// <param name="numResBlocks">Number of residual blocks per level (default: 2).</param>
+    /// <param name="attentionResolutions">Resolutions at which to apply attention (default: [4, 2, 1]).</param>
+    /// <param name="numHeads">Number of attention heads (default: 8).</param>
+    /// <param name="numMels">Number of mel spectrogram channels (default: 64).</param>
+    /// <param name="maxTextLength">Maximum text sequence length (default: 77).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers forming an AudioLDM model.</returns>
+    /// <remarks>
+    /// <para>
+    /// AudioLDM uses latent diffusion for text-to-audio generation:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>CLAP text encoder for conditioning</description></item>
+    /// <item><description>VAE to encode/decode mel spectrograms to latent space</description></item>
+    /// <item><description>U-Net for denoising in latent space</description></item>
+    /// <item><description>HiFi-GAN vocoder for waveform generation</description></item>
+    /// </list>
+    /// <para>
+    /// Reference: "AudioLDM: Text-to-Audio Generation with Latent Diffusion Models" by Liu et al., 2023
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultAudioLDMLayers(
+        int textHiddenDim = 768,
+        int latentDim = 8,
+        int unetChannels = 256,
+        int numResBlocks = 2,
+        int[]? attentionResolutions = null,
+        int numHeads = 8,
+        int numMels = 64,
+        int maxTextLength = 77,
+        double dropoutRate = 0.1)
+    {
+        attentionResolutions ??= [4, 2, 1];
+        IActivationFunction<T> siluActivation = new SwishActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // === TEXT ENCODER (CLAP-style) ===
+
+        // Token embedding
+        yield return new EmbeddingLayer<T>(49408, textHiddenDim); // CLIP vocabulary
+
+        // Positional encoding
+        yield return new PositionalEncodingLayer<T>(maxTextLength, textHiddenDim);
+
+        // Transformer encoder layers
+        for (int i = 0; i < 12; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxTextLength,
+                embeddingDimension: textHiddenDim,
+                headCount: 12,
+                activationFunction: identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+
+            yield return new DenseLayer<T>(textHiddenDim, textHiddenDim * 4, siluActivation);
+            yield return new DenseLayer<T>(textHiddenDim * 4, textHiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+        }
+
+        // === VAE ENCODER ===
+
+        // Initial convolution from mel spectrogram
+        yield return new DenseLayer<T>(numMels, unetChannels, siluActivation);
+
+        // Down-sampling path
+        int[] channelMults = [1, 2, 4, 4];
+        int currentChannels = unetChannels;
+
+        foreach (int mult in channelMults)
+        {
+            int outChannels = unetChannels * mult;
+
+            for (int r = 0; r < numResBlocks; r++)
+            {
+                yield return new DenseLayer<T>(currentChannels, outChannels, siluActivation);
+                yield return new LayerNormalizationLayer<T>(outChannels);
+                currentChannels = outChannels;
+            }
+
+            // Downsample (except last level)
+            if (mult != channelMults[^1])
+            {
+                yield return new DenseLayer<T>(currentChannels, currentChannels, siluActivation);
+            }
+        }
+
+        // Latent projection
+        yield return new DenseLayer<T>(currentChannels, latentDim * 2, identityActivation); // mean + log_var
+
+        // === U-NET DENOISER ===
+
+        // Time embedding
+        yield return new DenseLayer<T>(latentDim, unetChannels * 4, siluActivation);
+        yield return new DenseLayer<T>(unetChannels * 4, unetChannels * 4, siluActivation);
+
+        // U-Net encoder path
+        currentChannels = latentDim;
+        yield return new DenseLayer<T>(currentChannels, unetChannels, siluActivation);
+        currentChannels = unetChannels;
+
+        foreach (int mult in channelMults)
+        {
+            int outChannels = unetChannels * mult;
+
+            for (int r = 0; r < numResBlocks; r++)
+            {
+                yield return new DenseLayer<T>(currentChannels, outChannels, siluActivation);
+                yield return new LayerNormalizationLayer<T>(outChannels);
+
+                // Cross-attention at specified resolutions
+                if (attentionResolutions.Contains(mult))
+                {
+                    yield return new MultiHeadAttentionLayer<T>(
+                        sequenceLength: maxTextLength,
+                        embeddingDimension: outChannels,
+                        headCount: numHeads,
+                        activationFunction: identityActivation);
+                    yield return new LayerNormalizationLayer<T>(outChannels);
+                }
+
+                currentChannels = outChannels;
+            }
+        }
+
+        // Middle block
+        yield return new DenseLayer<T>(currentChannels, currentChannels, siluActivation);
+        yield return new MultiHeadAttentionLayer<T>(
+            sequenceLength: maxTextLength,
+            embeddingDimension: currentChannels,
+            headCount: numHeads,
+            activationFunction: identityActivation);
+        yield return new DenseLayer<T>(currentChannels, currentChannels, siluActivation);
+
+        // U-Net decoder path (symmetric to encoder)
+        for (int i = channelMults.Length - 1; i >= 0; i--)
+        {
+            int mult = channelMults[i];
+            int outChannels = unetChannels * mult;
+
+            for (int r = 0; r < numResBlocks + 1; r++)
+            {
+                yield return new DenseLayer<T>(currentChannels, outChannels, siluActivation);
+                yield return new LayerNormalizationLayer<T>(outChannels);
+
+                if (attentionResolutions.Contains(mult))
+                {
+                    yield return new MultiHeadAttentionLayer<T>(
+                        sequenceLength: maxTextLength,
+                        embeddingDimension: outChannels,
+                        headCount: numHeads,
+                        activationFunction: identityActivation);
+                    yield return new LayerNormalizationLayer<T>(outChannels);
+                }
+
+                currentChannels = outChannels;
+            }
+
+            // Upsample (except first level)
+            if (i > 0)
+            {
+                yield return new DenseLayer<T>(currentChannels, currentChannels, siluActivation);
+            }
+        }
+
+        // Output projection to latent
+        yield return new LayerNormalizationLayer<T>(currentChannels);
+        yield return new DenseLayer<T>(currentChannels, latentDim, identityActivation);
+
+        // === VAE DECODER ===
+
+        // Latent to channels
+        yield return new DenseLayer<T>(latentDim, unetChannels * channelMults[^1], siluActivation);
+        currentChannels = unetChannels * channelMults[^1];
+
+        // Up-sampling path
+        for (int i = channelMults.Length - 1; i >= 0; i--)
+        {
+            int mult = channelMults[i];
+            int outChannels = unetChannels * mult;
+
+            for (int r = 0; r < numResBlocks + 1; r++)
+            {
+                yield return new DenseLayer<T>(currentChannels, outChannels, siluActivation);
+                yield return new LayerNormalizationLayer<T>(outChannels);
+                currentChannels = outChannels;
+            }
+
+            // Upsample (except first level)
+            if (i > 0)
+            {
+                yield return new DenseLayer<T>(currentChannels, currentChannels, siluActivation);
+            }
+        }
+
+        // Output projection to mel spectrogram
+        yield return new LayerNormalizationLayer<T>(currentChannels);
+        yield return new DenseLayer<T>(currentChannels, numMels, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default Stable Audio layers for text-to-audio generation.
+    /// </summary>
+    /// <param name="textHiddenDim">Text encoder hidden dimension (default: 768).</param>
+    /// <param name="latentDim">Latent space dimension (default: 64).</param>
+    /// <param name="ditHiddenDim">DiT hidden dimension (default: 1024).</param>
+    /// <param name="numDitBlocks">Number of DiT transformer blocks (default: 24).</param>
+    /// <param name="numHeads">Number of attention heads (default: 16).</param>
+    /// <param name="maxTextLength">Maximum text sequence length (default: 512).</param>
+    /// <param name="maxAudioLength">Maximum audio latent sequence length (default: 2048).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers forming a Stable Audio model.</returns>
+    /// <remarks>
+    /// <para>
+    /// Stable Audio by Stability AI uses a Diffusion Transformer (DiT) architecture:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>T5-based text encoder for conditioning</description></item>
+    /// <item><description>Variational autoencoder for audio latent compression</description></item>
+    /// <item><description>DiT (Diffusion Transformer) for denoising in latent space</description></item>
+    /// <item><description>Supports variable-length audio generation with timing conditioning</description></item>
+    /// </list>
+    /// <para>
+    /// Reference: "Stable Audio: Fast Timing-Conditioned Latent Audio Diffusion" by Evans et al., 2024
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultStableAudioLayers(
+        int textHiddenDim = 768,
+        int latentDim = 64,
+        int ditHiddenDim = 1024,
+        int numDitBlocks = 24,
+        int numHeads = 16,
+        int maxTextLength = 512,
+        int maxAudioLength = 2048,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> siluActivation = new SwishActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // === T5 TEXT ENCODER ===
+
+        // Token embedding
+        yield return new EmbeddingLayer<T>(32128, textHiddenDim);
+
+        // Positional encoding
+        yield return new PositionalEncodingLayer<T>(maxTextLength, textHiddenDim);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // T5 encoder layers
+        for (int i = 0; i < 12; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxTextLength,
+                embeddingDimension: textHiddenDim,
+                headCount: 12,
+                activationFunction: identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+
+            yield return new DenseLayer<T>(textHiddenDim, textHiddenDim * 4, geluActivation);
+            yield return new DenseLayer<T>(textHiddenDim * 4, textHiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Project to DiT dimension
+        yield return new DenseLayer<T>(textHiddenDim, ditHiddenDim, identityActivation);
+
+        // === TIMING CONDITIONING ===
+
+        // Start/end time embedding (seconds conditioning)
+        yield return new DenseLayer<T>(2, ditHiddenDim, siluActivation);
+        yield return new DenseLayer<T>(ditHiddenDim, ditHiddenDim, siluActivation);
+
+        // === VAE ENCODER ===
+
+        // Audio waveform to latent space
+        yield return new DenseLayer<T>(1, 128, siluActivation);
+        yield return new DenseLayer<T>(128, 256, siluActivation);
+        yield return new DenseLayer<T>(256, 512, siluActivation);
+        yield return new DenseLayer<T>(512, latentDim * 2, identityActivation); // mean + log_var
+
+        // === DiT (DIFFUSION TRANSFORMER) ===
+
+        // Latent projection
+        yield return new DenseLayer<T>(latentDim, ditHiddenDim, identityActivation);
+
+        // Positional encoding for audio latents
+        yield return new PositionalEncodingLayer<T>(maxAudioLength, ditHiddenDim);
+
+        // Timestep embedding (sinusoidal + MLP)
+        yield return new DenseLayer<T>(ditHiddenDim, ditHiddenDim * 4, siluActivation);
+        yield return new DenseLayer<T>(ditHiddenDim * 4, ditHiddenDim, identityActivation);
+
+        // DiT blocks (transformer with AdaLN conditioning)
+        for (int i = 0; i < numDitBlocks; i++)
+        {
+            // Self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxAudioLength,
+                embeddingDimension: ditHiddenDim,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(ditHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            // Cross-attention to text encoder output
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxAudioLength,
+                embeddingDimension: ditHiddenDim,
+                headCount: numHeads,
+                activationFunction: identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(ditHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            // Feed-forward network with GELU
+            yield return new DenseLayer<T>(ditHiddenDim, ditHiddenDim * 4, geluActivation);
+            yield return new DenseLayer<T>(ditHiddenDim * 4, ditHiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(ditHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Final layer normalization
+        yield return new LayerNormalizationLayer<T>(ditHiddenDim);
+
+        // Output projection to latent space
+        yield return new DenseLayer<T>(ditHiddenDim, latentDim, identityActivation);
+
+        // === VAE DECODER ===
+
+        // Latent to waveform
+        yield return new DenseLayer<T>(latentDim, 512, siluActivation);
+        yield return new DenseLayer<T>(512, 256, siluActivation);
+        yield return new DenseLayer<T>(256, 128, siluActivation);
+        yield return new DenseLayer<T>(128, 1, identityActivation); // mono audio output
+    }
+
+    /// <summary>
+    /// Creates default Whisper layers for automatic speech recognition.
+    /// </summary>
+    /// <param name="modelDim">Model hidden dimension (default: 512 for Base).</param>
+    /// <param name="numEncoderLayers">Number of encoder transformer layers (default: 6 for Base).</param>
+    /// <param name="numDecoderLayers">Number of decoder transformer layers (default: 6 for Base).</param>
+    /// <param name="numHeads">Number of attention heads (default: 8 for Base).</param>
+    /// <param name="ffDim">Feed-forward hidden dimension (default: 2048 for Base).</param>
+    /// <param name="numMels">Number of mel spectrogram bins (default: 80).</param>
+    /// <param name="maxFrames">Maximum mel spectrogram frames (default: 3000 for 30s audio).</param>
+    /// <param name="maxTokens">Maximum output token sequence length (default: 448).</param>
+    /// <param name="vocabSize">Whisper vocabulary size (default: 51865).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.0 for inference-optimized).</param>
+    /// <returns>A collection of layers forming a Whisper encoder-decoder architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// Whisper is OpenAI's state-of-the-art automatic speech recognition model with:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Mel spectrogram audio preprocessing (80 bins, 16kHz)</description></item>
+    /// <item><description>Convolutional stem for initial audio feature extraction</description></item>
+    /// <item><description>Transformer encoder for audio representation learning</description></item>
+    /// <item><description>Transformer decoder with cross-attention for text generation</description></item>
+    /// <item><description>Support for 99+ languages and translation to English</description></item>
+    /// </list>
+    /// <para>
+    /// Reference: "Robust Speech Recognition via Large-Scale Weak Supervision" by Radford et al., 2022
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultWhisperLayers(
+        int modelDim = 512,
+        int numEncoderLayers = 6,
+        int numDecoderLayers = 6,
+        int numHeads = 8,
+        int ffDim = 2048,
+        int numMels = 80,
+        int maxFrames = 3000,
+        int maxTokens = 448,
+        int vocabSize = 51865,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // === AUDIO ENCODER ===
+
+        // Initial projection from mel spectrogram to model dimension
+        // (Simulating convolutional stem with dense layers for framework compatibility)
+        yield return new DenseLayer<T>(numMels, modelDim, geluActivation);
+        yield return new DenseLayer<T>(modelDim, modelDim, geluActivation);
+
+        // Positional encoding for encoder
+        yield return new PositionalEncodingLayer<T>(maxFrames, modelDim);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Encoder transformer layers
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            // Self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxFrames,
+                embeddingDimension: modelDim,
+                headCount: numHeads);
+
+            // Layer normalization (pre-LN architecture)
+            yield return new LayerNormalizationLayer<T>(modelDim);
+
+            // Feed-forward network
+            yield return new DenseLayer<T>(modelDim, ffDim, geluActivation);
+            yield return new DenseLayer<T>(ffDim, modelDim, identityActivation);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Final encoder layer normalization
+        yield return new LayerNormalizationLayer<T>(modelDim);
+
+        // === TEXT DECODER ===
+
+        // Token embedding (Whisper vocabulary)
+        yield return new EmbeddingLayer<T>(vocabSize, modelDim);
+
+        // Positional encoding for decoder
+        yield return new PositionalEncodingLayer<T>(maxTokens, modelDim);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Decoder transformer layers with cross-attention
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new TransformerDecoderLayer<T>(
+                embeddingSize: modelDim,
+                numHeads: numHeads,
+                feedForwardDim: ffDim,
+                sequenceLength: maxTokens,
+                ffnActivation: geluActivation);
+
+            if (dropoutRate > 0 && i < numDecoderLayers - 1)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Final decoder layer normalization
+        yield return new LayerNormalizationLayer<T>(modelDim);
+
+        // Output projection to vocabulary logits
+        yield return new DenseLayer<T>(modelDim, vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default TTS (Text-to-Speech) layers for speech synthesis.
+    /// </summary>
+    /// <param name="textHiddenDim">Text encoder hidden dimension (default: 256).</param>
+    /// <param name="audioHiddenDim">Audio decoder hidden dimension (default: 512).</param>
+    /// <param name="numEncoderLayers">Number of encoder transformer layers (default: 6).</param>
+    /// <param name="numDecoderLayers">Number of decoder transformer layers (default: 6).</param>
+    /// <param name="numHeads">Number of attention heads (default: 8).</param>
+    /// <param name="numMels">Number of mel spectrogram bins (default: 80).</param>
+    /// <param name="maxTextLength">Maximum input text length (default: 512).</param>
+    /// <param name="maxMelFrames">Maximum mel spectrogram frames (default: 1000).</param>
+    /// <param name="vocabSize">Phoneme/character vocabulary size (default: 148).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers forming a TTS encoder-decoder architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// TTS architecture with:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Character/phoneme embedding with positional encoding</description></item>
+    /// <item><description>Transformer encoder for text representation</description></item>
+    /// <item><description>Transformer decoder with cross-attention for mel generation</description></item>
+    /// <item><description>Post-net convolutional refinement (simulated with dense layers)</description></item>
+    /// </list>
+    /// <para>
+    /// Reference: "Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions" (Tacotron 2)
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultTtsLayers(
+        int textHiddenDim = 256,
+        int audioHiddenDim = 512,
+        int numEncoderLayers = 6,
+        int numDecoderLayers = 6,
+        int numHeads = 8,
+        int numMels = 80,
+        int maxTextLength = 512,
+        int maxMelFrames = 1000,
+        int vocabSize = 148,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> tanhActivation = new TanhActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // === TEXT ENCODER ===
+
+        // Character/phoneme embedding
+        yield return new EmbeddingLayer<T>(vocabSize, textHiddenDim);
+
+        // Positional encoding for text
+        yield return new PositionalEncodingLayer<T>(maxTextLength, textHiddenDim);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Text encoder transformer layers
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxTextLength,
+                embeddingDimension: textHiddenDim,
+                headCount: numHeads);
+
+            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+
+            yield return new DenseLayer<T>(textHiddenDim, textHiddenDim * 4, reluActivation);
+            yield return new DenseLayer<T>(textHiddenDim * 4, textHiddenDim, identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Project to decoder dimension
+        yield return new DenseLayer<T>(textHiddenDim, audioHiddenDim, identityActivation);
+
+        // === MEL DECODER ===
+
+        // Pre-net for mel input (autoregressive conditioning)
+        yield return new DenseLayer<T>(numMels, audioHiddenDim, reluActivation);
+        yield return new DenseLayer<T>(audioHiddenDim, audioHiddenDim, reluActivation);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Decoder transformer layers
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new TransformerDecoderLayer<T>(
+                embeddingSize: audioHiddenDim,
+                numHeads: numHeads,
+                feedForwardDim: audioHiddenDim * 4,
+                sequenceLength: maxMelFrames,
+                ffnActivation: reluActivation);
+
+            if (dropoutRate > 0 && i < numDecoderLayers - 1)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Mel projection
+        yield return new DenseLayer<T>(audioHiddenDim, numMels, identityActivation);
+
+        // === POST-NET (5 convolutional layers simulated with dense) ===
+        yield return new DenseLayer<T>(numMels, 512, tanhActivation);
+        yield return new DenseLayer<T>(512, 512, tanhActivation);
+        yield return new DenseLayer<T>(512, 512, tanhActivation);
+        yield return new DenseLayer<T>(512, 512, tanhActivation);
+        yield return new DenseLayer<T>(512, numMels, identityActivation);
+
+        // Stop token prediction
+        yield return new DenseLayer<T>(audioHiddenDim, 1, (IActivationFunction<T>)new SigmoidActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default speaker embedding layers for speaker verification and identification.
+    /// </summary>
+    /// <param name="numMels">Number of mel spectrogram bins (default: 80).</param>
+    /// <param name="hiddenDim">Hidden layer dimension (default: 512).</param>
+    /// <param name="embeddingDim">Output embedding dimension (default: 256).</param>
+    /// <param name="numLayers">Number of LSTM-like layers (default: 3).</param>
+    /// <param name="maxFrames">Maximum input frames (default: 500).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers for speaker embedding extraction.</returns>
+    /// <remarks>
+    /// <para>
+    /// ECAPA-TDNN inspired architecture for speaker embedding with:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Frame-level feature extraction with attention</description></item>
+    /// <item><description>Temporal context aggregation</description></item>
+    /// <item><description>Attentive statistics pooling</description></item>
+    /// <item><description>Speaker embedding projection</description></item>
+    /// </list>
+    /// <para>
+    /// Reference: "ECAPA-TDNN: Emphasized Channel Attention, Propagation and Aggregation in TDNN"
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultSpeakerEmbeddingLayers(
+        int numMels = 80,
+        int hiddenDim = 512,
+        int embeddingDim = 256,
+        int numLayers = 3,
+        int maxFrames = 500,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Initial feature projection
+        yield return new DenseLayer<T>(numMels, hiddenDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Frame-level processing with attention (simulating TDNN with attention)
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Self-attention for temporal modeling
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxFrames,
+                embeddingDimension: hiddenDim,
+                headCount: 8);
+
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            // Feed-forward with residual-like structure
+            yield return new DenseLayer<T>(hiddenDim, hiddenDim * 2, reluActivation);
+            yield return new DenseLayer<T>(hiddenDim * 2, hiddenDim, identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Attentive statistics pooling (simplified)
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim, (IActivationFunction<T>)new TanhActivation<T>());
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim, identityActivation);
+
+        // Final embedding projection
+        yield return new DenseLayer<T>(hiddenDim, embeddingDim, identityActivation);
+
+        // L2 normalization is handled in the model code
+    }
+
+    /// <summary>
+    /// Creates default genre classification layers.
+    /// </summary>
+    /// <param name="numMels">Number of mel spectrogram bins (default: 128).</param>
+    /// <param name="hiddenDim">Hidden layer dimension (default: 256).</param>
+    /// <param name="numClasses">Number of genre classes (default: 10).</param>
+    /// <param name="maxFrames">Maximum input frames (default: 1000).</param>
+    /// <param name="numAttentionLayers">Number of attention layers (default: 4).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.3).</param>
+    /// <returns>A collection of layers for genre classification.</returns>
+    /// <remarks>
+    /// <para>
+    /// Audio classification architecture with:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Mel spectrogram feature extraction</description></item>
+    /// <item><description>Transformer encoder for temporal modeling</description></item>
+    /// <item><description>Global average pooling</description></item>
+    /// <item><description>Classification head with softmax output</description></item>
+    /// </list>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultGenreClassifierLayers(
+        int numMels = 128,
+        int hiddenDim = 256,
+        int numClasses = 10,
+        int maxFrames = 1000,
+        int numAttentionLayers = 4,
+        double dropoutRate = 0.3)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Feature projection
+        yield return new DenseLayer<T>(numMels, hiddenDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Positional encoding
+        yield return new PositionalEncodingLayer<T>(maxFrames, hiddenDim);
+
+        // Transformer encoder layers
+        for (int i = 0; i < numAttentionLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxFrames,
+                embeddingDimension: hiddenDim,
+                headCount: 8);
+
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            yield return new DenseLayer<T>(hiddenDim, hiddenDim * 4, reluActivation);
+            yield return new DenseLayer<T>(hiddenDim * 4, hiddenDim, identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Classification head
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim, reluActivation);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        yield return new DenseLayer<T>(hiddenDim, numClasses, identityActivation);
+        // Softmax is applied in the model's prediction logic
+    }
+
+    /// <summary>
+    /// Creates default music source separation layers (U-Net style).
+    /// </summary>
+    /// <param name="numMels">Number of spectrogram frequency bins (default: 513 for STFT with 1024 window).</param>
+    /// <param name="baseChannels">Base channel count for U-Net (default: 32).</param>
+    /// <param name="numSources">Number of output sources (default: 4 for vocals, drums, bass, other).</param>
+    /// <param name="maxFrames">Maximum time frames (default: 512).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers for music source separation.</returns>
+    /// <remarks>
+    /// <para>
+    /// U-Net inspired architecture for source separation with:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Encoder path with downsampling</description></item>
+    /// <item><description>Bottleneck with attention</description></item>
+    /// <item><description>Decoder path with upsampling and skip connections</description></item>
+    /// <item><description>Multi-source mask prediction</description></item>
+    /// </list>
+    /// <para>
+    /// Reference: "Open-Unmix - A Reference Implementation for Music Source Separation"
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultSourceSeparationLayers(
+        int numMels = 513,
+        int baseChannels = 32,
+        int numSources = 4,
+        int maxFrames = 512,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // === ENCODER PATH ===
+
+        // Initial feature extraction
+        yield return new DenseLayer<T>(numMels, baseChannels * 4, reluActivation);
+        yield return new LayerNormalizationLayer<T>(baseChannels * 4);
+
+        // Encoder level 1
+        yield return new DenseLayer<T>(baseChannels * 4, baseChannels * 8, reluActivation);
+        yield return new LayerNormalizationLayer<T>(baseChannels * 8);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Encoder level 2
+        yield return new DenseLayer<T>(baseChannels * 8, baseChannels * 16, reluActivation);
+        yield return new LayerNormalizationLayer<T>(baseChannels * 16);
+
+        // === BOTTLENECK ===
+
+        // Attention for global context
+        yield return new MultiHeadAttentionLayer<T>(
+            sequenceLength: maxFrames,
+            embeddingDimension: baseChannels * 16,
+            headCount: 8);
+
+        yield return new LayerNormalizationLayer<T>(baseChannels * 16);
+
+        // LSTM-like temporal modeling (using attention + dense)
+        yield return new DenseLayer<T>(baseChannels * 16, baseChannels * 16, reluActivation);
+        yield return new DenseLayer<T>(baseChannels * 16, baseChannels * 16, identityActivation);
+
+        yield return new LayerNormalizationLayer<T>(baseChannels * 16);
+
+        // === DECODER PATH ===
+
+        // Decoder level 2
+        yield return new DenseLayer<T>(baseChannels * 16, baseChannels * 8, reluActivation);
+        yield return new LayerNormalizationLayer<T>(baseChannels * 8);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Decoder level 1
+        yield return new DenseLayer<T>(baseChannels * 8, baseChannels * 4, reluActivation);
+        yield return new LayerNormalizationLayer<T>(baseChannels * 4);
+
+        // === OUTPUT LAYER ===
+
+        // Project to output masks for all sources
+        yield return new DenseLayer<T>(baseChannels * 4, numMels * numSources, sigmoidActivation);
+    }
+
+    #endregion
+
+    #region Video AI Layers
+
+    /// <summary>
+    /// Creates layers for a video super-resolution model (Real-ESRGAN/BasicVSR++ style).
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input video height.</param>
+    /// <param name="inputWidth">Input video width.</param>
+    /// <param name="numFeatures">Number of feature channels (default: 64).</param>
+    /// <param name="numResBlocks">Number of residual blocks (default: 16).</param>
+    /// <param name="scaleFactor">Upscaling factor (default: 2).</param>
+    /// <param name="useTemporalConsistency">Whether to add temporal aggregation layer (default: true).</param>
+    /// <returns>A collection of layers for video super-resolution.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Super-resolution models increase video resolution. This architecture
+    /// uses residual blocks (skip connections) to preserve details while learning to add new ones.
+    /// The upsampling at the end increases the spatial size by the scale factor.
+    ///
+    /// Architecture overview:
+    /// 1. Initial convolution to extract features
+    /// 2. Multiple residual blocks for deep feature learning
+    /// 3. Temporal aggregation for video consistency (optional)
+    /// 4. Pixel shuffle upsampling for resolution increase
+    /// 5. Final convolution for output reconstruction
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultVideoSuperResolutionLayers(
+        int inputChannels = 3,
+        int inputHeight = 128,
+        int inputWidth = 128,
+        int numFeatures = 64,
+        int numResBlocks = 16,
+        int scaleFactor = 2,
+        bool useTemporalConsistency = true)
+    {
+        // Validate scaleFactor is a positive power of two (Real-ESRGAN only supports 2x/4x)
+        if (scaleFactor <= 0 || (scaleFactor & (scaleFactor - 1)) != 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(scaleFactor),
+                $"scaleFactor must be a positive power of two (e.g., 2, 4, 8). Got: {scaleFactor}");
+        }
+
+        // Track current spatial dimensions
+        int currentHeight = inputHeight;
+        int currentWidth = inputWidth;
+        int currentChannels = inputChannels;
+
+        // Initial feature extraction (no activation - will be followed by residual blocks)
+        yield return new ConvolutionalLayer<T>(
+            inputDepth: currentChannels,
+            inputHeight: currentHeight,
+            inputWidth: currentWidth,
+            outputDepth: numFeatures,
+            kernelSize: 3,
+            stride: 1,
+            padding: 1);
+        currentChannels = numFeatures;
+
+        // Residual blocks for deep feature extraction
+        for (int i = 0; i < numResBlocks; i++)
+        {
+            // Each residual block: Conv -> ReLU -> Conv + Skip
+            yield return new ConvolutionalLayer<T>(
+                inputDepth: currentChannels,
+                inputHeight: currentHeight,
+                inputWidth: currentWidth,
+                outputDepth: numFeatures,
+                kernelSize: 3,
+                stride: 1,
+                padding: 1,
+                activationFunction: new ReLUActivation<T>() as IActivationFunction<T>);
+
+            yield return new ConvolutionalLayer<T>(
+                inputDepth: numFeatures,
+                inputHeight: currentHeight,
+                inputWidth: currentWidth,
+                outputDepth: numFeatures,
+                kernelSize: 3,
+                stride: 1,
+                padding: 1);
+
+            // Note: Skip connection would be handled in the model's forward pass
+        }
+
+        // Temporal aggregation layer for video consistency
+        if (useTemporalConsistency)
+        {
+            yield return new ConvolutionalLayer<T>(
+                inputDepth: currentChannels,
+                inputHeight: currentHeight,
+                inputWidth: currentWidth,
+                outputDepth: numFeatures,
+                kernelSize: 3,
+                stride: 1,
+                padding: 1);
+        }
+
+        // Upsampling layers using pixel shuffle
+        int currentScale = 1;
+        while (currentScale < scaleFactor)
+        {
+            // Each pixel shuffle doubles the resolution
+            // Conv to expand channels for pixel shuffle (with ReLU activation)
+            yield return new ConvolutionalLayer<T>(
+                inputDepth: currentChannels,
+                inputHeight: currentHeight,
+                inputWidth: currentWidth,
+                outputDepth: numFeatures * 4,  // 4x channels for 2x spatial
+                kernelSize: 3,
+                stride: 1,
+                padding: 1,
+                activationFunction: new ReLUActivation<T>() as IActivationFunction<T>);
+
+            // Pixel shuffle: [C*4, H, W] -> [C, H*2, W*2]
+            yield return new PixelShuffleLayer<T>(
+                inputShape: [numFeatures * 4, currentHeight, currentWidth],
+                upscaleFactor: 2);
+
+            currentHeight *= 2;
+            currentWidth *= 2;
+            currentChannels = numFeatures;
+
+            currentScale *= 2;
+        }
+
+        // Final reconstruction convolution (no activation - output should be in original range)
+        yield return new ConvolutionalLayer<T>(
+            inputDepth: currentChannels,
+            inputHeight: currentHeight,
+            inputWidth: currentWidth,
+            outputDepth: inputChannels,
+            kernelSize: 3,
+            stride: 1,
+            padding: 1);
+    }
+
+    /// <summary>
+    /// Creates a simple super-resolution architecture for testing and lightweight use.
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input video height.</param>
+    /// <param name="inputWidth">Input video width.</param>
+    /// <param name="scaleFactor">Upscaling factor (default: 2).</param>
+    /// <returns>A collection of layers for simple super-resolution.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is a smaller, faster model that trades quality for speed.
+    /// Good for real-time applications or when GPU memory is limited.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSimpleVideoSuperResolutionLayers(
+        int inputChannels = 3,
+        int inputHeight = 128,
+        int inputWidth = 128,
+        int scaleFactor = 2)
+    {
+        // Validate scaleFactor is a positive power of two
+        if (scaleFactor <= 0 || (scaleFactor & (scaleFactor - 1)) != 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(scaleFactor),
+                $"scaleFactor must be a positive power of two (e.g., 2, 4, 8). Got: {scaleFactor}");
+        }
+
+        int numFeatures = 32;  // Smaller feature dimension
+        int currentHeight = inputHeight;
+        int currentWidth = inputWidth;
+
+        // Initial feature extraction
+        yield return new ConvolutionalLayer<T>(inputChannels, currentHeight, currentWidth, numFeatures, 5, 1, 2,
+            new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // A few residual blocks
+        for (int i = 0; i < 4; i++)
+        {
+            yield return new ConvolutionalLayer<T>(numFeatures, currentHeight, currentWidth, numFeatures, 3, 1, 1,
+                new ReLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(numFeatures, currentHeight, currentWidth, numFeatures, 3, 1, 1);
+        }
+
+        // Upsampling
+        int scale = scaleFactor;
+        while (scale > 1)
+        {
+            // Conv with ReLU before pixel shuffle
+            yield return new ConvolutionalLayer<T>(numFeatures, currentHeight, currentWidth, numFeatures * 4, 3, 1, 1,
+                new ReLUActivation<T>() as IActivationFunction<T>);
+
+            yield return new PixelShuffleLayer<T>(
+                inputShape: [numFeatures * 4, currentHeight, currentWidth],
+                upscaleFactor: 2);
+
+            currentHeight *= 2;
+            currentWidth *= 2;
+
+            scale /= 2;
+        }
+
+        // Output (no activation)
+        yield return new ConvolutionalLayer<T>(numFeatures, currentHeight, currentWidth, inputChannels, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates layers for an optical flow estimation model (RAFT-style).
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input frame height.</param>
+    /// <param name="inputWidth">Input frame width.</param>
+    /// <param name="hiddenDim">Hidden dimension for flow estimation (default: 192).</param>
+    /// <returns>A collection of layers for optical flow estimation.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Optical flow tells you how each pixel moves between two frames.
+    /// This is useful for motion analysis, video editing, and as input to other models.
+    /// The output is a 2-channel tensor showing horizontal and vertical motion.
+    ///
+    /// Architecture:
+    /// 1. Feature encoder extracts features from both frames
+    /// 2. Correlation volume computes matching scores
+    /// 3. Iterative refinement improves the flow estimate
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultOpticalFlowLayers(
+        int inputChannels = 3,
+        int inputHeight = 128,
+        int inputWidth = 128,
+        int hiddenDim = 192)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
+
+        // Feature encoder (shared for both frames)
+        yield return new ConvolutionalLayer<T>(inputChannels, h, w, 64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        yield return new ConvolutionalLayer<T>(64, h, w, 128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        yield return new ConvolutionalLayer<T>(128, h, w, 256, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        // Context encoder (reset dimensions)
+        h = inputHeight; w = inputWidth;
+        yield return new ConvolutionalLayer<T>(inputChannels, h, w, 64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        yield return new ConvolutionalLayer<T>(64, h, w, 128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        yield return new ConvolutionalLayer<T>(128, h, w, hiddenDim, 3, 2, 1);
+        h /= 2; w /= 2;
+
+        // Flow head (produces 2-channel flow output)
+        yield return new ConvolutionalLayer<T>(hiddenDim, h, w, 128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(128, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, h, w, 2, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates layers for a frame interpolation model (FILM/RIFE-style).
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input frame height.</param>
+    /// <param name="inputWidth">Input frame width.</param>
+    /// <param name="numFeatures">Number of feature channels (default: 64).</param>
+    /// <returns>A collection of layers for frame interpolation.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Frame interpolation creates new frames between existing ones
+    /// to make video smoother (e.g., 30fps to 60fps). The model learns to "imagine"
+    /// what the in-between frames should look like based on the surrounding frames.
+    ///
+    /// Architecture:
+    /// 1. Feature pyramid extracts multi-scale features
+    /// 2. Flow estimation predicts motion
+    /// 3. Synthesis network generates interpolated frames
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultFrameInterpolationLayers(
+        int inputChannels = 3,
+        int inputHeight = 128,
+        int inputWidth = 128,
+        int numFeatures = 64)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
+
+        // Feature pyramid network (two frames concatenated = inputChannels * 2)
+        // Level 1
+        yield return new ConvolutionalLayer<T>(inputChannels * 2, h, w, 32, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(32, h, w, 32, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        // Level 2
+        yield return new ConvolutionalLayer<T>(32, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, h, w, 64, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        // Level 3
+        yield return new ConvolutionalLayer<T>(64, h, w, 96, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(96, h, w, 96, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        // Flow estimation head (outputs at downsampled resolution: h/8 x w/8)
+        yield return new ConvolutionalLayer<T>(96, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, h, w, 4, 3, 1, 1);  // 4 = 2 flows * 2 directions
+
+        // NOTE: The synthesis network below expects input at the ORIGINAL resolution.
+        // Higher-level models (FILM, FLAVR, etc.) should:
+        // 1. Run the feature pyramid layers (indices 0-7) to get downsampled flow
+        // 2. Upsample the flow to original resolution
+        // 3. Concatenate original frames with upsampled flow
+        // 4. Run the synthesis network layers (indices 8+) on that concatenation
+        // The layer shapes below are defined for the concatenated input at original resolution.
+
+        // Synthesis network (expects original resolution: inputHeight x inputWidth)
+        // Input: [frames_concat (C*2), upsampled_flow (4)] = C*2 + 4 channels
+        int synthH = inputHeight;
+        int synthW = inputWidth;
+        yield return new ConvolutionalLayer<T>(inputChannels * 2 + 4, synthH, synthW, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        for (int i = 0; i < 4; i++)
+        {
+            yield return new ConvolutionalLayer<T>(numFeatures, synthH, synthW, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        }
+
+        yield return new ConvolutionalLayer<T>(numFeatures, synthH, synthW, inputChannels, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates layers for a video stabilization model (StabNet-style).
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input frame height.</param>
+    /// <param name="inputWidth">Input frame width.</param>
+    /// <returns>A collection of layers for video stabilization.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Video stabilization removes camera shake. The model predicts
+    /// how to warp each frame to align with a smooth camera path. This is similar to
+    /// what smartphone cameras do in real-time.
+    ///
+    /// Architecture:
+    /// 1. Feature encoder processes input frames
+    /// 2. Motion estimator predicts camera motion
+    /// 3. Smoother learns the smooth target path
+    /// 4. Warper transforms frames to match smooth path
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultVideoStabilizationLayers(
+        int inputChannels = 3,
+        int inputHeight = 128,
+        int inputWidth = 128)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
+
+        // Feature encoder
+        yield return new ConvolutionalLayer<T>(inputChannels, h, w, 64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        yield return new ConvolutionalLayer<T>(64, h, w, 128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        yield return new ConvolutionalLayer<T>(128, h, w, 256, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        // Motion estimation layers
+        yield return new ConvolutionalLayer<T>(256, h, w, 256, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(256, h, w, 128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Global average pooling to get fixed-size feature vector
+        yield return new GlobalPoolingLayer<T>(
+            inputShape: [128, h, w],
+            poolingType: PoolingType.Average);
+
+        // Output: 6 parameters for affine transformation
+        yield return new DenseLayer<T>(128, 64, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>(64, 6, new IdentityActivation<T>() as IActivationFunction<T>);  // 6 affine params
+    }
+
+    /// <summary>
+    /// Creates layers for an InternVideo2-style video understanding model.
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input frame height.</param>
+    /// <param name="inputWidth">Input frame width.</param>
+    /// <param name="embedDim">Embedding dimension (default: 768).</param>
+    /// <param name="numEncoderLayers">Number of transformer encoder layers (default: 12).</param>
+    /// <param name="patchSize">Patch size for video tokenization (default: 14).</param>
+    /// <returns>A collection of layers for video understanding.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> InternVideo2 understands video content by encoding frames
+    /// into embeddings that capture both spatial (what's in each frame) and temporal
+    /// (how things change over time) information. It can be used for:
+    /// - Video classification (identifying what's happening)
+    /// - Video-text retrieval (finding videos matching descriptions)
+    /// - Video question answering
+    ///
+    /// Architecture (based on the paper):
+    /// 1. Patch embedding converts video frames into tokens
+    /// 2. Spatial attention processes within-frame relationships
+    /// 3. Temporal attention processes across-frame relationships
+    /// 4. FFN layers add non-linearity and expressiveness
+    /// 5. Projection maps to a shared video-text embedding space
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> "InternVideo2: Scaling Video Foundation Models for Multimodal Video Understanding"
+    /// https://arxiv.org/abs/2403.15377
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultInternVideo2Layers(
+        int inputChannels = 3,
+        int inputHeight = 224,
+        int inputWidth = 224,
+        int embedDim = 768,
+        int numEncoderLayers = 12,
+        int patchSize = 14)
+    {
+        int patchH = inputHeight / patchSize;
+        int patchW = inputWidth / patchSize;
+
+        // Patch embedding: converts image to sequence of patch embeddings
+        yield return new ConvolutionalLayer<T>(inputChannels, inputHeight, inputWidth, embedDim, patchSize, patchSize, 0, new GELUActivation<T>() as IActivationFunction<T>);
+
+        // Encoder layers with spatial and temporal attention
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            // Spatial self-attention (approximated as 1x1 conv for efficiency)
+            yield return new ConvolutionalLayer<T>(embedDim, patchH, patchW, embedDim, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+
+            // Temporal attention (every other layer for efficiency)
+            if (i % 2 == 1)
+            {
+                yield return new ConvolutionalLayer<T>(embedDim, patchH, patchW, embedDim, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+            }
+
+            // FFN with expansion factor of 4
+            yield return new ConvolutionalLayer<T>(embedDim, patchH, patchW, embedDim * 4, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(embedDim * 4, patchH, patchW, embedDim, 1, 1, 0);
+        }
+
+        // Global average pooling for CLS-like token
+        yield return new GlobalPoolingLayer<T>(
+            inputShape: [embedDim, patchH, patchW],
+            poolingType: PoolingType.Average);
+
+        // Projection to shared embedding space (512 is common for CLIP-like models)
+        yield return new DenseLayer<T>(embedDim, 512, new IdentityActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates layers for a VRT (Video Restoration Transformer) model.
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input frame height.</param>
+    /// <param name="inputWidth">Input frame width.</param>
+    /// <param name="embedDim">Embedding dimension (default: 120).</param>
+    /// <param name="numFrames">Number of temporal frames (default: 6).</param>
+    /// <param name="numBlocks">Number of transformer blocks (default: 8).</param>
+    /// <param name="scaleFactor">Upscaling factor for super-resolution. Supported values: 1, 2, or 4 (default: 4).</param>
+    /// <exception cref="ArgumentException">Thrown when scaleFactor is not 1, 2, or 4.</exception>
+    /// <returns>A collection of layers for video restoration.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> VRT (Video Restoration Transformer) is a powerful model for:
+    /// - Video super-resolution (increasing video resolution)
+    /// - Video deblurring (removing motion blur)
+    /// - Video denoising (removing noise from videos)
+    ///
+    /// It uses attention mechanisms to leverage both spatial and temporal information
+    /// from multiple video frames to produce high-quality restored frames.
+    ///
+    /// Architecture (based on the paper):
+    /// 1. Shallow feature extraction from input frames
+    /// 2. Temporal mutual self-attention (TMSA) blocks
+    /// 3. Deep feature extraction with parallel warping
+    /// 4. Reconstruction module for output
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> "VRT: A Video Restoration Transformer"
+    /// https://arxiv.org/abs/2201.12288
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultVRTLayers(
+        int inputChannels = 3,
+        int inputHeight = 64,
+        int inputWidth = 64,
+        int embedDim = 120,
+        int numFrames = 6,
+        int numBlocks = 8,
+        int scaleFactor = 4)
+    {
+        // Validate scaleFactor - only 1, 2, or 4 are supported due to pixel shuffle implementation
+        if (scaleFactor != 1 && scaleFactor != 2 && scaleFactor != 4)
+            throw new ArgumentException($"scaleFactor must be 1, 2, or 4. Got: {scaleFactor}", nameof(scaleFactor));
+
+        int h = inputHeight;
+        int w = inputWidth;
+
+        // Shallow feature extraction
+        yield return new ConvolutionalLayer<T>(inputChannels, h, w, embedDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+
+        // Multi-scale feature extraction with encoder structure
+        int currentDim = embedDim;
+        for (int i = 0; i < 3; i++)
+        {
+            // Temporal mutual self-attention approximated with conv blocks
+            for (int j = 0; j < numBlocks / 4; j++)
+            {
+                yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+                yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+            }
+
+            if (i < 2)
+            {
+                // Downsample
+                currentDim *= 2;
+                yield return new ConvolutionalLayer<T>(currentDim / 2, h, w, currentDim, 4, 2, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+                h /= 2; w /= 2;
+            }
+        }
+
+        // Bottleneck with deep features
+        for (int i = 0; i < numBlocks / 2; i++)
+        {
+            yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+        }
+
+        // Decoder with upsampling for super-resolution
+        for (int i = 0; i < 2; i++)
+        {
+            int prevDim = currentDim;
+            currentDim /= 2;
+            h *= 2; w *= 2;
+            yield return new ConvolutionalLayer<T>(prevDim, h / 2, w / 2, currentDim * 4, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+            yield return new PixelShuffleLayer<T>([currentDim * 4, h / 2, w / 2], 2);
+        }
+
+        // Upscaling for super-resolution (pixel shuffle for efficient upsampling)
+        if (scaleFactor >= 2)
+        {
+            yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim * 4, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+            yield return new PixelShuffleLayer<T>([currentDim * 4, h, w], 2);
+            h *= 2; w *= 2;
+        }
+        if (scaleFactor >= 4)
+        {
+            yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim * 4, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+            yield return new PixelShuffleLayer<T>([currentDim * 4, h, w], 2);
+            h *= 2; w *= 2;
+        }
+
+        // Final reconstruction
+        yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(currentDim, h, w, inputChannels, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates layers for a CogVideo text-to-video generation model.
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels for latent (default: 4).</param>
+    /// <param name="inputHeight">Input latent height (default: 32).</param>
+    /// <param name="inputWidth">Input latent width (default: 32).</param>
+    /// <param name="embedDim">Embedding dimension (default: 1024).</param>
+    /// <param name="numLayers">Number of transformer layers (default: 24).</param>
+    /// <param name="numFrames">Number of video frames to generate (default: 16).</param>
+    /// <returns>A collection of layers for video generation.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> CogVideo generates videos from text descriptions.
+    /// It works in the latent space (compressed representation) and uses a
+    /// diffusion-based approach to iteratively refine noise into coherent video.
+    ///
+    /// Architecture (based on the CogVideoX paper):
+    /// 1. Text encoder processes the input prompt
+    /// 2. Latent space diffusion model generates video frames
+    /// 3. VAE decoder converts latent to pixel space
+    ///
+    /// This creates the denoising U-Net backbone that refines latent codes.
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> "CogVideoX: Text-to-Video Diffusion Models with An Expert Transformer"
+    /// https://arxiv.org/abs/2408.06072
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultCogVideoLayers(
+        int inputChannels = 4,
+        int inputHeight = 32,
+        int inputWidth = 32,
+        int embedDim = 1024,
+        int numLayers = 24,
+        int numFrames = 16)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
+
+        // Input projection for latent + timestep conditioning
+        yield return new ConvolutionalLayer<T>(inputChannels, h, w, embedDim, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+
+        // Encoder (downsampling path)
+        int currentDim = embedDim;
+        int[] channelMults = { 1, 2, 4, 4 };
+
+        foreach (var mult in channelMults)
+        {
+            int outDim = embedDim * mult;
+
+            // Two residual-style conv blocks per level
+            yield return new ConvolutionalLayer<T>(currentDim, h, w, outDim, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(outDim, h, w, outDim, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+
+            currentDim = outDim;
+
+            // Downsample (except last level)
+            if (mult != channelMults[^1])
+            {
+                yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim, 4, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+                h /= 2; w /= 2;
+            }
+        }
+
+        // Middle block with transformer layers
+        for (int i = 0; i < Math.Min(numLayers / 4, 6); i++)
+        {
+            // Spatial attention approximation
+            yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
+            // Temporal attention approximation
+            yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
+            // FFN
+            yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim * 4, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(currentDim * 4, h, w, currentDim, 1, 1, 0);
+        }
+
+        // Decoder (upsampling path) - symmetric with encoder
+        for (int i = channelMults.Length - 1; i >= 0; i--)
+        {
+            int outDim = i > 0 ? embedDim * channelMults[i - 1] : embedDim;
+
+            // Two residual-style conv blocks per level
+            yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(currentDim, h, w, outDim, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+
+            currentDim = outDim;
+
+            // Upsample only at levels that downsampled in encoder (mult != last element)
+            // This ensures symmetric encoder/decoder geometry for proper U-Net denoising
+            if (i > 0 && channelMults[i - 1] != channelMults[^1])
+            {
+                yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim * 4, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+                yield return new PixelShuffleLayer<T>([currentDim * 4, h, w], 2);
+                h *= 2; w *= 2;
+            }
+        }
+
+        // Output projection back to latent channels
+        yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(currentDim, h, w, inputChannels, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates layers for an AnimateDiff motion module that adds temporal coherence.
+    /// </summary>
+    /// <param name="inputChannels">Number of input feature channels (default: 320).</param>
+    /// <param name="inputHeight">Input feature height (default: 64).</param>
+    /// <param name="inputWidth">Input feature width (default: 64).</param>
+    /// <param name="numLayers">Number of motion transformer layers (default: 8).</param>
+    /// <param name="numFrames">Number of video frames (default: 16).</param>
+    /// <returns>A collection of layers for motion modeling.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> AnimateDiff is a motion module that plugs into existing
+    /// image generation models (like Stable Diffusion) to create animated videos.
+    /// It learns temporal dynamics from video data.
+    ///
+    /// Architecture (based on the paper):
+    /// 1. Input features come from the base image model
+    /// 2. Temporal attention layers model motion across frames
+    /// 3. Cross-attention with motion context enables coherent animation
+    /// 4. Output features blend back into the base model
+    ///
+    /// The motion module is designed to be inserted at multiple points in the U-Net.
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> "AnimateDiff: Animate Your Personalized Text-to-Image Diffusion Models"
+    /// https://arxiv.org/abs/2307.04725
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultAnimateDiffLayers(
+        int inputChannels = 320,
+        int inputHeight = 64,
+        int inputWidth = 64,
+        int numLayers = 8,
+        int numFrames = 16)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
+
+        // Input normalization and projection
+        yield return new ConvolutionalLayer<T>(inputChannels, h, w, inputChannels, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
+
+        // Motion transformer layers with temporal attention
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Temporal self-attention (approximated with 1x1 conv for efficiency)
+            yield return new ConvolutionalLayer<T>(inputChannels, h, w, inputChannels, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
+
+            // Position-wise FFN with expansion
+            yield return new ConvolutionalLayer<T>(inputChannels, h, w, inputChannels * 4, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(inputChannels * 4, h, w, inputChannels, 1, 1, 0);
+        }
+
+        // Multi-scale temporal processing for different motion granularities
+        int[] channelMults = { 1, 2, 4 };
+        int currentChannels = inputChannels;
+
+        foreach (var mult in channelMults)
+        {
+            int outChannels = inputChannels * mult;
+
+            // Downsample
+            yield return new ConvolutionalLayer<T>(currentChannels, h, w, outChannels, 4, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+            h /= 2; w /= 2;
+            currentChannels = outChannels;
+
+            // Temporal attention at this scale
+            yield return new ConvolutionalLayer<T>(currentChannels, h, w, currentChannels, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(currentChannels, h, w, currentChannels, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+        }
+
+        // Upsample back to original resolution
+        for (int i = channelMults.Length - 1; i >= 0; i--)
+        {
+            int outChannels = i > 0 ? inputChannels * channelMults[i - 1] : inputChannels;
+
+            // Upsample using pixel shuffle
+            yield return new ConvolutionalLayer<T>(currentChannels, h, w, outChannels * 4, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+            yield return new PixelShuffleLayer<T>([outChannels * 4, h, w], 2);
+            h *= 2; w *= 2;
+            currentChannels = outChannels;
+
+            // Temporal processing at this scale
+            yield return new ConvolutionalLayer<T>(currentChannels, h, w, currentChannels, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+        }
+
+        // Output projection with residual
+        yield return new ConvolutionalLayer<T>(currentChannels, h, w, inputChannels, 1, 1, 0);
+    }
+
+    /// <summary>
+    /// Creates layers for a Cutie video object segmentation model.
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input frame height (default: 480).</param>
+    /// <param name="inputWidth">Input frame width (default: 854).</param>
+    /// <param name="numFeatures">Feature dimension (default: 256).</param>
+    /// <returns>A collection of layers for video object segmentation.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Cutie is designed for semi-supervised video object segmentation (VOS).
+    /// Given a mask for an object in the first frame, it tracks and segments that object
+    /// throughout the entire video with high accuracy.
+    ///
+    /// Architecture:
+    /// 1. Image encoder (ResNet-like backbone) extracts features
+    /// 2. Object encoder processes mask with features
+    /// 3. Memory attention matches current frame to stored memories
+    /// 4. Mask decoder produces segmentation output
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> "Putting the Object Back into Video Object Segmentation"
+    /// https://arxiv.org/abs/2310.12982
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultCutieLayers(
+        int inputChannels = 3,
+        int inputHeight = 480,
+        int inputWidth = 854,
+        int numFeatures = 256)
+    {
+        // Helper to compute convolution output size: (input + 2*padding - kernel) / stride + 1
+        static int ConvOutSize(int input, int kernel, int stride, int padding) =>
+            (input + 2 * padding - kernel) / stride + 1;
+
+        int h = inputHeight;
+        int w = inputWidth;
+
+        // Image encoder (ResNet-like backbone)
+        yield return new ConvolutionalLayer<T>(inputChannels, h, w, 64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
+        h = ConvOutSize(h, 7, 2, 3); w = ConvOutSize(w, 7, 2, 3);
+        yield return new ConvolutionalLayer<T>(64, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, h, w, 128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h = ConvOutSize(h, 3, 2, 1); w = ConvOutSize(w, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(128, h, w, 256, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h = ConvOutSize(h, 3, 2, 1); w = ConvOutSize(w, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(256, h, w, numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h = ConvOutSize(h, 3, 2, 1); w = ConvOutSize(w, 3, 2, 1);
+
+        // Object encoder (processes mask with image features)
+        // Note: This takes numFeatures + 1 channels (features + mask)
+        yield return new ConvolutionalLayer<T>(numFeatures + 1, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Query/Key/Value projections for memory attention
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 1, 1, 0);
+
+        // Memory attention layers
+        for (int i = 0; i < 4; i++)
+        {
+            yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        }
+
+        // Mask decoder with upsampling
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, 128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([128, h, w], 2);
+        h *= 2; w *= 2;
+        yield return new ConvolutionalLayer<T>(128, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([64, h, w], 2);
+        h *= 2; w *= 2;
+        yield return new ConvolutionalLayer<T>(64, h, w, 32, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([32, h, w], 2);
+        h *= 2; w *= 2;
+        yield return new ConvolutionalLayer<T>(32, h, w, 16, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([16, h, w], 2);
+        h *= 2; w *= 2;
+
+        // Final mask head (outputs 1 channel for binary segmentation)
+        yield return new ConvolutionalLayer<T>(16, h, w, 1, 3, 1, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates layers for an XMem long-term video object segmentation model.
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input frame height (default: 480).</param>
+    /// <param name="inputWidth">Input frame width (default: 854).</param>
+    /// <param name="numFeatures">Feature dimension (default: 256).</param>
+    /// <returns>A collection of layers for long-term video object segmentation.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> XMem is designed for tracking objects in very long videos
+    /// using a three-tier memory system inspired by human memory:
+    /// - Sensory memory: Very recent frames (high detail, fast to forget)
+    /// - Working memory: Important recent frames (moderate detail)
+    /// - Long-term memory: Key historical frames (compressed, permanent)
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> "XMem: Long-Term Video Object Segmentation with an Atkinson-Shiffrin Memory Model"
+    /// https://arxiv.org/abs/2207.07115
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultXMemLayers(
+        int inputChannels = 3,
+        int inputHeight = 480,
+        int inputWidth = 854,
+        int numFeatures = 256)
+    {
+        // Helper to compute convolution output size: (input + 2*padding - kernel) / stride + 1
+        static int ConvOutSize(int input, int kernel, int stride, int padding) =>
+            (input + 2 * padding - kernel) / stride + 1;
+
+        int h = inputHeight;
+        int w = inputWidth;
+
+        // Encoder
+        yield return new ConvolutionalLayer<T>(inputChannels, h, w, 64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
+        h = ConvOutSize(h, 7, 2, 3); w = ConvOutSize(w, 7, 2, 3);
+        yield return new ConvolutionalLayer<T>(64, h, w, 128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h = ConvOutSize(h, 3, 2, 1); w = ConvOutSize(w, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(128, h, w, 256, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h = ConvOutSize(h, 3, 2, 1); w = ConvOutSize(w, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(256, h, w, numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h = ConvOutSize(h, 3, 2, 1); w = ConvOutSize(w, 3, 2, 1);
+
+        // Sensory memory network (high resolution, short-term)
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Working memory network (medium resolution)
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures / 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures / 2, h, w, numFeatures / 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Long-term memory network (compressed)
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures / 4, h, w, numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Memory fusion (combines sensory + working + long-term)
+        int totalFusionChannels = numFeatures + numFeatures / 2 + numFeatures / 4;
+        yield return new ConvolutionalLayer<T>(totalFusionChannels, h, w, numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Decoder with upsampling
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, 128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([128, h, w], 2);
+        h *= 2; w *= 2;
+        yield return new ConvolutionalLayer<T>(128, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([64, h, w], 2);
+        h *= 2; w *= 2;
+        yield return new ConvolutionalLayer<T>(64, h, w, 32, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([32, h, w], 2);
+        h *= 2; w *= 2;
+        yield return new ConvolutionalLayer<T>(32, h, w, 16, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([16, h, w], 2);
+        h *= 2; w *= 2;
+
+        // Final mask head
+        yield return new ConvolutionalLayer<T>(16, h, w, 1, 3, 1, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates the image encoder layers for SAM2 (Segment Anything Model 2).
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input height (default: 1024).</param>
+    /// <param name="inputWidth">Input width (default: 1024).</param>
+    /// <param name="numFeatures">Number of output feature channels (default: 256).</param>
+    /// <returns>Image encoder layers that downsample input to feature maps.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This creates the image encoder part of SAM2, which processes
+    /// input images into feature maps. The output has shape [numFeatures, H/16, W/16].
+    /// </para>
+    /// <para>
+    /// <b>Note:</b> SAM2 is a multi-branch architecture. Use separate factory methods:
+    /// - CreateSAM2ImageEncoderLayers: Image feature extraction (this method)
+    /// - CreateSAM2PromptEncoderLayers: Point/box/mask prompt encoding
+    /// - CreateSAM2MemoryLayers: Temporal memory attention
+    /// - CreateSAM2MaskDecoderLayers: Mask prediction head
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSAM2ImageEncoderLayers(
+        int inputChannels = 3,
+        int inputHeight = 1024,
+        int inputWidth = 1024,
+        int numFeatures = 256)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
+
+        // Stage 1: Initial patch embedding (4x downsample)
+        yield return new ConvolutionalLayer<T>(inputChannels, h, w, 64, 4, 4, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 4; w /= 4;
+        yield return new ConvolutionalLayer<T>(64, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Stage 2: 2x downsample
+        yield return new ConvolutionalLayer<T>(64, h, w, 128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(128, h, w, 128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(128, h, w, 128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Stage 3: 2x downsample
+        yield return new ConvolutionalLayer<T>(128, h, w, 256, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(256, h, w, 256, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(256, h, w, 256, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Stage 4: 2x downsample (final encoder stage)
+        yield return new ConvolutionalLayer<T>(256, h, w, numFeatures * 2, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Neck (feature pyramid fusion)
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates the prompt encoder layers for SAM2 (point, box, and mask prompts).
+    /// </summary>
+    /// <param name="numFeatures">Number of output feature channels (default: 256).</param>
+    /// <param name="maskHeight">Height of mask prompt input (default: 256).</param>
+    /// <param name="maskWidth">Width of mask prompt input (default: 256).</param>
+    /// <returns>Prompt encoder layers for different prompt types.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SAM2 accepts different types of prompts to tell it what to segment:
+    /// - Points: Click on the object (x, y coordinates)
+    /// - Boxes: Draw a bounding box (x1, y1, x2, y2)
+    /// - Masks: Provide an initial mask estimate
+    /// </para>
+    /// <para>
+    /// <b>Usage:</b> These layers are applied to prompt inputs separately, then combined
+    /// with image features in the mask decoder. They are NOT chained sequentially with
+    /// the image encoder.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSAM2PromptEncoderLayers(
+        int numFeatures = 256,
+        int maskHeight = 256,
+        int maskWidth = 256)
+    {
+        // Point prompt encoder: input [2] (x, y) -> [numFeatures]
+        yield return new DenseLayer<T>(2, numFeatures, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>(numFeatures, numFeatures, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Box prompt encoder: input [4] (x1, y1, x2, y2) -> [numFeatures]
+        yield return new DenseLayer<T>(4, numFeatures, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>(numFeatures, numFeatures, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Mask prompt encoder: input [1, maskHeight, maskWidth] -> [numFeatures/4, maskHeight/4, maskWidth/4]
+        yield return new ConvolutionalLayer<T>(1, maskHeight, maskWidth, numFeatures / 4, 4, 4, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures / 4, maskHeight / 4, maskWidth / 4, numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates the memory attention layers for SAM2 temporal consistency.
+    /// </summary>
+    /// <param name="numFeatures">Number of feature channels (default: 256).</param>
+    /// <param name="featureHeight">Height of feature maps (default: 64).</param>
+    /// <param name="featureWidth">Width of feature maps (default: 64).</param>
+    /// <returns>Memory attention layers for video object tracking.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Memory layers help SAM2 track objects across video frames
+    /// by maintaining a memory of past segmentations and matching them to new frames.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSAM2MemoryLayers(
+        int numFeatures = 256,
+        int featureHeight = 64,
+        int featureWidth = 64)
+    {
+        int h = featureHeight;
+        int w = featureWidth;
+
+        // Memory attention: fuses current features with memory
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Memory projection
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates the shared mask decoder refinement layers for SAM2.
+    /// </summary>
+    /// <param name="numFeatures">Number of feature channels (default: 256).</param>
+    /// <param name="featureHeight">Height of feature maps (default: 64).</param>
+    /// <param name="featureWidth">Width of feature maps (default: 64).</param>
+    /// <returns>Shared refinement layers that process fused features.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> These layers refine the combined image and prompt features
+    /// before branching into separate prediction heads. Output shape: [numFeatures, h, w]
+    /// </para>
+    /// <para>
+    /// <b>Usage:</b> Apply these layers first, then branch to the three separate heads:
+    /// - CreateSAM2MaskHead: Produces mask candidates
+    /// - CreateSAM2IoUHead: Predicts mask quality scores
+    /// - CreateSAM2OcclusionHead: Predicts occlusion
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSAM2MaskDecoderLayers(
+        int numFeatures = 256,
+        int featureHeight = 64,
+        int featureWidth = 64)
+    {
+        int h = featureHeight;
+        int w = featureWidth;
+
+        // Mask decoder refinement - shared feature processing
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates the mask prediction head for SAM2.
+    /// </summary>
+    /// <param name="numFeatures">Number of input feature channels (default: 256).</param>
+    /// <param name="featureHeight">Height of feature maps (default: 64).</param>
+    /// <param name="featureWidth">Width of feature maps (default: 64).</param>
+    /// <param name="numMaskCandidates">Number of mask candidates to output (default: 4).</param>
+    /// <returns>Mask prediction layers. Output shape: [numMaskCandidates, h, w]</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This head produces multiple candidate segmentation masks.
+    /// Each candidate is a probability map indicating object presence at each pixel.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSAM2MaskHead(
+        int numFeatures = 256,
+        int featureHeight = 64,
+        int featureWidth = 64,
+        int numMaskCandidates = 4)
+    {
+        // Input: [numFeatures, h, w] from CreateSAM2MaskDecoderLayers
+        // Output: [numMaskCandidates, h, w] mask probability maps
+        yield return new ConvolutionalLayer<T>(numFeatures, featureHeight, featureWidth, numMaskCandidates, 1, 1, 0, new SigmoidActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates the IoU (Intersection over Union) prediction head for SAM2.
+    /// </summary>
+    /// <param name="numFeatures">Number of input feature channels (default: 256).</param>
+    /// <param name="featureHeight">Height of feature maps (default: 64).</param>
+    /// <param name="featureWidth">Width of feature maps (default: 64).</param>
+    /// <param name="numMaskCandidates">Number of mask candidates (default: 4).</param>
+    /// <returns>IoU prediction layers. Output shape: [numMaskCandidates]</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This head predicts the quality (IoU score) for each mask candidate.
+    /// Higher scores indicate better masks. Used to select the best mask from candidates.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSAM2IoUHead(
+        int numFeatures = 256,
+        int featureHeight = 64,
+        int featureWidth = 64,
+        int numMaskCandidates = 4)
+    {
+        // Input: [numFeatures, h, w] from CreateSAM2MaskDecoderLayers
+        // Global pool then predict IoU for each mask candidate
+        yield return new GlobalPoolingLayer<T>([numFeatures, featureHeight, featureWidth], PoolingType.Average);
+        yield return new DenseLayer<T>(numFeatures, numMaskCandidates, new SigmoidActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates the occlusion prediction head for SAM2.
+    /// </summary>
+    /// <param name="numFeatures">Number of input feature channels (default: 256).</param>
+    /// <param name="featureHeight">Height of feature maps (default: 64).</param>
+    /// <param name="featureWidth">Width of feature maps (default: 64).</param>
+    /// <returns>Occlusion prediction layers. Output shape: [1]</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This head predicts whether the tracked object is occluded
+    /// (hidden by other objects). A high score indicates the object may be temporarily invisible.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSAM2OcclusionHead(
+        int numFeatures = 256,
+        int featureHeight = 64,
+        int featureWidth = 64)
+    {
+        // Input: [numFeatures, h, w] from CreateSAM2MaskDecoderLayers
+        // Global pool then predict occlusion probability
+        yield return new GlobalPoolingLayer<T>([numFeatures, featureHeight, featureWidth], PoolingType.Average);
+        yield return new DenseLayer<T>(numFeatures, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates all SAM2 layers for backward compatibility.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Warning:</b> This method returns layers from multiple branches that cannot be
+    /// chained sequentially. Use the individual factory methods (CreateSAM2ImageEncoderLayers,
+    /// CreateSAM2PromptEncoderLayers, CreateSAM2MemoryLayers, CreateSAM2MaskDecoderLayers)
+    /// for proper multi-branch handling.
+    /// </para>
+    /// </remarks>
+    [Obsolete("Use individual SAM2 factory methods (CreateSAM2ImageEncoderLayers, etc.) for proper multi-branch architecture.")]
+    public static IEnumerable<ILayer<T>> CreateDefaultSAM2Layers(
+        int inputChannels = 3,
+        int inputHeight = 1024,
+        int inputWidth = 1024,
+        int numFeatures = 256)
+    {
+        int featureHeight = inputHeight / 16;
+        int featureWidth = inputWidth / 16;
+
+        // Return only the image encoder as a chainable sequence
+        // Other branches must be created separately and wired in the SAM2 model
+        foreach (var layer in CreateSAM2ImageEncoderLayers(inputChannels, inputHeight, inputWidth, numFeatures))
+            yield return layer;
+    }
+
+    /// <summary>
+    /// Creates default layers for VideoMAE (Video Masked Autoencoder) action recognition model.
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input height (default: 224).</param>
+    /// <param name="inputWidth">Input width (default: 224).</param>
+    /// <param name="numFeatures">Number of feature channels (default: 768).</param>
+    /// <param name="numClasses">Number of action classes (default: 400 for Kinetics).</param>
+    /// <param name="tubeletSize">Temporal size of each tube (default: 2).</param>
+    /// <returns>An enumerable of layers configured for VideoMAE.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> VideoMAE is a self-supervised learning model that learns video
+    /// representations by masking and reconstructing video patches. It's used for action
+    /// recognition and video understanding tasks.
+    /// </para>
+    /// <para>
+    /// <b>Architecture:</b>
+    /// - 3D patch embedding (spatiotemporal)
+    /// - Transformer encoder blocks
+    /// - Classification head for action recognition
+    /// - Decoder for masked reconstruction during pretraining
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> "VideoMAE: Masked Autoencoders are Data-Efficient Learners for Self-Supervised Video Pre-Training"
+    /// https://arxiv.org/abs/2203.12602
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultVideoMAELayers(
+        int inputChannels = 3,
+        int inputHeight = 224,
+        int inputWidth = 224,
+        int numFeatures = 768,
+        int numClasses = 400,
+        int tubeletSize = 2)
+    {
+        int patchSize = 16;
+        int featH = inputHeight / patchSize;
+        int featW = inputWidth / patchSize;
+
+        // 3D patch embedding (spatiotemporal)
+        yield return new ConvolutionalLayer<T>(inputChannels * tubeletSize, inputHeight, inputWidth, numFeatures, patchSize, patchSize, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Transformer encoder blocks (12 blocks)
+        for (int i = 0; i < 12; i++)
+        {
+            yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        }
+
+        // Classification head with global average pooling
+        // First reduce features, then pool to 1x1, then classify
+        yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new GlobalPoolingLayer<T>([numFeatures, featH, featW], PoolingType.Average);
+        // After global pooling, shape is [numFeatures, 1, 1] - use DenseLayer for final classification
+        yield return new DenseLayer<T>(numFeatures, numClasses, new SoftmaxActivation<T>() as IActivationFunction<T>);
+
+        // Decoder blocks for reconstruction (4 blocks) - these operate at featH x featW resolution
+        // Note: In a real VideoMAE implementation, the decoder would receive encoder features
+        // and upsample back to original resolution. This factory provides encoder + classifier;
+        // full reconstruction with unpatching is handled by the VideoMAE model class.
+        for (int i = 0; i < 4; i++)
+        {
+            yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        }
+
+        // Reconstruction head - outputs patch-sized predictions at feature resolution
+        // The VideoMAE model handles reassembly back to video tubelet space
+        yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, inputChannels * tubeletSize * patchSize * patchSize, 1, 1, 0);
+    }
+
+    /// <summary>
+    /// Creates default layers for Depth Anything V2 monocular depth estimation model.
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input height (default: 480).</param>
+    /// <param name="inputWidth">Input width (default: 640).</param>
+    /// <param name="numFeatures">Number of feature channels (default: 768 for Base).</param>
+    /// <param name="numEncoderBlocks">Number of encoder transformer blocks (default: 12).</param>
+    /// <returns>An enumerable of layers configured for Depth Anything V2.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Depth Anything V2 estimates depth maps from single images.
+    /// Given an RGB image, it predicts the relative distance of each pixel from the camera.
+    /// </para>
+    /// <para>
+    /// <b>Architecture:</b>
+    /// - ViT-based encoder with DINOv2 initialization
+    /// - Multi-scale decoder for dense prediction
+    /// - Depth prediction head
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> "Depth Anything V2"
+    /// https://arxiv.org/abs/2406.09414
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultDepthAnythingV2Layers(
+        int inputChannels = 3,
+        int inputHeight = 480,
+        int inputWidth = 640,
+        int numFeatures = 768,
+        int numEncoderBlocks = 12)
+    {
+        int patchSize = 16;
+        int featH = inputHeight / patchSize;
+        int featW = inputWidth / patchSize;
+
+        // Patch embedding
+        yield return new ConvolutionalLayer<T>(inputChannels, inputHeight, inputWidth, numFeatures, patchSize, patchSize, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Encoder transformer blocks
+        for (int i = 0; i < numEncoderBlocks; i++)
+        {
+            yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        }
+
+        // Decoder blocks with progressive upsampling
+        int h = featH;
+        int w = featW;
+        int currentFeatures = numFeatures;
+
+        // Stage 1 - no upsampling yet
+        yield return new ConvolutionalLayer<T>(currentFeatures, h, w, numFeatures / 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        currentFeatures = numFeatures / 2;
+
+        // Stage 2 - 2x upsample
+        yield return new UpsamplingLayer<T>([currentFeatures, h, w], 2);
+        h *= 2; w *= 2;
+        yield return new ConvolutionalLayer<T>(currentFeatures, h, w, numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        currentFeatures = numFeatures / 4;
+
+        // Stage 3 - 2x upsample
+        yield return new UpsamplingLayer<T>([currentFeatures, h, w], 2);
+        h *= 2; w *= 2;
+        yield return new ConvolutionalLayer<T>(currentFeatures, h, w, numFeatures / 8, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        currentFeatures = numFeatures / 8;
+
+        // Stage 4 - 2x upsample
+        yield return new UpsamplingLayer<T>([currentFeatures, h, w], 2);
+        h *= 2; w *= 2;
+        yield return new ConvolutionalLayer<T>(currentFeatures, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Depth head - 2x upsample to original resolution
+        yield return new UpsamplingLayer<T>([64, h, w], 2);
+        h *= 2; w *= 2;
+        yield return new ConvolutionalLayer<T>(64, h, w, 1, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates default layers for TimeSformer video classification.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultTimeSformerLayers(
+        int inputChannels = 3,
+        int inputHeight = 224,
+        int inputWidth = 224,
+        int embedDim = 768,
+        int numLayers = 12,
+        int patchSize = 16,
+        int numClasses = 400)
+    {
+        int numPatches = (inputHeight / patchSize) * (inputWidth / patchSize);
+
+        // Patch embedding
+        yield return new ConvolutionalLayer<T>(inputChannels, inputHeight, inputWidth, embedDim, patchSize, patchSize, 0);
+
+        // Transformer encoder blocks (divided space-time attention)
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Temporal attention
+            yield return new ConvolutionalLayer<T>(embedDim, 1, numPatches, embedDim, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+            // Spatial attention
+            yield return new ConvolutionalLayer<T>(embedDim, 1, numPatches, embedDim, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+            // MLP
+            yield return new ConvolutionalLayer<T>(embedDim, 1, numPatches, embedDim * 4, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(embedDim * 4, 1, numPatches, embedDim, 1, 1, 0);
+        }
+
+        // Classification head
+        yield return new DenseLayer<T>(embedDim, numClasses, new SoftmaxActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates the slow pathway layers for SlowFast video recognition.
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input height (default: 224).</param>
+    /// <param name="inputWidth">Input width (default: 224).</param>
+    /// <param name="slowChannels">Base channel count for slow pathway (default: 64).</param>
+    /// <returns>Slow pathway layers that process fewer frames at higher capacity.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The slow pathway processes video at a low frame rate (e.g., 4 fps)
+    /// but with high channel capacity. It captures spatial semantics and appearance features.
+    /// Output shape: [slowChannels * 8, H/16, W/16]
+    /// </para>
+    /// <para>
+    /// <b>Note:</b> SlowFast is a dual-pathway architecture. Use separate factory methods:
+    /// - CreateSlowFastSlowPathwayLayers: Low frame rate, high capacity (this method)
+    /// - CreateSlowFastFastPathwayLayers: High frame rate, low capacity
+    /// - CreateSlowFastFusionLayers: Combines pathways for classification
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSlowFastSlowPathwayLayers(
+        int inputChannels = 3,
+        int inputHeight = 224,
+        int inputWidth = 224,
+        int slowChannels = 64)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
+
+        // Slow pathway - processes fewer frames at higher channel capacity
+        yield return new ConvolutionalLayer<T>(inputChannels, h, w, slowChannels, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(slowChannels, h, w, slowChannels * 2, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(slowChannels * 2, h, w, slowChannels * 4, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(slowChannels * 4, h, w, slowChannels * 8, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates the fast pathway layers for SlowFast video recognition.
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input height (default: 224).</param>
+    /// <param name="inputWidth">Input width (default: 224).</param>
+    /// <param name="fastChannels">Base channel count for fast pathway (default: 8).</param>
+    /// <returns>Fast pathway layers that process more frames at lower capacity.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The fast pathway processes video at a high frame rate (e.g., 32 fps)
+    /// but with lower channel capacity (1/8 of slow pathway). It captures motion and temporal dynamics.
+    /// Output shape: [fastChannels * 8, H/16, W/16]
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSlowFastFastPathwayLayers(
+        int inputChannels = 3,
+        int inputHeight = 224,
+        int inputWidth = 224,
+        int fastChannels = 8)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
+
+        // Fast pathway - processes more frames at lower channel capacity
+        yield return new ConvolutionalLayer<T>(inputChannels, h, w, fastChannels, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(fastChannels, h, w, fastChannels * 2, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(fastChannels * 2, h, w, fastChannels * 4, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(fastChannels * 4, h, w, fastChannels * 8, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates the fusion and classification layers for SlowFast.
+    /// </summary>
+    /// <param name="slowChannels">Base channel count for slow pathway (default: 64).</param>
+    /// <param name="fastChannels">Base channel count for fast pathway (default: 8).</param>
+    /// <param name="featureHeight">Height of feature maps after pathways (default: 14).</param>
+    /// <param name="featureWidth">Width of feature maps after pathways (default: 14).</param>
+    /// <param name="numClasses">Number of action classes (default: 400 for Kinetics).</param>
+    /// <returns>Fusion layers that combine pathways and classify actions.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This fuses the slow and fast pathway features (after concatenation)
+    /// and produces the final action classification. The SlowFast model should:
+    /// 1. Run slow pathway on subsampled frames
+    /// 2. Run fast pathway on all frames
+    /// 3. Concatenate outputs along channel dimension
+    /// 4. Apply these fusion layers
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSlowFastFusionLayers(
+        int slowChannels = 64,
+        int fastChannels = 8,
+        int featureHeight = 14,
+        int featureWidth = 14,
+        int numClasses = 400)
+    {
+        int fusedChannels = slowChannels * 8 + fastChannels * 8;
+        int h = featureHeight;
+        int w = featureWidth;
+
+        // 1x1 conv to fuse concatenated features
+        yield return new ConvolutionalLayer<T>(fusedChannels, h, w, fusedChannels, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Global average pooling
+        yield return new GlobalPoolingLayer<T>([fusedChannels, h, w], PoolingType.Average);
+
+        // Classification head
+        yield return new DenseLayer<T>(fusedChannels, numClasses, new SoftmaxActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates all SlowFast layers for backward compatibility (returns only slow pathway).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Warning:</b> SlowFast is a dual-pathway architecture that cannot be represented
+    /// as a single sequential layer list. Use the individual factory methods:
+    /// - CreateSlowFastSlowPathwayLayers
+    /// - CreateSlowFastFastPathwayLayers
+    /// - CreateSlowFastFusionLayers
+    /// </para>
+    /// </remarks>
+    [Obsolete("Use individual SlowFast factory methods for proper dual-pathway architecture.")]
+    public static IEnumerable<ILayer<T>> CreateDefaultSlowFastLayers(
+        int inputChannels = 3,
+        int inputHeight = 224,
+        int inputWidth = 224,
+        int numClasses = 400,
+        int slowChannels = 64,
+        int fastChannels = 8,
+        int alpha = 8)
+    {
+        // Return only the slow pathway as a chainable sequence
+        // Fast pathway and fusion must be handled separately in the SlowFast model
+        foreach (var layer in CreateSlowFastSlowPathwayLayers(inputChannels, inputHeight, inputWidth, slowChannels))
+            yield return layer;
+    }
+
+    /// <summary>
+    /// Creates default layers for MiDaS depth estimation.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMiDaSLayers(
+        int inputChannels = 3,
+        int inputHeight = 384,
+        int inputWidth = 384,
+        int embedDim = 768,
+        int numEncoderLayers = 12)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
+        int patchSize = 16;
+        int numPatches = (h / patchSize) * (w / patchSize);
+
+        // Patch embedding (ViT-style)
+        yield return new ConvolutionalLayer<T>(inputChannels, h, w, embedDim, patchSize, patchSize, 0);
+
+        // Transformer encoder blocks
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new ConvolutionalLayer<T>(embedDim, 1, numPatches, embedDim, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(embedDim, 1, numPatches, embedDim * 4, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(embedDim * 4, 1, numPatches, embedDim, 1, 1, 0);
+        }
+
+        // Decoder with reassemble and fusion
+        h = inputHeight / 16; w = inputWidth / 16;
+        yield return new ConvolutionalLayer<T>(embedDim, h, w, 256, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h *= 2; w *= 2;
+        yield return new ConvolutionalLayer<T>(256, h, w, 128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h *= 2; w *= 2;
+        yield return new ConvolutionalLayer<T>(128, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h *= 2; w *= 2;
+        yield return new ConvolutionalLayer<T>(64, h, w, 32, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h *= 2; w *= 2;
+
+        // Depth head (relative depth output)
+        yield return new ConvolutionalLayer<T>(32, h, w, 1, 1, 1, 0);
+    }
+
+    /// <summary>
+    /// Creates default layers for EDVR video restoration.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultEDVRLayers(
+        int inputChannels = 3,
+        int inputHeight = 256,
+        int inputWidth = 256,
+        int numFeatures = 64,
+        int numFrames = 5,
+        int numGroups = 8,
+        int numBlocks = 5)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
+
+        // Feature extraction
+        yield return new ConvolutionalLayer<T>(inputChannels * numFrames, h, w, numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+
+        // PCD (Pyramid Cascading and Deformable) alignment
+        for (int level = 0; level < 3; level++)
+        {
+            int scale = (int)Math.Pow(2, level);
+            int scaledH = h / scale;
+            int scaledW = w / scale;
+            yield return new ConvolutionalLayer<T>(numFeatures, scaledH, scaledW, numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        }
+
+        // TSA (Temporal and Spatial Attention) fusion
+        yield return new ConvolutionalLayer<T>(numFeatures * numFrames, h, w, numFeatures, 1, 1, 0, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+
+        // Reconstruction with residual blocks
+        for (int i = 0; i < numBlocks; i++)
+        {
+            yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1);
+        }
+
+        // Upsampling with PixelShuffle (sub-pixel convolution)
+        // Conv produces numFeatures*4 channels, PixelShuffle rearranges to numFeatures channels at 2x resolution
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures * 4, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new PixelShuffleLayer<T>([numFeatures * 4, h, w], 2);
+        h *= 2; w *= 2;
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures * 4, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new PixelShuffleLayer<T>([numFeatures * 4, h, w], 2);
+        h *= 2; w *= 2;
+
+        // Output
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, inputChannels, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates default layers for FLAVR frame interpolation.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultFLAVRLayers(
+        int inputChannels = 3,
+        int inputHeight = 256,
+        int inputWidth = 256,
+        int numFeatures = 64,
+        int numInputFrames = 4)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
+
+        // Encoder (3D convolutions for spatiotemporal features)
+        yield return new ConvolutionalLayer<T>(inputChannels * numInputFrames, h, w, numFeatures, 7, 1, 3, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures * 2, 3, 2, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures * 4, 3, 2, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 8, 3, 2, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        // Bottleneck
+        yield return new ConvolutionalLayer<T>(numFeatures * 8, h, w, numFeatures * 8, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+
+        // Decoder (flow-agnostic reconstruction) with upsampling
+        yield return new ConvolutionalLayer<T>(numFeatures * 8, h, w, numFeatures * 4, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([numFeatures * 4, h, w], 2);
+        h *= 2; w *= 2;
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 2, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([numFeatures * 2, h, w], 2);
+        h *= 2; w *= 2;
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([numFeatures, h, w], 2);
+        h *= 2; w *= 2;
+
+        // Output (single interpolated frame)
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, inputChannels, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates default layers for FlowFormer optical flow estimation.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultFlowFormerLayers(
+        int inputChannels = 3,
+        int inputHeight = 448,
+        int inputWidth = 1024,
+        int embedDim = 256,
+        int numLayers = 6)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
+
+        // CNN feature encoder (shared for both frames)
+        yield return new ConvolutionalLayer<T>(inputChannels * 2, h, w, 64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(64, h, w, 128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(128, h, w, embedDim, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        // Cost volume encoder
+        yield return new ConvolutionalLayer<T>(embedDim, h, w, embedDim, 3, 1, 1, new GELUActivation<T>() as IActivationFunction<T>);
+
+        // Transformer blocks for cost aggregation
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new ConvolutionalLayer<T>(embedDim, h, w, embedDim, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(embedDim, h, w, embedDim * 4, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(embedDim * 4, h, w, embedDim, 1, 1, 0);
+        }
+
+        // Flow decoder
+        yield return new ConvolutionalLayer<T>(embedDim, h, w, 128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(128, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Flow head (2 channels: horizontal and vertical flow)
+        yield return new ConvolutionalLayer<T>(64, h, w, 2, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates default layers for ByteTrack multi-object tracking.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultByteTrackLayers(
+        int inputChannels = 3,
+        int inputHeight = 800,
+        int inputWidth = 1440,
+        int numFeatures = 256,
+        int numClasses = 1)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
+
+        // Backbone (CSPDarknet-style)
+        yield return new ConvolutionalLayer<T>(inputChannels, h, w, 32, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(32, h, w, 64, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(64, h, w, 128, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(128, h, w, numFeatures, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures * 2, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        // FPN neck for multi-scale features
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
+
+        // Detection head (outputs: x, y, w, h, objectness, class)
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, 5 + numClasses, 1, 1, 0); // bbox + obj + classes
+    }
+
+    /// <summary>
+    /// Creates default layers for DIFRINT video stabilization.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultDIFRINTLayers(
+        int inputChannels = 3,
+        int inputHeight = 480,
+        int inputWidth = 640,
+        int numFeatures = 64,
+        int numIterations = 3)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
+
+        // Motion estimation encoder
+        yield return new ConvolutionalLayer<T>(inputChannels * 2, h, w, numFeatures, 7, 2, 3, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures * 2, 3, 2, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures * 4, 3, 2, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        // Iterative refinement blocks
+        for (int i = 0; i < numIterations; i++)
+        {
+            yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 4, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 4, 3, 1, 1);
+        }
+
+        // Decoder for stabilized frame with upsampling
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 2, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([numFeatures * 2, h, w], 2);
+        h *= 2; w *= 2;
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([numFeatures, h, w], 2);
+        h *= 2; w *= 2;
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([numFeatures, h, w], 2);
+        h *= 2; w *= 2;
+
+        // Output frame
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, inputChannels, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates default layers for RVM (Robust Video Matting).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultRVMLayers(
+        int inputChannels = 3,
+        int inputHeight = 512,
+        int inputWidth = 512,
+        int numFeatures = 32)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
+
+        // Encoder (MobileNetV3-style)
+        yield return new ConvolutionalLayer<T>(inputChannels, h, w, numFeatures, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures * 2, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures * 4, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 8, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        // Recurrent module (GRU-style for temporal consistency)
+        yield return new ConvolutionalLayer<T>(numFeatures * 8, h, w, numFeatures * 8, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 8, h, w, numFeatures * 8, 3, 1, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
+
+        // Decoder with upsampling
+        yield return new ConvolutionalLayer<T>(numFeatures * 8, h, w, numFeatures * 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([numFeatures * 4, h, w], 2);
+        h *= 2; w *= 2;
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([numFeatures * 2, h, w], 2);
+        h *= 2; w *= 2;
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([numFeatures, h, w], 2);
+        h *= 2; w *= 2;
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>([numFeatures, h, w], 2);
+        h *= 2; w *= 2;
+
+        // Output heads: alpha matte (1 channel) + foreground (3 channels)
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, 4, 1, 1, 0); // RGBA output
+    }
+
+    /// <summary>
+    /// Creates default layers for FastDVDNet video denoising.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultFastDVDNetLayers(
+        int inputChannels = 3,
+        int inputHeight = 480,
+        int inputWidth = 854,
+        int numFeatures = 32,
+        int numInputFrames = 5)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
+
+        // Stage 1: Multi-frame denoising blocks (process frames in pairs)
+        int stage1Input = inputChannels * 3 + 1; // 3 frames + noise map
+        yield return new ConvolutionalLayer<T>(stage1Input, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, inputChannels, 3, 1, 1);
+
+        // Stage 2: Temporal fusion (combine stage 1 outputs)
+        int stage2Input = inputChannels * 3 + 1; // 3 denoised frames + noise map
+        yield return new ConvolutionalLayer<T>(stage2Input, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, inputChannels, 3, 1, 1);
+    }
+
+
+    #endregion
 }

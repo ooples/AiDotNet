@@ -1,6 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Helpers;
 
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -336,6 +337,16 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public DenseLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
         : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
+        if (inputSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(inputSize), "Input size must be greater than zero.");
+        }
+
+        if (outputSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size must be greater than zero.");
+        }
+
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         L1Strength = NumOps.FromDouble(0.01);
         L2Strength = NumOps.FromDouble(0.01);
@@ -380,6 +391,16 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public DenseLayer(int inputSize, int outputSize, IVectorActivationFunction<T> vectorActivation)
         : base([inputSize], [outputSize], vectorActivation)
     {
+        if (inputSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(inputSize), "Input size must be greater than zero.");
+        }
+
+        if (outputSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size must be greater than zero.");
+        }
+
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         L1Strength = NumOps.FromDouble(0.01);
         L2Strength = NumOps.FromDouble(0.01);
@@ -603,14 +624,21 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new ArgumentNullException(nameof(weights));
         }
 
-        // Validate dimensions
-        if (weights.Shape[0] != OutputShape[0] || weights.Shape[1] != InputShape[0])
+        // Validate dimensions against current weights
+        if (weights.Shape[0] != _weights.Shape[0] || weights.Shape[1] != _weights.Shape[1])
         {
-            throw new ArgumentException($"Weight tensor dimensions must be {OutputShape[0]}x{InputShape[0]}, but got {weights.Shape[0]}x{weights.Shape[1]}");
+            throw new ArgumentException(
+                $"Weight tensor dimensions must be {_weights.Shape[0]}x{_weights.Shape[1]}, but got {weights.Shape[0]}x{weights.Shape[1]}");
         }
 
         // Set the weights directly
         _weights = weights;
+
+        // Update input shape if needed (from master merge)
+        if (InputShape.Length == 0 || InputShape[0] != weights.Shape[1])
+        {
+            UpdateInputShape([weights.Shape[1]]);
+        }
 
         // Invalidate cached weights since they've changed
         InvalidateWeightCaches();
@@ -938,13 +966,16 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Transformation is applied to the last dimension
         // Output shape: [..., outputSize]
 
-        int inputSize = input.Shape[^1]; // Last dimension
-        if (inputSize != InputShape[0])
+        int actualInputSize = input.Shape[^1]; // Last dimension
+        int expectedInputSize = _weights.Shape[1];
+
+        // Dynamic input size adaptation: resize weights if input size doesn't match
+        if (actualInputSize != expectedInputSize)
         {
-            throw new ArgumentException(
-                $"DenseLayer expects last dimension to be {InputShape[0]}, but got {inputSize}",
-                nameof(input));
+            EnsureWeightShapeForInput(actualInputSize);
         }
+
+        int inputSize = actualInputSize;
 
         Tensor<T> flattenedInput;
         int batchDim;
@@ -1043,6 +1074,44 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // 2D input: result is already [batch, outputSize]
 
         return result;
+    }
+
+    private void EnsureWeightShapeForInput(int actualInputSize)
+    {
+        if (_weights.Shape[1] == actualInputSize)
+        {
+            return;
+        }
+
+        int outputSize = _weights.Shape[0];
+        int existingInputSize = _weights.Shape[1];
+        var resizedWeights = new Tensor<T>([outputSize, actualInputSize]);
+
+        int sharedInputSize = Math.Min(existingInputSize, actualInputSize);
+        for (int o = 0; o < outputSize; o++)
+        {
+            for (int i = 0; i < sharedInputSize; i++)
+            {
+                resizedWeights[o, i] = _weights[o, i];
+            }
+        }
+
+        if (actualInputSize > sharedInputSize)
+        {
+            T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (actualInputSize + outputSize)));
+            var random = RandomHelper.CreateSecureRandom();
+            for (int o = 0; o < outputSize; o++)
+            {
+                for (int i = sharedInputSize; i < actualInputSize; i++)
+                {
+                    resizedWeights[o, i] = NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1));
+                }
+            }
+        }
+
+        _weights = resizedWeights;
+        _weightsGradient = null;
+        UpdateInputShape([actualInputSize]);
     }
 
     /// <summary>
@@ -1595,7 +1664,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Input shape: [batchSize, inputSize]
-        int inputSize = InputShape[0];
+        int inputSize = _weights.Shape[1];
 
         // Create placeholder for input data
         // Note: Using batch size 1 for placeholder; actual batch size is determined at runtime

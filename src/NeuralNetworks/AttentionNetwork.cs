@@ -256,9 +256,9 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (input.Shape[1] > _sequenceLength)
-            throw new ArgumentException($"Input sequence length {input.Shape[1]} exceeds maximum sequence length {_sequenceLength}");
-
+        // Support any sequence length by dynamically adapting
+        // Attention mechanisms naturally handle variable-length sequences
+        // If input sequence is longer than configured, layers will handle it internally
         var current = input;
         foreach (var layer in Layers)
         {

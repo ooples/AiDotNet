@@ -351,16 +351,30 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
     /// </remarks>
     private DecisionTreeNode<T> CreateLeafNode(Matrix<T> x, Vector<T> y)
     {
-        if (_options.UseLinearRegressionAtLeaves)
+        DecisionTreeNode<T> node;
+
+        // Linear regression requires at least 2 samples to avoid singular matrix
+        // (with 1 sample and intercept, xTx has determinant 0)
+        if (_options.UseLinearRegressionAtLeaves && y.Length >= 2)
         {
             var model = FitLinearModel(x, y);
-            return new DecisionTreeNode<T>(model.Intercept) { LinearModel = model };
+            // Use mean as Prediction fallback (used after deserialization when LinearModel is null)
+            var mean = StatisticsHelper<T>.CalculateMean(y);
+            node = new DecisionTreeNode<T>(mean) { LinearModel = model };
         }
         else
         {
             var mean = StatisticsHelper<T>.CalculateMean(y);
-            return new DecisionTreeNode<T>(mean);
+            node = new DecisionTreeNode<T>(mean);
         }
+
+        // Populate Samples for use in pruning calculations
+        for (int i = 0; i < y.Length; i++)
+        {
+            node.Samples.Add(new Sample<T>(x.GetRow(i), y[i]));
+        }
+
+        return node;
     }
 
     /// <summary>
@@ -432,6 +446,13 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
             PruneTreeAsync(node.Right)
         );
 
+        // Collect samples from subtree leaves before calculating errors
+        // This is needed because internal nodes don't have Samples populated
+        if (node.Samples.Count == 0)
+        {
+            CollectSamplesFromSubtree(node, node.Samples);
+        }
+
         var subtreeError = CalculateSubtreeError(node);
         var leafError = CalculateLeafError(node);
 
@@ -447,6 +468,26 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
             node.Prediction = CalculateAveragePrediction(node);
             node.Predictions = Vector<T>.CreateDefault(node.Samples.Count, node.Prediction);
             node.SumSquaredError = leafError;
+        }
+    }
+
+    /// <summary>
+    /// Collects all samples from leaf nodes in a subtree.
+    /// </summary>
+    /// <param name="node">The root of the subtree to collect samples from.</param>
+    /// <param name="samples">The list to add samples to.</param>
+    private void CollectSamplesFromSubtree(DecisionTreeNode<T>? node, List<Sample<T>> samples)
+    {
+        if (node == null) return;
+
+        if (node.IsLeaf)
+        {
+            samples.AddRange(node.Samples);
+        }
+        else
+        {
+            CollectSamplesFromSubtree(node.Left, samples);
+            CollectSamplesFromSubtree(node.Right, samples);
         }
     }
 
@@ -481,7 +522,8 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
         var node = Root;
         while (node != null && !node.IsLeaf)
         {
-            if (NumOps.LessThanOrEquals(input[node.FeatureIndex], node.Threshold))
+            // Use SplitValue which is set by the two-parameter constructor
+            if (NumOps.LessThanOrEquals(input[node.FeatureIndex], node.SplitValue))
             {
                 node = node?.Left;
             }
@@ -892,5 +934,148 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
         return new M5ModelTree<T>(_options, Regularization);
+    }
+
+    /// <summary>
+    /// Serializes the M5 model tree to a byte array, including linear models at leaf nodes.
+    /// </summary>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Serialize options
+        writer.Write(_options.MaxDepth);
+        writer.Write(_options.MinSamplesSplit);
+        writer.Write(double.IsNaN(_options.MaxFeatures) ? -1 : (int)_options.MaxFeatures);
+        writer.Write(_options.Seed ?? -1);
+        writer.Write((int)_options.SplitCriterion);
+        writer.Write(_options.MinInstancesPerLeaf);
+        writer.Write(_options.UsePruning);
+        writer.Write(_options.PruningFactor);
+        writer.Write(_options.UseLinearRegressionAtLeaves);
+        writer.Write(_options.SmoothingConstant);
+
+        // Serialize feature importances
+        writer.Write(FeatureImportances.Length);
+        for (int i = 0; i < FeatureImportances.Length; i++)
+        {
+            writer.Write(Convert.ToDouble(FeatureImportances[i]));
+        }
+
+        // Serialize tree structure including linear models
+        SerializeM5Node(writer, Root);
+
+        return ms.ToArray();
+    }
+
+    /// <summary>
+    /// Deserializes the M5 model tree from a byte array, including linear models at leaf nodes.
+    /// </summary>
+    public override void Deserialize(byte[] modelData)
+    {
+        using var ms = new MemoryStream(modelData);
+        using var reader = new BinaryReader(ms);
+
+        // Deserialize options
+        _options.MaxDepth = reader.ReadInt32();
+        _options.MinSamplesSplit = reader.ReadInt32();
+        int maxFeatures = reader.ReadInt32();
+        _options.MaxFeatures = maxFeatures == -1 ? double.NaN : maxFeatures;
+        int seed = reader.ReadInt32();
+        _options.Seed = seed == -1 ? null : seed;
+        _options.SplitCriterion = (SplitCriterion)reader.ReadInt32();
+        _options.MinInstancesPerLeaf = reader.ReadInt32();
+        _options.UsePruning = reader.ReadBoolean();
+        _options.PruningFactor = reader.ReadDouble();
+        _options.UseLinearRegressionAtLeaves = reader.ReadBoolean();
+        _options.SmoothingConstant = reader.ReadDouble();
+
+        // Deserialize feature importances
+        int featureCount = reader.ReadInt32();
+        var importances = new T[featureCount];
+        for (int i = 0; i < featureCount; i++)
+        {
+            importances[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        FeatureImportances = new Vector<T>(importances);
+
+        // Deserialize tree structure including linear models
+        Root = DeserializeM5Node(reader);
+    }
+
+    /// <summary>
+    /// Serializes an M5 tree node including its linear model if present.
+    /// </summary>
+    private void SerializeM5Node(BinaryWriter writer, DecisionTreeNode<T>? node)
+    {
+        if (node == null)
+        {
+            writer.Write(false);
+            return;
+        }
+
+        writer.Write(true);
+        writer.Write(node.FeatureIndex);
+        writer.Write(Convert.ToDouble(node.SplitValue));
+        writer.Write(Convert.ToDouble(node.Prediction));
+        writer.Write(node.IsLeaf);
+
+        // Serialize linear model if present
+        bool hasLinearModel = node.LinearModel != null;
+        writer.Write(hasLinearModel);
+        if (hasLinearModel)
+        {
+            var coefficients = node.LinearModel!.Coefficients;
+            writer.Write(coefficients.Length);
+            for (int i = 0; i < coefficients.Length; i++)
+            {
+                writer.Write(Convert.ToDouble(coefficients[i]));
+            }
+            writer.Write(Convert.ToDouble(node.LinearModel.Intercept));
+        }
+
+        SerializeM5Node(writer, node.Left);
+        SerializeM5Node(writer, node.Right);
+    }
+
+    /// <summary>
+    /// Deserializes an M5 tree node including its linear model if present.
+    /// </summary>
+    private DecisionTreeNode<T>? DeserializeM5Node(BinaryReader reader)
+    {
+        bool hasNode = reader.ReadBoolean();
+        if (!hasNode) return null;
+
+        var node = new DecisionTreeNode<T>
+        {
+            FeatureIndex = reader.ReadInt32(),
+            SplitValue = NumOps.FromDouble(reader.ReadDouble()),
+            Prediction = NumOps.FromDouble(reader.ReadDouble()),
+            IsLeaf = reader.ReadBoolean()
+        };
+
+        // Deserialize linear model if present
+        bool hasLinearModel = reader.ReadBoolean();
+        if (hasLinearModel)
+        {
+            int coeffCount = reader.ReadInt32();
+            var coefficients = new T[coeffCount];
+            for (int i = 0; i < coeffCount; i++)
+            {
+                coefficients[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            var intercept = NumOps.FromDouble(reader.ReadDouble());
+
+            // Create a SimpleRegression and set its coefficients
+            var regression = new SimpleRegression<T>(regularization: Regularization);
+            regression.SetCoefficientsAndIntercept(new Vector<T>(coefficients), intercept);
+            node.LinearModel = regression;
+        }
+
+        node.Left = DeserializeM5Node(reader);
+        node.Right = DeserializeM5Node(reader);
+
+        return node;
     }
 }

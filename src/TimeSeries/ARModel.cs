@@ -264,10 +264,13 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        // For AR models, the input should contain time series values as the first column
+        // or be a single-column matrix representing the full time series
+        Vector<T> y = input.Columns == 1 ? input.GetColumn(0) : input.GetColumn(0);
         Vector<T> predictions = new Vector<T>(input.Rows);
         for (int t = 0; t < input.Rows; t++)
         {
-            predictions[t] = Predict(input.GetRow(t), t);
+            predictions[t] = Predict(y, t);
         }
 
         return predictions;

@@ -1,6 +1,15 @@
 
 
+using AiDotNet.Tensors.Helpers;
+
 namespace AiDotNet.NeuralNetworks.Layers;
+
+public enum EmbeddingInputMode
+{
+    Auto,
+    Indices,
+    Continuous
+}
 
 /// <summary>
 /// Represents an embedding layer that converts discrete token indices into dense vector representations.
@@ -74,6 +83,16 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T> _embeddingTensor;
 
     /// <summary>
+    /// Projection weights for continuous input (lazy initialized).
+    /// Used when input contains continuous values instead of integer token indices.
+    /// </summary>
+    private Tensor<T>? _projectionWeights;
+
+    private Tensor<T>? _projectionWeightsGradient;
+    private bool _lastInputWasContinuous;
+    private bool? _autoDetectedContinuous;
+
+    /// <summary>
     /// The gradients for the embedding tensor, computed during backpropagation.
     /// </summary>
     /// <remarks>
@@ -137,6 +156,25 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     public T AuxiliaryLossWeight { get; set; }
 
+    private EmbeddingInputMode _inputMode = EmbeddingInputMode.Auto;
+    public EmbeddingInputMode InputMode
+    {
+        get => _inputMode;
+        set
+        {
+            if (_inputMode == value)
+            {
+                return;
+            }
+
+            _inputMode = value;
+            if (_inputMode == EmbeddingInputMode.Auto)
+            {
+                _autoDetectedContinuous = null;
+            }
+        }
+    }
+
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -161,6 +199,22 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in this layer.
+    /// </summary>
+    /// <value>
+    /// The number of elements in the embedding matrix (vocabulary size × embedding dimension).
+    /// </value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This counts the total number of adjustable values in the layer.
+    /// For an embedding layer with 10,000 vocabulary size and 300 dimensions,
+    /// the parameter count would be 10,000 × 300 = 3,000,000 parameters.
+    /// </para>
+    /// </remarks>
+    public override int ParameterCount
+        => _embeddingTensor.Shape[0] * _embeddingTensor.Shape[1] +
+           (_projectionWeights?.Length ?? 0);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="EmbeddingLayer{T}"/> class.
@@ -298,34 +352,72 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // 2D: [batch, seqLen] -> [batch, seqLen, embeddingDim]
         // 3D: [batch, seqLen, 1] -> [batch, seqLen, embeddingDim]
 
-        // Calculate total number of indices to look up
-        int totalIndices = input.Length;
-
-        // Create flattened indices tensor for embedding lookup
-        var flatIndices = new Tensor<int>([totalIndices]);
-
-        for (int i = 0; i < totalIndices; i++)
+        // Detect if input is continuous (float values, not integer indices)
+        // Continuous input: use linear projection instead of embedding lookup
+        bool isContinuousInput = InputMode switch
         {
-            int index = Convert.ToInt32(NumOps.ToDouble(input.Data[i]));
+            EmbeddingInputMode.Continuous => true,
+            EmbeddingInputMode.Indices => false,
+            _ => _autoDetectedContinuous ??= IsContinuousInput(input, vocabularySize)
+        };
+        _lastInputWasContinuous = isContinuousInput;
 
-            // Validate index is within vocabulary bounds
-            if (index < 0 || index >= vocabularySize)
+        Tensor<T> flatOutput;
+
+        if (isContinuousInput)
+        {
+            // Use linear projection for continuous input
+            // Project from input features to embedding dimension
+            int inputFeatures = input.Shape[input.Rank - 1];
+
+            // Create projection weights if needed (lazy initialization)
+            if (_projectionWeights == null || _projectionWeights.Shape[0] != inputFeatures)
             {
-                throw new ArgumentOutOfRangeException(
-                    nameof(input),
-                    $"Input index {index} at flat position {i} is out of range. " +
-                    $"Valid index range is [0, {vocabularySize - 1}] (vocabulary size: {vocabularySize}).");
+                _projectionWeights = new Tensor<T>([inputFeatures, embeddingDim]);
+                // Xavier initialization
+                T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (inputFeatures + embeddingDim)));
+                var random = RandomHelper.CreateSecureRandom();
+                for (int i = 0; i < _projectionWeights.Length; i++)
+                {
+                    _projectionWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
+                }
             }
 
-            flatIndices[i] = index;
+            // Flatten input to 2D [total_samples, inputFeatures] for projection
+            int totalSamples = input.Length / inputFeatures;
+            var input2D = input.Reshape([totalSamples, inputFeatures]);
+            flatOutput = input2D.MatrixMultiply(_projectionWeights);
+        }
+        else
+        {
+            // Standard embedding lookup for integer token indices
+            int totalIndices = input.Length;
+            var flatIndices = new Tensor<int>([totalIndices]);
+
+            for (int i = 0; i < totalIndices; i++)
+            {
+                int index = Convert.ToInt32(NumOps.ToDouble(input.Data[i]));
+                flatIndices[i] = index;
+            }
+
+            // Use Engine embedding lookup operation
+            flatOutput = Engine.TensorEmbeddingLookup<T, int>(_embeddingTensor, flatIndices);
         }
 
-        // Use Engine embedding lookup operation
-        var flatOutput = Engine.TensorEmbeddingLookup<T, int>(_embeddingTensor, flatIndices);
-
-        // Calculate output shape: same as input but last dim becomes embeddingDim
+        // Calculate output shape
         int[] outputShape;
-        if (input.Rank == 1)
+        if (isContinuousInput)
+        {
+            // For continuous input (linear projection): replace last dimension with embeddingDim
+            // input[..., inputFeatures] -> output[..., embeddingDim]
+            outputShape = new int[input.Rank];
+            for (int i = 0; i < input.Rank - 1; i++)
+            {
+                outputShape[i] = input.Shape[i];
+            }
+            outputShape[^1] = embeddingDim;
+        }
+        else if (input.Rank == 1)
         {
             // [seqLen] -> [seqLen, embeddingDim]
             outputShape = [input.Shape[0], embeddingDim];
@@ -354,6 +446,25 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         return flatOutput.Reshape(outputShape);
+    }
+
+    private bool IsContinuousInput(Tensor<T> input, int vocabularySize)
+    {
+        for (int i = 0; i < input.Length; i++)
+        {
+            double val = NumOps.ToDouble(input.Data[i]);
+            if (double.IsNaN(val) || double.IsInfinity(val))
+            {
+                return true;
+            }
+            int intVal = (int)val;
+            if (Math.Abs(val - intVal) > 1e-6 || intVal < 0 || intVal >= vocabularySize)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -389,6 +500,11 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        if (_lastInputWasContinuous)
+        {
+            return BackwardContinuous(outputGradient);
+        }
+
         return UseAutodiff
             ? BackwardViaAutodiff(outputGradient)
             : BackwardManual(outputGradient);
@@ -423,6 +539,28 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // We don't compute input gradients for embedding layer (indices are not differentiable)
         return new Tensor<T>(_originalInputShape);
+    }
+
+    private Tensor<T> BackwardContinuous(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null || _projectionWeights == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        int inputFeatures = _projectionWeights.Shape[0];
+        int embeddingDim = _projectionWeights.Shape[1];
+        int totalSamples = _lastInput.Length / inputFeatures;
+
+        var input2D = _lastInput.Reshape([totalSamples, inputFeatures]);
+        var grad2D = outputGradient.Reshape([totalSamples, embeddingDim]);
+
+        var input2DTransposed = Engine.TensorTranspose(input2D);
+        _projectionWeightsGradient = Engine.TensorMatMul(input2DTransposed, grad2D);
+
+        var projectionWeightsTransposed = Engine.TensorTranspose(_projectionWeights);
+        var inputGrad2D = Engine.TensorMatMul(grad2D, projectionWeightsTransposed);
+
+        _embeddingGradient = null;
+        return inputGrad2D.Reshape(_originalInputShape);
     }
 
     /// <summary>
@@ -493,12 +631,20 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
-        if (_embeddingGradient == null)
+        if (_embeddingGradient == null && _projectionWeightsGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        // Scale gradients by learning rate and subtract from embedding tensor
-        var scaledGradient = Engine.TensorMultiplyScalar(_embeddingGradient, learningRate);
-        _embeddingTensor = Engine.TensorSubtract(_embeddingTensor, scaledGradient);
+        if (_embeddingGradient != null)
+        {
+            var scaledGradient = Engine.TensorMultiplyScalar(_embeddingGradient, learningRate);
+            _embeddingTensor = Engine.TensorSubtract(_embeddingTensor, scaledGradient);
+        }
+
+        if (_projectionWeightsGradient != null && _projectionWeights != null)
+        {
+            var scaledProjectionGradient = Engine.TensorMultiplyScalar(_projectionWeightsGradient, learningRate);
+            _projectionWeights = Engine.TensorSubtract(_projectionWeights, scaledProjectionGradient);
+        }
     }
 
     /// <summary>
@@ -529,7 +675,14 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Vector<T> GetParameters()
     {
         // Use ToArray() for production-grade parameter extraction
-        return new Vector<T>(_embeddingTensor.ToArray());
+        var embeddingParams = new Vector<T>(_embeddingTensor.ToArray());
+        if (_projectionWeights == null)
+        {
+            return embeddingParams;
+        }
+
+        var projectionParams = new Vector<T>(_projectionWeights.ToArray());
+        return Vector<T>.Concatenate(embeddingParams, projectionParams);
     }
 
     /// <summary>
@@ -564,13 +717,28 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int embeddingDim = _embeddingTensor.Shape[1];
         int expectedParams = vocabSize * embeddingDim;
 
-        if (parameters.Length != expectedParams)
+        if (parameters.Length < expectedParams)
         {
             throw new ArgumentException($"Expected {expectedParams} parameters, but got {parameters.Length}");
         }
 
         // Restore embeddings without hot-path conversions
-        _embeddingTensor = new Tensor<T>([vocabSize, embeddingDim], parameters);
+        _embeddingTensor = new Tensor<T>([vocabSize, embeddingDim], parameters.Slice(0, expectedParams));
+
+        int projectionCount = parameters.Length - expectedParams;
+        if (projectionCount == 0)
+        {
+            _projectionWeights = null;
+            return;
+        }
+
+        if (projectionCount % embeddingDim != 0)
+        {
+            throw new ArgumentException($"Projection parameter count {projectionCount} is not divisible by embedding dimension {embeddingDim}.");
+        }
+
+        int inputFeatures = projectionCount / embeddingDim;
+        _projectionWeights = new Tensor<T>([inputFeatures, embeddingDim], parameters.Slice(expectedParams, projectionCount));
     }
 
     /// <summary>
@@ -744,6 +912,9 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Clear cached values from forward and backward passes
         _lastInput = null;
         _embeddingGradient = null;
+        _projectionWeightsGradient = null;
+        _lastInputWasContinuous = false;
+        _autoDetectedContinuous = null;
     }
 
     /// <summary>

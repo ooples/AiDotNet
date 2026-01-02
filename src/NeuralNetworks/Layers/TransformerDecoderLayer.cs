@@ -254,21 +254,40 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This field contains the feed-forward network that applies a non-linear transformation to each position in the sequence independently.
-    /// It consists of two linear transformations with an activation function in between.
+    /// This field contains the first layer of the feed-forward network that projects from embedding size to a larger hidden dimension.
+    /// It applies a non-linear transformation with an activation function.
     /// </para>
-    /// <para><b>For Beginners:</b> This component processes the attended information to produce the final output for each position.
-    /// 
-    /// The feed-forward network:
-    /// - Processes each position independently (unlike attention, which looks across positions)
-    /// - Applies a more complex transformation with non-linearity
-    /// - Helps the network learn more abstract patterns and relationships
-    /// 
-    /// This is where the model does its "thinking" after gathering information from self-attention
-    /// and cross-attention, making final decisions about what to output.
+    /// <para><b>For Beginners:</b> This component expands the representation to a larger dimension.
+    ///
+    /// The first feed-forward layer:
+    /// - Takes the attention output (embedding size)
+    /// - Expands it to a larger hidden dimension
+    /// - Applies an activation function for non-linearity
+    ///
+    /// This expansion gives the network more capacity to learn complex transformations.
     /// </para>
     /// </remarks>
     private FeedForwardLayer<T> _feedForward;
+
+    /// <summary>
+    /// The projection layer that maps back from the feed-forward hidden dimension to the embedding size.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field contains the second layer of the feed-forward network that projects from the hidden dimension back to the embedding size.
+    /// This ensures the output has the same dimension as the input for residual connections.
+    /// </para>
+    /// <para><b>For Beginners:</b> This component compresses the expanded representation back to the original size.
+    ///
+    /// The projection layer:
+    /// - Takes the expanded hidden representation
+    /// - Compresses it back to the embedding size
+    /// - Ensures the output can be added to the residual connection
+    ///
+    /// This is the standard FFN architecture in transformers: expand → activate → project back.
+    /// </para>
+    /// </remarks>
+    private readonly FeedForwardLayer<T> _feedForwardProjection;
 
     /// <summary>
     /// The layer normalization applied after the feed-forward network.
@@ -463,6 +482,22 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets the total number of trainable parameters in this layer.
+    /// </summary>
+    /// <remarks>
+    /// This returns the sum of all parameters from sublayers: self-attention, cross-attention,
+    /// layer norms, feed-forward layer, and feed-forward projection layer.
+    /// </remarks>
+    public override int ParameterCount =>
+        _selfAttention.ParameterCount +
+        _norm1.ParameterCount +
+        _crossAttention.ParameterCount +
+        _norm2.ParameterCount +
+        _feedForward.ParameterCount +
+        _feedForwardProjection.ParameterCount +
+        _norm3.ParameterCount;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="TransformerDecoderLayer{T}"/> class with scalar activation function.
     /// </summary>
     /// <param name="embeddingSize">The size of the embeddings. Default is 512.</param>
@@ -512,8 +547,10 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _crossAttention = new MultiHeadAttentionLayer<T>(_sequenceLength, _embeddingSize, _numHeads, activation);
         _norm2 = new LayerNormalizationLayer<T>(_embeddingSize);
 
-        // Feed-forward layer (with activation)
+        // Feed-forward layer (with activation) - expands to hidden dimension
         _feedForward = new FeedForwardLayer<T>(_embeddingSize, _feedForwardDim, activation);
+        // Projection layer (no activation) - projects back to embedding size
+        _feedForwardProjection = new FeedForwardLayer<T>(_feedForwardDim, _embeddingSize, (IActivationFunction<T>?)null);
         _norm3 = new LayerNormalizationLayer<T>(_embeddingSize);
 
         // Initialize NumOps-based fields
@@ -568,8 +605,10 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _crossAttention = new MultiHeadAttentionLayer<T>(_sequenceLength, _embeddingSize, _numHeads, activation);
         _norm2 = new LayerNormalizationLayer<T>(_embeddingSize);
 
-        // Feed-forward layer (with vector activation)
+        // Feed-forward layer (with vector activation) - expands to hidden dimension
         _feedForward = new FeedForwardLayer<T>(_embeddingSize, _feedForwardDim, activation);
+        // Projection layer (no activation) - projects back to embedding size
+        _feedForwardProjection = new FeedForwardLayer<T>(_feedForwardDim, _embeddingSize, (IActivationFunction<T>?)null);
         _norm3 = new LayerNormalizationLayer<T>(_embeddingSize);
 
         // Initialize NumOps-based fields
@@ -657,7 +696,8 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var residual2 = Engine.TensorAdd(_lastNormalized1, _lastCrossAttentionOutput);
         _lastNormalized2 = _norm2.Forward(residual2);
 
-        _lastFeedForwardOutput = _feedForward.Forward(_lastNormalized2);
+        var feedForwardHidden = _feedForward.Forward(_lastNormalized2);
+        _lastFeedForwardOutput = _feedForwardProjection.Forward(feedForwardHidden);
 
         // residual3 = normalized2 + feedForwardOutput
         var residual3 = Engine.TensorAdd(_lastNormalized2, _lastFeedForwardOutput);
@@ -742,7 +782,9 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         var gradNorm3 = _norm3.Backward(outputGradient);
-        var gradFeedForward = _feedForward.Backward(gradNorm3);
+        // Backward through projection layer first, then the feed-forward layer
+        var gradProjection = _feedForwardProjection.Backward(gradNorm3);
+        var gradFeedForward = _feedForward.Backward(gradProjection);
 
         // gradInput2 = gradFeedForward + gradNorm3
         var gradInput2 = Engine.TensorAdd(gradFeedForward, gradNorm3);
@@ -789,6 +831,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _crossAttention.UpdateParameters(learningRate);
         _norm2.UpdateParameters(learningRate);
         _feedForward.UpdateParameters(learningRate);
+        _feedForwardProjection.UpdateParameters(learningRate);
         _norm3.UpdateParameters(learningRate);
     }
 
@@ -827,6 +870,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var crossAttentionParams = _crossAttention.GetParameters();
         var norm2Params = _norm2.GetParameters();
         var feedForwardParams = _feedForward.GetParameters();
+        var feedForwardProjectionParams = _feedForwardProjection.GetParameters();
         var norm3Params = _norm3.GetParameters();
 
         // Concatenate all parameter vectors efficiently
@@ -834,10 +878,12 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             Vector<T>.Concatenate(
                 Vector<T>.Concatenate(
                     Vector<T>.Concatenate(
-                        Vector<T>.Concatenate(selfAttentionParams, norm1Params),
-                        crossAttentionParams),
-                    norm2Params),
-                feedForwardParams),
+                        Vector<T>.Concatenate(
+                            Vector<T>.Concatenate(selfAttentionParams, norm1Params),
+                            crossAttentionParams),
+                        norm2Params),
+                    feedForwardParams),
+                feedForwardProjectionParams),
             norm3Params);
     }
 
@@ -873,6 +919,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _crossAttention.ResetState();
         _norm2.ResetState();
         _feedForward.ResetState();
+        _feedForwardProjection.ResetState();
         _norm3.ResetState();
 
         // Clear cached tensors
@@ -1189,7 +1236,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     private ComputationNode<T> ApplyFeedForwardGraph(FeedForwardLayer<T> ffLayer, ComputationNode<T> input)
     {
-        // Get feed-forward weights and biases directly as tensors
+        // Get feed-forward weights and biases directly as tensors (first layer: expand to hidden dim)
         var weightsTensor = ffLayer.GetWeightsTensor();
         var biasTensor = ffLayer.GetBiasesTensor();
 
@@ -1199,20 +1246,35 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var weightsNode = TensorOperations<T>.Constant(weightsTensor, "ff_weights");
         var biasNode = TensorOperations<T>.Constant(biasTensor, "ff_bias");
 
-        // Linear transformation: output = input @ weights^T + bias
+        // Linear transformation: hidden = input @ weights^T + bias
         var weightsT = TensorOperations<T>.Transpose(weightsNode);
         var linear = TensorOperations<T>.MatrixMultiply(input, weightsT);
         var withBias = TensorOperations<T>.Add(linear, biasNode);
 
         // Apply activation if present using the activation's own ApplyToGraph method
-        // This follows OCP - each activation knows how to export itself to a graph
+        ComputationNode<T> hidden = withBias;
         var activation = ffLayer.ScalarActivation;
         if (activation != null)
         {
-            return activation.ApplyToGraph(withBias);
+            hidden = activation.ApplyToGraph(withBias);
         }
 
-        return withBias;
+        // Apply projection layer (second layer: project back to embedding size)
+        var projWeightsTensor = _feedForwardProjection.GetWeightsTensor();
+        var projBiasTensor = _feedForwardProjection.GetBiasesTensor();
+
+        if (projWeightsTensor == null || projBiasTensor == null)
+            throw new InvalidOperationException("Feed-forward projection layer weights not initialized.");
+
+        var projWeightsNode = TensorOperations<T>.Constant(projWeightsTensor, "ff_proj_weights");
+        var projBiasNode = TensorOperations<T>.Constant(projBiasTensor, "ff_proj_bias");
+
+        // Linear transformation: output = hidden @ projWeights^T + projBias
+        var projWeightsT = TensorOperations<T>.Transpose(projWeightsNode);
+        var projLinear = TensorOperations<T>.MatrixMultiply(hidden, projWeightsT);
+        var output = TensorOperations<T>.Add(projLinear, projBiasNode);
+
+        return output;
     }
 
     /// <summary>
@@ -1262,6 +1324,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                    _crossAttention != null && _crossAttention.SupportsJitCompilation &&
                    _norm2 != null && _norm2.SupportsJitCompilation &&
                    _feedForward != null && _feedForward.SupportsJitCompilation &&
+                   _feedForwardProjection != null && _feedForwardProjection.SupportsJitCompilation &&
                    _norm3 != null && _norm3.SupportsJitCompilation;
         }
     }

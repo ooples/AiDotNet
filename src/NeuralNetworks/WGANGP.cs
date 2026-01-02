@@ -83,6 +83,11 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     /// </summary>
     public ConvolutionalNeuralNetwork<T> Critic { get; private set; }
 
+    /// <summary>
+    /// Gets the total number of trainable parameters in the WGAN-GP.
+    /// </summary>
+    public override int ParameterCount => Generator.GetParameterCount() + Critic.GetParameterCount();
+
     private readonly ILossFunction<T> _lossFunction;
 
     /// <summary>

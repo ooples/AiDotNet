@@ -108,13 +108,12 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
     {
         ValidateInputs(x, y);
 
-        // Apply regularization to the input matrix
-        var regularizedX = Regularization.Regularize(x);
-
-        _xValues = regularizedX.GetColumn(0); // Isotonic regression typically works with 1D input
+        // Note: Isotonic regression doesn't use traditional regularization -
+        // the monotonicity constraint itself acts as a form of regularization
+        _xValues = x.GetColumn(0); // Isotonic regression typically works with 1D input
         _yValues = y;
 
-        OptimizeModel(regularizedX, _yValues);
+        OptimizeModel(x, _yValues);
     }
 
     /// <summary>
@@ -175,9 +174,6 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
                 }
             }
         } while (changed);
-
-        // Apply regularization to the coefficients
-        yhat = Regularization.Regularize(yhat);
 
         SupportVectors = new Matrix<T>(n, 1);
         for (int i = 0; i < n; i++)
@@ -261,6 +257,12 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
     /// <returns>The index of the nearest support vector.</returns>
     private int FindNearestIndex(T x)
     {
+        // Handle edge case: single support vector
+        if (SupportVectors.Rows == 1)
+        {
+            return 0;
+        }
+
         int left = 0;
         int right = SupportVectors.Rows - 1;
 
@@ -277,13 +279,19 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
             }
         }
 
+        // Ensure index is within bounds
+        if (left >= SupportVectors.Rows)
+        {
+            return SupportVectors.Rows - 1;
+        }
+
         if (left > 0 && NumOps.GreaterThan(NumOps.Abs(NumOps.Subtract(SupportVectors[left - 1, 0], x)),
                                            NumOps.Abs(NumOps.Subtract(SupportVectors[left, 0], x))))
         {
             return left;
         }
 
-        return left - 1;
+        return Math.Max(0, left - 1);
     }
 
     /// <summary>

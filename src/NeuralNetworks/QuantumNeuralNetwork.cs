@@ -181,14 +181,26 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // Ensure input is correctly shaped
-        if (input.Shape != Architecture.GetInputShape())
+        // Handle any-rank input by reshaping to match expected shape
+        var expectedShape = Architecture.GetInputShape();
+        var workingInput = input;
+
+        // Calculate total expected elements
+        int expectedElements = expectedShape.Aggregate(1, (a, b) => a * b);
+        int inputElements = input.Length;
+
+        // If element counts match, reshape to expected shape
+        if (inputElements == expectedElements && !input.Shape.SequenceEqual(expectedShape))
         {
-            throw new ArgumentException("Input shape does not match the expected input shape.");
+            workingInput = input.Reshape(expectedShape);
+        }
+        else if (inputElements != expectedElements)
+        {
+            throw new ArgumentException($"Input has {inputElements} elements but expected {expectedElements} elements.");
         }
 
         // Simulate quantum state preparation
-        var quantumState = PrepareQuantumState(input);
+        var quantumState = PrepareQuantumState(workingInput);
 
         // Apply quantum layers
         foreach (var layer in Layers)
@@ -369,12 +381,23 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Tensor<Complex<T>> PrepareQuantumState(Tensor<T> input)
     {
-        var (normalizedInput, _) = _normalizer.NormalizeInput(input);
-        var quantumState = new Tensor<Complex<T>>([normalizedInput.Length]);
+        // Ensure input is 2D for normalizer (reshape 1D [n] to [1, n])
+        var workingInput = input.Shape.Length == 1
+            ? input.Reshape([1, input.Shape[0]])
+            : input;
 
-        for (int i = 0; i < normalizedInput.Length; i++)
+        var (normalizedInput, _) = _normalizer.NormalizeInput(workingInput);
+
+        // Flatten back to 1D for quantum state preparation
+        var flatInput = normalizedInput.Shape.Length > 1
+            ? normalizedInput.Reshape([normalizedInput.Length])
+            : normalizedInput;
+
+        var quantumState = new Tensor<Complex<T>>([flatInput.Length]);
+
+        for (int i = 0; i < flatInput.Length; i++)
         {
-            var amplitude = NumOps.Sqrt(normalizedInput[i]);
+            var amplitude = NumOps.Sqrt(flatInput[i]);
             quantumState[i] = new Complex<T>(amplitude, NumOps.Zero);
         }
 

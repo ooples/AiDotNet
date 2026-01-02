@@ -1,6 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
-using AiDotNet.Models.Options;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralRadianceFields.Interfaces;
@@ -80,7 +80,7 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 /// - σ_i: Density at sample point i
 /// - δ_i: Distance between sample points
 /// - c_i: Color at sample point i
-/// - T(t_i) = exp(-Σ(j<i) σ_j * δ_j)
+/// - T(t_i) = exp(-Σ(j&lt;i) σ_j * δ_j)
 /// </para>
 /// <para>
 /// Applications:
@@ -112,46 +112,175 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 /// </remarks>
 public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
 {
-    private readonly int _positionEncodingLevels; // L in paper (typically 10)
-    private readonly int _directionEncodingLevels; // L' in paper (typically 4)
-    private readonly int _hiddenDim; // Hidden layer dimension (typically 256)
-    private readonly int _numLayers; // Number of MLP layers (typically 8)
-    private readonly int _colorHiddenDim;
-    private readonly int _colorNumLayers;
-    private readonly int _renderSamples;
-    private readonly int _hierarchicalSamples;
-    private readonly int _skipConnectionLayer;
-    private readonly bool _useHierarchicalSampling;
-    private readonly T _renderNearBound;
-    private readonly T _renderFarBound;
-    private readonly T _learningRate;
-
-    private readonly List<DenseLayer<T>> _positionLayers = [];
-    private DenseLayer<T>? _densityLayer;
-    private DenseLayer<T>? _featureLayer;
-    private readonly List<DenseLayer<T>> _colorLayers = [];
-    private DenseLayer<T>? _colorOutputLayer;
-
-    private Tensor<T>? _lastPositions;
-    private Tensor<T>? _lastDirections;
-    private Tensor<T>? _lastPositionEncoding;
-    private Tensor<T>? _lastDirectionEncoding;
-    private Tensor<T>? _lastDensityRaw;
-    private Tensor<T>? _lastRgbRaw;
-
-    public override bool SupportsTraining => true;
+    #region Model Architecture Parameters
 
     /// <summary>
-    /// Initializes a new instance of the NeRF class.
+    /// Number of frequency levels for position encoding (L in paper, typically 10).
     /// </summary>
-    /// <param name="positionEncodingLevels">Number of frequency levels for position encoding.</param>
-    /// <param name="directionEncodingLevels">Number of frequency levels for direction encoding.</param>
-    /// <param name="hiddenDim">Dimension of hidden layers in the MLP.</param>
-    /// <param name="numLayers">Number of hidden layers in the MLP.</param>
-    /// <param name="useHierarchicalSampling">Whether to use coarse-to-fine hierarchical sampling.</param>
-    /// <param name="lossFunction">Optional loss function for training.</param>
+    private readonly int _positionEncodingLevels;
+
+    /// <summary>
+    /// Number of frequency levels for direction encoding (L' in paper, typically 4).
+    /// </summary>
+    private readonly int _directionEncodingLevels;
+
+    /// <summary>
+    /// Hidden layer dimension (typically 256).
+    /// </summary>
+    private readonly int _hiddenDim;
+
+    /// <summary>
+    /// Number of MLP layers (typically 8).
+    /// </summary>
+    private readonly int _numLayers;
+
+    /// <summary>
+    /// Hidden dimension for color prediction network.
+    /// </summary>
+    private readonly int _colorHiddenDim;
+
+    /// <summary>
+    /// Number of layers in color prediction network.
+    /// </summary>
+    private readonly int _colorNumLayers;
+
+    /// <summary>
+    /// Number of samples per ray for rendering.
+    /// </summary>
+    private readonly int _renderSamples;
+
+    /// <summary>
+    /// Number of additional samples for hierarchical sampling.
+    /// </summary>
+    private readonly int _hierarchicalSamples;
+
+    /// <summary>
+    /// Layer index for skip connection.
+    /// </summary>
+    private readonly int _skipConnectionLayer;
+
+    /// <summary>
+    /// Whether to use hierarchical (coarse-to-fine) sampling.
+    /// </summary>
+    private readonly bool _useHierarchicalSampling;
+
+    /// <summary>
+    /// Near bound for ray sampling.
+    /// </summary>
+    private readonly T _renderNearBound;
+
+    /// <summary>
+    /// Far bound for ray sampling.
+    /// </summary>
+    private readonly T _renderFarBound;
+
+    /// <summary>
+    /// Learning rate for training.
+    /// </summary>
+    private readonly T _learningRate;
+
+    #endregion
+
+    #region Network Layers
+
+    /// <summary>
+    /// Position encoding MLP layers.
+    /// </summary>
+    private readonly List<DenseLayer<T>> _positionLayers = [];
+
+    /// <summary>
+    /// Density prediction layer.
+    /// </summary>
+    private DenseLayer<T>? _densityLayer;
+
+    /// <summary>
+    /// Feature extraction layer (before color prediction).
+    /// </summary>
+    private DenseLayer<T>? _featureLayer;
+
+    /// <summary>
+    /// Color prediction MLP layers.
+    /// </summary>
+    private readonly List<DenseLayer<T>> _colorLayers = [];
+
+    /// <summary>
+    /// Final RGB output layer.
+    /// </summary>
+    private DenseLayer<T>? _colorOutputLayer;
+
+    #endregion
+
+    #region Training State
+
+    /// <summary>
+    /// Cached positions from last forward pass (for backpropagation).
+    /// </summary>
+    private Tensor<T>? _lastPositions;
+
+    /// <summary>
+    /// Cached directions from last forward pass (for backpropagation).
+    /// </summary>
+    private Tensor<T>? _lastDirections;
+
+    /// <summary>
+    /// Cached position encoding from last forward pass.
+    /// </summary>
+    private Tensor<T>? _lastPositionEncoding;
+
+    /// <summary>
+    /// Cached direction encoding from last forward pass.
+    /// </summary>
+    private Tensor<T>? _lastDirectionEncoding;
+
+    /// <summary>
+    /// Cached raw density output from last forward pass.
+    /// </summary>
+    private Tensor<T>? _lastDensityRaw;
+
+    /// <summary>
+    /// Cached raw RGB output from last forward pass.
+    /// </summary>
+    private Tensor<T>? _lastRgbRaw;
+
+    /// <summary>
+    /// Loss function for training.
+    /// </summary>
+    private readonly ILossFunction<T> _lossFunction;
+
+    #endregion
+
+    #region Public Properties
+
+    /// <summary>
+    /// Gets whether this network supports training.
+    /// </summary>
+    public override bool SupportsTraining => true;
+
+    #endregion
+
+    #region Constructor
+
+    /// <summary>
+    /// Creates a new NeRF model for 3D scene representation and novel view synthesis.
+    /// </summary>
+    /// <param name="positionEncodingLevels">Number of frequency levels for position encoding.
+    /// Higher values enable more high-frequency details but are harder to optimize. Default is 10.</param>
+    /// <param name="directionEncodingLevels">Number of frequency levels for direction encoding.
+    /// Lower than position (view dependence is smoother than geometry). Default is 4.</param>
+    /// <param name="hiddenDim">Size of hidden layers. Larger values have more capacity but are slower. Default is 256.</param>
+    /// <param name="numLayers">Depth of network. More layers can learn more complex functions. Default is 8.</param>
+    /// <param name="colorHiddenDim">Hidden dimension for color prediction network. Default is 128.</param>
+    /// <param name="colorNumLayers">Number of layers in color prediction network. Default is 1.</param>
+    /// <param name="useHierarchicalSampling">Whether to use two-stage rendering (coarse + fine).
+    /// True gives better quality but is slower. Default is true.</param>
+    /// <param name="renderSamples">Number of samples per ray for rendering. Default is 64.</param>
+    /// <param name="hierarchicalSamples">Additional samples for hierarchical sampling. Default is 128.</param>
+    /// <param name="renderNearBound">Near bound for ray sampling. Default is 2.0.</param>
+    /// <param name="renderFarBound">Far bound for ray sampling. Default is 6.0.</param>
+    /// <param name="learningRate">Learning rate for training. Default is 5e-4.</param>
+    /// <param name="lossFunction">Loss function for training. If null, MSE loss is used.</param>
     /// <remarks>
-    /// <b>For Beginners:</b> Creates a NeRF model for 3D scene representation.
+    /// <para><b>For Beginners:</b> Creates a NeRF model for 3D scene representation.
     ///
     /// Parameters explained:
     /// - positionEncodingLevels: How many frequencies for position encoding
@@ -179,96 +308,89 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
     ///   - False: Faster, lower quality
     ///
     /// Standard NeRF configuration:
-    /// new NeRF(
+    /// <code>
+    /// var nerf = new NeRF&lt;float&gt;(
     ///     positionEncodingLevels: 10,
     ///     directionEncodingLevels: 4,
     ///     hiddenDim: 256,
     ///     numLayers: 8,
-    ///     useHierarchicalSampling: true
-    /// );
+    ///     useHierarchicalSampling: true);
+    /// </code>
+    /// </para>
     /// </remarks>
-    public NeRF()
-        : this(new NeRFOptions(), null)
-    {
-    }
-
-    public NeRF(NeRFOptions options, ILossFunction<T>? lossFunction = null)
-        : base(CreateArchitecture(options.HiddenDim), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Regression))
-    {
-        if (options == null)
-        {
-            throw new ArgumentNullException(nameof(options));
-        }
-
-        if (options.PositionEncodingLevels <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(options.PositionEncodingLevels), "Position encoding levels must be positive.");
-        }
-        if (options.DirectionEncodingLevels <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(options.DirectionEncodingLevels), "Direction encoding levels must be positive.");
-        }
-        if (options.HiddenDim <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(options.HiddenDim), "Hidden dimension must be positive.");
-        }
-        if (options.NumLayers <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(options.NumLayers), "Number of layers must be positive.");
-        }
-        if (options.ColorHiddenDim <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(options.ColorHiddenDim), "Color hidden dimension must be positive.");
-        }
-        if (options.ColorNumLayers < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(options.ColorNumLayers), "Color layer count cannot be negative.");
-        }
-        if (options.RenderSamples <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(options.RenderSamples), "Render samples must be positive.");
-        }
-        if (options.HierarchicalSamples < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(options.HierarchicalSamples), "Hierarchical samples cannot be negative.");
-        }
-
-        _positionEncodingLevels = options.PositionEncodingLevels;
-        _directionEncodingLevels = options.DirectionEncodingLevels;
-        _hiddenDim = options.HiddenDim;
-        _numLayers = options.NumLayers;
-        _colorHiddenDim = options.ColorHiddenDim;
-        _colorNumLayers = options.ColorNumLayers;
-        _useHierarchicalSampling = options.UseHierarchicalSampling;
-        _renderSamples = options.RenderSamples;
-        _hierarchicalSamples = options.HierarchicalSamples;
-        _renderNearBound = NumOps.FromDouble(options.RenderNearBound);
-        _renderFarBound = NumOps.FromDouble(options.RenderFarBound);
-        _learningRate = NumOps.FromDouble(options.LearningRate);
-        _skipConnectionLayer = _numLayers >= 4 ? Math.Min(_numLayers / 2, _numLayers - 1) : -1;
-
-        InitializeLayers();
-    }
-
     public NeRF(
         int positionEncodingLevels = 10,
         int directionEncodingLevels = 4,
         int hiddenDim = 256,
         int numLayers = 8,
+        int colorHiddenDim = 128,
+        int colorNumLayers = 1,
         bool useHierarchicalSampling = true,
+        int renderSamples = 64,
+        int hierarchicalSamples = 128,
+        double renderNearBound = 2.0,
+        double renderFarBound = 6.0,
+        double learningRate = 5e-4,
         ILossFunction<T>? lossFunction = null)
-        : this(
-            new NeRFOptions
-            {
-                PositionEncodingLevels = positionEncodingLevels,
-                DirectionEncodingLevels = directionEncodingLevels,
-                HiddenDim = hiddenDim,
-                NumLayers = numLayers,
-                UseHierarchicalSampling = useHierarchicalSampling
-            },
-            lossFunction)
+        : base(CreateArchitecture(hiddenDim), lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        // Validate parameters
+        if (positionEncodingLevels <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(positionEncodingLevels), "Position encoding levels must be positive.");
+        }
+        if (directionEncodingLevels <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(directionEncodingLevels), "Direction encoding levels must be positive.");
+        }
+        if (hiddenDim <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(hiddenDim), "Hidden dimension must be positive.");
+        }
+        if (numLayers <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numLayers), "Number of layers must be positive.");
+        }
+        if (colorHiddenDim <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(colorHiddenDim), "Color hidden dimension must be positive.");
+        }
+        if (colorNumLayers < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(colorNumLayers), "Color layer count cannot be negative.");
+        }
+        if (renderSamples <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(renderSamples), "Render samples must be positive.");
+        }
+        if (hierarchicalSamples < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(hierarchicalSamples), "Hierarchical samples cannot be negative.");
+        }
+
+        // Store parameters
+        _positionEncodingLevels = positionEncodingLevels;
+        _directionEncodingLevels = directionEncodingLevels;
+        _hiddenDim = hiddenDim;
+        _numLayers = numLayers;
+        _colorHiddenDim = colorHiddenDim;
+        _colorNumLayers = colorNumLayers;
+        _useHierarchicalSampling = useHierarchicalSampling;
+        _renderSamples = renderSamples;
+        _hierarchicalSamples = hierarchicalSamples;
+        _renderNearBound = NumOps.FromDouble(renderNearBound);
+        _renderFarBound = NumOps.FromDouble(renderFarBound);
+        _learningRate = NumOps.FromDouble(learningRate);
+        _skipConnectionLayer = numLayers >= 4 ? Math.Min(numLayers / 2, numLayers - 1) : -1;
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+
+        // Initialize network layers
+        InitializeLayers();
     }
+
+    #endregion
+
+    #region Layer Initialization
 
     private static NeuralNetworkArchitecture<T> CreateArchitecture(int hiddenDim)
     {
@@ -282,6 +404,9 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
             outputSize: 4);
     }
 
+    /// <summary>
+    /// Initializes the neural network layers.
+    /// </summary>
     protected override void InitializeLayers()
     {
         ClearLayers();
@@ -291,6 +416,7 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         int positionDim = 3 * 2 * _positionEncodingLevels;
         int directionDim = 3 * 2 * _directionEncodingLevels;
 
+        // Position MLP layers
         for (int i = 0; i < _numLayers; i++)
         {
             int inputDim = i == 0 ? positionDim : _hiddenDim;
@@ -304,12 +430,14 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
             AddLayerToCollection(layer);
         }
 
+        // Density and feature layers
         _densityLayer = new DenseLayer<T>(_hiddenDim, 1, activationFunction: new IdentityActivation<T>());
         AddLayerToCollection(_densityLayer);
 
         _featureLayer = new DenseLayer<T>(_hiddenDim, _hiddenDim, activationFunction: new IdentityActivation<T>());
         AddLayerToCollection(_featureLayer);
 
+        // Color MLP layers
         int colorInputDim = _hiddenDim + directionDim;
         int colorHiddenDim = _colorNumLayers > 0 ? _colorHiddenDim : colorInputDim;
         for (int i = 0; i < _colorNumLayers; i++)
@@ -324,6 +452,16 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         AddLayerToCollection(_colorOutputLayer);
     }
 
+    #endregion
+
+    #region IRadianceField Implementation
+
+    /// <summary>
+    /// Queries the radiance field at given positions and viewing directions.
+    /// </summary>
+    /// <param name="positions">3D positions tensor of shape [N, 3].</param>
+    /// <param name="viewingDirections">Viewing direction vectors of shape [N, 3].</param>
+    /// <returns>RGB colors and volume densities for each query point.</returns>
     public (Tensor<T> rgb, Tensor<T> density) QueryField(Tensor<T> positions, Tensor<T> viewingDirections)
     {
         if (positions.Shape.Length != 2 || positions.Shape[1] != 3)
@@ -334,8 +472,6 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         {
             throw new ArgumentException("Viewing directions must have shape [N, 3].", nameof(viewingDirections));
         }
-
-        int numPoints = positions.Shape[0];
 
         var positionEncoding = PositionalEncoding(positions, _positionEncodingLevels);
         var directionEncoding = PositionalEncoding(NormalizeDirections(viewingDirections), _directionEncodingLevels);
@@ -383,6 +519,80 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         return (rgb, density);
     }
 
+    #endregion
+
+    #region Rendering Methods
+
+    /// <summary>
+    /// Renders an image from a camera viewpoint.
+    /// </summary>
+    /// <param name="cameraPosition">Camera position in world coordinates.</param>
+    /// <param name="cameraRotation">Camera rotation matrix (3x3).</param>
+    /// <param name="imageWidth">Output image width in pixels.</param>
+    /// <param name="imageHeight">Output image height in pixels.</param>
+    /// <param name="focalLength">Camera focal length.</param>
+    /// <returns>Rendered image tensor of shape [height, width, 3].</returns>
+    public Tensor<T> RenderImage(
+        Vector<T> cameraPosition,
+        Matrix<T> cameraRotation,
+        int imageWidth,
+        int imageHeight,
+        T focalLength)
+    {
+        // Generate rays for each pixel
+        var (rayOrigins, rayDirections) = GenerateCameraRays(
+            cameraPosition, cameraRotation, imageWidth, imageHeight, focalLength);
+
+        // Render rays
+        var renderedColors = RenderRays(rayOrigins, rayDirections, _renderSamples, _renderNearBound, _renderFarBound);
+
+        // Reshape to image
+        return renderedColors.Reshape(imageHeight, imageWidth, 3);
+    }
+
+    /// <summary>
+    /// Renders colors for a batch of rays.
+    /// </summary>
+    /// <param name="rayOrigins">Ray origin positions [N, 3].</param>
+    /// <param name="rayDirections">Ray direction vectors [N, 3].</param>
+    /// <param name="numSamples">Number of samples per ray.</param>
+    /// <param name="nearBound">Near clipping plane.</param>
+    /// <param name="farBound">Far clipping plane.</param>
+    /// <returns>Rendered colors for each ray [N, 3].</returns>
+    public Tensor<T> RenderRays(
+        Tensor<T> rayOrigins,
+        Tensor<T> rayDirections,
+        int numSamples,
+        T nearBound,
+        T farBound)
+    {
+        int numRays = rayOrigins.Shape[0];
+
+        // Sample points along rays
+        var (samplePositions, sampleDirections, sampleTs, rayNear, rayFar) = SamplePointsAlongRays(
+            rayOrigins, rayDirections, numSamples, nearBound, farBound, stratified: true);
+
+        // Query radiance field
+        var (rgb, density) = QueryField(samplePositions, sampleDirections);
+
+        if (_useHierarchicalSampling && _hierarchicalSamples > 0 && numSamples > 1)
+        {
+            var weights = ComputeSampleWeights(density, numRays, numSamples, rayNear, rayFar, sampleTs);
+            var fineTs = SampleImportance(sampleTs, weights, numRays, numSamples, _hierarchicalSamples);
+            var mergedTs = MergeSampleTs(sampleTs, fineTs, numRays, numSamples, _hierarchicalSamples);
+            var (mergedPositions, mergedDirections) = BuildSamplePositions(rayOrigins, rayDirections, mergedTs);
+            var (mergedRgb, mergedDensity) = QueryField(mergedPositions, mergedDirections);
+            return VolumeRendering(mergedRgb, mergedDensity, numRays, numSamples + _hierarchicalSamples, rayNear, rayFar, mergedTs);
+        }
+
+        // Perform volume rendering
+        return VolumeRendering(rgb, density, numRays, numSamples, rayNear, rayFar, sampleTs);
+    }
+
+    #endregion
+
+    #region Positional Encoding
+
     /// <summary>
     /// Computes positional encoding for Neural Radiance Fields using vectorized Engine operations.
     /// </summary>
@@ -407,6 +617,10 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         // Use vectorized Engine implementation for CPU/GPU acceleration
         return Engine.PositionalEncodingBackward(input, encodedGradient, numLevels);
     }
+
+    #endregion
+
+    #region Helper Methods
 
     private Tensor<T> NormalizeDirections(Tensor<T> directions)
     {
@@ -475,24 +689,6 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         return new Tensor<T>(data, left.Shape);
     }
 
-    public Tensor<T> RenderImage(
-        Vector<T> cameraPosition,
-        Matrix<T> cameraRotation,
-        int imageWidth,
-        int imageHeight,
-        T focalLength)
-    {
-        // Generate rays for each pixel
-        var (rayOrigins, rayDirections) = GenerateCameraRays(
-            cameraPosition, cameraRotation, imageWidth, imageHeight, focalLength);
-
-        // Render rays
-        var renderedColors = RenderRays(rayOrigins, rayDirections, _renderSamples, _renderNearBound, _renderFarBound);
-
-        // Reshape to image
-        return renderedColors.Reshape(imageHeight, imageWidth, 3);
-    }
-
     private (Tensor<T> origins, Tensor<T> directions) GenerateCameraRays(
         Vector<T> cameraPosition,
         Matrix<T> cameraRotation,
@@ -545,36 +741,6 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         }
 
         return (new Tensor<T>(origins, [numRays, 3]), new Tensor<T>(directions, [numRays, 3]));
-    }
-
-    public Tensor<T> RenderRays(
-        Tensor<T> rayOrigins,
-        Tensor<T> rayDirections,
-        int numSamples,
-        T nearBound,
-        T farBound)
-    {
-        int numRays = rayOrigins.Shape[0];
-
-        // Sample points along rays
-        var (samplePositions, sampleDirections, sampleTs, rayNear, rayFar) = SamplePointsAlongRays(
-            rayOrigins, rayDirections, numSamples, nearBound, farBound, stratified: true);
-
-        // Query radiance field
-        var (rgb, density) = QueryField(samplePositions, sampleDirections);
-
-        if (_useHierarchicalSampling && _hierarchicalSamples > 0 && numSamples > 1)
-        {
-            var weights = ComputeSampleWeights(density, numRays, numSamples, rayNear, rayFar, sampleTs);
-            var fineTs = SampleImportance(sampleTs, weights, numRays, numSamples, _hierarchicalSamples);
-            var mergedTs = MergeSampleTs(sampleTs, fineTs, numRays, numSamples, _hierarchicalSamples);
-            var (mergedPositions, mergedDirections) = BuildSamplePositions(rayOrigins, rayDirections, mergedTs);
-            var (mergedRgb, mergedDensity) = QueryField(mergedPositions, mergedDirections);
-            return VolumeRendering(mergedRgb, mergedDensity, numRays, numSamples + _hierarchicalSamples, rayNear, rayFar, mergedTs);
-        }
-
-        // Perform volume rendering
-        return VolumeRendering(rgb, density, numRays, numSamples, rayNear, rayFar, sampleTs);
     }
 
     private (Tensor<T> positions, Tensor<T> directions, double[] sampleTs, double[] rayNear, double[] rayFar)
@@ -882,6 +1048,13 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         return merged;
     }
 
+    #endregion
+
+    #region NeuralNetworkBase Implementation
+
+    /// <summary>
+    /// Performs forward pass with memory for backpropagation.
+    /// </summary>
     public override Tensor<T> ForwardWithMemory(Tensor<T> input)
     {
         if (input.Shape.Length != 2 || input.Shape[1] != 6)
@@ -922,6 +1095,9 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         return new Tensor<T>(output, [numPoints, 4]);
     }
 
+    /// <summary>
+    /// Performs backpropagation to compute gradients.
+    /// </summary>
     public override Tensor<T> Backpropagate(Tensor<T> outputGradient)
     {
         if (_lastPositionEncoding == null || _lastDirectionEncoding == null || _lastDensityRaw == null || _lastRgbRaw == null)
@@ -1058,20 +1234,27 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         return new Tensor<T>(inputGrad, [numPoints, 6]);
     }
 
+    /// <summary>
+    /// Trains the model on input data.
+    /// </summary>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Set training mode
+        SetTrainingMode(true);
+
+        // Forward pass
         var prediction = ForwardWithMemory(input);
 
-        if (LossFunction == null)
-        {
-            throw new InvalidOperationException("Loss function not set.");
-        }
+        // Compute loss
+        var flatPrediction = prediction.ToVector();
+        var flatExpected = expectedOutput.ToVector();
+        LastLoss = _lossFunction.CalculateLoss(flatPrediction, flatExpected);
 
-        LastLoss = LossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
+        // Compute gradients
+        var lossGradient = _lossFunction.CalculateDerivative(flatPrediction, flatExpected);
+        Backpropagate(Tensor<T>.FromVector(lossGradient));
 
-        var lossGradient = LossFunction.ComputeGradient(prediction, expectedOutput);
-        Backpropagate(lossGradient);
-
+        // Update layer parameters
         foreach (var layer in Layers)
         {
             if (layer.SupportsTraining && layer.ParameterCount > 0)
@@ -1079,18 +1262,46 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
                 layer.UpdateParameters(_learningRate);
             }
         }
+
+        SetTrainingMode(false);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
+    /// <summary>
+    /// Updates model parameters using gradient descent.
+    /// </summary>
+    public override void UpdateParameters(Vector<T> gradients)
     {
-        if (parameters == null)
+        if (gradients == null)
         {
-            throw new ArgumentNullException(nameof(parameters));
+            throw new ArgumentNullException(nameof(gradients));
         }
 
-        SetParameters(parameters);
+        // Apply gradient descent: params = params - learning_rate * gradients
+        var currentParams = GetParameters();
+        for (int i = 0; i < currentParams.Length; i++)
+        {
+            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(_learningRate, gradients[i]));
+        }
+
+        SetParameters(currentParams);
     }
 
+    /// <summary>
+    /// Makes a prediction using the model.
+    /// </summary>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        SetTrainingMode(false);
+        return ForwardWithMemory(input);
+    }
+
+    #endregion
+
+    #region Metadata and Serialization
+
+    /// <summary>
+    /// Gets metadata about the model.
+    /// </summary>
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -1117,6 +1328,9 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         };
     }
 
+    /// <summary>
+    /// Serializes network-specific data.
+    /// </summary>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_positionEncodingLevels);
@@ -1133,6 +1347,9 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         writer.Write(NumOps.ToDouble(_learningRate));
     }
 
+    /// <summary>
+    /// Deserializes network-specific data.
+    /// </summary>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         int positionLevels = reader.ReadInt32();
@@ -1165,30 +1382,26 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         }
     }
 
+    /// <summary>
+    /// Creates a new instance of this model for cloning.
+    /// </summary>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return new NeRF<T>(
-            new NeRFOptions
-            {
-                PositionEncodingLevels = _positionEncodingLevels,
-                DirectionEncodingLevels = _directionEncodingLevels,
-                HiddenDim = _hiddenDim,
-                NumLayers = _numLayers,
-                ColorHiddenDim = _colorHiddenDim,
-                ColorNumLayers = _colorNumLayers,
-                UseHierarchicalSampling = _useHierarchicalSampling,
-                RenderSamples = _renderSamples,
-                HierarchicalSamples = _hierarchicalSamples,
-                RenderNearBound = NumOps.ToDouble(_renderNearBound),
-                RenderFarBound = NumOps.ToDouble(_renderFarBound),
-                LearningRate = NumOps.ToDouble(_learningRate)
-            },
-            LossFunction);
+            positionEncodingLevels: _positionEncodingLevels,
+            directionEncodingLevels: _directionEncodingLevels,
+            hiddenDim: _hiddenDim,
+            numLayers: _numLayers,
+            colorHiddenDim: _colorHiddenDim,
+            colorNumLayers: _colorNumLayers,
+            useHierarchicalSampling: _useHierarchicalSampling,
+            renderSamples: _renderSamples,
+            hierarchicalSamples: _hierarchicalSamples,
+            renderNearBound: NumOps.ToDouble(_renderNearBound),
+            renderFarBound: NumOps.ToDouble(_renderFarBound),
+            learningRate: NumOps.ToDouble(_learningRate),
+            lossFunction: _lossFunction);
     }
 
-    public override Tensor<T> Predict(Tensor<T> input)
-    {
-        SetTrainingMode(false);
-        return ForwardWithMemory(input);
-    }
+    #endregion
 }

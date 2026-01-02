@@ -61,6 +61,7 @@
 	  <PackageReference Include="System.Numerics.Tensors" Version="10.0.1" />
 	  <PackageReference Include="System.ValueTuple" Version="4.6.1" />
 	  <PackageReference Include="TreeSitter.DotNet" Version="1.2.0" />
+	  <PackageReference Include="FftSharp" Version="2.2.0" />
 	</ItemGroup>
 
 	<!-- PostgreSQL package only for .NET 8.0+ -->
@@ -128,10 +129,11 @@
 	  <Using Include="AiDotNet.Tensors.Helpers" />
 	</ItemGroup>
 
-	<!-- Global usings for internal AiDotNet namespaces -->
-	<ItemGroup>
-	  <Using Include="AiDotNet.Autodiff" />
-	</ItemGroup>
+        <!-- Global usings for internal AiDotNet namespaces -->
+        <ItemGroup>
+          <Using Include="AiDotNet.Autodiff" />
+          <Using Include="AiDotNet.Validation" />
+        </ItemGroup>
 
 	<!-- Global usings for common System namespaces -->
 	<ItemGroup>

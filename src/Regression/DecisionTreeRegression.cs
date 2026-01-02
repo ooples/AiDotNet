@@ -116,9 +116,10 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     /// <param name="y">A vector of target values corresponding to each sample in x.</param>
     /// <remarks>
     /// <para>
-    /// This method builds the decision tree model by recursively splitting the data based on features and thresholds 
-    /// that best reduce the prediction error. It applies any specified regularization to the input data and 
-    /// calculates feature importances after training.
+    /// This method builds the decision tree model by recursively splitting the data based on features and thresholds
+    /// that best reduce the prediction error. Unlike traditional regression models, decision trees do not apply data
+    /// regularization transformations. Instead, they control model complexity through structural parameters such as
+    /// MaxDepth, MinSamplesSplit, and MinSamplesLeaf. After building the tree, feature importances are calculated.
     /// </para>
     /// <para><b>For Beginners:</b> This method teaches the decision tree how to make predictions using your data.
     /// 
@@ -147,12 +148,11 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     /// </remarks>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
-        // Apply regularization to the input data
-        var regularizedX = _regularization.Regularize(x);
-        var regularizedY = _regularization.Regularize(y);
-
-        Root = BuildTree(regularizedX, regularizedY, 0);
-        CalculateFeatureImportances(regularizedX);
+        // Build the decision tree using the original data
+        // Note: Decision tree regularization is handled through tree structure parameters
+        // (MaxDepth, MinSamplesSplit, etc.), not through data transformation
+        Root = BuildTree(x, y, 0);
+        CalculateFeatureImportances(x);
     }
 
     /// <summary>
@@ -192,17 +192,13 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        // Apply regularization to the input data
-        var regularizedInput = _regularization.Regularize(input);
-
-        var predictions = new T[regularizedInput.Rows];
-        for (int i = 0; i < regularizedInput.Rows; i++)
+        var predictions = new T[input.Rows];
+        for (int i = 0; i < input.Rows; i++)
         {
-            predictions[i] = PredictSingle(regularizedInput.GetRow(i), Root);
+            predictions[i] = PredictSingle(input.GetRow(i), Root);
         }
 
-        // Apply regularization to the predictions
-        return _regularization.Regularize(new Vector<T>(predictions));
+        return new Vector<T>(predictions);
     }
 
     /// <summary>
@@ -544,6 +540,11 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     private T CalculateWeightedVarianceReduction(Vector<T> y, Vector<T> weights)
     {
         T totalWeight = weights.Sum();
+        // Protect against division by zero
+        if (NumOps.Equals(totalWeight, NumOps.Zero))
+        {
+            return NumOps.Zero;
+        }
         T weightedMean = NumOps.Divide(y.DotProduct(weights), totalWeight);
         T weightedVariance = NumOps.Zero;
 
@@ -567,9 +568,10 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     /// <param name="depth">The current depth in the tree.</param>
     private void BuildTreeWithWeights(DecisionTreeNode<T> node, Matrix<T> x, Vector<T> y, Vector<T> weights, int depth)
     {
-        if (depth >= Options.MaxDepth || x.Rows <= Options.MinSamplesSplit)
+        if (depth >= Options.MaxDepth || x.Rows < Options.MinSamplesSplit)
         {
             // Create a leaf node
+            node.IsLeaf = true;
             node.Prediction = CalculateWeightedLeafValue(y, weights);
             return;
         }
@@ -583,6 +585,7 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         if (featureIndex == -1)
         {
             // No valid split found, create a leaf node
+            node.IsLeaf = true;
             node.Prediction = CalculateWeightedLeafValue(y, weights);
             return;
         }
@@ -593,12 +596,15 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         if (leftIndices.Count == 0 || rightIndices.Count == 0)
         {
             // If split results in empty node, create a leaf
+            node.IsLeaf = true;
             node.Prediction = CalculateWeightedLeafValue(y, weights);
             return;
         }
 
         // Create child nodes and continue building the tree
+        node.IsLeaf = false;
         node.FeatureIndex = featureIndex;
+        node.SplitValue = threshold;  // Use SplitValue since PredictSingle uses SplitValue
         node.Threshold = threshold;
         node.Left = new DecisionTreeNode<T>();
         node.Right = new DecisionTreeNode<T>();
@@ -645,6 +651,11 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     private T CalculateWeightedLeafValue(Vector<T> y, Vector<T> weights)
     {
         T totalWeight = weights.Sum();
+        // Protect against division by zero - if total weight is 0, return mean of y values
+        if (NumOps.Equals(totalWeight, NumOps.Zero))
+        {
+            return StatisticsHelper<T>.CalculateMean(y);
+        }
         return NumOps.Divide(y.DotProduct(weights), totalWeight);
     }
 
@@ -740,6 +751,7 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         {
             FeatureIndex = bestFeatureIndex,
             SplitValue = bestSplitValue,
+            IsLeaf = false, // Mark as internal node - required since default is true
             Left = BuildTree(new Matrix<T>(leftX), new Vector<T>(leftY), depth + 1),
             Right = BuildTree(new Matrix<T>(rightX), new Vector<T>(rightY), depth + 1),
             LeftSampleCount = leftX.Count,
@@ -787,6 +799,8 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         _featureImportances = new Vector<T>([.. Enumerable.Repeat(NumOps.Zero, x.Columns)]);
         CalculateFeatureImportancesRecursive(Root, x.Columns);
         NormalizeFeatureImportances();
+        // Copy to the public property from base class so ensemble methods can access it
+        FeatureImportances = _featureImportances;
     }
 
     /// <summary>
@@ -978,6 +992,9 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
 
             return NumOps.Divide(variance, NumOps.FromDouble(sampleCount));
         }
+
+        // Copy to the public property from base class so ensemble methods can access it
+        FeatureImportances = _featureImportances;
     }
 
     /// <summary>

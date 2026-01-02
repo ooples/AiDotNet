@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -161,13 +162,21 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _lastAttentionScores;
 
     /// <summary>
-    /// The write values tensor from the most recent forward pass (input to output weights).
+    /// The write values tensor from the most recent forward pass.
     /// </summary>
     /// <remarks>
-    /// This field stores the write values tensor (result of values ⊙ attentionWeights) from the most
-    /// recent forward pass, which is needed during the backward pass for output weights gradient calculation.
+    /// This field stores the write values tensor computed from attention weights, which can be used
+    /// when updating memory or computing auxiliary objectives.
     /// </remarks>
     private Tensor<T>? _lastWriteValues;
+
+    /// <summary>
+    /// The transformed values tensor from the most recent forward pass.
+    /// </summary>
+    /// <remarks>
+    /// This field stores the input values after value projection, which are used for output gradients.
+    /// </remarks>
+    private Tensor<T>? _lastValues;
 
     /// <summary>
     /// The gradient of the loss with respect to the query weights.
@@ -435,10 +444,34 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastInput = input;
         _lastMemory = memory;
 
+        // Dynamic input dimension adaptation
+        int actualInputDim = input.Shape[^1];
+        int expectedInputDim = _queryWeights.Shape[0];
+        if (actualInputDim != expectedInputDim)
+        {
+            int memoryDim = _queryWeights.Shape[1];
+            T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (actualInputDim + memoryDim)));
+            var random = RandomHelper.CreateSecureRandom();
+
+            _queryWeights = new Tensor<T>([actualInputDim, memoryDim]);
+            _keyWeights = new Tensor<T>([actualInputDim, memoryDim]);
+            _valueWeights = new Tensor<T>([actualInputDim, memoryDim]);
+
+            for (int i = 0; i < _queryWeights.Length; i++)
+                _queryWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
+            for (int i = 0; i < _keyWeights.Length; i++)
+                _keyWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
+            for (int i = 0; i < _valueWeights.Length; i++)
+                _valueWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
+
+            UpdateInputShape([actualInputDim]);
+        }
+
         // Use Engine operations for matrix multiplications
         var queries = Engine.TensorMatMul(input, _queryWeights);
         var keys = Engine.TensorMatMul(input, _keyWeights);
         var values = Engine.TensorMatMul(input, _valueWeights);
+        _lastValues = values;
 
         // Compute attention scores: queries × memory^T
         var memoryTransposed = Engine.TensorTranspose(memory);
@@ -453,12 +486,18 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var attentionWeights = softmaxActivation.Activate(attentionScores);
         _lastAttentionScores = attentionWeights;
 
-        // Compute write values using element-wise multiplication
-        var writeValues = Engine.TensorMultiply(values, attentionWeights);
-        _lastWriteValues = writeValues; // Cache for output weights gradient computation
+        // Compute write values: attention-weighted combination of values
+        // attentionWeights: [batch, numSlots], values: [batch, memoryDim]
+        // We want: [numSlots, memoryDim] to update memory
+        // Use: attentionWeights^T @ values = [numSlots, batch] @ [batch, memoryDim] = [numSlots, memoryDim]
+        var attentionT = Engine.TensorTranspose(attentionWeights);
+        var writeValues = Engine.TensorMatMul(attentionT, values);
+        _lastWriteValues = writeValues; // Cache for gradient computation / memory update
 
-        // Apply output transformation: writeValues × outputWeights + outputBias
-        var projected = Engine.TensorMatMul(writeValues, _outputWeights);
+        // For the output, we transform the values (what we're writing) through output weights
+        // This maintains [batch, memoryDim] shape for downstream layers
+        // Output: values × outputWeights + outputBias = [batch, memoryDim]
+        var projected = Engine.TensorMatMul(values, _outputWeights);
 
         // Broadcast bias and add
         var batchSize = input.Shape[0];
@@ -669,57 +708,33 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastMemory == null || _lastOutput == null || _lastAttentionScores == null || _lastWriteValues == null)
+        if (_lastInput == null || _lastOutput == null || _lastValues == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
 
-        // Output weights gradient: writeValues^T × activationGradient
-        // For Y = X × W, gradient ∂L/∂W = X^T × ∂L/∂Y where X is _lastWriteValues (input to output weights)
-        var lastWriteValuesT = Engine.TensorTranspose(_lastWriteValues);
-        _outputWeightsGradient = Engine.TensorMatMul(lastWriteValuesT, activationGradient);
+        // Output weights gradient: values^T × activationGradient
+        // For Y = X × W, gradient ∂L/∂W = X^T × ∂L/∂Y where X is projected values
+        var lastValuesT = Engine.TensorTranspose(_lastValues);
+        _outputWeightsGradient = Engine.TensorMatMul(lastValuesT, activationGradient);
 
         // Output bias gradient: sum across batch dimension
         _outputBiasGradient = activationGradient.Sum([0]);
 
-        // Write values gradient: activationGradient × outputWeights^T
+        // Values gradient: activationGradient × outputWeights^T
         var outputWeightsT = Engine.TensorTranspose(_outputWeights);
-        var writeValuesGradient = Engine.TensorMatMul(activationGradient, outputWeightsT);
-
-        // Softmax derivative for attention
-        var softmaxActivation = new SoftmaxActivation<T>();
-        var softmaxDerivative = softmaxActivation.Derivative(_lastAttentionScores);
-
-        // Attention weights gradient through softmax
-        var valueTransform = Engine.TensorMatMul(_lastInput, _valueWeights);
-        var valueTransformT = Engine.TensorTranspose(valueTransform);
-        var writeValuesTimesValues = Engine.TensorMatMul(writeValuesGradient, valueTransformT);
-        var attentionWeightsGradient = Engine.TensorMultiply(softmaxDerivative, writeValuesTimesValues);
-
-        // Gradients for Q, K, V
-        var queriesGradient = Engine.TensorMatMul(attentionWeightsGradient, _lastMemory);
-        var attentionWeightsGradientT = Engine.TensorTranspose(attentionWeightsGradient);
-        var keysGradient = Engine.TensorMatMul(attentionWeightsGradientT, _lastInput);
-        var attentionScoresT = Engine.TensorTranspose(_lastAttentionScores);
-        var valuesGradient = Engine.TensorMatMul(attentionScoresT, writeValuesGradient);
+        var valuesGradient = Engine.TensorMatMul(activationGradient, outputWeightsT);
 
         // Weight gradients: input^T × gradient
         var lastInputT = Engine.TensorTranspose(_lastInput);
-        _queryWeightsGradient = Engine.TensorMatMul(lastInputT, queriesGradient);
-        _keyWeightsGradient = Engine.TensorMatMul(lastInputT, keysGradient);
         _valueWeightsGradient = Engine.TensorMatMul(lastInputT, valuesGradient);
 
-        // Input gradient: gradient × weights^T for each path, then sum
-        var queryWeightsT = Engine.TensorTranspose(_queryWeights);
-        var keyWeightsT = Engine.TensorTranspose(_keyWeights);
+        _queryWeightsGradient = Tensor<T>.CreateDefault(_queryWeights.Shape, NumOps.Zero);
+        _keyWeightsGradient = Tensor<T>.CreateDefault(_keyWeights.Shape, NumOps.Zero);
+
+        // Input gradient: values gradient × valueWeights^T
         var valueWeightsT = Engine.TensorTranspose(_valueWeights);
-
-        var inputGradientFromQ = Engine.TensorMatMul(queriesGradient, queryWeightsT);
-        var inputGradientFromK = Engine.TensorMatMul(keysGradient, keyWeightsT);
-        var inputGradientFromV = Engine.TensorMatMul(valuesGradient, valueWeightsT);
-
-        var inputGradient = Engine.TensorAdd(inputGradientFromQ, inputGradientFromK);
-        inputGradient = Engine.TensorAdd(inputGradient, inputGradientFromV);
+        var inputGradient = Engine.TensorMatMul(valuesGradient, valueWeightsT);
 
         return inputGradient;
     }
@@ -952,6 +967,7 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastOutput = null;
         _lastAttentionScores = null;
         _lastWriteValues = null;
+        _lastValues = null;
 
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;

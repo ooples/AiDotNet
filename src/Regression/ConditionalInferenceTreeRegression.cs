@@ -110,28 +110,28 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
     /// <remarks>
     /// <para>
     /// This method trains the conditional inference tree regression model using the provided input features and
-    /// target values. It first applies regularization to the data if specified, then builds the tree recursively
-    /// starting from the root node. After building the tree, it calculates feature importances to identify which
-    /// features have the most impact on predictions.
+    /// target values. Unlike traditional regression models, tree-based methods do not apply data regularization
+    /// transformations. Instead, they control model complexity through structural parameters such as MaxDepth,
+    /// MinSamplesSplit, and MinSamplesLeaf. This method builds the tree recursively starting from the root node
+    /// and calculates feature importances to identify which features have the most impact on predictions.
     /// </para>
     /// <para><b>For Beginners:</b> This method teaches the model to make predictions based on your data.
-    /// 
+    ///
     /// During training:
-    /// - The data is first prepared by applying any regularization
     /// - A decision tree is built by finding the best questions to ask at each step
     /// - The model looks for patterns that connect your input features to the values you want to predict
     /// - The importance of each feature is calculated, showing which inputs matter most for predictions
-    /// 
+    ///
+    /// Note: Unlike linear regression models, tree-based methods control overfitting through tree structure
+    /// parameters (like max depth) rather than through data regularization.
+    ///
     /// The "Async" in the method name means it can run in the background while your program does other things,
     /// which is helpful for large datasets.
     /// </para>
     /// </remarks>
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {
-        var regularizedX = Regularization.Regularize(x);
-        var regularizedY = Regularization.Regularize(y);
-
-        _root = await BuildTreeAsync(regularizedX, regularizedY, 0);
+        _root = await BuildTreeAsync(x, y, 0);
         await CalculateFeatureImportancesAsync(x.Columns);
     }
 
@@ -181,7 +181,8 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
         {
             FeatureIndex = splitResult.Value.Feature,
             Threshold = splitResult.Value.Threshold,
-            PValue = splitResult.Value.PValue
+            PValue = splitResult.Value.PValue,
+            IsLeaf = false // Mark as internal node
         };
 
         var buildTasks = new[]
@@ -381,9 +382,10 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
     /// </remarks>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
-        var regularizedInput = Regularization.Regularize(input);
+        // Note: Tree-based methods handle regularization through tree structure parameters
+        // (MaxDepth, MinSamplesSplit, etc.), not through data transformation
         var tasks = Enumerable.Range(0, input.Rows)
-            .Select(i => new Func<T>(() => PredictSingle(regularizedInput.GetRow(i))));
+            .Select(i => new Func<T>(() => PredictSingle(input.GetRow(i))));
 
         return new Vector<T>(await ParallelProcessingHelper.ProcessTasksInParallel(tasks, _options.MaxDegreeOfParallelism));
     }

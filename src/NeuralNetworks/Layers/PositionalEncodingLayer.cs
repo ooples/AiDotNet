@@ -38,19 +38,17 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// The maximum sequence length that this layer can handle.
     /// </summary>
     /// <remarks>
-    /// This field defines the upper limit on sequence length. Sequences longer than this value
-    /// will cause an exception when passed through the layer.
+    /// This field is automatically extended when longer sequences are encountered.
     /// </remarks>
-    private readonly int maxSequenceLength;
+    private int maxSequenceLength;
 
     /// <summary>
     /// The size of each embedding vector.
     /// </summary>
     /// <remarks>
-    /// This field specifies the dimensionality of the embedding vectors to which
-    /// positional encodings will be added.
+    /// This field is automatically adapted when input embedding dimensions differ.
     /// </remarks>
-    private readonly int embeddingSize;
+    private int embeddingSize;
 
     /// <summary>
     /// The pre-computed positional encodings tensor.
@@ -61,6 +59,8 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// and reused for all forward passes.
     /// </remarks>
     private Tensor<T> encodings;
+
+    private readonly object _encodingLock = new();
 
     /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
@@ -197,7 +197,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         if (embeddingSize % 2 == 1)
         {
             int lastDimIdx = embeddingSize - 1;
-            double exponent = NumericalStabilityHelper.SafeDiv(2.0 * (lastDimIdx / 2), embeddingSize);
+            double exponent = NumericalStabilityHelper.SafeDiv(2.0 * (lastDimIdx / 2.0), embeddingSize);
             T divTerm = NumOps.FromDouble(1.0 / Math.Pow(10000, exponent));
 
             // Vectorized: angles = positions * divTerm, then sin(angles)
@@ -256,20 +256,78 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         int seqLength = input.Shape[rank - 2];
         int inputEmbedDim = input.Shape[rank - 1];
 
-        if (seqLength > maxSequenceLength)
-        {
-            throw new ArgumentException(
-                $"Input sequence length {seqLength} exceeds maximum sequence length {maxSequenceLength}");
-        }
+        Tensor<T> currentEncodings;
+        int currentEmbeddingSize;
 
-        if (inputEmbedDim != embeddingSize)
+        lock (_encodingLock)
         {
-            throw new ArgumentException(
-                $"Input embedding dimension {inputEmbedDim} does not match expected dimension {embeddingSize}");
+            // Dynamically adjust embedding size if needed
+            if (inputEmbedDim != embeddingSize)
+            {
+                embeddingSize = inputEmbedDim;
+                encodings = new Tensor<T>([maxSequenceLength, embeddingSize]);
+
+                for (int pos = 0; pos < maxSequenceLength; pos++)
+                {
+                    for (int i = 0; i < embeddingSize / 2; i++)
+                    {
+                        double exponent = NumericalStabilityHelper.SafeDiv(2.0 * i, embeddingSize);
+                        double divTerm = 1.0 / Math.Pow(10000, exponent);
+                        encodings[pos, 2 * i] = NumOps.FromDouble(Math.Sin(pos * divTerm));
+                        encodings[pos, 2 * i + 1] = NumOps.FromDouble(Math.Cos(pos * divTerm));
+                    }
+                    if (embeddingSize % 2 == 1)
+                    {
+                        int lastDimIdx = embeddingSize - 1;
+                        double exponent = NumericalStabilityHelper.SafeDiv(2.0 * (lastDimIdx / 2.0), embeddingSize);
+                        double divTerm = 1.0 / Math.Pow(10000, exponent);
+                        encodings[pos, lastDimIdx] = NumOps.FromDouble(Math.Sin(pos * divTerm));
+                    }
+                }
+            }
+
+            // Dynamically extend encodings if needed (support any sequence length)
+            if (seqLength > maxSequenceLength)
+            {
+                int oldMaxSeq = maxSequenceLength;
+                maxSequenceLength = seqLength;
+                var newEncodings = new Tensor<T>([maxSequenceLength, embeddingSize]);
+
+                for (int pos = 0; pos < oldMaxSeq; pos++)
+                {
+                    for (int e = 0; e < embeddingSize; e++)
+                    {
+                        newEncodings[pos, e] = encodings[pos, e];
+                    }
+                }
+
+                for (int pos = oldMaxSeq; pos < maxSequenceLength; pos++)
+                {
+                    for (int i = 0; i < embeddingSize / 2; i++)
+                    {
+                        double exponent = NumericalStabilityHelper.SafeDiv(2.0 * i, embeddingSize);
+                        double divTerm = 1.0 / Math.Pow(10000, exponent);
+                        newEncodings[pos, 2 * i] = NumOps.FromDouble(Math.Sin(pos * divTerm));
+                        newEncodings[pos, 2 * i + 1] = NumOps.FromDouble(Math.Cos(pos * divTerm));
+                    }
+                    if (embeddingSize % 2 == 1)
+                    {
+                        int lastDimIdx = embeddingSize - 1;
+                        double exponent = NumericalStabilityHelper.SafeDiv(2.0 * (lastDimIdx / 2.0), embeddingSize);
+                        double divTerm = 1.0 / Math.Pow(10000, exponent);
+                        newEncodings[pos, lastDimIdx] = NumOps.FromDouble(Math.Sin(pos * divTerm));
+                    }
+                }
+
+                encodings = newEncodings;
+            }
+
+            currentEncodings = encodings;
+            currentEmbeddingSize = embeddingSize;
         }
 
         // Slice encodings to match input sequence length: [seq, embed]
-        var slicedEncodings = encodings.Slice(0, 0, seqLength, embeddingSize);
+        var slicedEncodings = currentEncodings.Slice(0, 0, seqLength, currentEmbeddingSize);
 
         if (rank == 2)
         {
@@ -284,7 +342,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
             for (int d = 0; d < rank - 2; d++)
                 broadcastShape[d] = 1;
             broadcastShape[rank - 2] = seqLength;
-            broadcastShape[rank - 1] = embeddingSize;
+            broadcastShape[rank - 1] = currentEmbeddingSize;
 
             var reshapedEncodings = slicedEncodings.Reshape(broadcastShape);
             return Engine.TensorBroadcastAdd(input, reshapedEncodings);

@@ -255,6 +255,8 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
         // Initialize NumOps-based fields
         AuxiliaryLossWeight = NumOps.FromDouble(0.3);
         _lastDeepSupervisionLoss = NumOps.Zero;
+
+        InitializeResidualLayers();
     }
 
     /// <summary>
@@ -285,11 +287,16 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     /// </remarks>
     protected override void InitializeLayers()
     {
+        InitializeResidualLayers();
+    }
+
+    private void InitializeResidualLayers()
+    {
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
             // Use the layers provided by the user
             Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
+            ValidateCustomLayersInternal(Layers);
         }
         else
         {

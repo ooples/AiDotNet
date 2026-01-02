@@ -435,7 +435,58 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         // Concatenate latent codes and class embeddings
         var input = ConcatenateTensors(truncatedCodes, classEmbeddings);
 
-        return Generator.Predict(input);
+        // Reshape input to 3D/4D format for CNN generator
+        Tensor<T> reshapedInput;
+        if (input.Shape.Length == 1)
+        {
+            // 1D [total_size] -> 3D [1, height, width]
+            int totalLen = input.Shape[0];
+            int h = (int)Math.Ceiling(Math.Sqrt(totalLen));
+            int w = h;
+            int padded = h * w;
+            if (padded > totalLen)
+            {
+                var paddedData = new T[padded];
+                Array.Copy(input.Data, paddedData, totalLen);
+                reshapedInput = new Tensor<T>(paddedData, [1, h, w]);
+            }
+            else
+            {
+                reshapedInput = input.Reshape([1, h, w]);
+            }
+        }
+        else if (input.Shape.Length == 2)
+        {
+            // 2D [batch, total_size] -> 4D [batch, 1, height, width]
+            int batch = input.Shape[0];
+            int latentLen = input.Shape[1];
+            int h = (int)Math.Ceiling(Math.Sqrt(latentLen));
+            int w = h;
+            int padded = h * w;
+            if (padded > latentLen)
+            {
+                var paddedData = new T[batch * padded];
+                for (int b = 0; b < batch; b++)
+                {
+                    for (int j = 0; j < latentLen; j++)
+                    {
+                        paddedData[b * padded + j] = input[b, j];
+                    }
+                }
+                reshapedInput = new Tensor<T>(paddedData, [batch, 1, h, w]);
+            }
+            else
+            {
+                reshapedInput = input.Reshape([batch, 1, h, w]);
+            }
+        }
+        else
+        {
+            // Already 3D or higher
+            reshapedInput = input;
+        }
+
+        return Generator.Predict(reshapedInput);
     }
 
     /// <summary>
@@ -941,6 +992,14 @@ public class BigGAN<T> : NeuralNetworkBase<T>
             return gradient;
         }
     }
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in the BigGAN.
+    /// </summary>
+    /// <remarks>
+    /// This includes all parameters from both the Generator and Discriminator networks.
+    /// </remarks>
+    public override int ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount();
 
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)

@@ -49,6 +49,11 @@ public class OctonionLinearLayer<T> : LayerBase<T>
     private Octonion<T>[,]? _lastInput;
 
     /// <summary>
+    /// Stores the original input shape for any-rank tensor support.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// Stored pre-activation output for gradient computation.
     /// </summary>
     private Octonion<T>[,]? _lastOutput;
@@ -165,29 +170,36 @@ public class OctonionLinearLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor with shape [inputFeatures * 8] or [batch, inputFeatures * 8].</param>
     /// <returns>Output tensor with shape [outputFeatures * 8] or [batch, outputFeatures * 8].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+        public override Tensor<T> Forward(Tensor<T> input)
     {
-        bool wasSingleSample = input.Rank == 1;
+        _originalInputShape = input.Shape;
+
         int batchSize;
         int inputLen;
         Tensor<T> inputTensor;
 
-        if (wasSingleSample)
+        if (input.Rank == 1)
         {
             batchSize = 1;
             inputLen = input.Shape[0];
-            // Convert 1D to 2D for processing
-            inputTensor = new Tensor<T>([1, inputLen]);
-            for (int i = 0; i < inputLen; i++)
-            {
-                inputTensor[0, i] = input[i];
-            }
+            inputTensor = input.Reshape([1, inputLen]);
         }
-        else
+        else if (input.Rank == 2)
         {
             batchSize = input.Shape[0];
             inputLen = input.Shape[1];
             inputTensor = input;
+        }
+        else
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < input.Rank - 1; d++)
+            {
+                flatBatch *= input.Shape[d];
+            }
+            batchSize = flatBatch;
+            inputLen = input.Shape[input.Rank - 1];
+            inputTensor = input.Reshape([batchSize, inputLen]);
         }
 
         // Validate input shape
@@ -222,52 +234,82 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         // Apply activation function
         var activated = ApplyActivation(outputTensor);
 
-        // Return 1D tensor for single sample input to match input rank
-        if (wasSingleSample)
+        if (_originalInputShape == null || _originalInputShape.Length == 2)
         {
-            int outputLen = OutputFeatures * 8;
-            var result = new Tensor<T>([outputLen]);
-            for (int o = 0; o < outputLen; o++)
-            {
-                result[o] = activated[0, o];
-            }
-            return result;
+            return activated;
         }
 
-        return activated;
+        if (_originalInputShape.Length == 1)
+        {
+            return activated.Reshape([OutputFeatures * 8]);
+        }
+
+        var outputShape = new int[_originalInputShape.Length];
+        for (int d = 0; d < _originalInputShape.Length - 1; d++)
+        {
+            outputShape[d] = _originalInputShape[d];
+        }
+        outputShape[_originalInputShape.Length - 1] = OutputFeatures * 8;
+        return activated.Reshape(outputShape);
     }
 
     /// <summary>
-    /// Performs the backward pass through the layer.
     /// </summary>
     /// <param name="outputGradient">Gradient from the next layer.</param>
     /// <returns>Gradient to pass to the previous layer.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
+        public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null)
         {
             throw new InvalidOperationException("Backward called before Forward.");
         }
 
-        bool wasSingleSample = outputGradient.Rank == 1;
-        int batchSize;
         Tensor<T> gradTensor;
+        int batchSize;
+        int gradLen = OutputFeatures * 8;
 
-        if (wasSingleSample)
+        if (_originalInputShape == null)
         {
-            batchSize = 1;
-            int gradLen = OutputFeatures * 8;
-            // Convert 1D to 2D for processing
-            gradTensor = new Tensor<T>([1, gradLen]);
-            for (int i = 0; i < gradLen; i++)
+            if (outputGradient.Rank == 1)
             {
-                gradTensor[0, i] = outputGradient[i];
+                batchSize = 1;
+                gradTensor = outputGradient.Reshape([1, gradLen]);
+            }
+            else if (outputGradient.Rank == 2)
+            {
+                batchSize = outputGradient.Shape[0];
+                gradTensor = outputGradient;
+            }
+            else
+            {
+                int flatBatch = 1;
+                for (int d = 0; d < outputGradient.Rank - 1; d++)
+                {
+                    flatBatch *= outputGradient.Shape[d];
+                }
+                batchSize = flatBatch;
+                gradTensor = outputGradient.Reshape([batchSize, gradLen]);
             }
         }
-        else
+        else if (_originalInputShape.Length == 1)
+        {
+            batchSize = 1;
+            gradTensor = outputGradient.Reshape([1, gradLen]);
+        }
+        else if (_originalInputShape.Length == 2)
         {
             batchSize = outputGradient.Shape[0];
             gradTensor = outputGradient;
+        }
+        else
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < _originalInputShape.Length - 1; d++)
+            {
+                flatBatch *= _originalInputShape[d];
+            }
+            batchSize = flatBatch;
+            gradTensor = outputGradient.Reshape([batchSize, gradLen]);
         }
 
         // Apply activation derivative
@@ -320,23 +362,26 @@ public class OctonionLinearLayer<T> : LayerBase<T>
 
         var result = OctonionsToTensor(inputGradOctonions, batchSize, InputFeatures);
 
-        // Return 1D tensor for single sample input to match input rank
-        if (wasSingleSample)
+        if (_originalInputShape == null || _originalInputShape.Length == 2)
         {
-            int inputLen = InputFeatures * 8;
-            var result1D = new Tensor<T>([inputLen]);
-            for (int i = 0; i < inputLen; i++)
-            {
-                result1D[i] = result[0, i];
-            }
-            return result1D;
+            return result;
         }
 
-        return result;
+        if (_originalInputShape.Length == 1)
+        {
+            return result.Reshape([InputFeatures * 8]);
+        }
+
+        var inputShape = new int[_originalInputShape.Length];
+        for (int d = 0; d < _originalInputShape.Length - 1; d++)
+        {
+            inputShape[d] = _originalInputShape[d];
+        }
+        inputShape[_originalInputShape.Length - 1] = InputFeatures * 8;
+        return result.Reshape(inputShape);
     }
 
-    /// <summary>
-    /// Updates the layer's parameters using the calculated gradients.
+    /// <summary> using the calculated gradients.
     /// </summary>
     /// <param name="learningRate">The learning rate to use for the update.</param>
     public override void UpdateParameters(T learningRate)
@@ -464,6 +509,7 @@ public class OctonionLinearLayer<T> : LayerBase<T>
     {
         _lastInput = null;
         _lastOutput = null;
+        _originalInputShape = null;
         _weightsGradient = null;
         _biasesGradient = null;
     }

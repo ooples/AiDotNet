@@ -71,9 +71,15 @@ public class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
         // If no genetic algorithm is provided, create a default StandardGeneticAlgorithm
         if (geneticAlgorithm == null)
         {
-            // Need to provide a model factory - use a simple model as default
-            static IFullModel<T, TInput, TOutput> modelFactory()
+            // Use the provided model as a template, falling back to SimpleRegression if not provided
+            var templateModel = model;
+            IFullModel<T, TInput, TOutput> modelFactory()
             {
+                // Clone the template model to get a fresh instance with the same configuration
+                if (templateModel != null)
+                {
+                    return templateModel.Clone();
+                }
                 return (IFullModel<T, TInput, TOutput>)new SimpleRegression<T>();
             }
 

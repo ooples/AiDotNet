@@ -134,11 +134,8 @@ public class OrthogonalRegression<T> : RegressionBase<T>
             augmentedMatrix[i, p] = centeredY[i];
         }
 
-        // Use the decomposition method from options
-        IMatrixDecomposition<T> decomposition = Options.DecompositionMethod ?? new SvdDecomposition<T>(augmentedMatrix);
-
-        // Get the solution using MatrixSolutionHelper
-        Vector<T> solution = MatrixSolutionHelper.SolveLinearSystem(augmentedMatrix, augmentedMatrix.GetColumn(p), MatrixDecompositionFactory.GetDecompositionType(Options.DecompositionMethod));
+        // Get the solution using MatrixSolutionHelper with the decomposition type from options
+        Vector<T> solution = MatrixSolutionHelper.SolveLinearSystem(augmentedMatrix, augmentedMatrix.GetColumn(p), _options.DecompositionType);
 
         // Rescale the solution
         for (int j = 0; j < p; j++)

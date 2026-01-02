@@ -97,7 +97,7 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// chasing a constantly moving target, which would make learning very difficult.
     /// </para>
     /// </remarks>
-    private readonly DeepQNetwork<T> _targetNetwork;
+    private DeepQNetwork<T>? _targetNetwork;
 
     /// <summary>
     /// Gets the exploration rate, which controls how often the agent takes random actions versus exploiting learned knowledge.
@@ -153,7 +153,7 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// Initializes a new instance of the <see cref="DeepQNetwork{T}"/> class with the specified architecture and exploration rate.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="epsilon">The initial exploration rate (probability of taking random actions). Default is a high value for exploration.</param>
+    /// <param name="epsilon">The initial exploration rate (probability of taking random actions). Default is 1.0 for full exploration.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new Deep Q-Network with the specified architecture and exploration rate.
@@ -171,12 +171,29 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// a curiosity level (epsilon) that determines how often they'll experiment versus stick with what they know.
     /// </para>
     /// </remarks>
-    public DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, double epsilon = 1e16) :
+    public DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, double epsilon = 1.0) :
+        this(architecture, lossFunction, epsilon, isTargetNetwork: false)
+    {
+    }
+
+    /// <summary>
+    /// Private constructor used to create the target network without infinite recursion.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="lossFunction">The loss function to use for training.</param>
+    /// <param name="epsilon">The initial exploration rate.</param>
+    /// <param name="isTargetNetwork">If true, this is a target network and won't create its own target network.</param>
+    private DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction, double epsilon, bool isTargetNetwork) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _epsilon = NumOps.FromDouble(epsilon);
-        _targetNetwork = new DeepQNetwork<T>(architecture, lossFunction, epsilon);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+
+        // Only create the target network if this is not already a target network (prevents infinite recursion)
+        if (!isTargetNetwork)
+        {
+            _targetNetwork = new DeepQNetwork<T>(architecture, lossFunction, epsilon, isTargetNetwork: true);
+        }
 
         InitializeLayers();
     }
@@ -371,6 +388,11 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     private void UpdateTargetNetwork()
     {
         // Copy weights from the main network to the target network
+        if (_targetNetwork is null)
+        {
+            return;
+        }
+
         for (int i = 0; i < Layers.Count; i++)
         {
             _targetNetwork.Layers[i].SetParameters(Layers[i].GetParameters());
@@ -496,9 +518,9 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
             // Calculate target Q-value for the action taken
             T targetQ;
 
-            if (experience.Done)
+            if (experience.Done || _targetNetwork is null)
             {
-                // For terminal states, target Q-value is just the reward
+                // For terminal states (or if no target network), target Q-value is just the reward
                 targetQ = experience.Reward;
             }
             else
@@ -746,10 +768,14 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
         // Save replay buffer size (but not the actual experiences)
         writer.Write(_replayBuffer.Count);
 
-        // Serialize target network
-        for (int i = 0; i < _targetNetwork.Layers.Count; i++)
+        // Serialize target network (if present)
+        writer.Write(_targetNetwork is not null);
+        if (_targetNetwork is not null)
         {
-            _targetNetwork.Layers[i].Serialize(writer);
+            for (int i = 0; i < _targetNetwork.Layers.Count; i++)
+            {
+                _targetNetwork.Layers[i].Serialize(writer);
+            }
         }
     }
 
@@ -784,11 +810,20 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
 
         // Load replay buffer size (but can't restore actual experiences)
         int replayBufferSize = reader.ReadInt32();
+        _ = replayBufferSize;
 
-        // Deserialize target network
-        for (int i = 0; i < _targetNetwork.Layers.Count; i++)
+        // Deserialize target network (if it was serialized)
+        bool hasTargetNetwork = reader.ReadBoolean();
+        if (hasTargetNetwork)
         {
-            _targetNetwork.Layers[i].Deserialize(reader);
+            var targetNetwork = _targetNetwork ??
+                new DeepQNetwork<T>(Architecture, _lossFunction, Convert.ToDouble(epsilon), isTargetNetwork: true);
+            _targetNetwork = targetNetwork;
+
+            for (int i = 0; i < targetNetwork.Layers.Count; i++)
+            {
+                targetNetwork.Layers[i].Deserialize(reader);
+            }
         }
     }
 
@@ -818,3 +853,10 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
         return new DeepQNetwork<T>(this.Architecture, _lossFunction, Convert.ToDouble(this._epsilon));
     }
 }
+
+
+
+
+
+
+

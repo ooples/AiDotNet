@@ -266,32 +266,33 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         // Set to inference mode
         SetTrainingMode(false);
 
-        // Get batch size from input shape
-        bool isBatch = input.Shape.Length > 1 && input.Shape[0] > 1;
-        int batchSize = isBatch ? input.Shape[0] : 1;
+        // Convert memory matrix to tensor for memory-augmented layers
+        var memoryTensor = Tensor<T>.FromMatrix(_memory);
 
-        // Process through input encoding layers (first quarter of layers)
-        Tensor<T> encoded = EncodeInput(input);
+        // Flow through all layers sequentially
+        // Each layer handles its own tensor operations (industry standard)
+        Tensor<T> current = input;
 
-        // Calculate attention over memory
-        Tensor<T> attentionWeights = CalculateAttention(encoded);
-
-        // Read from memory using attention weights
-        Tensor<T> memoryReadout = ReadFromMemory(attentionWeights);
-
-        // Combine input representation with memory
-        Tensor<T> combined = CombineInputAndMemory(encoded, memoryReadout);
-
-        // Process through output layers to generate prediction
-        Tensor<T> output = GenerateOutput(combined);
-
-        // Update memory with new information (optional, depends on architecture)
-        if (ShouldUpdateMemoryDuringInference())
+        foreach (var layer in Layers)
         {
-            UpdateMemory(encoded, attentionWeights);
+            if (layer is MemoryReadLayer<T> memoryReadLayer)
+            {
+                // MemoryReadLayer computes attention and reads from memory internally
+                current = memoryReadLayer.Forward(current, memoryTensor);
+            }
+            else if (layer is MemoryWriteLayer<T> memoryWriteLayer)
+            {
+                // MemoryWriteLayer updates memory based on input
+                current = memoryWriteLayer.Forward(current, memoryTensor);
+            }
+            else
+            {
+                // Standard layer forward pass
+                current = layer.Forward(current);
+            }
         }
 
-        return output;
+        return current;
     }
 
     /// <summary>
@@ -324,10 +325,16 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         int startLayerIndex = Layers.Count / 4;
         int endLayerIndex = Layers.Count / 2;
 
+        // Convert memory matrix to tensor for MemoryReadLayer
+        var memoryTensor = Tensor<T>.FromMatrix(_memory);
+
         Tensor<T> current = encoded;
         for (int i = startLayerIndex; i < endLayerIndex; i++)
         {
-            current = Layers[i].Forward(current);
+            // MemoryReadLayer requires both input and memory tensors
+            current = Layers[i] is MemoryReadLayer<T> memoryReadLayer
+                ? memoryReadLayer.Forward(current, memoryTensor)
+                : Layers[i].Forward(current);
         }
 
         // Apply softmax to get normalized attention weights

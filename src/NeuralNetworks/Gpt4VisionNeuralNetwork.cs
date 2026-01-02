@@ -1456,6 +1456,92 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
     #region NeuralNetworkBase Overrides
 
     /// <inheritdoc/>
+    public override int ParameterCount
+    {
+        get
+        {
+            if (!_useNativeMode)
+            {
+                return 0;
+            }
+
+            int count = 0;
+
+            // Vision encoder layers
+            foreach (var layer in _visionEncoderLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            // Language model layers
+            foreach (var layer in _languageModelLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            // Cross-attention layers
+            foreach (var layer in _crossAttentionLayers)
+            {
+                count += layer.ParameterCount;
+            }
+
+            // Single layers
+            if (_visionPatchEmbedding is not null)
+            {
+                count += _visionPatchEmbedding.ParameterCount;
+            }
+
+            if (_visionLayerNorm is not null)
+            {
+                count += _visionLayerNorm.ParameterCount;
+            }
+
+            if (_visionProjector1 is not null)
+            {
+                count += _visionProjector1.ParameterCount;
+            }
+
+            if (_visionProjector2 is not null)
+            {
+                count += _visionProjector2.ParameterCount;
+            }
+
+            if (_tokenEmbedding is not null)
+            {
+                count += _tokenEmbedding.ParameterCount;
+            }
+
+            if (_lmHead is not null)
+            {
+                count += _lmHead.ParameterCount;
+            }
+
+            if (_finalLayerNorm is not null)
+            {
+                count += _finalLayerNorm.ParameterCount;
+            }
+
+            // Positional embeddings
+            if (_visionClsToken is not null)
+            {
+                count += _visionClsToken.Rows * _visionClsToken.Columns;
+            }
+
+            if (_visionPositionalEmbeddings is not null)
+            {
+                count += _visionPositionalEmbeddings.Rows * _visionPositionalEmbeddings.Columns;
+            }
+
+            if (_textPositionalEmbeddings is not null)
+            {
+                count += _textPositionalEmbeddings.Rows * _textPositionalEmbeddings.Columns;
+            }
+
+            return count;
+        }
+    }
+
+    /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         SetTrainingMode(false);
