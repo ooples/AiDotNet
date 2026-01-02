@@ -293,15 +293,16 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         K = ReshapeToHeads(K, batch, contextLen, _headCount, _headDim);
         V = ReshapeToHeads(V, batch, contextLen, _headCount, _headDim);
 
-        // Compute attention: Q @ K^T / sqrt(d_k)
-        var scores = ComputeAttentionScores(Q, K, batch, queryLen, contextLen);
-        _lastAttentionScores = scores;
+        // Compute scaled dot-product attention using the Engine
+        // ScaledDotProductAttention handles: Q @ K^T / sqrt(d_k), softmax, scores @ V
+        var attended = Engine.ScaledDotProductAttention(
+            Q, K, V,
+            mask: null,
+            scale: 1.0 / Math.Sqrt(_headDim),
+            out var attentionWeights);
 
-        // Apply softmax
-        scores = ApplySoftmax(scores, batch, queryLen, contextLen);
-
-        // Weighted sum of values: scores @ V
-        var attended = ApplyAttentionToValues(scores, V, batch, queryLen);
+        // Cache post-softmax attention weights for any downstream use
+        _lastAttentionScores = attentionWeights;
 
         // Reshape back: [B, numHeads, queryLen, headDim] -> [B, queryLen, queryDim]
         attended = ReshapeFromHeads(attended, batch, queryLen, _headCount, _headDim);

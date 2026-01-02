@@ -651,32 +651,20 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastProjectedKeys = keys;
         _lastProjectedValues = values;
 
-        // 2. Compute Attention Scores: Q @ K.T
-        // [B, H, Sq, D] @ [B, H, D, Sk] -> [B, H, Sq, Sk]
-        // Flatten batch and heads for 3D BatchMatMul
-        var Q_3D = queries.Reshape(batchSize * _headCount, seqLengthQ, _headDimension);
-        var K_3D = keys.Reshape(batchSize * _headCount, seqLengthKV, _headDimension);
-        var KT_3D = K_3D.Transpose(new[] { 0, 2, 1 });
+        // 2. Compute Scaled Dot-Product Attention
+        // ScaledDotProductAttention computes: softmax(Q @ K^T / scale) @ V
+        // Input shapes: [batch, heads, seq, head_dim]
+        // Output shape: [batch, heads, seq_q, head_dim]
+        var context_4D = Engine.ScaledDotProductAttention(
+            queries, keys, values,
+            mask: null,
+            scale: 1.0 / Math.Sqrt(_headDimension),
+            out var attentionWeights4D);
 
-        var attentionScores = Engine.BatchMatMul(Q_3D, KT_3D);
+        // Cache attention weights for backward pass
+        _lastAttentionScores = attentionWeights4D;
 
-        // Scale
-        T scaleFactor = NumOps.Sqrt(NumOps.FromDouble(_headDimension));
-        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor);
-        attentionScores = Engine.TensorMultiplyScalar(attentionScores, scaleValue);
-
-        // Softmax
-        var softmaxActivation = new SoftmaxActivation<T>();
-        var attentionWeights = softmaxActivation.Activate(attentionScores);
-        _lastAttentionScores = attentionWeights.Reshape(batchSize, _headCount, seqLengthQ, seqLengthKV);
-
-        // 3. Output: Weights @ V
-        // [B*H, Sq, Sk] @ [B*H, Sk, D] -> [B*H, Sq, D]
-        var V_3D = values.Reshape(batchSize * _headCount, seqLengthKV, _headDimension);
-        var attentionOutput = Engine.BatchMatMul(attentionWeights, V_3D);
-
-        // 4. Cache Head Outputs
-        var context_4D = attentionOutput.Reshape(batchSize, _headCount, seqLengthQ, _headDimension);
+        // 3. Cache Head Outputs
         var permutedForCache = context_4D.Transpose(new[] { 1, 0, 2, 3 }); // [H, B, S, D]
         _lastHeadOutputs = new List<Tensor<T>> { permutedForCache }; // store stacked heads
 
@@ -786,36 +774,18 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Reshape attention output gradient to 4D: [batch, heads, seq, head_dim]
         attentionOutputGradient = attentionOutputGradient.Reshape([batchSize, sequenceLength, _headCount, _headDimension]).Transpose([0, 2, 1, 3]);
 
-        // Use cached projected K, V (4D: [batch, heads, seq, head_dim])
-        // dV = AttentionWeights^T @ dAttentionOutput
-        // _lastAttentionScores is [batch, heads, seq_q, seq_k], after transpose [batch, heads, seq_k, seq_q]
-        // attentionOutputGradient is [batch, heads, seq_q, head_dim]
-        // Result: [batch, heads, seq_k, head_dim]
-        var valuesGradient4D = _lastAttentionScores.Transpose([0, 1, 3, 2]).Multiply(attentionOutputGradient);
-
-        // dAttentionWeights = dAttentionOutput @ V^T
-        // attentionOutputGradient is [batch, heads, seq_q, head_dim]
-        // V^T is [batch, heads, head_dim, seq_k]
-        // Result: [batch, heads, seq_q, seq_k]
-        var valuesTransposed = _lastProjectedValues.Transpose([0, 1, 3, 2]); // [batch, heads, head_dim, seq_k]
-        var dAttentionWeights = attentionOutputGradient.Multiply(valuesTransposed);
-
-        // Apply softmax derivative to get gradient w.r.t. attention scores
-        var softmaxActivation = new SoftmaxActivation<T>();
-        var softmaxDerivative = softmaxActivation.Derivative(_lastAttentionScores);
-        var attentionScoresGradient = softmaxDerivative.ElementwiseMultiply(dAttentionWeights);
-
-        // dQ = dAttentionScores @ K
-        // attentionScoresGradient is [batch, heads, seq_q, seq_k]
-        // K is [batch, heads, seq_k, head_dim]
-        // Result: [batch, heads, seq_q, head_dim]
-        var queriesGradient4D = attentionScoresGradient.Multiply(_lastProjectedKeys);
-
-        // dK = dAttentionScores^T @ Q
-        // attentionScoresGradient^T is [batch, heads, seq_k, seq_q]
-        // Q is [batch, heads, seq_q, head_dim]
-        // Result: [batch, heads, seq_k, head_dim]
-        var keysGradient4D = attentionScoresGradient.Transpose([0, 1, 3, 2]).Multiply(_lastProjectedQueries);
+        // Use Engine.ScaledDotProductAttentionBackward for efficient gradient computation
+        // Computes dQ, dK, dV gradients through the attention operation
+        Engine.ScaledDotProductAttentionBackward(
+            attentionOutputGradient,
+            _lastProjectedQueries,
+            _lastProjectedKeys,
+            _lastProjectedValues,
+            _lastAttentionScores,
+            1.0 / Math.Sqrt(_headDimension),
+            out var queriesGradient4D,
+            out var keysGradient4D,
+            out var valuesGradient4D);
 
         // Reshape gradients from 4D to 3D: [batch, seq, embed]
         var queriesGradient = queriesGradient4D.Transpose([0, 2, 1, 3]).Reshape([batchSize, sequenceLength, embeddingDimension]);
