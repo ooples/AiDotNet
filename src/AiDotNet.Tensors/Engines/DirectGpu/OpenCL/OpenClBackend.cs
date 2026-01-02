@@ -3863,6 +3863,533 @@ KERNEL VARIANTS (A/B testing):
 
         #endregion
 
+        #region Convolution Operations
+
+        public void Conv2D(IGpuBuffer input, IGpuBuffer kernel, IGpuBuffer output,
+            int batch, int inChannels, int inHeight, int inWidth,
+            int outChannels, int outHeight, int outWidth,
+            int kernelH, int kernelW,
+            int strideH, int strideW, int padH, int padW,
+            int dilationH, int dilationW)
+        {
+            throw new NotImplementedException("OpenCL Conv2D kernel not yet implemented.");
+        }
+
+        public void Conv2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer kernel, IGpuBuffer gradInput,
+            int batch, int inChannels, int inHeight, int inWidth,
+            int outChannels, int outHeight, int outWidth,
+            int kernelH, int kernelW,
+            int strideH, int strideW, int padH, int padW,
+            int dilationH, int dilationW)
+        {
+            throw new NotImplementedException("OpenCL Conv2DBackwardInput kernel not yet implemented.");
+        }
+
+        public void Conv2DBackwardKernel(IGpuBuffer input, IGpuBuffer gradOutput, IGpuBuffer gradKernel,
+            int batch, int inChannels, int inHeight, int inWidth,
+            int outChannels, int outHeight, int outWidth,
+            int kernelH, int kernelW,
+            int strideH, int strideW, int padH, int padW,
+            int dilationH, int dilationW)
+        {
+            throw new NotImplementedException("OpenCL Conv2DBackwardKernel kernel not yet implemented.");
+        }
+
+        public void Conv3D(IGpuBuffer input, IGpuBuffer kernel, IGpuBuffer output,
+            int batch, int inChannels, int inDepth, int inHeight, int inWidth,
+            int outChannels, int outDepth, int outHeight, int outWidth,
+            int kernelD, int kernelH, int kernelW,
+            int strideD, int strideH, int strideW,
+            int padD, int padH, int padW,
+            int dilationD, int dilationH, int dilationW)
+        {
+            throw new NotImplementedException("OpenCL Conv3D kernel not yet implemented.");
+        }
+
+        public void DepthwiseConv2D(IGpuBuffer input, IGpuBuffer kernel, IGpuBuffer output,
+            int batch, int channels, int inHeight, int inWidth,
+            int outHeight, int outWidth,
+            int kernelH, int kernelW,
+            int strideH, int strideW, int padH, int padW)
+        {
+            throw new NotImplementedException("OpenCL DepthwiseConv2D kernel not yet implemented.");
+        }
+
+        public void ConvTranspose2D(IGpuBuffer input, IGpuBuffer kernel, IGpuBuffer output,
+            int batch, int inChannels, int inHeight, int inWidth,
+            int outChannels, int outHeight, int outWidth,
+            int kernelH, int kernelW,
+            int strideH, int strideW, int padH, int padW,
+            int outputPadH, int outputPadW)
+        {
+            throw new NotImplementedException("OpenCL ConvTranspose2D kernel not yet implemented.");
+        }
+
+        #endregion
+
+        #region Pooling Operations
+
+        public void MaxPool2D(IGpuBuffer input, IGpuBuffer output, IGpuBuffer? indices,
+            int batch, int channels, int inHeight, int inWidth,
+            int outHeight, int outWidth,
+            int kernelH, int kernelW,
+            int strideH, int strideW, int padH, int padW)
+        {
+            throw new NotImplementedException("OpenCL MaxPool2D kernel not yet implemented.");
+        }
+
+        public void MaxPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput,
+            int batch, int channels, int inHeight, int inWidth,
+            int outHeight, int outWidth,
+            int kernelH, int kernelW,
+            int strideH, int strideW, int padH, int padW)
+        {
+            throw new NotImplementedException("OpenCL MaxPool2DBackward kernel not yet implemented.");
+        }
+
+        public void AvgPool2D(IGpuBuffer input, IGpuBuffer output,
+            int batch, int channels, int inHeight, int inWidth,
+            int outHeight, int outWidth,
+            int kernelH, int kernelW,
+            int strideH, int strideW, int padH, int padW,
+            bool countIncludePad)
+        {
+            throw new NotImplementedException("OpenCL AvgPool2D kernel not yet implemented.");
+        }
+
+        public void AvgPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput,
+            int batch, int channels, int inHeight, int inWidth,
+            int outHeight, int outWidth,
+            int kernelH, int kernelW,
+            int strideH, int strideW, int padH, int padW,
+            bool countIncludePad)
+        {
+            throw new NotImplementedException("OpenCL AvgPool2DBackward kernel not yet implemented.");
+        }
+
+        public void GlobalAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width)
+        {
+            throw new NotImplementedException("OpenCL GlobalAvgPool2D kernel not yet implemented.");
+        }
+
+        public void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width)
+        {
+            throw new NotImplementedException("OpenCL GlobalMaxPool2D kernel not yet implemented.");
+        }
+
+        public void AdaptiveAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth)
+        {
+            throw new NotImplementedException("OpenCL AdaptiveAvgPool2D kernel not yet implemented.");
+        }
+
+        #endregion
+
+        #region Normalization Operations
+
+        public void BatchNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
+            IGpuBuffer runningMean, IGpuBuffer runningVar, IGpuBuffer saveMean, IGpuBuffer saveInvVar,
+            int batch, int channels, int spatialSize, float epsilon, float momentum, bool training)
+        {
+            throw new NotImplementedException("OpenCL BatchNorm kernel not yet implemented.");
+        }
+
+        public void BatchNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma,
+            IGpuBuffer saveMean, IGpuBuffer saveInvVar, IGpuBuffer gradInput, IGpuBuffer gradGamma, IGpuBuffer gradBeta,
+            int batch, int channels, int spatialSize, float epsilon)
+        {
+            throw new NotImplementedException("OpenCL BatchNormBackward kernel not yet implemented.");
+        }
+
+        public void LayerNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
+            IGpuBuffer saveMean, IGpuBuffer saveInvVar, int batchSize, int normalizedSize, float epsilon)
+        {
+            throw new NotImplementedException("OpenCL LayerNorm kernel not yet implemented.");
+        }
+
+        public void LayerNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma,
+            IGpuBuffer saveMean, IGpuBuffer saveInvVar, IGpuBuffer gradInput, IGpuBuffer gradGamma, IGpuBuffer gradBeta,
+            int batchSize, int normalizedSize, float epsilon)
+        {
+            throw new NotImplementedException("OpenCL LayerNormBackward kernel not yet implemented.");
+        }
+
+        public void GroupNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
+            IGpuBuffer saveMean, IGpuBuffer saveInvVar, int batch, int numGroups, int channels, int spatialSize, float epsilon)
+        {
+            throw new NotImplementedException("OpenCL GroupNorm kernel not yet implemented.");
+        }
+
+        public void InstanceNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
+            IGpuBuffer saveMean, IGpuBuffer saveInvVar, int batch, int channels, int spatialSize, float epsilon)
+        {
+            throw new NotImplementedException("OpenCL InstanceNorm kernel not yet implemented.");
+        }
+
+        public void RmsNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer saveRms,
+            int batchSize, int normalizedSize, float epsilon)
+        {
+            throw new NotImplementedException("OpenCL RmsNorm kernel not yet implemented.");
+        }
+
+        #endregion
+
+        #region Dropout Operations
+
+        public void Dropout(IGpuBuffer input, IGpuBuffer output, IGpuBuffer mask, int size, float dropoutRate, ulong seed, bool training)
+        {
+            throw new NotImplementedException("OpenCL Dropout kernel not yet implemented.");
+        }
+
+        public void DropoutBackward(IGpuBuffer gradOutput, IGpuBuffer mask, IGpuBuffer gradInput, int size, float dropoutRate)
+        {
+            throw new NotImplementedException("OpenCL DropoutBackward kernel not yet implemented.");
+        }
+
+        #endregion
+
+        #region Embedding Operations
+
+        public void Embedding(IGpuBuffer indices, IGpuBuffer embeddingTable, IGpuBuffer output, int numIndices, int embeddingDim)
+        {
+            throw new NotImplementedException("OpenCL Embedding kernel not yet implemented.");
+        }
+
+        public void EmbeddingBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradEmbedding, int numIndices, int embeddingDim, int vocabSize)
+        {
+            throw new NotImplementedException("OpenCL EmbeddingBackward kernel not yet implemented.");
+        }
+
+        public IGpuBuffer AllocateIntBuffer(int size)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var buffer = new DirectOpenClBuffer(_context, size);
+            return new DirectOpenClGpuBuffer(buffer);
+        }
+
+        public IGpuBuffer AllocateIntBuffer(int[] data)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            // Convert int array to float array for storage
+            var floatData = new float[data.Length];
+            for (int i = 0; i < data.Length; i++)
+            {
+                floatData[i] = BitConverter.Int32BitsToSingle(data[i]);
+            }
+
+            var buffer = new DirectOpenClBuffer(_context, floatData);
+            return new DirectOpenClGpuBuffer(buffer);
+        }
+
+        #endregion
+
+        #region Attention Operations
+
+        public void ScaledDotProductAttention(IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+            IGpuBuffer output, IGpuBuffer? attentionWeights, IGpuBuffer? mask,
+            int batch, int numHeads, int seqLen, int headDim, float scale, bool isCausal)
+        {
+            throw new NotImplementedException("OpenCL ScaledDotProductAttention kernel not yet implemented.");
+        }
+
+        public void ScaledDotProductAttentionBackward(IGpuBuffer gradOutput, IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+            IGpuBuffer attentionWeights, IGpuBuffer gradQuery, IGpuBuffer gradKey, IGpuBuffer gradValue,
+            int batch, int numHeads, int seqLen, int headDim, float scale, bool isCausal)
+        {
+            throw new NotImplementedException("OpenCL ScaledDotProductAttentionBackward kernel not yet implemented.");
+        }
+
+        public void FlashAttention(IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+            IGpuBuffer output, IGpuBuffer? mask, int batch, int numHeads, int seqLen, int headDim, float scale, bool isCausal)
+        {
+            throw new NotImplementedException("OpenCL FlashAttention kernel not yet implemented.");
+        }
+
+        #endregion
+
+        #region Transpose and Reshape Operations
+
+        public void Transpose(IGpuBuffer A, IGpuBuffer B, int rows, int cols)
+        {
+            throw new NotImplementedException("OpenCL Transpose kernel not yet implemented.");
+        }
+
+        public void BatchedTranspose(IGpuBuffer A, IGpuBuffer B, int batch, int rows, int cols)
+        {
+            throw new NotImplementedException("OpenCL BatchedTranspose kernel not yet implemented.");
+        }
+
+        public void Permute(IGpuBuffer input, IGpuBuffer output, int[] shape, int[] permutation)
+        {
+            throw new NotImplementedException("OpenCL Permute kernel not yet implemented.");
+        }
+
+        public void Copy(IGpuBuffer source, IGpuBuffer destination, int size)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            // Use CPU fallback for copy - download from source and upload to destination
+            var srcBuffer = ((DirectOpenClGpuBuffer)source).Buffer;
+            var dstBuffer = ((DirectOpenClGpuBuffer)destination).Buffer;
+
+            var data = srcBuffer.ToArray();
+            dstBuffer.CopyFromHost(data);
+        }
+
+        public void Fill(IGpuBuffer buffer, float value, int size)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            // Use CPU fallback for fill
+            var data = new float[size];
+            for (int i = 0; i < size; i++)
+            {
+                data[i] = value;
+            }
+
+            var clBuffer = ((DirectOpenClGpuBuffer)buffer).Buffer;
+            clBuffer.CopyFromHost(data);
+        }
+
+        #endregion
+
+        #region Activation Gradient Operations
+
+        public void ReluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+        {
+            throw new NotImplementedException("OpenCL ReluBackward kernel not yet implemented.");
+        }
+
+        public void SigmoidBackward(IGpuBuffer gradOutput, IGpuBuffer output, IGpuBuffer gradInput, int size)
+        {
+            throw new NotImplementedException("OpenCL SigmoidBackward kernel not yet implemented.");
+        }
+
+        public void TanhBackward(IGpuBuffer gradOutput, IGpuBuffer output, IGpuBuffer gradInput, int size)
+        {
+            throw new NotImplementedException("OpenCL TanhBackward kernel not yet implemented.");
+        }
+
+        public void GeluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+        {
+            throw new NotImplementedException("OpenCL GeluBackward kernel not yet implemented.");
+        }
+
+        public void SoftmaxBackward(IGpuBuffer gradOutput, IGpuBuffer output, IGpuBuffer gradInput, int batchSize, int features)
+        {
+            throw new NotImplementedException("OpenCL SoftmaxBackward kernel not yet implemented.");
+        }
+
+        public void LeakyRelu(IGpuBuffer A, IGpuBuffer B, float alpha, int size)
+        {
+            throw new NotImplementedException("OpenCL LeakyRelu kernel not yet implemented.");
+        }
+
+        public void LeakyReluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, float alpha, int size)
+        {
+            throw new NotImplementedException("OpenCL LeakyReluBackward kernel not yet implemented.");
+        }
+
+        public void Elu(IGpuBuffer A, IGpuBuffer B, float alpha, int size)
+        {
+            throw new NotImplementedException("OpenCL Elu kernel not yet implemented.");
+        }
+
+        public void EluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer output, IGpuBuffer gradInput, float alpha, int size)
+        {
+            throw new NotImplementedException("OpenCL EluBackward kernel not yet implemented.");
+        }
+
+        public void Swish(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            throw new NotImplementedException("OpenCL Swish kernel not yet implemented.");
+        }
+
+        public void SwishBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+        {
+            throw new NotImplementedException("OpenCL SwishBackward kernel not yet implemented.");
+        }
+
+        public void Silu(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            throw new NotImplementedException("OpenCL Silu kernel not yet implemented.");
+        }
+
+        public void Mish(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            throw new NotImplementedException("OpenCL Mish kernel not yet implemented.");
+        }
+
+        public void Softplus(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            throw new NotImplementedException("OpenCL Softplus kernel not yet implemented.");
+        }
+
+        public void Hardswish(IGpuBuffer A, IGpuBuffer B, int size)
+        {
+            throw new NotImplementedException("OpenCL Hardswish kernel not yet implemented.");
+        }
+
+        #endregion
+
+        #region Loss Function Operations
+
+        public float CrossEntropyLoss(IGpuBuffer predictions, IGpuBuffer targets, int batchSize, int numClasses)
+        {
+            throw new NotImplementedException("OpenCL CrossEntropyLoss kernel not yet implemented.");
+        }
+
+        public void CrossEntropyBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int batchSize, int numClasses)
+        {
+            throw new NotImplementedException("OpenCL CrossEntropyBackward kernel not yet implemented.");
+        }
+
+        public float BinaryCrossEntropyLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+        {
+            throw new NotImplementedException("OpenCL BinaryCrossEntropyLoss kernel not yet implemented.");
+        }
+
+        public void BinaryCrossEntropyBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+        {
+            throw new NotImplementedException("OpenCL BinaryCrossEntropyBackward kernel not yet implemented.");
+        }
+
+        public float MseLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+        {
+            throw new NotImplementedException("OpenCL MseLoss kernel not yet implemented.");
+        }
+
+        public void MseBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+        {
+            throw new NotImplementedException("OpenCL MseBackward kernel not yet implemented.");
+        }
+
+        public float SmoothL1Loss(IGpuBuffer predictions, IGpuBuffer targets, int size, float beta)
+        {
+            throw new NotImplementedException("OpenCL SmoothL1Loss kernel not yet implemented.");
+        }
+
+        public void SmoothL1Backward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float beta)
+        {
+            throw new NotImplementedException("OpenCL SmoothL1Backward kernel not yet implemented.");
+        }
+
+        #endregion
+
+        #region Gradient Clipping and Utility Operations
+
+        public void Clamp(IGpuBuffer A, IGpuBuffer B, float min, float max, int size)
+        {
+            throw new NotImplementedException("OpenCL Clamp kernel not yet implemented.");
+        }
+
+        public float L2Norm(IGpuBuffer A, int size)
+        {
+            throw new NotImplementedException("OpenCL L2Norm kernel not yet implemented.");
+        }
+
+        public void ClipByValue(IGpuBuffer A, IGpuBuffer B, float clipValue, int size)
+        {
+            throw new NotImplementedException("OpenCL ClipByValue kernel not yet implemented.");
+        }
+
+        public void ClipByNorm(IGpuBuffer A, IGpuBuffer B, float maxNorm, int size)
+        {
+            throw new NotImplementedException("OpenCL ClipByNorm kernel not yet implemented.");
+        }
+
+        public void Fma(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, IGpuBuffer D, int size)
+        {
+            throw new NotImplementedException("OpenCL Fma kernel not yet implemented.");
+        }
+
+        public void ScatterAdd(IGpuBuffer source, IGpuBuffer indices, IGpuBuffer destination, int sourceSize, int destSize)
+        {
+            throw new NotImplementedException("OpenCL ScatterAdd kernel not yet implemented.");
+        }
+
+        public void Gather(IGpuBuffer source, IGpuBuffer indices, IGpuBuffer output, int numIndices, int featureSize)
+        {
+            throw new NotImplementedException("OpenCL Gather kernel not yet implemented.");
+        }
+
+        #endregion
+
+        #region Comparison Operations
+
+        public void GreaterThan(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+        {
+            throw new NotImplementedException("OpenCL GreaterThan kernel not yet implemented.");
+        }
+
+        public void LessThan(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+        {
+            throw new NotImplementedException("OpenCL LessThan kernel not yet implemented.");
+        }
+
+        public void Equal(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+        {
+            throw new NotImplementedException("OpenCL Equal kernel not yet implemented.");
+        }
+
+        public void Where(IGpuBuffer condition, IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+        {
+            throw new NotImplementedException("OpenCL Where kernel not yet implemented.");
+        }
+
+        #endregion
+
+        #region Statistics Operations
+
+        public void MeanAxis(IGpuBuffer A, IGpuBuffer B, int outerSize, int reduceSize)
+        {
+            throw new NotImplementedException("OpenCL MeanAxis kernel not yet implemented.");
+        }
+
+        public void VarAxis(IGpuBuffer A, IGpuBuffer mean, IGpuBuffer variance, int outerSize, int reduceSize)
+        {
+            throw new NotImplementedException("OpenCL VarAxis kernel not yet implemented.");
+        }
+
+        public void ArgMax(IGpuBuffer A, IGpuBuffer indices, int outerSize, int reduceSize)
+        {
+            throw new NotImplementedException("OpenCL ArgMax kernel not yet implemented.");
+        }
+
+        public void ArgMin(IGpuBuffer A, IGpuBuffer indices, int outerSize, int reduceSize)
+        {
+            throw new NotImplementedException("OpenCL ArgMin kernel not yet implemented.");
+        }
+
+        #endregion
+
+        #region Optimizer Operations
+
+        public void SgdMomentumUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
+            float learningRate, float momentum, float weightDecay, int size)
+        {
+            throw new NotImplementedException("OpenCL SgdMomentumUpdate kernel not yet implemented.");
+        }
+
+        public void AdamUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+            float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+        {
+            throw new NotImplementedException("OpenCL AdamUpdate kernel not yet implemented.");
+        }
+
+        public void AdamWUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+            float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+        {
+            throw new NotImplementedException("OpenCL AdamWUpdate kernel not yet implemented.");
+        }
+
+        #endregion
+
         public void Dispose()
         {
             if (_disposed) return;

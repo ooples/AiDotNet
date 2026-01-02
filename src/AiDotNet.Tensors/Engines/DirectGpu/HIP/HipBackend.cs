@@ -1396,6 +1396,540 @@ public sealed class HipBackend : IDirectGpuBackend
 
     #endregion
 
+    #region Convolution Operations
+
+    public void Conv2D(IGpuBuffer input, IGpuBuffer kernel, IGpuBuffer output,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW)
+    {
+        throw new NotImplementedException("HIP Conv2D kernel not yet implemented.");
+    }
+
+    public void Conv2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer kernel, IGpuBuffer gradInput,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW)
+    {
+        throw new NotImplementedException("HIP Conv2DBackwardInput kernel not yet implemented.");
+    }
+
+    public void Conv2DBackwardKernel(IGpuBuffer input, IGpuBuffer gradOutput, IGpuBuffer gradKernel,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW)
+    {
+        throw new NotImplementedException("HIP Conv2DBackwardKernel not yet implemented.");
+    }
+
+    public void Conv3D(IGpuBuffer input, IGpuBuffer kernel, IGpuBuffer output,
+        int batch, int inChannels, int inDepth, int inHeight, int inWidth,
+        int outChannels, int outDepth, int outHeight, int outWidth,
+        int kernelD, int kernelH, int kernelW,
+        int strideD, int strideH, int strideW,
+        int padD, int padH, int padW,
+        int dilationD, int dilationH, int dilationW)
+    {
+        throw new NotImplementedException("HIP Conv3D kernel not yet implemented.");
+    }
+
+    public void DepthwiseConv2D(IGpuBuffer input, IGpuBuffer kernel, IGpuBuffer output,
+        int batch, int channels, int inHeight, int inWidth,
+        int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW)
+    {
+        throw new NotImplementedException("HIP DepthwiseConv2D kernel not yet implemented.");
+    }
+
+    public void ConvTranspose2D(IGpuBuffer input, IGpuBuffer kernel, IGpuBuffer output,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int outputPadH, int outputPadW)
+    {
+        throw new NotImplementedException("HIP ConvTranspose2D kernel not yet implemented.");
+    }
+
+    #endregion
+
+    #region Pooling Operations
+
+    public void MaxPool2D(IGpuBuffer input, IGpuBuffer output, IGpuBuffer? indices,
+        int batch, int channels, int inHeight, int inWidth,
+        int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW)
+    {
+        throw new NotImplementedException("HIP MaxPool2D kernel not yet implemented.");
+    }
+
+    public void MaxPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput,
+        int batch, int channels, int inHeight, int inWidth,
+        int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW)
+    {
+        throw new NotImplementedException("HIP MaxPool2DBackward kernel not yet implemented.");
+    }
+
+    public void AvgPool2D(IGpuBuffer input, IGpuBuffer output,
+        int batch, int channels, int inHeight, int inWidth,
+        int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        bool countIncludePad)
+    {
+        throw new NotImplementedException("HIP AvgPool2D kernel not yet implemented.");
+    }
+
+    public void AvgPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput,
+        int batch, int channels, int inHeight, int inWidth,
+        int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        bool countIncludePad)
+    {
+        throw new NotImplementedException("HIP AvgPool2DBackward kernel not yet implemented.");
+    }
+
+    public void GlobalAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width)
+    {
+        throw new NotImplementedException("HIP GlobalAvgPool2D kernel not yet implemented.");
+    }
+
+    public void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width)
+    {
+        throw new NotImplementedException("HIP GlobalMaxPool2D kernel not yet implemented.");
+    }
+
+    public void AdaptiveAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth)
+    {
+        throw new NotImplementedException("HIP AdaptiveAvgPool2D kernel not yet implemented.");
+    }
+
+    #endregion
+
+    #region Normalization Operations
+
+    public void BatchNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
+        IGpuBuffer runningMean, IGpuBuffer runningVar, IGpuBuffer saveMean, IGpuBuffer saveInvVar,
+        int batch, int channels, int spatialSize, float epsilon, float momentum, bool training)
+    {
+        throw new NotImplementedException("HIP BatchNorm kernel not yet implemented.");
+    }
+
+    public void BatchNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar, IGpuBuffer gradInput, IGpuBuffer gradGamma, IGpuBuffer gradBeta,
+        int batch, int channels, int spatialSize, float epsilon)
+    {
+        throw new NotImplementedException("HIP BatchNormBackward kernel not yet implemented.");
+    }
+
+    public void LayerNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar, int batchSize, int normalizedSize, float epsilon)
+    {
+        throw new NotImplementedException("HIP LayerNorm kernel not yet implemented.");
+    }
+
+    public void LayerNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar, IGpuBuffer gradInput, IGpuBuffer gradGamma, IGpuBuffer gradBeta,
+        int batchSize, int normalizedSize, float epsilon)
+    {
+        throw new NotImplementedException("HIP LayerNormBackward kernel not yet implemented.");
+    }
+
+    public void GroupNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar, int batch, int numGroups, int channels, int spatialSize, float epsilon)
+    {
+        throw new NotImplementedException("HIP GroupNorm kernel not yet implemented.");
+    }
+
+    public void InstanceNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar, int batch, int channels, int spatialSize, float epsilon)
+    {
+        throw new NotImplementedException("HIP InstanceNorm kernel not yet implemented.");
+    }
+
+    public void RmsNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer saveRms,
+        int batchSize, int normalizedSize, float epsilon)
+    {
+        throw new NotImplementedException("HIP RmsNorm kernel not yet implemented.");
+    }
+
+    #endregion
+
+    #region Dropout Operations
+
+    public void Dropout(IGpuBuffer input, IGpuBuffer output, IGpuBuffer mask, int size, float dropoutRate, ulong seed, bool training)
+    {
+        throw new NotImplementedException("HIP Dropout kernel not yet implemented.");
+    }
+
+    public void DropoutBackward(IGpuBuffer gradOutput, IGpuBuffer mask, IGpuBuffer gradInput, int size, float dropoutRate)
+    {
+        throw new NotImplementedException("HIP DropoutBackward kernel not yet implemented.");
+    }
+
+    #endregion
+
+    #region Embedding Operations
+
+    public void Embedding(IGpuBuffer indices, IGpuBuffer embeddingTable, IGpuBuffer output, int numIndices, int embeddingDim)
+    {
+        throw new NotImplementedException("HIP Embedding kernel not yet implemented.");
+    }
+
+    public void EmbeddingBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradEmbedding, int numIndices, int embeddingDim, int vocabSize)
+    {
+        throw new NotImplementedException("HIP EmbeddingBackward kernel not yet implemented.");
+    }
+
+    public IGpuBuffer AllocateIntBuffer(int size)
+    {
+        IntPtr devicePtr = IntPtr.Zero;
+        var sizeBytes = (UIntPtr)(size * sizeof(int));
+
+        var result = HipNativeBindings.hipMalloc(ref devicePtr, sizeBytes);
+        HipNativeBindings.CheckError(result, "hipMalloc(int)");
+
+        result = HipNativeBindings.hipMemset(devicePtr, 0, sizeBytes);
+        HipNativeBindings.CheckError(result, "hipMemset(int)");
+
+        return new HipGpuBuffer(devicePtr, size);
+    }
+
+    public IGpuBuffer AllocateIntBuffer(int[] data)
+    {
+        IntPtr devicePtr = IntPtr.Zero;
+        var size = data.Length;
+        var sizeBytes = (UIntPtr)(size * sizeof(int));
+
+        var result = HipNativeBindings.hipMalloc(ref devicePtr, sizeBytes);
+        HipNativeBindings.CheckError(result, "hipMalloc(int)");
+
+        GCHandle handle = GCHandle.Alloc(data, GCHandleType.Pinned);
+        try
+        {
+            result = HipNativeBindings.hipMemcpy(
+                devicePtr,
+                handle.AddrOfPinnedObject(),
+                sizeBytes,
+                HipMemcpyKind.HostToDevice);
+            HipNativeBindings.CheckError(result, "hipMemcpy H2D (int)");
+        }
+        finally
+        {
+            handle.Free();
+        }
+
+        return new HipGpuBuffer(devicePtr, size);
+    }
+
+    #endregion
+
+    #region Attention Operations
+
+    public void ScaledDotProductAttention(IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+        IGpuBuffer output, IGpuBuffer? attentionWeights, IGpuBuffer? mask,
+        int batch, int numHeads, int seqLen, int headDim, float scale, bool isCausal)
+    {
+        throw new NotImplementedException("HIP ScaledDotProductAttention kernel not yet implemented.");
+    }
+
+    public void ScaledDotProductAttentionBackward(IGpuBuffer gradOutput, IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+        IGpuBuffer attentionWeights, IGpuBuffer gradQuery, IGpuBuffer gradKey, IGpuBuffer gradValue,
+        int batch, int numHeads, int seqLen, int headDim, float scale, bool isCausal)
+    {
+        throw new NotImplementedException("HIP ScaledDotProductAttentionBackward kernel not yet implemented.");
+    }
+
+    public void FlashAttention(IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+        IGpuBuffer output, IGpuBuffer? mask, int batch, int numHeads, int seqLen, int headDim, float scale, bool isCausal)
+    {
+        throw new NotImplementedException("HIP FlashAttention kernel not yet implemented.");
+    }
+
+    #endregion
+
+    #region Transpose and Reshape Operations
+
+    public void Transpose(IGpuBuffer A, IGpuBuffer B, int rows, int cols)
+    {
+        throw new NotImplementedException("HIP Transpose kernel not yet implemented.");
+    }
+
+    public void BatchedTranspose(IGpuBuffer A, IGpuBuffer B, int batch, int rows, int cols)
+    {
+        throw new NotImplementedException("HIP BatchedTranspose kernel not yet implemented.");
+    }
+
+    public void Permute(IGpuBuffer input, IGpuBuffer output, int[] shape, int[] permutation)
+    {
+        throw new NotImplementedException("HIP Permute kernel not yet implemented.");
+    }
+
+    public void Copy(IGpuBuffer source, IGpuBuffer destination, int size)
+    {
+        var sizeBytes = (UIntPtr)(size * sizeof(float));
+        var result = HipNativeBindings.hipMemcpy(
+            destination.Handle,
+            source.Handle,
+            sizeBytes,
+            HipMemcpyKind.DeviceToDevice);
+        HipNativeBindings.CheckError(result, "hipMemcpy D2D");
+    }
+
+    public void Fill(IGpuBuffer buffer, float value, int size)
+    {
+        // Download, fill, upload (HIP doesn't have direct memset for float patterns)
+        var data = new float[size];
+        for (int i = 0; i < size; i++)
+            data[i] = value;
+        UploadToBuffer(buffer, data);
+    }
+
+    #endregion
+
+    #region Activation Gradient Operations
+
+    public void ReluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+    {
+        throw new NotImplementedException("HIP ReluBackward kernel not yet implemented.");
+    }
+
+    public void SigmoidBackward(IGpuBuffer gradOutput, IGpuBuffer output, IGpuBuffer gradInput, int size)
+    {
+        throw new NotImplementedException("HIP SigmoidBackward kernel not yet implemented.");
+    }
+
+    public void TanhBackward(IGpuBuffer gradOutput, IGpuBuffer output, IGpuBuffer gradInput, int size)
+    {
+        throw new NotImplementedException("HIP TanhBackward kernel not yet implemented.");
+    }
+
+    public void GeluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+    {
+        throw new NotImplementedException("HIP GeluBackward kernel not yet implemented.");
+    }
+
+    public void SoftmaxBackward(IGpuBuffer gradOutput, IGpuBuffer output, IGpuBuffer gradInput, int batchSize, int features)
+    {
+        throw new NotImplementedException("HIP SoftmaxBackward kernel not yet implemented.");
+    }
+
+    public void LeakyRelu(IGpuBuffer A, IGpuBuffer B, float alpha, int size)
+    {
+        throw new NotImplementedException("HIP LeakyRelu kernel not yet implemented.");
+    }
+
+    public void LeakyReluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, float alpha, int size)
+    {
+        throw new NotImplementedException("HIP LeakyReluBackward kernel not yet implemented.");
+    }
+
+    public void Elu(IGpuBuffer A, IGpuBuffer B, float alpha, int size)
+    {
+        throw new NotImplementedException("HIP Elu kernel not yet implemented.");
+    }
+
+    public void EluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer output, IGpuBuffer gradInput, float alpha, int size)
+    {
+        throw new NotImplementedException("HIP EluBackward kernel not yet implemented.");
+    }
+
+    public void Swish(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        throw new NotImplementedException("HIP Swish kernel not yet implemented.");
+    }
+
+    public void SwishBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+    {
+        throw new NotImplementedException("HIP SwishBackward kernel not yet implemented.");
+    }
+
+    public void Silu(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        throw new NotImplementedException("HIP Silu kernel not yet implemented.");
+    }
+
+    public void Mish(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        throw new NotImplementedException("HIP Mish kernel not yet implemented.");
+    }
+
+    public void Softplus(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        throw new NotImplementedException("HIP Softplus kernel not yet implemented.");
+    }
+
+    public void Hardswish(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        throw new NotImplementedException("HIP Hardswish kernel not yet implemented.");
+    }
+
+    #endregion
+
+    #region Loss Function Operations
+
+    public float CrossEntropyLoss(IGpuBuffer predictions, IGpuBuffer targets, int batchSize, int numClasses)
+    {
+        throw new NotImplementedException("HIP CrossEntropyLoss kernel not yet implemented.");
+    }
+
+    public void CrossEntropyBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int batchSize, int numClasses)
+    {
+        throw new NotImplementedException("HIP CrossEntropyBackward kernel not yet implemented.");
+    }
+
+    public float BinaryCrossEntropyLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+    {
+        throw new NotImplementedException("HIP BinaryCrossEntropyLoss kernel not yet implemented.");
+    }
+
+    public void BinaryCrossEntropyBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+    {
+        throw new NotImplementedException("HIP BinaryCrossEntropyBackward kernel not yet implemented.");
+    }
+
+    public float MseLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+    {
+        throw new NotImplementedException("HIP MseLoss kernel not yet implemented.");
+    }
+
+    public void MseBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+    {
+        throw new NotImplementedException("HIP MseBackward kernel not yet implemented.");
+    }
+
+    public float SmoothL1Loss(IGpuBuffer predictions, IGpuBuffer targets, int size, float beta)
+    {
+        throw new NotImplementedException("HIP SmoothL1Loss kernel not yet implemented.");
+    }
+
+    public void SmoothL1Backward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float beta)
+    {
+        throw new NotImplementedException("HIP SmoothL1Backward kernel not yet implemented.");
+    }
+
+    #endregion
+
+    #region Utility Operations
+
+    public void Clamp(IGpuBuffer A, IGpuBuffer B, float min, float max, int size)
+    {
+        throw new NotImplementedException("HIP Clamp kernel not yet implemented.");
+    }
+
+    public float L2Norm(IGpuBuffer A, int size)
+    {
+        throw new NotImplementedException("HIP L2Norm kernel not yet implemented.");
+    }
+
+    public void ClipByValue(IGpuBuffer A, IGpuBuffer B, float clipValue, int size)
+    {
+        throw new NotImplementedException("HIP ClipByValue kernel not yet implemented.");
+    }
+
+    public void ClipByNorm(IGpuBuffer A, IGpuBuffer B, float maxNorm, int size)
+    {
+        throw new NotImplementedException("HIP ClipByNorm kernel not yet implemented.");
+    }
+
+    public void Fma(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, IGpuBuffer D, int size)
+    {
+        throw new NotImplementedException("HIP Fma kernel not yet implemented.");
+    }
+
+    public void ScatterAdd(IGpuBuffer source, IGpuBuffer indices, IGpuBuffer destination, int sourceSize, int destSize)
+    {
+        throw new NotImplementedException("HIP ScatterAdd kernel not yet implemented.");
+    }
+
+    public void Gather(IGpuBuffer source, IGpuBuffer indices, IGpuBuffer output, int numIndices, int featureSize)
+    {
+        throw new NotImplementedException("HIP Gather kernel not yet implemented.");
+    }
+
+    #endregion
+
+    #region Comparison Operations
+
+    public void GreaterThan(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+    {
+        throw new NotImplementedException("HIP GreaterThan kernel not yet implemented.");
+    }
+
+    public void LessThan(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+    {
+        throw new NotImplementedException("HIP LessThan kernel not yet implemented.");
+    }
+
+    public void Equal(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+    {
+        throw new NotImplementedException("HIP Equal kernel not yet implemented.");
+    }
+
+    public void Where(IGpuBuffer condition, IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+    {
+        throw new NotImplementedException("HIP Where kernel not yet implemented.");
+    }
+
+    #endregion
+
+    #region Statistics Operations
+
+    public void MeanAxis(IGpuBuffer A, IGpuBuffer B, int outerSize, int reduceSize)
+    {
+        throw new NotImplementedException("HIP MeanAxis kernel not yet implemented.");
+    }
+
+    public void VarAxis(IGpuBuffer A, IGpuBuffer mean, IGpuBuffer variance, int outerSize, int reduceSize)
+    {
+        throw new NotImplementedException("HIP VarAxis kernel not yet implemented.");
+    }
+
+    public void ArgMax(IGpuBuffer A, IGpuBuffer indices, int outerSize, int reduceSize)
+    {
+        throw new NotImplementedException("HIP ArgMax kernel not yet implemented.");
+    }
+
+    public void ArgMin(IGpuBuffer A, IGpuBuffer indices, int outerSize, int reduceSize)
+    {
+        throw new NotImplementedException("HIP ArgMin kernel not yet implemented.");
+    }
+
+    #endregion
+
+    #region Optimizer Operations
+
+    public void SgdMomentumUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
+        float learningRate, float momentum, float weightDecay, int size)
+    {
+        throw new NotImplementedException("HIP SgdMomentumUpdate kernel not yet implemented.");
+    }
+
+    public void AdamUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+    {
+        throw new NotImplementedException("HIP AdamUpdate kernel not yet implemented.");
+    }
+
+    public void AdamWUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+    {
+        throw new NotImplementedException("HIP AdamWUpdate kernel not yet implemented.");
+    }
+
+    #endregion
+
     public void Synchronize()
     {
         if (_stream != IntPtr.Zero)

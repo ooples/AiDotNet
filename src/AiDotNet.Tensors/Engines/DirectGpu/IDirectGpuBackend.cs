@@ -477,6 +477,231 @@ public interface IDirectGpuBackend : IDisposable
     void Synchronize();
 
     #endregion
+
+    #region Convolution Operations
+
+    void Conv2D(IGpuBuffer input, IGpuBuffer kernel, IGpuBuffer output,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW);
+
+    void Conv2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer kernel, IGpuBuffer gradInput,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW);
+
+    void Conv2DBackwardKernel(IGpuBuffer input, IGpuBuffer gradOutput, IGpuBuffer gradKernel,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW);
+
+    void Conv3D(IGpuBuffer input, IGpuBuffer kernel, IGpuBuffer output,
+        int batch, int inChannels, int inDepth, int inHeight, int inWidth,
+        int outChannels, int outDepth, int outHeight, int outWidth,
+        int kernelD, int kernelH, int kernelW,
+        int strideD, int strideH, int strideW,
+        int padD, int padH, int padW,
+        int dilationD, int dilationH, int dilationW);
+
+    void DepthwiseConv2D(IGpuBuffer input, IGpuBuffer kernel, IGpuBuffer output,
+        int batch, int channels, int inHeight, int inWidth,
+        int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW);
+
+    void ConvTranspose2D(IGpuBuffer input, IGpuBuffer kernel, IGpuBuffer output,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int outputPadH, int outputPadW);
+
+    #endregion
+
+    #region Pooling Operations
+
+    void MaxPool2D(IGpuBuffer input, IGpuBuffer output, IGpuBuffer? indices,
+        int batch, int channels, int inHeight, int inWidth,
+        int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW);
+
+    void MaxPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput,
+        int batch, int channels, int inHeight, int inWidth,
+        int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW);
+
+    void AvgPool2D(IGpuBuffer input, IGpuBuffer output,
+        int batch, int channels, int inHeight, int inWidth,
+        int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        bool countIncludePad);
+
+    void AvgPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput,
+        int batch, int channels, int inHeight, int inWidth,
+        int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        bool countIncludePad);
+
+    void GlobalAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width);
+    void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width);
+    void AdaptiveAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth);
+
+    #endregion
+
+    #region Normalization Operations
+
+    void BatchNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
+        IGpuBuffer runningMean, IGpuBuffer runningVar, IGpuBuffer saveMean, IGpuBuffer saveInvVar,
+        int batch, int channels, int spatialSize, float epsilon, float momentum, bool training);
+
+    void BatchNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar, IGpuBuffer gradInput, IGpuBuffer gradGamma, IGpuBuffer gradBeta,
+        int batch, int channels, int spatialSize, float epsilon);
+
+    void LayerNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar, int batchSize, int normalizedSize, float epsilon);
+
+    void LayerNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar, IGpuBuffer gradInput, IGpuBuffer gradGamma, IGpuBuffer gradBeta,
+        int batchSize, int normalizedSize, float epsilon);
+
+    void GroupNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar, int batch, int numGroups, int channels, int spatialSize, float epsilon);
+
+    void InstanceNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar, int batch, int channels, int spatialSize, float epsilon);
+
+    void RmsNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer saveRms,
+        int batchSize, int normalizedSize, float epsilon);
+
+    #endregion
+
+    #region Dropout and Regularization
+
+    void Dropout(IGpuBuffer input, IGpuBuffer output, IGpuBuffer mask, int size, float dropoutRate, ulong seed, bool training);
+    void DropoutBackward(IGpuBuffer gradOutput, IGpuBuffer mask, IGpuBuffer gradInput, int size, float dropoutRate);
+
+    #endregion
+
+    #region Embedding Operations
+
+    void Embedding(IGpuBuffer indices, IGpuBuffer embeddingTable, IGpuBuffer output, int numIndices, int embeddingDim);
+    void EmbeddingBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradEmbedding, int numIndices, int embeddingDim, int vocabSize);
+    IGpuBuffer AllocateIntBuffer(int size);
+    IGpuBuffer AllocateIntBuffer(int[] data);
+
+    #endregion
+
+    #region Attention Operations
+
+    void ScaledDotProductAttention(IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+        IGpuBuffer output, IGpuBuffer? attentionWeights, IGpuBuffer? mask,
+        int batch, int numHeads, int seqLen, int headDim, float scale, bool isCausal);
+
+    void ScaledDotProductAttentionBackward(IGpuBuffer gradOutput, IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+        IGpuBuffer attentionWeights, IGpuBuffer gradQuery, IGpuBuffer gradKey, IGpuBuffer gradValue,
+        int batch, int numHeads, int seqLen, int headDim, float scale, bool isCausal);
+
+    void FlashAttention(IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+        IGpuBuffer output, IGpuBuffer? mask, int batch, int numHeads, int seqLen, int headDim, float scale, bool isCausal);
+
+    #endregion
+
+    #region Transpose and Reshape
+
+    void Transpose(IGpuBuffer A, IGpuBuffer B, int rows, int cols);
+    void BatchedTranspose(IGpuBuffer A, IGpuBuffer B, int batch, int rows, int cols);
+    void Permute(IGpuBuffer input, IGpuBuffer output, int[] shape, int[] permutation);
+    void Copy(IGpuBuffer source, IGpuBuffer destination, int size);
+    void Fill(IGpuBuffer buffer, float value, int size);
+
+    #endregion
+
+    #region Activation Gradients
+
+    void ReluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size);
+    void SigmoidBackward(IGpuBuffer gradOutput, IGpuBuffer output, IGpuBuffer gradInput, int size);
+    void TanhBackward(IGpuBuffer gradOutput, IGpuBuffer output, IGpuBuffer gradInput, int size);
+    void GeluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size);
+    void SoftmaxBackward(IGpuBuffer gradOutput, IGpuBuffer output, IGpuBuffer gradInput, int batchSize, int features);
+    void LeakyRelu(IGpuBuffer A, IGpuBuffer B, float alpha, int size);
+    void LeakyReluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, float alpha, int size);
+    void Elu(IGpuBuffer A, IGpuBuffer B, float alpha, int size);
+    void EluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer output, IGpuBuffer gradInput, float alpha, int size);
+    void Swish(IGpuBuffer A, IGpuBuffer B, int size);
+    void SwishBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size);
+    void Silu(IGpuBuffer A, IGpuBuffer B, int size);
+    void Mish(IGpuBuffer A, IGpuBuffer B, int size);
+    void Softplus(IGpuBuffer A, IGpuBuffer B, int size);
+    void Hardswish(IGpuBuffer A, IGpuBuffer B, int size);
+
+    #endregion
+
+    #region Loss Functions
+
+    float CrossEntropyLoss(IGpuBuffer predictions, IGpuBuffer targets, int batchSize, int numClasses);
+    void CrossEntropyBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int batchSize, int numClasses);
+    float BinaryCrossEntropyLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+    void BinaryCrossEntropyBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+    float MseLoss(IGpuBuffer predictions, IGpuBuffer targets, int size);
+    void MseBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size);
+    float SmoothL1Loss(IGpuBuffer predictions, IGpuBuffer targets, int size, float beta);
+    void SmoothL1Backward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float beta);
+
+    #endregion
+
+    #region Gradient Clipping and Utility
+
+    void Clamp(IGpuBuffer A, IGpuBuffer B, float min, float max, int size);
+    float L2Norm(IGpuBuffer A, int size);
+    void ClipByValue(IGpuBuffer A, IGpuBuffer B, float clipValue, int size);
+    void ClipByNorm(IGpuBuffer A, IGpuBuffer B, float maxNorm, int size);
+    void Fma(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, IGpuBuffer D, int size);
+    void ScatterAdd(IGpuBuffer source, IGpuBuffer indices, IGpuBuffer destination, int sourceSize, int destSize);
+    void Gather(IGpuBuffer source, IGpuBuffer indices, IGpuBuffer output, int numIndices, int featureSize);
+
+    #endregion
+
+    #region Comparison Operations
+
+    void GreaterThan(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size);
+    void LessThan(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size);
+    void Equal(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size);
+    void Where(IGpuBuffer condition, IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size);
+
+    #endregion
+
+    #region Statistics
+
+    void MeanAxis(IGpuBuffer A, IGpuBuffer B, int outerSize, int reduceSize);
+    void VarAxis(IGpuBuffer A, IGpuBuffer mean, IGpuBuffer variance, int outerSize, int reduceSize);
+    void ArgMax(IGpuBuffer A, IGpuBuffer indices, int outerSize, int reduceSize);
+    void ArgMin(IGpuBuffer A, IGpuBuffer indices, int outerSize, int reduceSize);
+
+    #endregion
+
+    #region Optimizer Operations
+
+    void SgdMomentumUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
+        float learningRate, float momentum, float weightDecay, int size);
+
+    void AdamUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size);
+
+    void AdamWUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size);
+
+    #endregion
 }
 
 /// <summary>

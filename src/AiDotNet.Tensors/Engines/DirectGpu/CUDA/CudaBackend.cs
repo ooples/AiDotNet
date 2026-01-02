@@ -919,6 +919,553 @@ public sealed class CudaBackend : IDirectGpuBackend
             throw new ArgumentException("Buffer C is too small for the specified batch dimensions.");
     }
 
+    #region Convolution Operations
+
+    public void Conv2D(IGpuBuffer input, IGpuBuffer kernel, IGpuBuffer output,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW)
+    {
+        throw new NotImplementedException("CUDA Conv2D kernel not yet implemented.");
+    }
+
+    public void Conv2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer kernel, IGpuBuffer gradInput,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW)
+    {
+        throw new NotImplementedException("CUDA Conv2DBackwardInput kernel not yet implemented.");
+    }
+
+    public void Conv2DBackwardKernel(IGpuBuffer input, IGpuBuffer gradOutput, IGpuBuffer gradKernel,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int dilationH, int dilationW)
+    {
+        throw new NotImplementedException("CUDA Conv2DBackwardKernel not yet implemented.");
+    }
+
+    public void Conv3D(IGpuBuffer input, IGpuBuffer kernel, IGpuBuffer output,
+        int batch, int inChannels, int inDepth, int inHeight, int inWidth,
+        int outChannels, int outDepth, int outHeight, int outWidth,
+        int kernelD, int kernelH, int kernelW,
+        int strideD, int strideH, int strideW,
+        int padD, int padH, int padW,
+        int dilationD, int dilationH, int dilationW)
+    {
+        throw new NotImplementedException("CUDA Conv3D kernel not yet implemented.");
+    }
+
+    public void DepthwiseConv2D(IGpuBuffer input, IGpuBuffer kernel, IGpuBuffer output,
+        int batch, int channels, int inHeight, int inWidth,
+        int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW)
+    {
+        throw new NotImplementedException("CUDA DepthwiseConv2D kernel not yet implemented.");
+    }
+
+    public void ConvTranspose2D(IGpuBuffer input, IGpuBuffer kernel, IGpuBuffer output,
+        int batch, int inChannels, int inHeight, int inWidth,
+        int outChannels, int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        int outputPadH, int outputPadW)
+    {
+        throw new NotImplementedException("CUDA ConvTranspose2D kernel not yet implemented.");
+    }
+
+    #endregion
+
+    #region Pooling Operations
+
+    public void MaxPool2D(IGpuBuffer input, IGpuBuffer output, IGpuBuffer? indices,
+        int batch, int channels, int inHeight, int inWidth,
+        int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW)
+    {
+        throw new NotImplementedException("CUDA MaxPool2D kernel not yet implemented.");
+    }
+
+    public void MaxPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput,
+        int batch, int channels, int inHeight, int inWidth,
+        int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW)
+    {
+        throw new NotImplementedException("CUDA MaxPool2DBackward kernel not yet implemented.");
+    }
+
+    public void AvgPool2D(IGpuBuffer input, IGpuBuffer output,
+        int batch, int channels, int inHeight, int inWidth,
+        int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        bool countIncludePad)
+    {
+        throw new NotImplementedException("CUDA AvgPool2D kernel not yet implemented.");
+    }
+
+    public void AvgPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput,
+        int batch, int channels, int inHeight, int inWidth,
+        int outHeight, int outWidth,
+        int kernelH, int kernelW,
+        int strideH, int strideW, int padH, int padW,
+        bool countIncludePad)
+    {
+        throw new NotImplementedException("CUDA AvgPool2DBackward kernel not yet implemented.");
+    }
+
+    public void GlobalAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width)
+    {
+        throw new NotImplementedException("CUDA GlobalAvgPool2D kernel not yet implemented.");
+    }
+
+    public void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width)
+    {
+        throw new NotImplementedException("CUDA GlobalMaxPool2D kernel not yet implemented.");
+    }
+
+    public void AdaptiveAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth)
+    {
+        throw new NotImplementedException("CUDA AdaptiveAvgPool2D kernel not yet implemented.");
+    }
+
+    #endregion
+
+    #region Normalization Operations
+
+    public void BatchNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
+        IGpuBuffer runningMean, IGpuBuffer runningVar, IGpuBuffer saveMean, IGpuBuffer saveInvVar,
+        int batch, int channels, int spatialSize, float epsilon, float momentum, bool training)
+    {
+        throw new NotImplementedException("CUDA BatchNorm kernel not yet implemented.");
+    }
+
+    public void BatchNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar, IGpuBuffer gradInput, IGpuBuffer gradGamma, IGpuBuffer gradBeta,
+        int batch, int channels, int spatialSize, float epsilon)
+    {
+        throw new NotImplementedException("CUDA BatchNormBackward kernel not yet implemented.");
+    }
+
+    public void LayerNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar, int batchSize, int normalizedSize, float epsilon)
+    {
+        throw new NotImplementedException("CUDA LayerNorm kernel not yet implemented.");
+    }
+
+    public void LayerNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar, IGpuBuffer gradInput, IGpuBuffer gradGamma, IGpuBuffer gradBeta,
+        int batchSize, int normalizedSize, float epsilon)
+    {
+        throw new NotImplementedException("CUDA LayerNormBackward kernel not yet implemented.");
+    }
+
+    public void GroupNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar, int batch, int numGroups, int channels, int spatialSize, float epsilon)
+    {
+        throw new NotImplementedException("CUDA GroupNorm kernel not yet implemented.");
+    }
+
+    public void InstanceNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
+        IGpuBuffer saveMean, IGpuBuffer saveInvVar, int batch, int channels, int spatialSize, float epsilon)
+    {
+        throw new NotImplementedException("CUDA InstanceNorm kernel not yet implemented.");
+    }
+
+    public void RmsNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer saveRms,
+        int batchSize, int normalizedSize, float epsilon)
+    {
+        throw new NotImplementedException("CUDA RmsNorm kernel not yet implemented.");
+    }
+
+    #endregion
+
+    #region Dropout Operations
+
+    public void Dropout(IGpuBuffer input, IGpuBuffer output, IGpuBuffer mask, int size, float dropoutRate, ulong seed, bool training)
+    {
+        throw new NotImplementedException("CUDA Dropout kernel not yet implemented.");
+    }
+
+    public void DropoutBackward(IGpuBuffer gradOutput, IGpuBuffer mask, IGpuBuffer gradInput, int size, float dropoutRate)
+    {
+        throw new NotImplementedException("CUDA DropoutBackward kernel not yet implemented.");
+    }
+
+    #endregion
+
+    #region Embedding Operations
+
+    public void Embedding(IGpuBuffer indices, IGpuBuffer embeddingTable, IGpuBuffer output, int numIndices, int embeddingDim)
+    {
+        throw new NotImplementedException("CUDA Embedding kernel not yet implemented.");
+    }
+
+    public void EmbeddingBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradEmbedding, int numIndices, int embeddingDim, int vocabSize)
+    {
+        throw new NotImplementedException("CUDA EmbeddingBackward kernel not yet implemented.");
+    }
+
+    public IGpuBuffer AllocateIntBuffer(int size)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("CUDA backend is not available.");
+
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Buffer size must be positive.");
+
+        using var _ = PushContext();
+        ulong byteSize = (ulong)size * sizeof(int);
+        CuBlasNative.CheckCudaResult(CuBlasNative.cuMemAlloc(out IntPtr devicePtr, byteSize), "cuMemAlloc(int)");
+        CuBlasNative.CheckCudaResult(CuBlasNative.cuMemsetD32(devicePtr, 0, (ulong)size), "cuMemsetD32(int)");
+        return new CudaGpuBuffer(_cudaContext, devicePtr, size);
+    }
+
+    public IGpuBuffer AllocateIntBuffer(int[] data)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("CUDA backend is not available.");
+
+        using var _ = PushContext();
+        int size = data.Length;
+        if (size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(data), "Buffer size must be positive.");
+        ulong byteSize = (ulong)size * sizeof(int);
+
+        CuBlasNative.CheckCudaResult(CuBlasNative.cuMemAlloc(out IntPtr devicePtr, byteSize), "cuMemAlloc(int)");
+
+        try
+        {
+            unsafe
+            {
+                fixed (int* src = data)
+                {
+                    CuBlasNative.CheckCudaResult(
+                        CuBlasNative.cuMemcpyHtoD(devicePtr, (IntPtr)src, byteSize),
+                        "cuMemcpyHtoD(int)");
+                }
+            }
+        }
+        catch
+        {
+            CuBlasNative.cuMemFree(devicePtr);
+            throw;
+        }
+
+        return new CudaGpuBuffer(_cudaContext, devicePtr, size);
+    }
+
+    #endregion
+
+    #region Attention Operations
+
+    public void ScaledDotProductAttention(IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+        IGpuBuffer output, IGpuBuffer? attentionWeights, IGpuBuffer? mask,
+        int batch, int numHeads, int seqLen, int headDim, float scale, bool isCausal)
+    {
+        throw new NotImplementedException("CUDA ScaledDotProductAttention kernel not yet implemented.");
+    }
+
+    public void ScaledDotProductAttentionBackward(IGpuBuffer gradOutput, IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+        IGpuBuffer attentionWeights, IGpuBuffer gradQuery, IGpuBuffer gradKey, IGpuBuffer gradValue,
+        int batch, int numHeads, int seqLen, int headDim, float scale, bool isCausal)
+    {
+        throw new NotImplementedException("CUDA ScaledDotProductAttentionBackward kernel not yet implemented.");
+    }
+
+    public void FlashAttention(IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
+        IGpuBuffer output, IGpuBuffer? mask, int batch, int numHeads, int seqLen, int headDim, float scale, bool isCausal)
+    {
+        throw new NotImplementedException("CUDA FlashAttention kernel not yet implemented.");
+    }
+
+    #endregion
+
+    #region Transpose and Reshape Operations
+
+    public void Transpose(IGpuBuffer A, IGpuBuffer B, int rows, int cols)
+    {
+        throw new NotImplementedException("CUDA Transpose kernel not yet implemented.");
+    }
+
+    public void BatchedTranspose(IGpuBuffer A, IGpuBuffer B, int batch, int rows, int cols)
+    {
+        throw new NotImplementedException("CUDA BatchedTranspose kernel not yet implemented.");
+    }
+
+    public void Permute(IGpuBuffer input, IGpuBuffer output, int[] shape, int[] permutation)
+    {
+        throw new NotImplementedException("CUDA Permute kernel not yet implemented.");
+    }
+
+    public void Copy(IGpuBuffer source, IGpuBuffer destination, int size)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("CUDA backend is not available.");
+
+        using var _ = PushContext();
+        ulong byteSize = (ulong)size * sizeof(float);
+        CuBlasNative.CheckCudaResult(
+            CuBlasNative.cuMemcpyDtoD(destination.Handle, source.Handle, byteSize),
+            "cuMemcpyDtoD");
+    }
+
+    public void Fill(IGpuBuffer buffer, float value, int size)
+    {
+        if (!IsAvailable)
+            throw new InvalidOperationException("CUDA backend is not available.");
+
+        using var _ = PushContext();
+        // cuMemsetD32 sets 32-bit values
+        uint bits = BitConverter.SingleToUInt32Bits(value);
+        CuBlasNative.CheckCudaResult(
+            CuBlasNative.cuMemsetD32(buffer.Handle, bits, (ulong)size),
+            "cuMemsetD32");
+    }
+
+    #endregion
+
+    #region Activation Gradient Operations
+
+    public void ReluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+    {
+        throw new NotImplementedException("CUDA ReluBackward kernel not yet implemented.");
+    }
+
+    public void SigmoidBackward(IGpuBuffer gradOutput, IGpuBuffer output, IGpuBuffer gradInput, int size)
+    {
+        throw new NotImplementedException("CUDA SigmoidBackward kernel not yet implemented.");
+    }
+
+    public void TanhBackward(IGpuBuffer gradOutput, IGpuBuffer output, IGpuBuffer gradInput, int size)
+    {
+        throw new NotImplementedException("CUDA TanhBackward kernel not yet implemented.");
+    }
+
+    public void GeluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+    {
+        throw new NotImplementedException("CUDA GeluBackward kernel not yet implemented.");
+    }
+
+    public void SoftmaxBackward(IGpuBuffer gradOutput, IGpuBuffer output, IGpuBuffer gradInput, int batchSize, int features)
+    {
+        throw new NotImplementedException("CUDA SoftmaxBackward kernel not yet implemented.");
+    }
+
+    public void LeakyRelu(IGpuBuffer A, IGpuBuffer B, float alpha, int size)
+    {
+        throw new NotImplementedException("CUDA LeakyRelu kernel not yet implemented.");
+    }
+
+    public void LeakyReluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, float alpha, int size)
+    {
+        throw new NotImplementedException("CUDA LeakyReluBackward kernel not yet implemented.");
+    }
+
+    public void Elu(IGpuBuffer A, IGpuBuffer B, float alpha, int size)
+    {
+        throw new NotImplementedException("CUDA Elu kernel not yet implemented.");
+    }
+
+    public void EluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer output, IGpuBuffer gradInput, float alpha, int size)
+    {
+        throw new NotImplementedException("CUDA EluBackward kernel not yet implemented.");
+    }
+
+    public void Swish(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        throw new NotImplementedException("CUDA Swish kernel not yet implemented.");
+    }
+
+    public void SwishBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
+    {
+        throw new NotImplementedException("CUDA SwishBackward kernel not yet implemented.");
+    }
+
+    public void Silu(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        throw new NotImplementedException("CUDA Silu kernel not yet implemented.");
+    }
+
+    public void Mish(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        throw new NotImplementedException("CUDA Mish kernel not yet implemented.");
+    }
+
+    public void Softplus(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        throw new NotImplementedException("CUDA Softplus kernel not yet implemented.");
+    }
+
+    public void Hardswish(IGpuBuffer A, IGpuBuffer B, int size)
+    {
+        throw new NotImplementedException("CUDA Hardswish kernel not yet implemented.");
+    }
+
+    #endregion
+
+    #region Loss Function Operations
+
+    public float CrossEntropyLoss(IGpuBuffer predictions, IGpuBuffer targets, int batchSize, int numClasses)
+    {
+        throw new NotImplementedException("CUDA CrossEntropyLoss kernel not yet implemented.");
+    }
+
+    public void CrossEntropyBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int batchSize, int numClasses)
+    {
+        throw new NotImplementedException("CUDA CrossEntropyBackward kernel not yet implemented.");
+    }
+
+    public float BinaryCrossEntropyLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+    {
+        throw new NotImplementedException("CUDA BinaryCrossEntropyLoss kernel not yet implemented.");
+    }
+
+    public void BinaryCrossEntropyBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+    {
+        throw new NotImplementedException("CUDA BinaryCrossEntropyBackward kernel not yet implemented.");
+    }
+
+    public float MseLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
+    {
+        throw new NotImplementedException("CUDA MseLoss kernel not yet implemented.");
+    }
+
+    public void MseBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
+    {
+        throw new NotImplementedException("CUDA MseBackward kernel not yet implemented.");
+    }
+
+    public float SmoothL1Loss(IGpuBuffer predictions, IGpuBuffer targets, int size, float beta)
+    {
+        throw new NotImplementedException("CUDA SmoothL1Loss kernel not yet implemented.");
+    }
+
+    public void SmoothL1Backward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float beta)
+    {
+        throw new NotImplementedException("CUDA SmoothL1Backward kernel not yet implemented.");
+    }
+
+    #endregion
+
+    #region Utility Operations
+
+    public void Clamp(IGpuBuffer A, IGpuBuffer B, float min, float max, int size)
+    {
+        throw new NotImplementedException("CUDA Clamp kernel not yet implemented.");
+    }
+
+    public float L2Norm(IGpuBuffer A, int size)
+    {
+        throw new NotImplementedException("CUDA L2Norm kernel not yet implemented.");
+    }
+
+    public void ClipByValue(IGpuBuffer A, IGpuBuffer B, float clipValue, int size)
+    {
+        throw new NotImplementedException("CUDA ClipByValue kernel not yet implemented.");
+    }
+
+    public void ClipByNorm(IGpuBuffer A, IGpuBuffer B, float maxNorm, int size)
+    {
+        throw new NotImplementedException("CUDA ClipByNorm kernel not yet implemented.");
+    }
+
+    public void Fma(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, IGpuBuffer D, int size)
+    {
+        throw new NotImplementedException("CUDA Fma kernel not yet implemented.");
+    }
+
+    public void ScatterAdd(IGpuBuffer source, IGpuBuffer indices, IGpuBuffer destination, int sourceSize, int destSize)
+    {
+        throw new NotImplementedException("CUDA ScatterAdd kernel not yet implemented.");
+    }
+
+    public void Gather(IGpuBuffer source, IGpuBuffer indices, IGpuBuffer output, int numIndices, int featureSize)
+    {
+        throw new NotImplementedException("CUDA Gather kernel not yet implemented.");
+    }
+
+    #endregion
+
+    #region Comparison Operations
+
+    public void GreaterThan(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+    {
+        throw new NotImplementedException("CUDA GreaterThan kernel not yet implemented.");
+    }
+
+    public void LessThan(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+    {
+        throw new NotImplementedException("CUDA LessThan kernel not yet implemented.");
+    }
+
+    public void Equal(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+    {
+        throw new NotImplementedException("CUDA Equal kernel not yet implemented.");
+    }
+
+    public void Where(IGpuBuffer condition, IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
+    {
+        throw new NotImplementedException("CUDA Where kernel not yet implemented.");
+    }
+
+    #endregion
+
+    #region Statistics Operations
+
+    public void MeanAxis(IGpuBuffer A, IGpuBuffer B, int outerSize, int reduceSize)
+    {
+        throw new NotImplementedException("CUDA MeanAxis kernel not yet implemented.");
+    }
+
+    public void VarAxis(IGpuBuffer A, IGpuBuffer mean, IGpuBuffer variance, int outerSize, int reduceSize)
+    {
+        throw new NotImplementedException("CUDA VarAxis kernel not yet implemented.");
+    }
+
+    public void ArgMax(IGpuBuffer A, IGpuBuffer indices, int outerSize, int reduceSize)
+    {
+        throw new NotImplementedException("CUDA ArgMax kernel not yet implemented.");
+    }
+
+    public void ArgMin(IGpuBuffer A, IGpuBuffer indices, int outerSize, int reduceSize)
+    {
+        throw new NotImplementedException("CUDA ArgMin kernel not yet implemented.");
+    }
+
+    #endregion
+
+    #region Optimizer Operations
+
+    public void SgdMomentumUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
+        float learningRate, float momentum, float weightDecay, int size)
+    {
+        throw new NotImplementedException("CUDA SgdMomentumUpdate kernel not yet implemented.");
+    }
+
+    public void AdamUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+    {
+        throw new NotImplementedException("CUDA AdamUpdate kernel not yet implemented.");
+    }
+
+    public void AdamWUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
+    {
+        throw new NotImplementedException("CUDA AdamWUpdate kernel not yet implemented.");
+    }
+
+    #endregion
+
     public void Dispose()
     {
         if (_disposed)
