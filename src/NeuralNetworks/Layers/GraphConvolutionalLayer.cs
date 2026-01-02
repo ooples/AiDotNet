@@ -165,6 +165,23 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
     private Tensor<T>? _adjForBatch;
 
     /// <summary>
+    /// Edge source node indices for sparse graph representation.
+    /// When set via SetEdges, enables memory-efficient scatter-based aggregation.
+    /// </summary>
+    private Tensor<int>? _edgeSourceIndices;
+
+    /// <summary>
+    /// Edge target node indices for sparse graph representation.
+    /// When set via SetEdges, enables memory-efficient scatter-based aggregation.
+    /// </summary>
+    private Tensor<int>? _edgeTargetIndices;
+
+    /// <summary>
+    /// Indicates whether to use sparse (edge-based) or dense (adjacency matrix) aggregation.
+    /// </summary>
+    private bool _useSparseAggregation = false;
+
+    /// <summary>
     /// Stores the gradients for the weights calculated during the backward pass.
     /// </summary>
     private Tensor<T>? _weightsGradient;
@@ -521,6 +538,57 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
     {
         return _adjacencyMatrix;
     }
+    /// <summary>
+    /// Sets the edge list representation of the graph structure for sparse aggregation.
+    /// </summary>
+    /// <param name="sourceIndices">Tensor containing source node indices for each edge. Shape: [numEdges].</param>
+    /// <param name="targetIndices">Tensor containing target node indices for each edge. Shape: [numEdges].</param>
+    /// <remarks>
+    /// <para>
+    /// This method provides an edge-list representation of the graph, enabling memory-efficient
+    /// sparse aggregation using scatter operations. This is the recommended approach for production
+    /// GNN workloads, especially for large sparse graphs where O(E) complexity is much better than
+    /// O(N^2) dense adjacency matrix operations.
+    /// </para>
+    /// </remarks>
+    public void SetEdges(Tensor<int> sourceIndices, Tensor<int> targetIndices)
+    {
+        if (sourceIndices == null)
+            throw new ArgumentNullException(nameof(sourceIndices));
+
+        if (targetIndices == null)
+            throw new ArgumentNullException(nameof(targetIndices));
+
+        if (sourceIndices.Length != targetIndices.Length)
+            throw new ArgumentException($"Source and target index tensors must have the same length. Got {sourceIndices.Length} and {targetIndices.Length}.");
+
+        _edgeSourceIndices = sourceIndices;
+        _edgeTargetIndices = targetIndices;
+        _useSparseAggregation = true;
+
+        _graphEdges = new List<(int, int)>();
+        for (int i = 0; i < sourceIndices.Length; i++)
+        {
+            _graphEdges.Add((sourceIndices.GetFlat(i), targetIndices.GetFlat(i)));
+        }
+        _edgesExtracted = true;
+    }
+
+    /// <summary>
+    /// Gets whether sparse (edge-based) aggregation is currently enabled.
+    /// </summary>
+    public bool UsesSparseAggregation => _useSparseAggregation;
+
+    /// <summary>
+    /// Clears the edge list and switches back to dense adjacency matrix aggregation.
+    /// </summary>
+    public void ClearEdges()
+    {
+        _edgeSourceIndices = null;
+        _edgeTargetIndices = null;
+        _useSparseAggregation = false;
+    }
+
 
     /// <summary>
     /// Performs the forward pass of the graph convolutional layer.
@@ -549,9 +617,10 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        if (_adjacencyMatrix == null)
+        // Check that either adjacency matrix or edge indices are set
+        if (_adjacencyMatrix == null && !_useSparseAggregation)
         {
-            throw new InvalidOperationException("Adjacency matrix must be set using the SetAdjacencyMatrix method before calling Forward.");
+            throw new InvalidOperationException("Graph structure must be set using SetAdjacencyMatrix or SetEdges before calling Forward.");
         }
 
         // Store original shape for any-rank tensor support
@@ -589,42 +658,93 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         // First: X * W using reshape pattern for 3D @ 2D
         var xw = BatchedMatMul3Dx2D(processInput, _weights, batchSize, numNodes, processInput.Shape[2], outputFeatures);
 
-        // Ensure adjacency matrix has matching rank for batch operation
-        // If adjacency is 2D and xw is 3D, broadcast adjacency to 3D
-        Tensor<T> adjForBatch;
-        if (_adjacencyMatrix.Shape.Length == 2 && xw.Shape.Length == 3)
+        Tensor<T> output;
+
+        if (_useSparseAggregation && _edgeSourceIndices != null && _edgeTargetIndices != null)
         {
-            // Reshape 2D adjacency [nodes, nodes] to 3D [1, nodes, nodes] and broadcast to [batchSize, nodes, nodes]
-            if (batchSize == 1)
+            // Sparse aggregation using scatter operations (production-recommended for large graphs)
+            // For each batch, gather source features and scatter-add to target nodes
+            output = new Tensor<T>([batchSize, numNodes, outputFeatures]);
+            output.Fill(NumOps.Zero);
+
+            int numEdges = _edgeSourceIndices.Length;
+
+            for (int b = 0; b < batchSize; b++)
             {
-                adjForBatch = _adjacencyMatrix.Reshape([1, numNodes, numNodes]);
-            }
-            else
-            {
-                // Broadcast: repeat adjacency matrix for each batch item
-                adjForBatch = new Tensor<T>([batchSize, numNodes, numNodes]);
-                for (int b = 0; b < batchSize; b++)
+                // Gather source node features for all edges: messages[e] = xw[b, src[e], :]
+                var messages = new Tensor<T>([numEdges, outputFeatures]);
+                for (int e = 0; e < numEdges; e++)
                 {
-                    for (int i = 0; i < numNodes; i++)
+                    int srcNode = _edgeSourceIndices.GetFlat(e);
+                    for (int f = 0; f < outputFeatures; f++)
                     {
-                        for (int j = 0; j < numNodes; j++)
+                        messages[e, f] = xw[b, srcNode, f];
+                    }
+                }
+
+                // Scatter-add messages to target nodes
+                var aggregated = Engine.ScatterAdd(messages, _edgeTargetIndices, dim: 0, outputSize: numNodes);
+
+                // Copy to output batch
+                for (int n = 0; n < numNodes; n++)
+                {
+                    for (int f = 0; f < outputFeatures; f++)
+                    {
+                        output[b, n, f] = aggregated[n, f];
+                    }
+                }
+            }
+
+            // Store for backward pass (null for sparse path)
+            _adjForBatch = null;
+        }
+        else
+        {
+            // Dense aggregation using adjacency matrix multiplication
+            if (_adjacencyMatrix == null)
+            {
+                throw new InvalidOperationException(
+                    "Adjacency matrix is required for dense aggregation. " +
+                    "Either call SetAdjacencyMatrix() or use SetEdges() for sparse aggregation.");
+            }
+
+            // Ensure adjacency matrix has matching rank for batch operation
+            // If adjacency is 2D and xw is 3D, broadcast adjacency to 3D
+            Tensor<T> adjForBatch;
+            if (_adjacencyMatrix.Shape.Length == 2 && xw.Shape.Length == 3)
+            {
+                // Reshape 2D adjacency [nodes, nodes] to 3D [1, nodes, nodes] and broadcast to [batchSize, nodes, nodes]
+                if (batchSize == 1)
+                {
+                    adjForBatch = _adjacencyMatrix.Reshape([1, numNodes, numNodes]);
+                }
+                else
+                {
+                    // Broadcast: repeat adjacency matrix for each batch item
+                    adjForBatch = new Tensor<T>([batchSize, numNodes, numNodes]);
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        for (int i = 0; i < numNodes; i++)
                         {
-                            adjForBatch[new int[] { b, i, j }] = _adjacencyMatrix[new int[] { i, j }];
+                            for (int j = 0; j < numNodes; j++)
+                            {
+                                adjForBatch[new int[] { b, i, j }] = _adjacencyMatrix[new int[] { i, j }];
+                            }
                         }
                     }
                 }
             }
-        }
-        else
-        {
-            adjForBatch = _adjacencyMatrix;
-        }
+            else
+            {
+                adjForBatch = _adjacencyMatrix;
+            }
 
-        // Store for backward pass
-        _adjForBatch = adjForBatch;
+            // Store for backward pass
+            _adjForBatch = adjForBatch;
 
-        // Then: A * (X * W) using batched matmul for 3D @ 3D
-        var output = Engine.BatchMatMul(adjForBatch, xw);
+            // Then: A * (X * W) using batched matmul for 3D @ 3D
+            output = Engine.BatchMatMul(adjForBatch, xw);
+        }
 
         // Add bias by broadcasting across batch and node dimensions
         var biasBroadcast = BroadcastBias(_bias, batchSize, numNodes);

@@ -424,23 +424,47 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var K = kProjected.Reshape(batchSize, seqLen, _attentionSize);
         var V = vProjected.Reshape(batchSize, seqLen, _attentionSize);
 
-        // 2. Compute Attention Scores: Q @ K.T
-        // K is [B, S, A]. We need K.T as [B, A, S].
-        var KT = K.Transpose(new[] { 0, 2, 1 });
+        Tensor<T> attentionOutput;
 
-        // [B, S, A] @ [B, A, S] -> [B, S, S]
-        var attentionScores = Engine.BatchMatMul(Q, KT);
+        // Check if we can use the optimized Engine.ScaledDotProductAttention
+        // (only when using default Softmax activation)
+        if (VectorActivation is SoftmaxActivation<T>)
+        {
+            // 2-5. Use Engine.ScaledDotProductAttention for optimized computation
+            // Reshape to 4D by adding head dimension: [B, S, A] -> [B, 1, S, A]
+            var Q4D = Q.Reshape(batchSize, 1, seqLen, _attentionSize);
+            var K4D = K.Reshape(batchSize, 1, seqLen, _attentionSize);
+            var V4D = V.Reshape(batchSize, 1, seqLen, _attentionSize);
 
-        // 3. Scale
-        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(_attentionSize)));
-        attentionScores = Engine.TensorMultiplyScalar(attentionScores, scaleValue);
+            var output4D = Engine.ScaledDotProductAttention(
+                Q4D, K4D, V4D,
+                mask: null,
+                scale: 1.0 / Math.Sqrt(_attentionSize),
+                out var attentionWeights4D);
 
-        // 4. Softmax
-        _lastAttentionWeights = ApplyActivation(attentionScores);
+            // Reshape attention weights back to 3D for caching: [B, 1, S, S] -> [B, S, S]
+            _lastAttentionWeights = attentionWeights4D.Reshape(batchSize, seqLen, seqLen);
 
-        // 5. Output: Weights @ V
-        // [B, S, S] @ [B, S, A] -> [B, S, A]
-        var attentionOutput = Engine.BatchMatMul(_lastAttentionWeights, V);
+            // Reshape output back to 3D: [B, 1, S, A] -> [B, S, A]
+            attentionOutput = output4D.Reshape(batchSize, seqLen, _attentionSize);
+        }
+        else
+        {
+            // Fallback to manual computation for custom activations
+            // 2. Compute Attention Scores: Q @ K.T
+            var KT = K.Transpose(new[] { 0, 2, 1 });
+            var attentionScores = Engine.BatchMatMul(Q, KT);
+
+            // 3. Scale
+            T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(_attentionSize)));
+            attentionScores = Engine.TensorMultiplyScalar(attentionScores, scaleValue);
+
+            // 4. Apply activation (custom, not softmax)
+            _lastAttentionWeights = ApplyActivation(attentionScores);
+
+            // 5. Output: Weights @ V
+            attentionOutput = Engine.BatchMatMul(_lastAttentionWeights, V);
+        }
         _lastAttentionOutput = attentionOutput; // Cache for backward pass
 
         // 6. Output Projection: Apply Wo to project from attentionSize back to inputSize

@@ -9457,6 +9457,436 @@ public class CpuEngine : IEngine
         return gradOutput;
     }
 
+    /// <summary>
+    /// Computes Graph Attention Network (GAT) style attention over graph nodes.
+    /// </summary>
+    public Tensor<T> GraphAttention<T>(
+        Tensor<T> nodeFeatures,
+        Tensor<int> edgeSourceIndices,
+        Tensor<int> edgeTargetIndices,
+        Tensor<T> attentionWeightSource,
+        Tensor<T> attentionWeightTarget,
+        double leakyReluAlpha,
+        out Tensor<T> attentionCoeffs)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batchSize = nodeFeatures.Shape[0];
+        int numNodes = nodeFeatures.Shape[1];
+        int features = nodeFeatures.Shape[2];
+        int numEdges = edgeSourceIndices.Shape[0];
+
+        var nodeData = nodeFeatures.AsSpan();
+        var srcIndices = edgeSourceIndices.AsSpan();
+        var tgtIndices = edgeTargetIndices.AsSpan();
+        var attnSrcData = attentionWeightSource.AsSpan();
+        var attnTgtData = attentionWeightTarget.AsSpan();
+
+        // Output tensors
+        var outputData = new T[batchSize * numNodes * features];
+        var coeffsData = new T[batchSize * numEdges];
+
+        T alpha = numOps.FromDouble(leakyReluAlpha);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int batchOffset = b * numNodes * features;
+
+            // Step 1: Compute attention scores for each edge
+            var edgeScores = new T[numEdges];
+            for (int e = 0; e < numEdges; e++)
+            {
+                int src = srcIndices[e];
+                int tgt = tgtIndices[e];
+
+                // Compute a_src^T @ h_src + a_tgt^T @ h_tgt
+                T score = numOps.Zero;
+                for (int f = 0; f < features; f++)
+                {
+                    T srcFeature = nodeData[batchOffset + src * features + f];
+                    T tgtFeature = nodeData[batchOffset + tgt * features + f];
+                    score = numOps.Add(score, numOps.Multiply(attnSrcData[f], srcFeature));
+                    score = numOps.Add(score, numOps.Multiply(attnTgtData[f], tgtFeature));
+                }
+
+                // Apply LeakyReLU
+                if (numOps.ToDouble(score) < 0)
+                {
+                    score = numOps.Multiply(alpha, score);
+                }
+                edgeScores[e] = score;
+            }
+
+            // Step 2: Compute softmax per target node (normalize over incoming edges)
+            // First, group edges by target node
+            var targetEdges = new System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<int>>();
+            for (int e = 0; e < numEdges; e++)
+            {
+                int tgt = tgtIndices[e];
+                if (!targetEdges.ContainsKey(tgt))
+                    targetEdges[tgt] = new System.Collections.Generic.List<int>();
+                targetEdges[tgt].Add(e);
+            }
+
+            // Softmax per target node
+            var attentionWeights = new T[numEdges];
+            foreach (var kvp in targetEdges)
+            {
+                var edges = kvp.Value;
+
+                // Find max for numerical stability
+                double maxScore = double.MinValue;
+                foreach (int e in edges)
+                {
+                    double s = numOps.ToDouble(edgeScores[e]);
+                    if (s > maxScore) maxScore = s;
+                }
+
+                // Compute exp and sum
+                double expSum = 0.0;
+                var expScores = new double[edges.Count];
+                for (int i = 0; i < edges.Count; i++)
+                {
+                    expScores[i] = Math.Exp(numOps.ToDouble(edgeScores[edges[i]]) - maxScore);
+                    expSum += expScores[i];
+                }
+
+                // Normalize
+                for (int i = 0; i < edges.Count; i++)
+                {
+                    attentionWeights[edges[i]] = numOps.FromDouble(expScores[i] / expSum);
+                }
+            }
+
+            // Store attention coefficients
+            for (int e = 0; e < numEdges; e++)
+            {
+                coeffsData[b * numEdges + e] = attentionWeights[e];
+            }
+
+            // Step 3: Aggregate features using attention weights
+            // h'_i = sum_j alpha_ij * h_j (where j are neighbors of i)
+            for (int e = 0; e < numEdges; e++)
+            {
+                int src = srcIndices[e];
+                int tgt = tgtIndices[e];
+                T weight = attentionWeights[e];
+
+                for (int f = 0; f < features; f++)
+                {
+                    T srcFeature = nodeData[batchOffset + src * features + f];
+                    T contribution = numOps.Multiply(weight, srcFeature);
+                    outputData[batchOffset + tgt * features + f] = numOps.Add(
+                        outputData[batchOffset + tgt * features + f], contribution);
+                }
+            }
+        }
+
+        attentionCoeffs = new Tensor<T>(new[] { batchSize, numEdges }, new Vector<T>(coeffsData));
+        return new Tensor<T>(nodeFeatures.Shape, new Vector<T>(outputData));
+    }
+
+    /// <summary>
+    /// Computes the backward pass for Graph Attention Network attention.
+    /// </summary>
+    public Tensor<T> GraphAttentionBackward<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> nodeFeatures,
+        Tensor<int> edgeSourceIndices,
+        Tensor<int> edgeTargetIndices,
+        Tensor<T> attentionWeightSource,
+        Tensor<T> attentionWeightTarget,
+        Tensor<T> attentionCoeffs,
+        double leakyReluAlpha,
+        out Tensor<T> gradNodeFeatures,
+        out Tensor<T> gradAttentionWeightSource,
+        out Tensor<T> gradAttentionWeightTarget)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batchSize = nodeFeatures.Shape[0];
+        int numNodes = nodeFeatures.Shape[1];
+        int features = nodeFeatures.Shape[2];
+        int numEdges = edgeSourceIndices.Shape[0];
+
+        var nodeData = nodeFeatures.AsSpan();
+        var gradOutData = gradOutput.AsSpan();
+        var srcIndices = edgeSourceIndices.AsSpan();
+        var tgtIndices = edgeTargetIndices.AsSpan();
+        var attnSrcData = attentionWeightSource.AsSpan();
+        var attnTgtData = attentionWeightTarget.AsSpan();
+        var coeffsData = attentionCoeffs.AsSpan();
+
+        T alpha = numOps.FromDouble(leakyReluAlpha);
+
+        var gradNodeData = new T[batchSize * numNodes * features];
+        var gradAttnSrc = new T[features];
+        var gradAttnTgt = new T[features];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int batchOffset = b * numNodes * features;
+            int coeffsOffset = b * numEdges;
+
+            // Group edges by target for softmax backward
+            var targetEdges = new System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<int>>();
+            for (int e = 0; e < numEdges; e++)
+            {
+                int tgt = tgtIndices[e];
+                if (!targetEdges.ContainsKey(tgt))
+                    targetEdges[tgt] = new System.Collections.Generic.List<int>();
+                targetEdges[tgt].Add(e);
+            }
+
+            // Compute gradients for each edge
+            var gradCoeffs = new T[numEdges];
+
+            // Gradient w.r.t. attention coefficients from aggregation
+            // dL/d_alpha_ij = dL/d_h'_tgt @ h_src
+            for (int e = 0; e < numEdges; e++)
+            {
+                int src = srcIndices[e];
+                int tgt = tgtIndices[e];
+
+                T gradCoeff = numOps.Zero;
+                for (int f = 0; f < features; f++)
+                {
+                    T gradOutTgt = gradOutData[batchOffset + tgt * features + f];
+                    T srcFeature = nodeData[batchOffset + src * features + f];
+                    gradCoeff = numOps.Add(gradCoeff, numOps.Multiply(gradOutTgt, srcFeature));
+                }
+                gradCoeffs[e] = gradCoeff;
+            }
+
+            // Gradient w.r.t. node features from aggregation
+            // dL/d_h_src += alpha_ij * dL/d_h'_tgt
+            for (int e = 0; e < numEdges; e++)
+            {
+                int src = srcIndices[e];
+                int tgt = tgtIndices[e];
+                T coeff = coeffsData[coeffsOffset + e];
+
+                for (int f = 0; f < features; f++)
+                {
+                    T gradOutTgt = gradOutData[batchOffset + tgt * features + f];
+                    T contribution = numOps.Multiply(coeff, gradOutTgt);
+                    gradNodeData[batchOffset + src * features + f] = numOps.Add(
+                        gradNodeData[batchOffset + src * features + f], contribution);
+                }
+            }
+
+            // Backprop through softmax per target node
+            foreach (var kvp in targetEdges)
+            {
+                var edges = kvp.Value;
+
+                // Softmax backward: dL/d_score_i = sum_j (alpha_i * (delta_ij - alpha_j)) * dL/d_alpha_j
+                for (int i = 0; i < edges.Count; i++)
+                {
+                    int ei = edges[i];
+                    T alphaI = coeffsData[coeffsOffset + ei];
+                    T gradScore = numOps.Zero;
+
+                    for (int j = 0; j < edges.Count; j++)
+                    {
+                        int ej = edges[j];
+                        T alphaJ = coeffsData[coeffsOffset + ej];
+                        T gradAlphaJ = gradCoeffs[ej];
+
+                        T jacobian = i == j
+                            ? numOps.Multiply(alphaI, numOps.Subtract(numOps.One, alphaJ))
+                            : numOps.Negate(numOps.Multiply(alphaI, alphaJ));
+
+                        gradScore = numOps.Add(gradScore, numOps.Multiply(jacobian, gradAlphaJ));
+                    }
+
+                    // Backprop through LeakyReLU
+                    // Recompute score to check sign
+                    int src = srcIndices[ei];
+                    int tgt = tgtIndices[ei];
+                    T score = numOps.Zero;
+                    for (int f = 0; f < features; f++)
+                    {
+                        T srcFeature = nodeData[batchOffset + src * features + f];
+                        T tgtFeature = nodeData[batchOffset + tgt * features + f];
+                        score = numOps.Add(score, numOps.Multiply(attnSrcData[f], srcFeature));
+                        score = numOps.Add(score, numOps.Multiply(attnTgtData[f], tgtFeature));
+                    }
+
+                    T leakyGrad = numOps.ToDouble(score) < 0 ? alpha : numOps.One;
+                    gradScore = numOps.Multiply(gradScore, leakyGrad);
+
+                    // Gradient w.r.t. attention weights
+                    // dL/d_a_src += dL/d_score * h_src
+                    // dL/d_a_tgt += dL/d_score * h_tgt
+                    for (int f = 0; f < features; f++)
+                    {
+                        T srcFeature = nodeData[batchOffset + src * features + f];
+                        T tgtFeature = nodeData[batchOffset + tgt * features + f];
+
+                        gradAttnSrc[f] = numOps.Add(gradAttnSrc[f], numOps.Multiply(gradScore, srcFeature));
+                        gradAttnTgt[f] = numOps.Add(gradAttnTgt[f], numOps.Multiply(gradScore, tgtFeature));
+
+                        // Gradient w.r.t. node features through attention
+                        T gradSrcFromAttn = numOps.Multiply(gradScore, attnSrcData[f]);
+                        T gradTgtFromAttn = numOps.Multiply(gradScore, attnTgtData[f]);
+
+                        gradNodeData[batchOffset + src * features + f] = numOps.Add(
+                            gradNodeData[batchOffset + src * features + f], gradSrcFromAttn);
+                        gradNodeData[batchOffset + tgt * features + f] = numOps.Add(
+                            gradNodeData[batchOffset + tgt * features + f], gradTgtFromAttn);
+                    }
+                }
+            }
+        }
+
+        gradNodeFeatures = new Tensor<T>(nodeFeatures.Shape, new Vector<T>(gradNodeData));
+        gradAttentionWeightSource = new Tensor<T>(attentionWeightSource.Shape, new Vector<T>(gradAttnSrc));
+        gradAttentionWeightTarget = new Tensor<T>(attentionWeightTarget.Shape, new Vector<T>(gradAttnTgt));
+
+        return gradOutput;
+    }
+
+    /// <summary>
+    /// Computes multi-head Graph Attention with concatenation or averaging of heads.
+    /// </summary>
+    public Tensor<T> MultiHeadGraphAttention<T>(
+        Tensor<T> nodeFeatures,
+        Tensor<int> edgeSourceIndices,
+        Tensor<int> edgeTargetIndices,
+        Tensor<T> headWeights,
+        Tensor<T> attentionWeightsSource,
+        Tensor<T> attentionWeightsTarget,
+        double leakyReluAlpha,
+        bool concatenate,
+        out Tensor<T> attentionCoeffs)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batchSize = nodeFeatures.Shape[0];
+        int numNodes = nodeFeatures.Shape[1];
+        int inFeatures = nodeFeatures.Shape[2];
+        int numHeads = headWeights.Shape[0];
+        int headDim = headWeights.Shape[2];
+        int numEdges = edgeSourceIndices.Shape[0];
+
+        var nodeData = nodeFeatures.AsSpan();
+        var weightData = headWeights.AsSpan();
+        var attnSrcData = attentionWeightsSource.AsSpan();
+        var attnTgtData = attentionWeightsTarget.AsSpan();
+
+        int outFeatures = concatenate ? numHeads * headDim : headDim;
+        var outputData = new T[batchSize * numNodes * outFeatures];
+        var allCoeffsData = new T[batchSize * numHeads * numEdges];
+
+        for (int h = 0; h < numHeads; h++)
+        {
+            // Transform node features for this head: [batch, nodes, in_features] @ W_h -> [batch, nodes, head_dim]
+            var transformedData = new T[batchSize * numNodes * headDim];
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int n = 0; n < numNodes; n++)
+                {
+                    for (int d = 0; d < headDim; d++)
+                    {
+                        T sum = numOps.Zero;
+                        for (int f = 0; f < inFeatures; f++)
+                        {
+                            int nodeIdx = b * numNodes * inFeatures + n * inFeatures + f;
+                            int weightIdx = h * inFeatures * headDim + f * headDim + d;
+                            sum = numOps.Add(sum, numOps.Multiply(nodeData[nodeIdx], weightData[weightIdx]));
+                        }
+                        transformedData[b * numNodes * headDim + n * headDim + d] = sum;
+                    }
+                }
+            }
+
+            // Extract attention weights for this head
+            var headAttnSrc = new T[headDim];
+            var headAttnTgt = new T[headDim];
+            for (int d = 0; d < headDim; d++)
+            {
+                headAttnSrc[d] = attnSrcData[h * headDim + d];
+                headAttnTgt[d] = attnTgtData[h * headDim + d];
+            }
+
+            // Create transformed tensor for this head
+            var transformedTensor = new Tensor<T>(new[] { batchSize, numNodes, headDim }, new Vector<T>(transformedData));
+            var headAttnSrcTensor = new Tensor<T>(new[] { headDim }, new Vector<T>(headAttnSrc));
+            var headAttnTgtTensor = new Tensor<T>(new[] { headDim }, new Vector<T>(headAttnTgt));
+
+            // Apply single-head GAT
+            var headOutput = GraphAttention(
+                transformedTensor,
+                edgeSourceIndices,
+                edgeTargetIndices,
+                headAttnSrcTensor,
+                headAttnTgtTensor,
+                leakyReluAlpha,
+                out var headCoeffs);
+
+            var headOutputData = headOutput.AsSpan();
+            var headCoeffsData = headCoeffs.AsSpan();
+
+            // Store coefficients
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int e = 0; e < numEdges; e++)
+                {
+                    allCoeffsData[b * numHeads * numEdges + h * numEdges + e] = headCoeffsData[b * numEdges + e];
+                }
+            }
+
+            // Combine head outputs
+            if (concatenate)
+            {
+                // Concatenate: place head output at appropriate offset
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int n = 0; n < numNodes; n++)
+                    {
+                        for (int d = 0; d < headDim; d++)
+                        {
+                            int srcIdx = b * numNodes * headDim + n * headDim + d;
+                            int dstIdx = b * numNodes * outFeatures + n * outFeatures + h * headDim + d;
+                            outputData[dstIdx] = headOutputData[srcIdx];
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // Average: accumulate and divide later
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int n = 0; n < numNodes; n++)
+                    {
+                        for (int d = 0; d < headDim; d++)
+                        {
+                            int idx = b * numNodes * headDim + n * headDim + d;
+                            outputData[idx] = numOps.Add(outputData[idx], headOutputData[idx]);
+                        }
+                    }
+                }
+            }
+        }
+
+        // If averaging, divide by number of heads
+        if (!concatenate)
+        {
+            T divisor = numOps.FromDouble(numHeads);
+            for (int i = 0; i < outputData.Length; i++)
+            {
+                outputData[i] = numOps.Divide(outputData[i], divisor);
+            }
+        }
+
+        attentionCoeffs = new Tensor<T>(new[] { batchSize, numHeads, numEdges }, new Vector<T>(allCoeffsData));
+        return new Tensor<T>(new[] { batchSize, numNodes, outFeatures }, new Vector<T>(outputData));
+    }
+
+
     #endregion
 
     #region Scatter Operations (Graph Neural Networks)

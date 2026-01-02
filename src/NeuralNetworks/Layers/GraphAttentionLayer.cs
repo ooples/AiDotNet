@@ -60,6 +60,21 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private Tensor<T>? _adjacencyMatrix;
 
     /// <summary>
+    /// Edge source node indices for sparse graph representation.
+    /// </summary>
+    private Tensor<int>? _edgeSourceIndices;
+
+    /// <summary>
+    /// Edge target node indices for sparse graph representation.
+    /// </summary>
+    private Tensor<int>? _edgeTargetIndices;
+
+    /// <summary>
+    /// Indicates whether to use sparse (edge-based) or dense (adjacency matrix) aggregation.
+    /// </summary>
+    private bool _useSparseAggregation = false;
+
+    /// <summary>
     /// Cached input from forward pass for backward computation.
     /// </summary>
     private Tensor<T>? _lastInput;
@@ -198,13 +213,57 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         return _adjacencyMatrix;
     }
 
+    /// <summary>
+    /// Sets the edge list representation of the graph structure for sparse aggregation.
+    /// </summary>
+    /// <param name="sourceIndices">Tensor containing source node indices for each edge. Shape: [numEdges].</param>
+    /// <param name="targetIndices">Tensor containing target node indices for each edge. Shape: [numEdges].</param>
+    /// <remarks>
+    /// <para>
+    /// This method provides an edge-list representation of the graph, enabling memory-efficient
+    /// sparse attention computation using the Engine's GraphAttention operations. This is the
+    /// recommended approach for production GAT workloads with large sparse graphs.
+    /// </para>
+    /// </remarks>
+    public void SetEdges(Tensor<int> sourceIndices, Tensor<int> targetIndices)
+    {
+        if (sourceIndices == null)
+            throw new ArgumentNullException(nameof(sourceIndices));
+
+        if (targetIndices == null)
+            throw new ArgumentNullException(nameof(targetIndices));
+
+        if (sourceIndices.Length != targetIndices.Length)
+            throw new ArgumentException($"Source and target index tensors must have the same length. Got {sourceIndices.Length} and {targetIndices.Length}.");
+
+        _edgeSourceIndices = sourceIndices;
+        _edgeTargetIndices = targetIndices;
+        _useSparseAggregation = true;
+    }
+
+    /// <summary>
+    /// Gets whether sparse (edge-based) aggregation is currently enabled.
+    /// </summary>
+    public bool UsesSparseAggregation => _useSparseAggregation;
+
+    /// <summary>
+    /// Clears the edge list and switches back to dense adjacency matrix aggregation.
+    /// </summary>
+    public void ClearEdges()
+    {
+        _edgeSourceIndices = null;
+        _edgeTargetIndices = null;
+        _useSparseAggregation = false;
+    }
+
     /// <inheritdoc/>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        if (_adjacencyMatrix == null)
+        // Check that either adjacency matrix or edge indices are set
+        if (_adjacencyMatrix == null && !_useSparseAggregation)
         {
             throw new InvalidOperationException(
-                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Forward.");
+                "Graph structure must be set using SetAdjacencyMatrix or SetEdges before calling Forward.");
         }
 
         // Store original shape for any-rank tensor support
@@ -243,6 +302,97 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         _lastInput = processInput;
 
+        Tensor<T> output;
+        Tensor<T> activatedOutput;
+
+        if (_useSparseAggregation && _edgeSourceIndices != null && _edgeTargetIndices != null)
+        {
+            // Sparse aggregation using Engine.MultiHeadGraphAttention (production-recommended)
+            // Prepare attention weight tensors for the engine operation
+            var attnWeightsSource = new Tensor<T>([_numHeads, _outputFeatures]);
+            var attnWeightsTarget = new Tensor<T>([_numHeads, _outputFeatures]);
+            for (int h = 0; h < _numHeads; h++)
+            {
+                for (int f = 0; f < _outputFeatures; f++)
+                {
+                    attnWeightsSource[h, f] = _attentionWeights[h, f];
+                    attnWeightsTarget[h, f] = _attentionWeights[h, _outputFeatures + f];
+                }
+            }
+
+            output = new Tensor<T>([batchSize, numNodes, _outputFeatures]);
+            output.Fill(NumOps.Zero);
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                // Extract batch features [numNodes, inputFeatures]
+                var batchFeatures = new Tensor<T>([numNodes, _inputFeatures]);
+                for (int n = 0; n < numNodes; n++)
+                {
+                    for (int f = 0; f < _inputFeatures; f++)
+                    {
+                        batchFeatures[n, f] = processInput[b, n, f];
+                    }
+                }
+
+                // Call Engine.MultiHeadGraphAttention
+                var batchOutput = Engine.MultiHeadGraphAttention(
+                    batchFeatures,
+                    _edgeSourceIndices,
+                    _edgeTargetIndices,
+                    _weights,
+                    attnWeightsSource,
+                    attnWeightsTarget,
+                    NumOps.ToDouble(_alpha),
+                    concatenate: false,  // Average heads
+                    out var batchAttnCoeffs);
+
+                // Add bias and copy to output
+                for (int n = 0; n < numNodes; n++)
+                {
+                    for (int f = 0; f < _outputFeatures; f++)
+                    {
+                        output[b, n, f] = NumOps.Add(batchOutput[n, f], _bias[f]);
+                    }
+                }
+            }
+
+            // Store cached values for backward pass
+            _lastTransformed = null;
+            _lastPreSoftmaxScores = null;
+            _lastAttentionCoefficients = null;
+            _lastHeadOutputs = null;
+
+            activatedOutput = ApplyActivation(output);
+
+            // Reshape output to match original input rank
+            if (rank == 1)
+            {
+                _lastOutput = activatedOutput.Reshape([_outputFeatures]);
+            }
+            else if (rank == 2)
+            {
+                _lastOutput = activatedOutput.Reshape([numNodes, _outputFeatures]);
+            }
+            else
+            {
+                if (_originalInputShape == null)
+                {
+                    throw new InvalidOperationException("Original input shape was not captured.");
+                }
+                var originalShape = _originalInputShape;
+                var outputShape = new int[rank];
+                for (int d = 0; d < rank - 2; d++)
+                    outputShape[d] = originalShape[d];
+                outputShape[rank - 2] = numNodes;
+                outputShape[rank - 1] = _outputFeatures;
+                _lastOutput = activatedOutput.Reshape(outputShape);
+            }
+
+            return _lastOutput;
+        }
+
+        // Dense aggregation path (original implementation)
         // Step 1: Transform input for each head using Engine operations
         // transformed[b,h,n,f] = sum_i(input[b,n,i] * weights[h,i,f])
         _lastTransformed = new Tensor<T>([batchSize, _numHeads, numNodes, _outputFeatures]);
@@ -355,7 +505,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // Step 5: Average across heads and add bias
-        var output = new Tensor<T>([batchSize, numNodes, _outputFeatures]);
+        output = new Tensor<T>([batchSize, numNodes, _outputFeatures]);
         T numHeadsT = NumOps.FromDouble(_numHeads);
 
         for (int b = 0; b < batchSize; b++)
@@ -374,7 +524,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             }
         }
 
-        var activatedOutput = ApplyActivation(output);
+        activatedOutput = ApplyActivation(output);
 
         // Reshape output to match original input rank
         if (rank == 1)

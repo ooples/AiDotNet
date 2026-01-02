@@ -3459,6 +3459,95 @@ public interface IEngine
         out Tensor<T> gradKey,
         out Tensor<T> gradValue);
 
+    /// <summary>
+    /// Computes Graph Attention Network (GAT) style attention over graph nodes.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="nodeFeatures">Node feature tensor with shape [batch, nodes, features].</param>
+    /// <param name="edgeSourceIndices">Source node indices for each edge with shape [num_edges].</param>
+    /// <param name="edgeTargetIndices">Target node indices for each edge with shape [num_edges].</param>
+    /// <param name="attentionWeightSource">Attention weight vector for source nodes [features].</param>
+    /// <param name="attentionWeightTarget">Attention weight vector for target nodes [features].</param>
+    /// <param name="leakyReluAlpha">Negative slope for LeakyReLU activation (typically 0.2).</param>
+    /// <param name="attentionCoeffs">Output: attention coefficients for each edge [batch, num_edges].</param>
+    /// <returns>The aggregated node features with shape [batch, nodes, features].</returns>
+    /// <remarks>
+    /// <para>
+    /// Implements the GAT attention mechanism from Veličković et al.:
+    /// α_ij = softmax_j(LeakyReLU(a_src^T @ h_i + a_tgt^T @ h_j))
+    /// h'_i = Σ_j α_ij @ h_j
+    /// </para>
+    /// <para><b>Key differences from scaled dot-product attention:</b></para>
+    /// <list type="bullet">
+    /// <item><description>Uses additive attention with learnable vectors instead of dot-product</description></item>
+    /// <item><description>Applies LeakyReLU before softmax for non-linearity</description></item>
+    /// <item><description>Operates on graph structure defined by edge indices</description></item>
+    /// <item><description>Softmax is computed per-node over its neighbors only</description></item>
+    /// </list>
+    /// </remarks>
+    Tensor<T> GraphAttention<T>(
+        Tensor<T> nodeFeatures,
+        Tensor<int> edgeSourceIndices,
+        Tensor<int> edgeTargetIndices,
+        Tensor<T> attentionWeightSource,
+        Tensor<T> attentionWeightTarget,
+        double leakyReluAlpha,
+        out Tensor<T> attentionCoeffs);
+
+    /// <summary>
+    /// Computes the backward pass for Graph Attention Network attention.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">Gradient from the next layer with shape [batch, nodes, features].</param>
+    /// <param name="nodeFeatures">Original node features from forward pass.</param>
+    /// <param name="edgeSourceIndices">Source node indices for each edge.</param>
+    /// <param name="edgeTargetIndices">Target node indices for each edge.</param>
+    /// <param name="attentionWeightSource">Attention weight vector for source nodes.</param>
+    /// <param name="attentionWeightTarget">Attention weight vector for target nodes.</param>
+    /// <param name="attentionCoeffs">Attention coefficients from forward pass.</param>
+    /// <param name="leakyReluAlpha">Negative slope for LeakyReLU.</param>
+    /// <param name="gradNodeFeatures">Output: gradient with respect to node features.</param>
+    /// <param name="gradAttentionWeightSource">Output: gradient with respect to source attention weights.</param>
+    /// <param name="gradAttentionWeightTarget">Output: gradient with respect to target attention weights.</param>
+    /// <returns>The gradient with respect to the output (same as gradOutput for chaining).</returns>
+    Tensor<T> GraphAttentionBackward<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> nodeFeatures,
+        Tensor<int> edgeSourceIndices,
+        Tensor<int> edgeTargetIndices,
+        Tensor<T> attentionWeightSource,
+        Tensor<T> attentionWeightTarget,
+        Tensor<T> attentionCoeffs,
+        double leakyReluAlpha,
+        out Tensor<T> gradNodeFeatures,
+        out Tensor<T> gradAttentionWeightSource,
+        out Tensor<T> gradAttentionWeightTarget);
+
+    /// <summary>
+    /// Computes multi-head Graph Attention with concatenation or averaging of heads.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="nodeFeatures">Node feature tensor with shape [batch, nodes, features].</param>
+    /// <param name="edgeSourceIndices">Source node indices for each edge.</param>
+    /// <param name="edgeTargetIndices">Target node indices for each edge.</param>
+    /// <param name="headWeights">Weight tensor for all heads [num_heads, features, head_dim].</param>
+    /// <param name="attentionWeightsSource">Attention weights for source [num_heads, head_dim].</param>
+    /// <param name="attentionWeightsTarget">Attention weights for target [num_heads, head_dim].</param>
+    /// <param name="leakyReluAlpha">Negative slope for LeakyReLU.</param>
+    /// <param name="concatenate">If true, concatenate heads; if false, average them.</param>
+    /// <param name="attentionCoeffs">Output: attention coefficients [batch, num_heads, num_edges].</param>
+    /// <returns>Output features [batch, nodes, num_heads * head_dim] if concat, else [batch, nodes, head_dim].</returns>
+    Tensor<T> MultiHeadGraphAttention<T>(
+        Tensor<T> nodeFeatures,
+        Tensor<int> edgeSourceIndices,
+        Tensor<int> edgeTargetIndices,
+        Tensor<T> headWeights,
+        Tensor<T> attentionWeightsSource,
+        Tensor<T> attentionWeightsTarget,
+        double leakyReluAlpha,
+        bool concatenate,
+        out Tensor<T> attentionCoeffs);
+
     #endregion
 
     #region Normalization Operations
