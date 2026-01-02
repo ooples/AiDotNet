@@ -235,6 +235,51 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 {
                     _kernelCache[name] = new DirectOpenClKernel(_context, sparseProgram, name);
                 }
+                Console.WriteLine($"[OpenClBackend] Sparse GEMM kernels: {string.Join(", ", SparseGemmKernels.GetKernelNames())}");
+
+                // Compile convolution kernels
+                Console.WriteLine("[OpenClBackend] Compiling convolution kernels...");
+                var convProgram = new DirectOpenClProgram(_context, ConvolutionKernels.GetSource());
+                convProgram.Build(optimizationFlags);
+                _programs.Add(convProgram);
+                foreach (var name in ConvolutionKernels.GetKernelNames())
+                {
+                    _kernelCache[name] = new DirectOpenClKernel(_context, convProgram, name);
+                }
+                Console.WriteLine($"[OpenClBackend] Convolution kernels: {string.Join(", ", ConvolutionKernels.GetKernelNames())}");
+
+                // Compile pooling kernels
+                Console.WriteLine("[OpenClBackend] Compiling pooling kernels...");
+                var poolProgram = new DirectOpenClProgram(_context, PoolingKernels.GetSource());
+                poolProgram.Build(optimizationFlags);
+                _programs.Add(poolProgram);
+                foreach (var name in PoolingKernels.GetKernelNames())
+                {
+                    _kernelCache[name] = new DirectOpenClKernel(_context, poolProgram, name);
+                }
+                Console.WriteLine($"[OpenClBackend] Pooling kernels: {string.Join(", ", PoolingKernels.GetKernelNames())}");
+
+                // Compile normalization kernels
+                Console.WriteLine("[OpenClBackend] Compiling normalization kernels...");
+                var normProgram = new DirectOpenClProgram(_context, NormalizationKernels.GetSource());
+                normProgram.Build(optimizationFlags);
+                _programs.Add(normProgram);
+                foreach (var name in NormalizationKernels.GetKernelNames())
+                {
+                    _kernelCache[name] = new DirectOpenClKernel(_context, normProgram, name);
+                }
+                Console.WriteLine($"[OpenClBackend] Normalization kernels: {string.Join(", ", NormalizationKernels.GetKernelNames())}");
+
+                // Compile neural network kernels (activation gradients, loss, optimizers)
+                Console.WriteLine("[OpenClBackend] Compiling neural network kernels...");
+                var nnProgram = new DirectOpenClProgram(_context, NeuralNetKernels.GetSource());
+                nnProgram.Build(optimizationFlags);
+                _programs.Add(nnProgram);
+                foreach (var name in NeuralNetKernels.GetKernelNames())
+                {
+                    _kernelCache[name] = new DirectOpenClKernel(_context, nnProgram, name);
+                }
+                Console.WriteLine($"[OpenClBackend] Neural network kernels compiled: {NeuralNetKernels.GetKernelNames().Length} kernels");
             }
             catch (Exception ex)
             {
@@ -3872,7 +3917,30 @@ KERNEL VARIANTS (A/B testing):
             int strideH, int strideW, int padH, int padW,
             int dilationH, int dilationW)
         {
-            throw new NotImplementedException("OpenCL Conv2D kernel not yet implemented.");
+            var k = _kernelCache["conv2d_direct"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)kernel).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, inChannels);
+            k.SetArg(arg++, inHeight);
+            k.SetArg(arg++, inWidth);
+            k.SetArg(arg++, outChannels);
+            k.SetArg(arg++, outHeight);
+            k.SetArg(arg++, outWidth);
+            k.SetArg(arg++, kernelH);
+            k.SetArg(arg++, kernelW);
+            k.SetArg(arg++, strideH);
+            k.SetArg(arg++, strideW);
+            k.SetArg(arg++, padH);
+            k.SetArg(arg++, padW);
+            k.SetArg(arg++, dilationH);
+            k.SetArg(arg++, dilationW);
+
+            // Work distribution: (outWidth, outHeight, batch * outChannels)
+            int localX = 8, localY = 8, localZ = 1;
+            k.Execute3D(outWidth, outHeight, batch * outChannels, localX, localY, localZ);
         }
 
         public void Conv2DBackwardInput(IGpuBuffer gradOutput, IGpuBuffer kernel, IGpuBuffer gradInput,
@@ -3882,7 +3950,30 @@ KERNEL VARIANTS (A/B testing):
             int strideH, int strideW, int padH, int padW,
             int dilationH, int dilationW)
         {
-            throw new NotImplementedException("OpenCL Conv2DBackwardInput kernel not yet implemented.");
+            var k = _kernelCache["conv2d_backward_input"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)kernel).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, inChannels);
+            k.SetArg(arg++, inHeight);
+            k.SetArg(arg++, inWidth);
+            k.SetArg(arg++, outChannels);
+            k.SetArg(arg++, outHeight);
+            k.SetArg(arg++, outWidth);
+            k.SetArg(arg++, kernelH);
+            k.SetArg(arg++, kernelW);
+            k.SetArg(arg++, strideH);
+            k.SetArg(arg++, strideW);
+            k.SetArg(arg++, padH);
+            k.SetArg(arg++, padW);
+            k.SetArg(arg++, dilationH);
+            k.SetArg(arg++, dilationW);
+
+            // Work distribution: (inWidth, inHeight, batch * inChannels)
+            int localX = 8, localY = 8, localZ = 1;
+            k.Execute3D(inWidth, inHeight, batch * inChannels, localX, localY, localZ);
         }
 
         public void Conv2DBackwardKernel(IGpuBuffer input, IGpuBuffer gradOutput, IGpuBuffer gradKernel,
@@ -3892,7 +3983,32 @@ KERNEL VARIANTS (A/B testing):
             int strideH, int strideW, int padH, int padW,
             int dilationH, int dilationW)
         {
-            throw new NotImplementedException("OpenCL Conv2DBackwardKernel kernel not yet implemented.");
+            var k = _kernelCache["conv2d_backward_kernel"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradKernel).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, inChannels);
+            k.SetArg(arg++, inHeight);
+            k.SetArg(arg++, inWidth);
+            k.SetArg(arg++, outChannels);
+            k.SetArg(arg++, outHeight);
+            k.SetArg(arg++, outWidth);
+            k.SetArg(arg++, kernelH);
+            k.SetArg(arg++, kernelW);
+            k.SetArg(arg++, strideH);
+            k.SetArg(arg++, strideW);
+            k.SetArg(arg++, padH);
+            k.SetArg(arg++, padW);
+            k.SetArg(arg++, dilationH);
+            k.SetArg(arg++, dilationW);
+
+            // Work distribution: (kernelW, kernelH, outChannels * inChannels)
+            int localX = Math.Min(8, kernelW);
+            int localY = Math.Min(8, kernelH);
+            int localZ = 1;
+            k.Execute3D(kernelW, kernelH, outChannels * inChannels, localX, localY, localZ);
         }
 
         public void Conv3D(IGpuBuffer input, IGpuBuffer kernel, IGpuBuffer output,
@@ -3903,7 +4019,36 @@ KERNEL VARIANTS (A/B testing):
             int padD, int padH, int padW,
             int dilationD, int dilationH, int dilationW)
         {
-            throw new NotImplementedException("OpenCL Conv3D kernel not yet implemented.");
+            var k = _kernelCache["conv3d_direct"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)kernel).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, inChannels);
+            k.SetArg(arg++, inDepth);
+            k.SetArg(arg++, inHeight);
+            k.SetArg(arg++, inWidth);
+            k.SetArg(arg++, outChannels);
+            k.SetArg(arg++, outDepth);
+            k.SetArg(arg++, outHeight);
+            k.SetArg(arg++, outWidth);
+            k.SetArg(arg++, kernelD);
+            k.SetArg(arg++, kernelH);
+            k.SetArg(arg++, kernelW);
+            k.SetArg(arg++, strideD);
+            k.SetArg(arg++, strideH);
+            k.SetArg(arg++, strideW);
+            k.SetArg(arg++, padD);
+            k.SetArg(arg++, padH);
+            k.SetArg(arg++, padW);
+            k.SetArg(arg++, dilationD);
+            k.SetArg(arg++, dilationH);
+            k.SetArg(arg++, dilationW);
+
+            // Work distribution: (outWidth, outDepth * outHeight, batch * outChannels)
+            int localX = 8, localY = 4, localZ = 1;
+            k.Execute3D(outWidth, outDepth * outHeight, batch * outChannels, localX, localY, localZ);
         }
 
         public void DepthwiseConv2D(IGpuBuffer input, IGpuBuffer kernel, IGpuBuffer output,
@@ -3912,7 +4057,26 @@ KERNEL VARIANTS (A/B testing):
             int kernelH, int kernelW,
             int strideH, int strideW, int padH, int padW)
         {
-            throw new NotImplementedException("OpenCL DepthwiseConv2D kernel not yet implemented.");
+            var k = _kernelCache["depthwise_conv2d"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)kernel).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, channels);
+            k.SetArg(arg++, inHeight);
+            k.SetArg(arg++, inWidth);
+            k.SetArg(arg++, outHeight);
+            k.SetArg(arg++, outWidth);
+            k.SetArg(arg++, kernelH);
+            k.SetArg(arg++, kernelW);
+            k.SetArg(arg++, strideH);
+            k.SetArg(arg++, strideW);
+            k.SetArg(arg++, padH);
+            k.SetArg(arg++, padW);
+
+            int localX = 8, localY = 8, localZ = 1;
+            k.Execute3D(outWidth, outHeight, batch * channels, localX, localY, localZ);
         }
 
         public void ConvTranspose2D(IGpuBuffer input, IGpuBuffer kernel, IGpuBuffer output,
@@ -3922,7 +4086,27 @@ KERNEL VARIANTS (A/B testing):
             int strideH, int strideW, int padH, int padW,
             int outputPadH, int outputPadW)
         {
-            throw new NotImplementedException("OpenCL ConvTranspose2D kernel not yet implemented.");
+            var k = _kernelCache["conv_transpose2d"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)kernel).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, inChannels);
+            k.SetArg(arg++, inHeight);
+            k.SetArg(arg++, inWidth);
+            k.SetArg(arg++, outChannels);
+            k.SetArg(arg++, outHeight);
+            k.SetArg(arg++, outWidth);
+            k.SetArg(arg++, kernelH);
+            k.SetArg(arg++, kernelW);
+            k.SetArg(arg++, strideH);
+            k.SetArg(arg++, strideW);
+            k.SetArg(arg++, padH);
+            k.SetArg(arg++, padW);
+
+            int localX = 8, localY = 8, localZ = 1;
+            k.Execute3D(outWidth, outHeight, batch * outChannels, localX, localY, localZ);
         }
 
         #endregion
@@ -3935,7 +4119,27 @@ KERNEL VARIANTS (A/B testing):
             int kernelH, int kernelW,
             int strideH, int strideW, int padH, int padW)
         {
-            throw new NotImplementedException("OpenCL MaxPool2D kernel not yet implemented.");
+            var k = _kernelCache["maxpool2d"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, indices != null ? ((DirectOpenClGpuBuffer)indices).Buffer.Handle : IntPtr.Zero);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, channels);
+            k.SetArg(arg++, inHeight);
+            k.SetArg(arg++, inWidth);
+            k.SetArg(arg++, outHeight);
+            k.SetArg(arg++, outWidth);
+            k.SetArg(arg++, kernelH);
+            k.SetArg(arg++, kernelW);
+            k.SetArg(arg++, strideH);
+            k.SetArg(arg++, strideW);
+            k.SetArg(arg++, padH);
+            k.SetArg(arg++, padW);
+            k.SetArg(arg++, indices != null ? 1 : 0);
+
+            int localX = 8, localY = 8, localZ = 1;
+            k.Execute3D(outWidth, outHeight, batch * channels, localX, localY, localZ);
         }
 
         public void MaxPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradInput,
@@ -3944,7 +4148,20 @@ KERNEL VARIANTS (A/B testing):
             int kernelH, int kernelW,
             int strideH, int strideW, int padH, int padW)
         {
-            throw new NotImplementedException("OpenCL MaxPool2DBackward kernel not yet implemented.");
+            var k = _kernelCache["maxpool2d_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)indices).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, channels);
+            k.SetArg(arg++, inHeight);
+            k.SetArg(arg++, inWidth);
+            k.SetArg(arg++, outHeight);
+            k.SetArg(arg++, outWidth);
+
+            int localX = 8, localY = 8, localZ = 1;
+            k.Execute3D(outWidth, outHeight, batch * channels, localX, localY, localZ);
         }
 
         public void AvgPool2D(IGpuBuffer input, IGpuBuffer output,
@@ -3954,7 +4171,26 @@ KERNEL VARIANTS (A/B testing):
             int strideH, int strideW, int padH, int padW,
             bool countIncludePad)
         {
-            throw new NotImplementedException("OpenCL AvgPool2D kernel not yet implemented.");
+            var k = _kernelCache["avgpool2d"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, channels);
+            k.SetArg(arg++, inHeight);
+            k.SetArg(arg++, inWidth);
+            k.SetArg(arg++, outHeight);
+            k.SetArg(arg++, outWidth);
+            k.SetArg(arg++, kernelH);
+            k.SetArg(arg++, kernelW);
+            k.SetArg(arg++, strideH);
+            k.SetArg(arg++, strideW);
+            k.SetArg(arg++, padH);
+            k.SetArg(arg++, padW);
+            k.SetArg(arg++, countIncludePad ? 1 : 0);
+
+            int localX = 8, localY = 8, localZ = 1;
+            k.Execute3D(outWidth, outHeight, batch * channels, localX, localY, localZ);
         }
 
         public void AvgPool2DBackward(IGpuBuffer gradOutput, IGpuBuffer gradInput,
@@ -3964,22 +4200,71 @@ KERNEL VARIANTS (A/B testing):
             int strideH, int strideW, int padH, int padW,
             bool countIncludePad)
         {
-            throw new NotImplementedException("OpenCL AvgPool2DBackward kernel not yet implemented.");
+            var k = _kernelCache["avgpool2d_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, channels);
+            k.SetArg(arg++, inHeight);
+            k.SetArg(arg++, inWidth);
+            k.SetArg(arg++, outHeight);
+            k.SetArg(arg++, outWidth);
+            k.SetArg(arg++, kernelH);
+            k.SetArg(arg++, kernelW);
+            k.SetArg(arg++, strideH);
+            k.SetArg(arg++, strideW);
+            k.SetArg(arg++, padH);
+            k.SetArg(arg++, padW);
+            k.SetArg(arg++, countIncludePad ? 1 : 0);
+
+            int localX = 8, localY = 8, localZ = 1;
+            k.Execute3D(inWidth, inHeight, batch * channels, localX, localY, localZ);
         }
 
         public void GlobalAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width)
         {
-            throw new NotImplementedException("OpenCL GlobalAvgPool2D kernel not yet implemented.");
+            var k = _kernelCache["global_avgpool2d"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, channels);
+            k.SetArg(arg++, height);
+            k.SetArg(arg++, width);
+
+            k.Execute1D(batch * channels, Math.Min(64, batch * channels));
         }
 
         public void GlobalMaxPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int height, int width)
         {
-            throw new NotImplementedException("OpenCL GlobalMaxPool2D kernel not yet implemented.");
+            var k = _kernelCache["global_maxpool2d"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, channels);
+            k.SetArg(arg++, height);
+            k.SetArg(arg++, width);
+
+            k.Execute1D(batch * channels, Math.Min(64, batch * channels));
         }
 
         public void AdaptiveAvgPool2D(IGpuBuffer input, IGpuBuffer output, int batch, int channels, int inHeight, int inWidth, int outHeight, int outWidth)
         {
-            throw new NotImplementedException("OpenCL AdaptiveAvgPool2D kernel not yet implemented.");
+            var k = _kernelCache["adaptive_avgpool2d"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, channels);
+            k.SetArg(arg++, inHeight);
+            k.SetArg(arg++, inWidth);
+            k.SetArg(arg++, outHeight);
+            k.SetArg(arg++, outWidth);
+
+            int localX = 8, localY = 8, localZ = 1;
+            k.Execute3D(outWidth, outHeight, batch * channels, localX, localY, localZ);
         }
 
         #endregion
@@ -3990,45 +4275,155 @@ KERNEL VARIANTS (A/B testing):
             IGpuBuffer runningMean, IGpuBuffer runningVar, IGpuBuffer saveMean, IGpuBuffer saveInvVar,
             int batch, int channels, int spatialSize, float epsilon, float momentum, bool training)
         {
-            throw new NotImplementedException("OpenCL BatchNorm kernel not yet implemented.");
+            var k = _kernelCache["batchnorm_forward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gamma).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)beta).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)runningMean).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)runningVar).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)saveMean).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)saveInvVar).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, channels);
+            k.SetArg(arg++, spatialSize);
+            k.SetArg(arg++, epsilon);
+            k.SetArg(arg++, momentum);
+            k.SetArg(arg++, training ? 1 : 0);
+
+            k.Execute1D(channels, Math.Min(64, channels));
         }
 
         public void BatchNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma,
             IGpuBuffer saveMean, IGpuBuffer saveInvVar, IGpuBuffer gradInput, IGpuBuffer gradGamma, IGpuBuffer gradBeta,
             int batch, int channels, int spatialSize, float epsilon)
         {
-            throw new NotImplementedException("OpenCL BatchNormBackward kernel not yet implemented.");
+            var k = _kernelCache["batchnorm_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gamma).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)saveMean).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)saveInvVar).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradGamma).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradBeta).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, channels);
+            k.SetArg(arg++, spatialSize);
+            k.SetArg(arg++, epsilon);
+
+            k.Execute1D(channels, Math.Min(64, channels));
         }
 
         public void LayerNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
             IGpuBuffer saveMean, IGpuBuffer saveInvVar, int batchSize, int normalizedSize, float epsilon)
         {
-            throw new NotImplementedException("OpenCL LayerNorm kernel not yet implemented.");
+            var k = _kernelCache["layernorm_forward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gamma).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)beta).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)saveMean).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)saveInvVar).Buffer.Handle);
+            k.SetArg(arg++, batchSize);
+            k.SetArg(arg++, normalizedSize);
+            k.SetArg(arg++, epsilon);
+
+            k.Execute1D(batchSize, Math.Min(64, batchSize));
         }
 
         public void LayerNormBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gamma,
             IGpuBuffer saveMean, IGpuBuffer saveInvVar, IGpuBuffer gradInput, IGpuBuffer gradGamma, IGpuBuffer gradBeta,
             int batchSize, int normalizedSize, float epsilon)
         {
-            throw new NotImplementedException("OpenCL LayerNormBackward kernel not yet implemented.");
+            // First compute gradInput
+            var k = _kernelCache["layernorm_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gamma).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)saveMean).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)saveInvVar).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradGamma).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradBeta).Buffer.Handle);
+            k.SetArg(arg++, batchSize);
+            k.SetArg(arg++, normalizedSize);
+            k.SetArg(arg++, epsilon);
+
+            k.Execute1D(batchSize, Math.Min(64, batchSize));
+
+            // Then accumulate gradient params
+            var kp = _kernelCache["layernorm_grad_params"];
+            arg = 0;
+            kp.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            kp.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            kp.SetArg(arg++, ((DirectOpenClGpuBuffer)saveMean).Buffer.Handle);
+            kp.SetArg(arg++, ((DirectOpenClGpuBuffer)saveInvVar).Buffer.Handle);
+            kp.SetArg(arg++, ((DirectOpenClGpuBuffer)gradGamma).Buffer.Handle);
+            kp.SetArg(arg++, ((DirectOpenClGpuBuffer)gradBeta).Buffer.Handle);
+            kp.SetArg(arg++, batchSize);
+            kp.SetArg(arg++, normalizedSize);
+
+            kp.Execute1D(normalizedSize, Math.Min(64, normalizedSize));
         }
 
         public void GroupNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
             IGpuBuffer saveMean, IGpuBuffer saveInvVar, int batch, int numGroups, int channels, int spatialSize, float epsilon)
         {
-            throw new NotImplementedException("OpenCL GroupNorm kernel not yet implemented.");
+            var k = _kernelCache["groupnorm_forward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gamma).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)beta).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)saveMean).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)saveInvVar).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, numGroups);
+            k.SetArg(arg++, channels);
+            k.SetArg(arg++, spatialSize);
+            k.SetArg(arg++, epsilon);
+
+            k.Execute1D(batch * numGroups, Math.Min(64, batch * numGroups));
         }
 
         public void InstanceNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer beta,
             IGpuBuffer saveMean, IGpuBuffer saveInvVar, int batch, int channels, int spatialSize, float epsilon)
         {
-            throw new NotImplementedException("OpenCL InstanceNorm kernel not yet implemented.");
+            var k = _kernelCache["instancenorm_forward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gamma).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)beta).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)saveMean).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)saveInvVar).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, channels);
+            k.SetArg(arg++, spatialSize);
+            k.SetArg(arg++, epsilon);
+
+            k.Execute1D(batch * channels, Math.Min(64, batch * channels));
         }
 
         public void RmsNorm(IGpuBuffer input, IGpuBuffer output, IGpuBuffer gamma, IGpuBuffer saveRms,
             int batchSize, int normalizedSize, float epsilon)
         {
-            throw new NotImplementedException("OpenCL RmsNorm kernel not yet implemented.");
+            var k = _kernelCache["rmsnorm_forward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gamma).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)saveRms).Buffer.Handle);
+            k.SetArg(arg++, batchSize);
+            k.SetArg(arg++, normalizedSize);
+            k.SetArg(arg++, epsilon);
+
+            k.Execute1D(batchSize, Math.Min(64, batchSize));
         }
 
         #endregion
@@ -4037,12 +4432,30 @@ KERNEL VARIANTS (A/B testing):
 
         public void Dropout(IGpuBuffer input, IGpuBuffer output, IGpuBuffer mask, int size, float dropoutRate, ulong seed, bool training)
         {
-            throw new NotImplementedException("OpenCL Dropout kernel not yet implemented.");
+            var k = _kernelCache["dropout_forward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)mask).Buffer.Handle);
+            k.SetArg(arg++, size);
+            k.SetArg(arg++, dropoutRate);
+            k.SetArg(arg++, (int)(seed & 0xFFFFFFFF));
+            k.SetArg(arg++, training ? 1 : 0);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public void DropoutBackward(IGpuBuffer gradOutput, IGpuBuffer mask, IGpuBuffer gradInput, int size, float dropoutRate)
         {
-            throw new NotImplementedException("OpenCL DropoutBackward kernel not yet implemented.");
+            var k = _kernelCache["dropout_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)mask).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, size);
+            k.SetArg(arg++, dropoutRate);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         #endregion
@@ -4051,12 +4464,33 @@ KERNEL VARIANTS (A/B testing):
 
         public void Embedding(IGpuBuffer indices, IGpuBuffer embeddingTable, IGpuBuffer output, int numIndices, int embeddingDim)
         {
-            throw new NotImplementedException("OpenCL Embedding kernel not yet implemented.");
+            var k = _kernelCache["embedding_forward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)indices).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)embeddingTable).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, numIndices);
+            k.SetArg(arg++, embeddingDim);
+
+            int localX = Math.Min(16, embeddingDim);
+            int localY = Math.Min(8, numIndices);
+            k.Execute2D(embeddingDim, numIndices, localX, localY);
         }
 
         public void EmbeddingBackward(IGpuBuffer gradOutput, IGpuBuffer indices, IGpuBuffer gradEmbedding, int numIndices, int embeddingDim, int vocabSize)
         {
-            throw new NotImplementedException("OpenCL EmbeddingBackward kernel not yet implemented.");
+            var k = _kernelCache["embedding_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)indices).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradEmbedding).Buffer.Handle);
+            k.SetArg(arg++, numIndices);
+            k.SetArg(arg++, embeddingDim);
+            k.SetArg(arg++, vocabSize);
+
+            int localX = Math.Min(16, embeddingDim);
+            int localY = Math.Min(8, numIndices);
+            k.Execute2D(embeddingDim, numIndices, localX, localY);
         }
 
         public IGpuBuffer AllocateIntBuffer(int size)
@@ -4073,11 +4507,12 @@ KERNEL VARIANTS (A/B testing):
             if (_context == null)
                 throw new InvalidOperationException("OpenCL context not available");
 
-            // Convert int array to float array for storage
+            // Convert int array to float array for storage (net471 compatible)
             var floatData = new float[data.Length];
             for (int i = 0; i < data.Length; i++)
             {
-                floatData[i] = BitConverter.Int32BitsToSingle(data[i]);
+                byte[] bytes = BitConverter.GetBytes(data[i]);
+                floatData[i] = BitConverter.ToSingle(bytes, 0);
             }
 
             var buffer = new DirectOpenClBuffer(_context, floatData);
@@ -4092,20 +4527,75 @@ KERNEL VARIANTS (A/B testing):
             IGpuBuffer output, IGpuBuffer? attentionWeights, IGpuBuffer? mask,
             int batch, int numHeads, int seqLen, int headDim, float scale, bool isCausal)
         {
-            throw new NotImplementedException("OpenCL ScaledDotProductAttention kernel not yet implemented.");
+            var k = _kernelCache["scaled_dot_product_attention"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)query).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)key).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)value).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, attentionWeights != null ? ((DirectOpenClGpuBuffer)attentionWeights).Buffer.Handle : IntPtr.Zero);
+            k.SetArg(arg++, mask != null ? ((DirectOpenClGpuBuffer)mask).Buffer.Handle : IntPtr.Zero);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, numHeads);
+            k.SetArg(arg++, seqLen);
+            k.SetArg(arg++, headDim);
+            k.SetArg(arg++, scale);
+            k.SetArg(arg++, isCausal ? 1 : 0);
+            k.SetArg(arg++, attentionWeights != null ? 1 : 0);
+            k.SetArg(arg++, mask != null ? 1 : 0);
+
+            int localX = Math.Min(16, headDim);
+            int localY = Math.Min(8, seqLen);
+            k.Execute3D(headDim, seqLen, batch * numHeads, localX, localY, 1);
         }
 
         public void ScaledDotProductAttentionBackward(IGpuBuffer gradOutput, IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
             IGpuBuffer attentionWeights, IGpuBuffer gradQuery, IGpuBuffer gradKey, IGpuBuffer gradValue,
             int batch, int numHeads, int seqLen, int headDim, float scale, bool isCausal)
         {
-            throw new NotImplementedException("OpenCL ScaledDotProductAttentionBackward kernel not yet implemented.");
+            var k = _kernelCache["attention_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)query).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)key).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)value).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)attentionWeights).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradQuery).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradKey).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradValue).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, numHeads);
+            k.SetArg(arg++, seqLen);
+            k.SetArg(arg++, headDim);
+            k.SetArg(arg++, scale);
+            k.SetArg(arg++, isCausal ? 1 : 0);
+
+            int localX = Math.Min(16, headDim);
+            int localY = Math.Min(8, seqLen);
+            k.Execute3D(headDim, seqLen, batch * numHeads, localX, localY, 1);
         }
 
         public void FlashAttention(IGpuBuffer query, IGpuBuffer key, IGpuBuffer value,
             IGpuBuffer output, IGpuBuffer? mask, int batch, int numHeads, int seqLen, int headDim, float scale, bool isCausal)
         {
-            throw new NotImplementedException("OpenCL FlashAttention kernel not yet implemented.");
+            // FlashAttention is a memory-efficient version - for OpenCL, use tiled implementation
+            var k = _kernelCache["flash_attention_forward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)query).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)key).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)value).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, mask != null ? ((DirectOpenClGpuBuffer)mask).Buffer.Handle : IntPtr.Zero);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, numHeads);
+            k.SetArg(arg++, seqLen);
+            k.SetArg(arg++, headDim);
+            k.SetArg(arg++, scale);
+            k.SetArg(arg++, isCausal ? 1 : 0);
+            k.SetArg(arg++, mask != null ? 1 : 0);
+
+            int localX = Math.Min(32, seqLen);
+            k.Execute2D(seqLen, batch * numHeads, localX, 1);
         }
 
         #endregion
@@ -4114,17 +4604,88 @@ KERNEL VARIANTS (A/B testing):
 
         public void Transpose(IGpuBuffer A, IGpuBuffer B, int rows, int cols)
         {
-            throw new NotImplementedException("OpenCL Transpose kernel not yet implemented.");
+            var k = _kernelCache["transpose2d"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, rows);
+            k.SetArg(arg++, cols);
+
+            int localX = Math.Min(16, cols);
+            int localY = Math.Min(16, rows);
+            k.Execute2D(cols, rows, localX, localY);
         }
 
         public void BatchedTranspose(IGpuBuffer A, IGpuBuffer B, int batch, int rows, int cols)
         {
-            throw new NotImplementedException("OpenCL BatchedTranspose kernel not yet implemented.");
+            var k = _kernelCache["batched_transpose"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, batch);
+            k.SetArg(arg++, rows);
+            k.SetArg(arg++, cols);
+
+            int localX = Math.Min(16, cols);
+            int localY = Math.Min(16, rows);
+            k.Execute3D(cols, rows, batch, localX, localY, 1);
         }
 
         public void Permute(IGpuBuffer input, IGpuBuffer output, int[] shape, int[] permutation)
         {
-            throw new NotImplementedException("OpenCL Permute kernel not yet implemented.");
+            // Permute is a general operation - handle common cases
+            if (shape.Length == 2 && permutation[0] == 1 && permutation[1] == 0)
+            {
+                // 2D transpose
+                Transpose(input, output, shape[0], shape[1]);
+                return;
+            }
+
+            // For general permute, use CPU fallback (could implement general permute kernel)
+            var srcBuffer = ((DirectOpenClGpuBuffer)input).Buffer;
+            var dstBuffer = ((DirectOpenClGpuBuffer)output).Buffer;
+            var data = srcBuffer.ToArray();
+
+            int totalSize = 1;
+            foreach (var dim in shape) totalSize *= dim;
+
+            var result = new float[totalSize];
+
+            // Calculate strides for original and permuted tensors
+            int[] strides = new int[shape.Length];
+            int[] permutedShape = new int[shape.Length];
+            int[] permutedStrides = new int[shape.Length];
+
+            strides[shape.Length - 1] = 1;
+            for (int i = shape.Length - 2; i >= 0; i--)
+                strides[i] = strides[i + 1] * shape[i + 1];
+
+            for (int i = 0; i < shape.Length; i++)
+                permutedShape[i] = shape[permutation[i]];
+
+            permutedStrides[shape.Length - 1] = 1;
+            for (int i = shape.Length - 2; i >= 0; i--)
+                permutedStrides[i] = permutedStrides[i + 1] * permutedShape[i + 1];
+
+            // Perform permutation
+            for (int i = 0; i < totalSize; i++)
+            {
+                int[] coords = new int[shape.Length];
+                int idx = i;
+                for (int d = 0; d < shape.Length; d++)
+                {
+                    coords[d] = idx / strides[d];
+                    idx %= strides[d];
+                }
+
+                int newIdx = 0;
+                for (int d = 0; d < shape.Length; d++)
+                    newIdx += coords[permutation[d]] * permutedStrides[d];
+
+                result[newIdx] = data[i];
+            }
+
+            dstBuffer.CopyFromHost(result);
         }
 
         public void Copy(IGpuBuffer source, IGpuBuffer destination, int size)
@@ -4162,77 +4723,181 @@ KERNEL VARIANTS (A/B testing):
 
         public void ReluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
         {
-            throw new NotImplementedException("OpenCL ReluBackward kernel not yet implemented.");
+            var k = _kernelCache["relu_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public void SigmoidBackward(IGpuBuffer gradOutput, IGpuBuffer output, IGpuBuffer gradInput, int size)
         {
-            throw new NotImplementedException("OpenCL SigmoidBackward kernel not yet implemented.");
+            var k = _kernelCache["sigmoid_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public void TanhBackward(IGpuBuffer gradOutput, IGpuBuffer output, IGpuBuffer gradInput, int size)
         {
-            throw new NotImplementedException("OpenCL TanhBackward kernel not yet implemented.");
+            var k = _kernelCache["tanh_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public void GeluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
         {
-            throw new NotImplementedException("OpenCL GeluBackward kernel not yet implemented.");
+            var k = _kernelCache["gelu_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public void SoftmaxBackward(IGpuBuffer gradOutput, IGpuBuffer output, IGpuBuffer gradInput, int batchSize, int features)
         {
-            throw new NotImplementedException("OpenCL SoftmaxBackward kernel not yet implemented.");
+            var k = _kernelCache["softmax_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, batchSize);
+            k.SetArg(arg++, features);
+
+            k.Execute1D(batchSize, Math.Min(64, batchSize));
         }
 
         public void LeakyRelu(IGpuBuffer A, IGpuBuffer B, float alpha, int size)
         {
-            throw new NotImplementedException("OpenCL LeakyRelu kernel not yet implemented.");
+            var k = _kernelCache["leaky_relu_forward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, alpha);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public void LeakyReluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, float alpha, int size)
         {
-            throw new NotImplementedException("OpenCL LeakyReluBackward kernel not yet implemented.");
+            var k = _kernelCache["leaky_relu_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, alpha);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public void Elu(IGpuBuffer A, IGpuBuffer B, float alpha, int size)
         {
-            throw new NotImplementedException("OpenCL Elu kernel not yet implemented.");
+            var k = _kernelCache["elu_forward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, alpha);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public void EluBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer output, IGpuBuffer gradInput, float alpha, int size)
         {
-            throw new NotImplementedException("OpenCL EluBackward kernel not yet implemented.");
+            var k = _kernelCache["elu_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, alpha);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public void Swish(IGpuBuffer A, IGpuBuffer B, int size)
         {
-            throw new NotImplementedException("OpenCL Swish kernel not yet implemented.");
+            var k = _kernelCache["swish_forward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public void SwishBackward(IGpuBuffer gradOutput, IGpuBuffer input, IGpuBuffer gradInput, int size)
         {
-            throw new NotImplementedException("OpenCL SwishBackward kernel not yet implemented.");
+            var k = _kernelCache["swish_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradOutput).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)input).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public void Silu(IGpuBuffer A, IGpuBuffer B, int size)
         {
-            throw new NotImplementedException("OpenCL Silu kernel not yet implemented.");
+            var k = _kernelCache["silu_forward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public void Mish(IGpuBuffer A, IGpuBuffer B, int size)
         {
-            throw new NotImplementedException("OpenCL Mish kernel not yet implemented.");
+            var k = _kernelCache["mish_forward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public void Softplus(IGpuBuffer A, IGpuBuffer B, int size)
         {
-            throw new NotImplementedException("OpenCL Softplus kernel not yet implemented.");
+            var k = _kernelCache["softplus_forward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public void Hardswish(IGpuBuffer A, IGpuBuffer B, int size)
         {
-            throw new NotImplementedException("OpenCL Hardswish kernel not yet implemented.");
+            var k = _kernelCache["hardswish_forward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         #endregion
@@ -4241,42 +4906,134 @@ KERNEL VARIANTS (A/B testing):
 
         public float CrossEntropyLoss(IGpuBuffer predictions, IGpuBuffer targets, int batchSize, int numClasses)
         {
-            throw new NotImplementedException("OpenCL CrossEntropyLoss kernel not yet implemented.");
+            // Allocate output buffer for per-sample losses
+            using var lossBuffer = AllocateBuffer(batchSize);
+
+            var k = _kernelCache["cross_entropy_loss"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)predictions).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)targets).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)lossBuffer).Buffer.Handle);
+            k.SetArg(arg++, batchSize);
+            k.SetArg(arg++, numClasses);
+
+            k.Execute1D(batchSize, Math.Min(64, batchSize));
+
+            // Download and compute mean
+            var losses = new float[batchSize];
+            DownloadBuffer(lossBuffer, losses);
+            float sum = 0;
+            for (int i = 0; i < batchSize; i++) sum += losses[i];
+            return sum / batchSize;
         }
 
         public void CrossEntropyBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int batchSize, int numClasses)
         {
-            throw new NotImplementedException("OpenCL CrossEntropyBackward kernel not yet implemented.");
+            var k = _kernelCache["cross_entropy_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)predictions).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)targets).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, batchSize);
+            k.SetArg(arg++, numClasses);
         }
 
         public float BinaryCrossEntropyLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
         {
-            throw new NotImplementedException("OpenCL BinaryCrossEntropyLoss kernel not yet implemented.");
+            using var lossBuffer = AllocateBuffer(size);
+
+            var k = _kernelCache["bce_loss"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)predictions).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)targets).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)lossBuffer).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
+
+            var losses = new float[size];
+            DownloadBuffer(lossBuffer, losses);
+            float sum = 0;
+            for (int i = 0; i < size; i++) sum += losses[i];
+            return sum / size;
         }
 
         public void BinaryCrossEntropyBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
         {
-            throw new NotImplementedException("OpenCL BinaryCrossEntropyBackward kernel not yet implemented.");
+            var k = _kernelCache["bce_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)predictions).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)targets).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public float MseLoss(IGpuBuffer predictions, IGpuBuffer targets, int size)
         {
-            throw new NotImplementedException("OpenCL MseLoss kernel not yet implemented.");
+            using var lossBuffer = AllocateBuffer(size);
+
+            var k = _kernelCache["mse_loss"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)predictions).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)targets).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)lossBuffer).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
+
+            var losses = new float[size];
+            DownloadBuffer(lossBuffer, losses);
+            float sum = 0;
+            for (int i = 0; i < size; i++) sum += losses[i];
+            return sum / size;
         }
 
         public void MseBackward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size)
         {
-            throw new NotImplementedException("OpenCL MseBackward kernel not yet implemented.");
+            var k = _kernelCache["mse_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)predictions).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)targets).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public float SmoothL1Loss(IGpuBuffer predictions, IGpuBuffer targets, int size, float beta)
         {
-            throw new NotImplementedException("OpenCL SmoothL1Loss kernel not yet implemented.");
+            using var lossBuffer = AllocateBuffer(size);
+
+            var k = _kernelCache["smooth_l1_loss"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)predictions).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)targets).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)lossBuffer).Buffer.Handle);
+            k.SetArg(arg++, size);
+            k.SetArg(arg++, beta);
+
+            k.Execute1D(size, Math.Min(256, size));
+
+            var losses = new float[size];
+            DownloadBuffer(lossBuffer, losses);
+            float sum = 0;
+            for (int i = 0; i < size; i++) sum += losses[i];
+            return sum / size;
         }
 
         public void SmoothL1Backward(IGpuBuffer predictions, IGpuBuffer targets, IGpuBuffer gradInput, int size, float beta)
         {
-            throw new NotImplementedException("OpenCL SmoothL1Backward kernel not yet implemented.");
+            var k = _kernelCache["smooth_l1_backward"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)predictions).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)targets).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradInput).Buffer.Handle);
+            k.SetArg(arg++, size);
+            k.SetArg(arg++, beta);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         #endregion
@@ -4285,37 +5042,99 @@ KERNEL VARIANTS (A/B testing):
 
         public void Clamp(IGpuBuffer A, IGpuBuffer B, float min, float max, int size)
         {
-            throw new NotImplementedException("OpenCL Clamp kernel not yet implemented.");
+            var k = _kernelCache["clamp"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, min);
+            k.SetArg(arg++, max);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public float L2Norm(IGpuBuffer A, int size)
         {
-            throw new NotImplementedException("OpenCL L2Norm kernel not yet implemented.");
+            using var squaredBuffer = AllocateBuffer(size);
+
+            var k = _kernelCache["l2_norm_squared"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)squaredBuffer).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
+
+            var squared = new float[size];
+            DownloadBuffer(squaredBuffer, squared);
+            float sum = 0;
+            for (int i = 0; i < size; i++) sum += squared[i];
+            return (float)Math.Sqrt(sum);
         }
 
         public void ClipByValue(IGpuBuffer A, IGpuBuffer B, float clipValue, int size)
         {
-            throw new NotImplementedException("OpenCL ClipByValue kernel not yet implemented.");
+            Clamp(A, B, -clipValue, clipValue, size);
         }
 
         public void ClipByNorm(IGpuBuffer A, IGpuBuffer B, float maxNorm, int size)
         {
-            throw new NotImplementedException("OpenCL ClipByNorm kernel not yet implemented.");
+            float norm = L2Norm(A, size);
+            if (norm > maxNorm)
+            {
+                float scale = maxNorm / norm;
+                var k = _kernelCache["scale"];
+                uint arg = 0;
+                k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+                k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+                k.SetArg(arg++, scale);
+                k.SetArg(arg++, size);
+
+                k.Execute1D(size, Math.Min(256, size));
+            }
+            else
+            {
+                Copy(A, B, size);
+            }
         }
 
         public void Fma(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, IGpuBuffer D, int size)
         {
-            throw new NotImplementedException("OpenCL Fma kernel not yet implemented.");
+            var k = _kernelCache["fma"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)C).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)D).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public void ScatterAdd(IGpuBuffer source, IGpuBuffer indices, IGpuBuffer destination, int sourceSize, int destSize)
         {
-            throw new NotImplementedException("OpenCL ScatterAdd kernel not yet implemented.");
+            var k = _kernelCache["scatter_add"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)source).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)indices).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)destination).Buffer.Handle);
+            k.SetArg(arg++, sourceSize);
+            k.SetArg(arg++, destSize);
+
+            k.Execute1D(sourceSize, Math.Min(256, sourceSize));
         }
 
         public void Gather(IGpuBuffer source, IGpuBuffer indices, IGpuBuffer output, int numIndices, int featureSize)
         {
-            throw new NotImplementedException("OpenCL Gather kernel not yet implemented.");
+            var k = _kernelCache["gather"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)source).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)indices).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)output).Buffer.Handle);
+            k.SetArg(arg++, numIndices);
+            k.SetArg(arg++, featureSize);
+
+            k.Execute2D(featureSize, numIndices, Math.Min(16, featureSize), Math.Min(16, numIndices));
         }
 
         #endregion
@@ -4324,22 +5143,51 @@ KERNEL VARIANTS (A/B testing):
 
         public void GreaterThan(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
         {
-            throw new NotImplementedException("OpenCL GreaterThan kernel not yet implemented.");
+            var k = _kernelCache["greater_than"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)C).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public void LessThan(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
         {
-            throw new NotImplementedException("OpenCL LessThan kernel not yet implemented.");
+            var k = _kernelCache["less_than"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)C).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public void Equal(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
         {
-            throw new NotImplementedException("OpenCL Equal kernel not yet implemented.");
+            var k = _kernelCache["equal"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)C).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public void Where(IGpuBuffer condition, IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int size)
         {
-            throw new NotImplementedException("OpenCL Where kernel not yet implemented.");
+            var k = _kernelCache["where_select"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)condition).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)C).Buffer.Handle);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         #endregion
@@ -4348,22 +5196,51 @@ KERNEL VARIANTS (A/B testing):
 
         public void MeanAxis(IGpuBuffer A, IGpuBuffer B, int outerSize, int reduceSize)
         {
-            throw new NotImplementedException("OpenCL MeanAxis kernel not yet implemented.");
+            var k = _kernelCache["mean_axis"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)B).Buffer.Handle);
+            k.SetArg(arg++, outerSize);
+            k.SetArg(arg++, reduceSize);
+
+            k.Execute1D(outerSize, Math.Min(64, outerSize));
         }
 
         public void VarAxis(IGpuBuffer A, IGpuBuffer mean, IGpuBuffer variance, int outerSize, int reduceSize)
         {
-            throw new NotImplementedException("OpenCL VarAxis kernel not yet implemented.");
+            var k = _kernelCache["var_axis"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)mean).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)variance).Buffer.Handle);
+            k.SetArg(arg++, outerSize);
+            k.SetArg(arg++, reduceSize);
+
+            k.Execute1D(outerSize, Math.Min(64, outerSize));
         }
 
         public void ArgMax(IGpuBuffer A, IGpuBuffer indices, int outerSize, int reduceSize)
         {
-            throw new NotImplementedException("OpenCL ArgMax kernel not yet implemented.");
+            var k = _kernelCache["argmax"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)indices).Buffer.Handle);
+            k.SetArg(arg++, outerSize);
+            k.SetArg(arg++, reduceSize);
+
+            k.Execute1D(outerSize, Math.Min(64, outerSize));
         }
 
         public void ArgMin(IGpuBuffer A, IGpuBuffer indices, int outerSize, int reduceSize)
         {
-            throw new NotImplementedException("OpenCL ArgMin kernel not yet implemented.");
+            var k = _kernelCache["argmin"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)A).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)indices).Buffer.Handle);
+            k.SetArg(arg++, outerSize);
+            k.SetArg(arg++, reduceSize);
+
+            k.Execute1D(outerSize, Math.Min(64, outerSize));
         }
 
         #endregion
@@ -4373,19 +5250,57 @@ KERNEL VARIANTS (A/B testing):
         public void SgdMomentumUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer velocity,
             float learningRate, float momentum, float weightDecay, int size)
         {
-            throw new NotImplementedException("OpenCL SgdMomentumUpdate kernel not yet implemented.");
+            var k = _kernelCache["sgd_momentum_update"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)param).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradient).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)velocity).Buffer.Handle);
+            k.SetArg(arg++, learningRate);
+            k.SetArg(arg++, momentum);
+            k.SetArg(arg++, weightDecay);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public void AdamUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
             float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
         {
-            throw new NotImplementedException("OpenCL AdamUpdate kernel not yet implemented.");
+            var k = _kernelCache["adam_update"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)param).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradient).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)m).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)v).Buffer.Handle);
+            k.SetArg(arg++, learningRate);
+            k.SetArg(arg++, beta1);
+            k.SetArg(arg++, beta2);
+            k.SetArg(arg++, epsilon);
+            k.SetArg(arg++, weightDecay);
+            k.SetArg(arg++, step);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         public void AdamWUpdate(IGpuBuffer param, IGpuBuffer gradient, IGpuBuffer m, IGpuBuffer v,
             float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step, int size)
         {
-            throw new NotImplementedException("OpenCL AdamWUpdate kernel not yet implemented.");
+            var k = _kernelCache["adamw_update"];
+            uint arg = 0;
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)param).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)gradient).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)m).Buffer.Handle);
+            k.SetArg(arg++, ((DirectOpenClGpuBuffer)v).Buffer.Handle);
+            k.SetArg(arg++, learningRate);
+            k.SetArg(arg++, beta1);
+            k.SetArg(arg++, beta2);
+            k.SetArg(arg++, epsilon);
+            k.SetArg(arg++, weightDecay);
+            k.SetArg(arg++, step);
+            k.SetArg(arg++, size);
+
+            k.Execute1D(size, Math.Min(256, size));
         }
 
         #endregion

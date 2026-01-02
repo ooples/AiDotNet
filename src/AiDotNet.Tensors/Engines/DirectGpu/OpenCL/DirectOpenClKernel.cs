@@ -144,6 +144,34 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 throw new InvalidOperationException($"Failed to enqueue kernel: {err}");
         }
 
+        /// <summary>
+        /// Executes kernel with 3D work distribution.
+        /// </summary>
+        public void Execute3D(int globalSizeX, int globalSizeY, int globalSizeZ, int localSizeX, int localSizeY, int localSizeZ)
+        {
+            // Round up global sizes to multiples of local sizes
+            int alignedGlobalX = ((globalSizeX + localSizeX - 1) / localSizeX) * localSizeX;
+            int alignedGlobalY = ((globalSizeY + localSizeY - 1) / localSizeY) * localSizeY;
+            int alignedGlobalZ = ((globalSizeZ + localSizeZ - 1) / localSizeZ) * localSizeZ;
+
+            var globalSizes = new UIntPtr[] { (UIntPtr)alignedGlobalX, (UIntPtr)alignedGlobalY, (UIntPtr)alignedGlobalZ };
+            var localSizes = new UIntPtr[] { (UIntPtr)localSizeX, (UIntPtr)localSizeY, (UIntPtr)localSizeZ };
+
+            int err = OpenClNativeBindings.EnqueueNDRangeKernel(
+                _context.CommandQueue,
+                _kernel,
+                3, // work_dim
+                null, // global_work_offset
+                globalSizes,
+                localSizes,
+                0,
+                IntPtr.Zero,
+                IntPtr.Zero);
+
+            if (err != OpenClNativeBindings.CL_SUCCESS)
+                throw new InvalidOperationException($"Failed to enqueue kernel: {err}");
+        }
+
         #endregion
 
         #region Profiled Execution

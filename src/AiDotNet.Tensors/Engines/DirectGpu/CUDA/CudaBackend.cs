@@ -1225,8 +1225,9 @@ public sealed class CudaBackend : IDirectGpuBackend
             throw new InvalidOperationException("CUDA backend is not available.");
 
         using var _ = PushContext();
-        // cuMemsetD32 sets 32-bit values
-        uint bits = BitConverter.SingleToUInt32Bits(value);
+        // cuMemsetD32 sets 32-bit values (net471 compatible conversion)
+        byte[] bytes = BitConverter.GetBytes(value);
+        uint bits = BitConverter.ToUInt32(bytes, 0);
         CuBlasNative.CheckCudaResult(
             CuBlasNative.cuMemsetD32(buffer.Handle, bits, (ulong)size),
             "cuMemsetD32");
