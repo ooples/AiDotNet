@@ -128,7 +128,7 @@ __kernel void col2im(
 // Uses shared memory for input tile caching
 __kernel void conv2d_direct(
     __global const float* input,
-    __global const float* kernel,
+    __global const float* weights,
     __global float* output,
     const int batch,
     const int inChannels,
@@ -164,8 +164,8 @@ __kernel void conv2d_direct(
 
                 if (ih >= 0 && ih < inHeight && iw >= 0 && iw < inWidth) {
                     float inVal = input[((b * inChannels + ic) * inHeight + ih) * inWidth + iw];
-                    float kernelVal = kernel[((oc * inChannels + ic) * kernelH + kh) * kernelW + kw];
-                    sum += inVal * kernelVal;
+                    float wVal = weights[((oc * inChannels + ic) * kernelH + kh) * kernelW + kw];
+                    sum += inVal * wVal;
                 }
             }
         }
@@ -177,7 +177,7 @@ __kernel void conv2d_direct(
 // Conv2D backward pass for input gradients
 __kernel void conv2d_backward_input(
     __global const float* gradOutput,
-    __global const float* kernel,
+    __global const float* weights,
     __global float* gradInput,
     const int batch,
     const int inChannels,
@@ -217,8 +217,8 @@ __kernel void conv2d_backward_input(
 
                     if (oh >= 0 && oh < outHeight && ow >= 0 && ow < outWidth) {
                         float gradVal = gradOutput[((b * outChannels + oc) * outHeight + oh) * outWidth + ow];
-                        float kernelVal = kernel[((oc * inChannels + ic) * kernelH + kh) * kernelW + kw];
-                        sum += gradVal * kernelVal;
+                        float wVal = weights[((oc * inChannels + ic) * kernelH + kh) * kernelW + kw];
+                        sum += gradVal * wVal;
                     }
                 }
             }
@@ -228,8 +228,8 @@ __kernel void conv2d_backward_input(
     gradInput[((b * inChannels + ic) * inHeight + ih) * inWidth + iw] = sum;
 }
 
-// Conv2D backward pass for kernel gradients
-__kernel void conv2d_backward_kernel(
+// Conv2D backward pass for weight gradients
+__kernel void conv2d_backward_weights(
     __global const float* input,
     __global const float* gradOutput,
     __global float* gradKernel,
@@ -280,7 +280,7 @@ __kernel void conv2d_backward_kernel(
 // Depthwise Conv2D - each channel is convolved independently
 __kernel void depthwise_conv2d(
     __global const float* input,
-    __global const float* kernel,
+    __global const float* weights,
     __global float* output,
     const int batch,
     const int channels,
@@ -312,8 +312,8 @@ __kernel void depthwise_conv2d(
 
             if (ih >= 0 && ih < inHeight && iw >= 0 && iw < inWidth) {
                 float inVal = input[((b * channels + c) * inHeight + ih) * inWidth + iw];
-                float kernelVal = kernel[(c * kernelH + kh) * kernelW + kw];
-                sum += inVal * kernelVal;
+                float wVal = weights[(c * kernelH + kh) * kernelW + kw];
+                sum += inVal * wVal;
             }
         }
     }
@@ -324,7 +324,7 @@ __kernel void depthwise_conv2d(
 // Transposed Conv2D (deconvolution)
 __kernel void conv_transpose2d(
     __global const float* input,
-    __global const float* kernel,
+    __global const float* weights,
     __global float* output,
     const int batch,
     const int inChannels,
@@ -362,9 +362,9 @@ __kernel void conv_transpose2d(
 
                     if (ih >= 0 && ih < inHeight && iw >= 0 && iw < inWidth) {
                         float inVal = input[((b * inChannels + ic) * inHeight + ih) * inWidth + iw];
-                        // Note: kernel layout is [inChannels, outChannels, kH, kW]
-                        float kernelVal = kernel[((ic * outChannels + oc) * kernelH + kh) * kernelW + kw];
-                        sum += inVal * kernelVal;
+                        // Note: weights layout is [inChannels, outChannels, kH, kW]
+                        float wVal = weights[((ic * outChannels + oc) * kernelH + kh) * kernelW + kw];
+                        sum += inVal * wVal;
                     }
                 }
             }
@@ -377,7 +377,7 @@ __kernel void conv_transpose2d(
 // Conv3D for volumetric data
 __kernel void conv3d_direct(
     __global const float* input,
-    __global const float* kernel,
+    __global const float* weights,
     __global float* output,
     const int batch,
     const int inChannels,
@@ -423,8 +423,8 @@ __kernel void conv3d_direct(
 
                     if (id >= 0 && id < inDepth && ih >= 0 && ih < inHeight && iw >= 0 && iw < inWidth) {
                         float inVal = input[(((b * inChannels + ic) * inDepth + id) * inHeight + ih) * inWidth + iw];
-                        float kernelVal = kernel[(((oc * inChannels + ic) * kernelD + kd) * kernelH + kh) * kernelW + kw];
-                        sum += inVal * kernelVal;
+                        float wVal = weights[(((oc * inChannels + ic) * kernelD + kd) * kernelH + kh) * kernelW + kw];
+                        sum += inVal * wVal;
                     }
                 }
             }
@@ -447,7 +447,7 @@ __kernel void conv3d_direct(
                 "col2im",
                 "conv2d_direct",
                 "conv2d_backward_input",
-                "conv2d_backward_kernel",
+                "conv2d_backward_weights",
                 "depthwise_conv2d",
                 "conv_transpose2d",
                 "conv3d_direct"
