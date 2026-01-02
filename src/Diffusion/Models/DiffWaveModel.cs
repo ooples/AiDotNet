@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -299,11 +300,7 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
 
         for (int i = 0; i < totalSize; i++)
         {
-            // Box-Muller transform for normal distribution
-            var u1 = rng.NextDouble();
-            var u2 = rng.NextDouble();
-            var z = Math.Sqrt(-2.0 * Math.Log(Math.Max(u1, 1e-10))) * Math.Cos(2.0 * Math.PI * u2);
-            data[i] = NumOps.FromDouble(z);
+            data[i] = NumOps.FromDouble(rng.NextGaussian());
         }
 
         return new Tensor<T>(shape, new Vector<T>(data));

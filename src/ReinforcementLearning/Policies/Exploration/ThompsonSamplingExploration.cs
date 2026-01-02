@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Extensions;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.ReinforcementLearning.Policies.Exploration
@@ -146,10 +147,8 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
 
                     do
                     {
-                        // Standard normal using Box-Muller
-                        double u1 = random.NextDouble();
-                        double u2 = random.NextDouble();
-                        x = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+                        // Standard normal
+                        x = random.NextGaussian();
                         v = 1.0 + c * x;
                     } while (v <= 0.0);
 

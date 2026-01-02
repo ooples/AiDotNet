@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Extensions;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Helpers;
@@ -1020,14 +1021,20 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Priority 0: Try DirectGpu FUSED (works on ALL .NET versions, returns fully activated result)
         // This is the fastest path because it eliminates memory round-trips between operations
-        result = TryForwardWithDirectGpu(flattenedInput, batchDim);
+        ActivationType activationType = GetActivationType();
+
+        // Only use DirectGpu fused when activation is None (we'll apply activation ourselves)
+        // This ensures we have pre-activation values for proper gradient computation
+        if (activationType == ActivationType.None)
+        {
+            result = TryForwardWithDirectGpu(flattenedInput, batchDim);
+        }
 
         if (result != null)
         {
-            // DirectGpu already applied activation - cache pre-activation for backward pass
-            // Note: For proper gradient computation, we'd need the pre-activation values
-            // For now, store the result (activation derivative will need special handling)
+            // DirectGpu did GEMM+bias only (activation was None), so result is pre-activation
             _lastOutput = result;
+            result = ApplyActivation(result);
         }
         else
         {

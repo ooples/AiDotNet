@@ -50,9 +50,31 @@ public static class RandomExtensions
     /// </remarks>
     public static double NextGaussian(this Random random)
     {
-        double u1 = 1.0 - random.NextDouble();
-        double u2 = 1.0 - random.NextDouble();
+        // Box-Muller transform with guard against log(0) = -Infinity
+        double u1 = random.NextDouble();
+        double u2 = random.NextDouble();
+
+        // Guard against log(0) which produces -Infinity and then NaN
+        u1 = Math.Max(u1, double.Epsilon);
 
         return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
+    }
+
+    /// <summary>
+    /// Generates a random number from a Gaussian (normal) distribution with specified mean and standard deviation.
+    /// </summary>
+    /// <param name="random">The Random object to extend.</param>
+    /// <param name="mean">The mean (center) of the distribution.</param>
+    /// <param name="stdDev">The standard deviation (spread) of the distribution.</param>
+    /// <returns>A random double value from the specified normal distribution.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is the same as NextGaussian() but allows you to specify where the
+    /// bell curve is centered (mean) and how wide it is (standard deviation).
+    /// </para>
+    /// </remarks>
+    public static double NextGaussian(this Random random, double mean, double stdDev)
+    {
+        return mean + stdDev * random.NextGaussian();
     }
 }

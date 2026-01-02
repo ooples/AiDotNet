@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.WindowFunctions;
 
 namespace AiDotNet.Diffusion.Audio;
@@ -74,9 +75,19 @@ public class ShortTimeFourierTransform<T>
     private readonly PaddingMode _padMode;
 
     /// <summary>
-    /// FFT implementation.
+    /// FFT implementation (fallback for non-GPU operations).
     /// </summary>
     private readonly FastFourierTransform<T> _fft;
+
+    /// <summary>
+    /// IEngine for GPU-accelerated FFT operations.
+    /// </summary>
+    private IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
+    /// Window function as a tensor (for IEngine operations).
+    /// </summary>
+    private Tensor<T>? _windowTensor;
 
     /// <summary>
     /// Gets the FFT size.
@@ -92,6 +103,11 @@ public class ShortTimeFourierTransform<T>
     /// Gets the number of frequency bins (nFft / 2 + 1).
     /// </summary>
     public int NumFrequencyBins => _nFft / 2 + 1;
+
+    /// <summary>
+    /// Gets the window tensor for GPU operations.
+    /// </summary>
+    public Tensor<T>? WindowTensor => _windowTensor;
 
     /// <summary>
     /// Initializes a new STFT processor.
@@ -110,6 +126,10 @@ public class ShortTimeFourierTransform<T>
     ///   Common: hopLength = nFft/4 gives 75% overlap
     /// - windowFunction: Reduces spectral leakage. Hann (default) is the industry standard for audio.
     ///   Other options: HammingWindow, BlackmanWindow, KaiserWindow, etc.
+    /// </para>
+    /// <para>
+    /// <b>GPU Acceleration:</b> This class automatically uses GPU-accelerated FFT operations
+    /// when available through AiDotNetEngine.Current.
     /// </para>
     /// </remarks>
     public ShortTimeFourierTransform(
@@ -156,6 +176,9 @@ public class ShortTimeFourierTransform<T>
             Array.Copy(_window, 0, paddedWindow, padStart, _windowLength);
             _window = paddedWindow;
         }
+
+        // Create window tensor for IEngine operations
+        _windowTensor = new Tensor<T>(_window, new[] { _window.Length });
     }
 
     /// <summary>
@@ -428,9 +451,28 @@ public class ShortTimeFourierTransform<T>
     /// at each time, discarding phase information. This is often used for visualization
     /// and audio processing where phase isn't needed.
     /// </para>
+    /// <para>
+    /// <b>GPU Acceleration:</b> When GPU is available, this method uses hardware-accelerated
+    /// STFT operations through IEngine for significantly faster processing.
+    /// </para>
     /// </remarks>
     public Tensor<T> Magnitude(Tensor<T> signal)
     {
+        // Try GPU-accelerated path first
+        if (_windowTensor != null && Engine.SupportsGpu)
+        {
+            try
+            {
+                Engine.STFT(signal, _nFft, _hopLength, _windowTensor, _center, out var magnitude, out _);
+                return magnitude;
+            }
+            catch
+            {
+                // Fall back to CPU implementation on any error
+            }
+        }
+
+        // CPU fallback
         var complex = Forward(signal);
         return ComputeMagnitude(complex);
     }
@@ -440,6 +482,12 @@ public class ShortTimeFourierTransform<T>
     /// </summary>
     /// <param name="signal">Input signal.</param>
     /// <returns>Power spectrogram [numFrames, numFreqs].</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>GPU Acceleration:</b> When GPU is available, this method uses hardware-accelerated
+    /// STFT operations through IEngine for significantly faster processing.
+    /// </para>
+    /// </remarks>
     public Tensor<T> Power(Tensor<T> signal)
     {
         var magnitude = Magnitude(signal);
@@ -451,6 +499,40 @@ public class ShortTimeFourierTransform<T>
         }
 
         return power;
+    }
+
+    /// <summary>
+    /// Computes magnitude and phase spectrograms simultaneously.
+    /// </summary>
+    /// <param name="signal">Input signal.</param>
+    /// <param name="magnitude">Output magnitude spectrogram.</param>
+    /// <param name="phase">Output phase spectrogram in radians.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>GPU Acceleration:</b> This method uses IEngine.STFT directly for optimal
+    /// GPU utilization, returning both magnitude and phase in a single pass.
+    /// </para>
+    /// </remarks>
+    public void MagnitudeAndPhase(Tensor<T> signal, out Tensor<T> magnitude, out Tensor<T> phase)
+    {
+        // Try GPU-accelerated path first
+        if (_windowTensor != null && Engine.SupportsGpu)
+        {
+            try
+            {
+                Engine.STFT(signal, _nFft, _hopLength, _windowTensor, _center, out magnitude, out phase);
+                return;
+            }
+            catch
+            {
+                // Fall back to CPU implementation on any error
+            }
+        }
+
+        // CPU fallback
+        var complex = Forward(signal);
+        magnitude = ComputeMagnitude(complex);
+        phase = ExtractPhase(complex);
     }
 
     /// <summary>
@@ -504,6 +586,39 @@ public class ShortTimeFourierTransform<T>
         }
 
         return complex;
+    }
+
+    /// <summary>
+    /// Reconstructs audio signal from magnitude and phase spectrograms.
+    /// </summary>
+    /// <param name="magnitude">Magnitude spectrogram.</param>
+    /// <param name="phase">Phase spectrogram in radians.</param>
+    /// <param name="length">Expected output length (optional).</param>
+    /// <returns>Reconstructed audio signal.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>GPU Acceleration:</b> This method uses IEngine.ISTFT for hardware-accelerated
+    /// audio reconstruction when GPU is available.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> InverseFromMagnitudeAndPhase(Tensor<T> magnitude, Tensor<T> phase, int? length = null)
+    {
+        // Try GPU-accelerated path first
+        if (_windowTensor != null && Engine.SupportsGpu)
+        {
+            try
+            {
+                return Engine.ISTFT(magnitude, phase, _nFft, _hopLength, _windowTensor, _center, length);
+            }
+            catch
+            {
+                // Fall back to CPU implementation on any error
+            }
+        }
+
+        // CPU fallback - convert to complex and use standard Inverse
+        var complex = PolarToComplex(magnitude, phase);
+        return Inverse(complex, length);
     }
 
     /// <summary>

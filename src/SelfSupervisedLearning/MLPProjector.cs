@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -324,11 +325,7 @@ public class MLPProjector<T> : IProjectorHead<T>
 
         for (int i = 0; i < data.Length; i++)
         {
-            // Box-Muller transform for normal distribution
-            var u1 = random.NextDouble();
-            var u2 = random.NextDouble();
-            var normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            data[i] = NumOps.FromDouble(normal * stddev);
+            data[i] = NumOps.FromDouble(random.NextGaussian() * stddev);
         }
 
         return new Tensor<T>(data, [fanIn, fanOut]);

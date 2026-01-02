@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -336,11 +337,7 @@ public class VBLoRAAdapter<T> : LoRAAdapterBase<T>
                 {
                     for (int j = 0; j < _bankSizeA; j++)
                     {
-                        // Box-Muller transform for Gaussian random numbers
-                        double u1 = Random.NextDouble();
-                        double u2 = Random.NextDouble();
-                        double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-                        bankA[i, j] = NumOps.Multiply(NumOps.FromDouble(randStdNormal), stddev);
+                        bankA[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextGaussian()), stddev);
                     }
                 }
 
@@ -360,11 +357,7 @@ public class VBLoRAAdapter<T> : LoRAAdapterBase<T>
                 {
                     for (int j = 0; j < outputSize; j++)
                     {
-                        // Box-Muller transform for Gaussian random numbers
-                        double u1 = Random.NextDouble();
-                        double u2 = Random.NextDouble();
-                        double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-                        bankB[i, j] = NumOps.Multiply(NumOps.FromDouble(randStdNormal), stddev);
+                        bankB[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextGaussian()), stddev);
                     }
                 }
 

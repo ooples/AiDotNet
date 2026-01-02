@@ -1,4 +1,5 @@
 global using AiDotNet.LossFunctions;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -826,13 +827,8 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         {
             for (int j = 0; j < EncodedSize; j++)
             {
-                // Generate random numbers from a normal distribution
-                double u1 = 1.0 - random.NextDouble();
-                double u2 = 1.0 - random.NextDouble();
-                double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-
                 // Apply mean and standard deviation
-                double value = mean + z * stdDev;
+                double value = mean + random.NextGaussian() * stdDev;
                 latentSamples[i, j] = NumOps.FromDouble(value);
             }
         }

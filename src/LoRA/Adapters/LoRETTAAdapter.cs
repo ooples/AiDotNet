@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -290,11 +291,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
 
             for (int i = 0; i < core.Length; i++)
             {
-                // Box-Muller transform for Gaussian random numbers
-                double u1 = random.NextDouble();
-                double u2 = random.NextDouble();
-                double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-                core[i] = NumOps.Multiply(NumOps.FromDouble(randStdNormal), NumOps.FromDouble(scale));
+                core[i] = NumOps.Multiply(NumOps.FromDouble(random.NextGaussian()), NumOps.FromDouble(scale));
             }
 
             _ttCores.Add(core);

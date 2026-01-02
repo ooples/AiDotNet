@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
@@ -375,11 +376,7 @@ public class CogVideo<T> : NeuralNetworkBase<T>
 
         for (int i = 0; i < totalSize; i++)
         {
-            // Box-Muller transform for Gaussian noise
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            noiseData[i] = NumOps.FromDouble(randStdNormal);
+            noiseData[i] = NumOps.FromDouble(random.NextGaussian());
         }
 
         return new Tensor<T>(
@@ -603,13 +600,8 @@ public class CogVideo<T> : NeuralNetworkBase<T>
 
             for (int i = 0; i < resultData.Length; i++)
             {
-                // Sample from standard normal using Box-Muller transform
-                double u1 = random.NextDouble();
-                double u2 = random.NextDouble();
-                double z = Math.Sqrt(-2.0 * Math.Log(Math.Max(u1, 1e-20))) * Math.Cos(2.0 * Math.PI * u2);
-
                 double mean = NumOps.ToDouble(resultData[i]);
-                resultData[i] = NumOps.FromDouble(mean + stdDev * z);
+                resultData[i] = NumOps.FromDouble(mean + stdDev * random.NextGaussian());
             }
         }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
@@ -86,10 +87,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
                 double stdValue = Math.Exp(logStdValue);
 
                 // Sample from Gaussian
-                double u1 = _random.NextDouble();
-                double u2 = _random.NextDouble();
-                double normalSample = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                double sampledValue = meanValue + stdValue * normalSample;
+                double sampledValue = meanValue + stdValue * _random.NextGaussian();
 
                 continuousAction[i] = NumOps.FromDouble(sampledValue);
             }

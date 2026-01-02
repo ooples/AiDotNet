@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.TimeSeries;
 
@@ -1686,12 +1687,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
             T dampedStdDev = NumOps.Multiply(irregularStdDev, NumOps.Power(dampingFactor, NumOps.FromDouble(i)));
 
             // Generate random value with appropriate standard deviation
-            // Using Gaussian approximation (Box-Muller transform)
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double randomGaussian = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-
-            irregularForecast[i] = NumOps.Multiply(dampedStdDev, NumOps.FromDouble(randomGaussian));
+            irregularForecast[i] = NumOps.Multiply(dampedStdDev, NumOps.FromDouble(random.NextGaussian()));
         }
 
         return irregularForecast;

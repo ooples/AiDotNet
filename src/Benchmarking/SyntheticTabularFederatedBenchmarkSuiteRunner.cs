@@ -1,6 +1,7 @@
 using AiDotNet.Benchmarking.Models;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Results;
@@ -382,9 +383,7 @@ internal static class SyntheticTabularFederatedBenchmarkSuiteRunner
 
             do
             {
-                double u1 = random.NextDouble();
-                double u2 = random.NextDouble();
-                x = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+                x = random.NextGaussian();
                 v = 1.0 + c * x;
             } while (v <= 0.0);
 
@@ -405,8 +404,6 @@ internal static class SyntheticTabularFederatedBenchmarkSuiteRunner
 
     private static double NextGaussian(Random random)
     {
-        double u1 = Math.Max(random.NextDouble(), double.Epsilon);
-        double u2 = Math.Max(random.NextDouble(), double.Epsilon);
-        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        return random.NextGaussian();
     }
 }

@@ -1,3 +1,5 @@
+using AiDotNet.Extensions;
+
 namespace AiDotNet.Prototypes;
 
 /// <summary>
@@ -82,11 +84,7 @@ public class SimpleNeuralNetwork<T>
         var data = new T[length];
         for (int i = 0; i < length; i++)
         {
-            // Box-Muller transform for normal distribution
-            var u1 = 1.0 - _random.NextDouble();
-            var u2 = 1.0 - _random.NextDouble();
-            var randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            data[i] = _numOps.FromDouble(randStdNormal * scale);
+            data[i] = _numOps.FromDouble(_random.NextGaussian() * scale);
         }
         return new PrototypeVector<T>(data);
     }

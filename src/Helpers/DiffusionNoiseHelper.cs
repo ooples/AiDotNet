@@ -1,3 +1,5 @@
+using AiDotNet.Extensions;
+
 namespace AiDotNet.Helpers;
 
 /// <summary>
@@ -364,14 +366,6 @@ public static class DiffusionNoiseHelper<T>
     /// <returns>A pair of independent standard normal random values.</returns>
     private static (double z0, double z1) BoxMullerTransform(Random rng)
     {
-        double u1 = rng.NextDouble();
-        double u2 = rng.NextDouble();
-
-        // Avoid log(0)
-        while (u1 <= double.Epsilon)
-            u1 = rng.NextDouble();
-
-        double mag = Math.Sqrt(-2.0 * Math.Log(u1));
-        return (mag * Math.Cos(2.0 * Math.PI * u2), mag * Math.Sin(2.0 * Math.PI * u2));
+        return (rng.NextGaussian(), rng.NextGaussian());
     }
 }

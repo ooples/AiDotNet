@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.WindowFunctions;
 
 namespace AiDotNet.Diffusion.Audio;
@@ -49,9 +50,29 @@ public class GriffinLim<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// Gets the engine for GPU-accelerated operations.
+    /// </summary>
+    private IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// The STFT processor.
     /// </summary>
     private readonly ShortTimeFourierTransform<T> _stft;
+
+    /// <summary>
+    /// Window tensor for GPU operations.
+    /// </summary>
+    private readonly Tensor<T>? _windowTensor;
+
+    /// <summary>
+    /// FFT size for GPU operations.
+    /// </summary>
+    private readonly int _nFft;
+
+    /// <summary>
+    /// Hop length for GPU operations.
+    /// </summary>
+    private readonly int _hopLength;
 
     /// <summary>
     /// Number of iterations for phase estimation.
@@ -128,6 +149,15 @@ public class GriffinLim<T>
         _iterations = iterations;
         _momentum = momentum;
         _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
+
+        // Store parameters for GPU operations
+        _nFft = nFft;
+        _hopLength = hopLength ?? nFft / 4;
+
+        // Create window tensor for GPU operations
+        var window = windowFunction ?? new HanningWindowFunction<T>();
+        var windowData = window.CreateWindow(nFft);
+        _windowTensor = new Tensor<T>(windowData, new[] { nFft });
     }
 
     /// <summary>
@@ -152,6 +182,13 @@ public class GriffinLim<T>
         _iterations = iterations;
         _momentum = momentum;
         _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
+
+        // Extract parameters from STFT for GPU operations
+        _nFft = stft.NFft;
+        _hopLength = stft.HopLength;
+
+        // Get window tensor from STFT if available
+        _windowTensor = stft.WindowTensor;
     }
 
     /// <summary>
@@ -172,6 +209,27 @@ public class GriffinLim<T>
         if (magnitude == null)
             throw new ArgumentNullException(nameof(magnitude));
 
+        // Try GPU-accelerated Griffin-Lim first
+        if (_windowTensor != null && Engine.SupportsGpu)
+        {
+            try
+            {
+                return Engine.GriffinLim(
+                    magnitude,
+                    _nFft,
+                    _hopLength,
+                    _windowTensor,
+                    _iterations,
+                    NumOps.FromDouble(_momentum),
+                    length);
+            }
+            catch
+            {
+                // Fall back to CPU implementation
+            }
+        }
+
+        // CPU fallback implementation
         int numFrames = magnitude.Shape[0];
         int numFreqs = magnitude.Shape[1];
 

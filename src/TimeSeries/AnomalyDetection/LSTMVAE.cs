@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.TimeSeries.AnomalyDetection;
@@ -89,14 +90,9 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
                     var random = RandomHelper.CreateSeededRandom(42 + epoch * 10000 + i);
                     for (int j = 0; j < mean.Length; j++)
                     {
-                        // Sample from standard normal using Box-Muller transform
-                        double u1 = 1.0 - random.NextDouble();
-                        double u2 = 1.0 - random.NextDouble();
-                        double stdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-
                         // z = mean + exp(0.5 * logVar) * epsilon
                         T std = _numOps.Exp(_numOps.Multiply(_numOps.FromDouble(0.5), logVar[j]));
-                        z[j] = _numOps.Add(mean[j], _numOps.Multiply(std, _numOps.FromDouble(stdNormal)));
+                        z[j] = _numOps.Add(mean[j], _numOps.Multiply(std, _numOps.FromDouble(random.NextGaussian())));
                     }
 
                     // Decode with caching

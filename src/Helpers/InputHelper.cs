@@ -632,14 +632,14 @@ public static class InputHelper<T, TInput>
             if (index >= matrix.Rows)
                 throw new ArgumentOutOfRangeException(nameof(index), "Index exceeds matrix row count.");
 
-            // Return a single row as a Vector<T>
-            var rowVector = new Vector<T>(matrix.Columns);
+            // Return a single row as a 1-row Matrix<T> to preserve TInput type
+            var rowMatrix = new Matrix<T>(1, matrix.Columns);
             for (int i = 0; i < matrix.Columns; i++)
             {
-                rowVector[i] = matrix[index, i];
+                rowMatrix[0, i] = matrix[index, i];
             }
 
-            return (TInput)(object)rowVector;
+            return (TInput)(object)rowMatrix;
         }
 
         // Handle Tensor<T> input

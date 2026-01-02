@@ -1,6 +1,7 @@
 namespace AiDotNet.FederatedLearning.Privacy;
 
 using System;
+using AiDotNet.Extensions;
 using AiDotNet.Tensors.Helpers;
 
 /// <summary>
@@ -261,15 +262,11 @@ public class GaussianDifferentialPrivacy<T> : PrivacyMechanismBase<Dictionary<st
     /// <returns>A random sample from N(mean, sigma²).</returns>
     private double GenerateGaussianNoise(double mean, double sigma)
     {
-        // Box-Muller transform
-        double u1;
-        double u2;
+        double standardNormal;
         lock (_sync)
         {
-            u1 = 1.0 - _random.NextDouble(); // Uniform(0,1]
-            u2 = 1.0 - _random.NextDouble();
+            standardNormal = _random.NextGaussian();
         }
-        double standardNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
 
         return mean + sigma * standardNormal;
     }

@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using AiDotNet.Extensions;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Embeddings;
@@ -83,18 +84,7 @@ public class StubEmbeddingModel<T> : EmbeddingModelBase<T>
         // Generate values with normal distribution (mean=0, stddev=1)
         for (int i = 0; i < _embeddingDimension; i++)
         {
-            // Box-Muller transform for normal distribution
-            // Protect against Log(0) which would produce NaN/Infinity
-            double u1;
-            do
-            {
-                u1 = random.NextDouble();
-            } while (Math.Abs(u1) < double.Epsilon);
-
-            var u2 = random.NextDouble();
-            var normalValue = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-
-            values[i] = (T)Convert.ChangeType(normalValue, typeof(T));
+            values[i] = (T)Convert.ChangeType(random.NextGaussian(), typeof(T));
         }
 
         var vector = new Vector<T>(values);

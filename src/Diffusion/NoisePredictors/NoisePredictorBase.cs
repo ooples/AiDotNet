@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -441,22 +442,9 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>
         var noise = new Tensor<T>(shape);
         var noiseSpan = noise.AsWritableSpan();
 
-        // Box-Muller transform for normal distribution
-        for (int i = 0; i < noiseSpan.Length; i += 2)
+        for (int i = 0; i < noiseSpan.Length; i++)
         {
-            var u1 = rng.NextDouble();
-            var u2 = rng.NextDouble();
-
-            while (u1 <= double.Epsilon)
-                u1 = rng.NextDouble();
-
-            var mag = Math.Sqrt(-2.0 * Math.Log(u1));
-            var z0 = mag * Math.Cos(2.0 * Math.PI * u2);
-            var z1 = mag * Math.Sin(2.0 * Math.PI * u2);
-
-            noiseSpan[i] = NumOps.FromDouble(z0);
-            if (i + 1 < noiseSpan.Length)
-                noiseSpan[i + 1] = NumOps.FromDouble(z1);
+            noiseSpan[i] = NumOps.FromDouble(rng.NextGaussian());
         }
 
         return noise;

@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
+using AiDotNet.Extensions;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -534,11 +535,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private T GetSeededNormalRandom(T mean, T stdDev, Random random)
     {
-        // Box-Muller transform
-        double u1 = 1.0 - random.NextDouble();
-        double u2 = 1.0 - random.NextDouble();
-        double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-        double result = randStdNormal * Convert.ToDouble(stdDev) + Convert.ToDouble(mean);
+        double result = random.NextGaussian() * Convert.ToDouble(stdDev) + Convert.ToDouble(mean);
         return _numOps.FromDouble(result);
     }
 

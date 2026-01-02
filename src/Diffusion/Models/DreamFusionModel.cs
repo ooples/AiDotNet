@@ -2,6 +2,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -348,11 +349,7 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
 
         for (int i = 0; i < noiseSpan.Length; i++)
         {
-            // Box-Muller transform for Gaussian noise
-            double u1 = 1.0 - RandomGenerator.NextDouble();
-            double u2 = RandomGenerator.NextDouble();
-            double gaussian = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            noiseSpan[i] = NumOps.FromDouble(gaussian);
+            noiseSpan[i] = NumOps.FromDouble(RandomGenerator.NextGaussian());
         }
 
         return noise;

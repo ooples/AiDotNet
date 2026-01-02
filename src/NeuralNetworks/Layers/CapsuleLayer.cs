@@ -514,8 +514,8 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Reshape coupling coefficients to broadcast: [batchSize, inputCapsules, numCapsules, 1]
             var coefExpanded = couplingCoefficients.Reshape([batchSize, inputCapsules, _numCapsules, 1]);
 
-            // Element-wise multiply to weight the capsules
-            var weighted = Engine.TensorMultiply(transformedInput, coefExpanded);
+            // Element-wise multiply with broadcasting to weight the capsules
+            var weighted = Engine.TensorBroadcastMultiply(transformedInput, coefExpanded);
 
             // Sum over input capsules (axis 1) to get weighted sum: [batchSize, numCapsules, capsuleDimension]
             var weightedSum = Engine.ReduceSum(weighted, new[] { 1 }, keepDims: false);
@@ -540,8 +540,8 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 // Reshape output to broadcast: [batchSize, 1, numCapsules, capsuleDimension]
                 var outputExpanded = output.Reshape([batchSize, 1, _numCapsules, _capsuleDimension]);
 
-                // Element-wise multiply
-                var agreementProduct = Engine.TensorMultiply(transformedInput, outputExpanded);
+                // Element-wise multiply with broadcasting
+                var agreementProduct = Engine.TensorBroadcastMultiply(transformedInput, outputExpanded);
 
                 // Sum over capsule dimension (axis 3) to get agreement: [batchSize, inputCapsules, numCapsules]
                 var agreement = Engine.ReduceSum(agreementProduct, new[] { 3 }, keepDims: false);

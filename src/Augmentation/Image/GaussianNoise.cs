@@ -137,16 +137,11 @@ public class GaussianNoise<T> : AugmentationBase<T, ImageTensor<T>>
     }
 
     /// <summary>
-    /// Samples from a Gaussian distribution using Box-Muller transform.
+    /// Samples from a Gaussian distribution.
     /// </summary>
     private static double SampleGaussian(AugmentationContext<T> context, double mean, double std)
     {
-        // Box-Muller transform
-        double u1 = context.GetRandomDouble(0.0001, 0.9999); // Avoid exact 0 or 1
-        double u2 = context.GetRandomDouble(0.0, 1.0);
-
-        double z0 = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-        return mean + std * z0;
+        return context.SampleGaussian(mean, std);
     }
 
     /// <inheritdoc />

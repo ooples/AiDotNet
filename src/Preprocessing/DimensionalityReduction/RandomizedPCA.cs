@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -181,10 +182,7 @@ public class RandomizedPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         {
             for (int j = 0; j < k; j++)
             {
-                // Box-Muller transform for Gaussian
-                double u1 = random.NextDouble();
-                double u2 = random.NextDouble();
-                Omega[i, j] = Math.Sqrt(-2 * Math.Log(u1 + 1e-10)) * Math.Cos(2 * Math.PI * u2);
+                Omega[i, j] = random.NextGaussian();
             }
         }
 

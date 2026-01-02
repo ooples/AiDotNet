@@ -1,4 +1,5 @@
 using System.Linq;
+using AiDotNet.Extensions;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -263,10 +264,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
     /// </remarks>
     private double GenerateStandardNormal()
     {
-        double u1 = 1.0 - Random.NextDouble();
-        double u2 = 1.0 - Random.NextDouble();
-
-        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
+        return Random.NextGaussian();
     }
 
     /// <summary>

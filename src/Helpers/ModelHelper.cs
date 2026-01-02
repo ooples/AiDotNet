@@ -67,6 +67,15 @@ public static class ModelHelper<T, TInput, TOutput>
 
             return (x, y, predictions);
         }
+        else if (typeof(TInput) == typeof(Matrix<T>) && typeof(TOutput) == typeof(Tensor<T>))
+        {
+            // Support for meta-learning algorithms like ProtoNets that use Matrix input and Tensor output
+            var x = (TInput)(object)Matrix<T>.Empty();
+            var y = (TOutput)(object)Tensor<T>.Empty();
+            var predictions = (TOutput)(object)Tensor<T>.Empty();
+
+            return (x, y, predictions);
+        }
         else
         {
             throw new InvalidOperationException("Unsupported types for TInput and TOutput");

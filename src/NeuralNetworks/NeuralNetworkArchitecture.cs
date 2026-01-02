@@ -840,6 +840,7 @@ public class NeuralNetworkArchitecture<T>
 
             case InputType.TwoDimensional:
                 // Support both explicit dimensions and inferred dimensions from InputSize
+                // Also support variable batch size (InputHeight=0 with InputWidth>0) for tabular data
                 if (InputHeight <= 0 && InputWidth <= 0)
                 {
                     // Both dimensions missing - try to infer from InputSize
@@ -866,14 +867,24 @@ public class NeuralNetworkArchitecture<T>
                 }
                 else if (InputHeight <= 0 && InputWidth > 0)
                 {
-                    // Only InputHeight missing - infer from InputSize and InputWidth
+                    // InputHeight=0 with InputWidth>0 is valid for tabular data where:
+                    // - InputWidth = number of features (known at architecture time)
+                    // - InputHeight = batch/sample size (variable, determined at runtime)
+                    // Try to infer from InputSize if provided, otherwise default to 1
                     if (InputSize > 0 && InputSize % InputWidth == 0)
                     {
                         InputHeight = InputSize / InputWidth;
                     }
                     else
                     {
-                        throw new ArgumentException($"Cannot infer InputHeight: InputSize ({InputSize}) must be divisible by InputWidth ({InputWidth}).");
+                        // Default InputHeight=1 for single-sample or variable batch processing
+                        // The network will handle batches dynamically at runtime
+                        InputHeight = 1;
+                        if (InputSize <= 0)
+                        {
+                            // Set InputSize to InputWidth for single-sample case
+                            InputSize = InputWidth;
+                        }
                     }
                 }
                 else if (InputWidth <= 0 && InputHeight > 0)

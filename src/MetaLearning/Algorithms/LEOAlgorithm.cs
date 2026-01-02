@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -500,21 +501,11 @@ public class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     }
 
     /// <summary>
-    /// Samples from standard normal distribution using Box-Muller transform.
+    /// Samples from standard normal distribution.
     /// </summary>
     private double SampleStandardNormal()
     {
-        // Box-Muller transform for standard normal sampling
-        double u1 = RandomGenerator.NextDouble();
-        double u2 = RandomGenerator.NextDouble();
-
-        // Avoid log(0)
-        while (u1 <= double.Epsilon)
-        {
-            u1 = RandomGenerator.NextDouble();
-        }
-
-        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        return RandomGenerator.NextGaussian();
     }
 
     /// <summary>

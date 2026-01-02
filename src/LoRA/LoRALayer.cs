@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.LoRA;
 
@@ -181,11 +182,7 @@ public class LoRALayer<T> : LayerBase<T>
         {
             for (int j = 0; j < _loraA.Columns; j++)
             {
-                // Box-Muller transform for Gaussian random numbers
-                double u1 = Random.NextDouble();
-                double u2 = Random.NextDouble();
-                double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-                _loraA[i, j] = NumOps.Multiply(NumOps.FromDouble(randStdNormal), stddev);
+                _loraA[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextGaussian()), stddev);
             }
         }
 
@@ -236,12 +233,37 @@ public class LoRALayer<T> : LayerBase<T>
         }
 
         // Convert input to matrix [batchSize, inputSize]
+        // Handle any-rank tensors by flattening all dimensions after the first into inputSize
         Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
-        for (int i = 0; i < batchSize; i++)
+        if (input.Shape.Length == 1)
         {
+            // 1D input: treat as single batch
             for (int j = 0; j < inputSize; j++)
             {
-                inputMatrix[i, j] = input[i, j];
+                inputMatrix[0, j] = input[j];
+            }
+        }
+        else if (input.Shape.Length == 2)
+        {
+            // 2D input: standard batch x features
+            for (int i = 0; i < batchSize; i++)
+            {
+                for (int j = 0; j < inputSize; j++)
+                {
+                    inputMatrix[i, j] = input[i, j];
+                }
+            }
+        }
+        else
+        {
+            // Higher rank: flatten all dims after first into the second dimension
+            var flatInput = input.Reshape([batchSize, inputSize]);
+            for (int i = 0; i < batchSize; i++)
+            {
+                for (int j = 0; j < inputSize; j++)
+                {
+                    inputMatrix[i, j] = flatInput[i, j];
+                }
             }
         }
 

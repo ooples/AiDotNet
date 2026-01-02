@@ -639,7 +639,9 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
             SerializationBinder = new SafeSerializationBinder()
         };
         var optionsJson = reader.ReadString();
-        Options = JsonConvert.DeserializeObject<NonLinearRegressionOptions>(optionsJson, serializerSettings) ?? new NonLinearRegressionOptions();
+        // Use non-generic deserialize to respect polymorphic type info in JSON
+        var deserializedOptions = JsonConvert.DeserializeObject(optionsJson, serializerSettings);
+        Options = deserializedOptions as NonLinearRegressionOptions ?? new NonLinearRegressionOptions();
 
         // Deserialize support vectors
         int svRows = reader.ReadInt32();

@@ -393,6 +393,80 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
         return new KNearestNeighborsRegression<T>(_options, Regularization);
     }
 
+    /// <summary>
+    /// Creates a shallow copy of this KNN model including its training data.
+    /// </summary>
+    /// <returns>A new KNearestNeighborsRegression instance with the same configuration and training data.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method overrides the base class Clone to ensure that KNN-specific training data
+    /// (_xTrain and _yTrain) is properly copied. Without this override, cloned models would
+    /// lose their training data and fail when Predict is called.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a copy of your trained model.
+    ///
+    /// Unlike CreateInstance which creates an empty model, Clone copies:
+    /// - All the base class settings (support vectors, alphas, bias, options)
+    /// - The training data that KNN needs to make predictions
+    /// - The soft KNN settings if enabled
+    ///
+    /// This is important because KNN stores all training examples and uses them
+    /// at prediction time. A clone without training data would be unusable.
+    /// </para>
+    /// </remarks>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        // First call base class Clone to copy common properties
+        var clone = (KNearestNeighborsRegression<T>)base.Clone();
+
+        // Copy KNN-specific training data (shallow copy - shares data with original)
+        clone._xTrain = _xTrain;
+        clone._yTrain = _yTrain;
+
+        // Copy soft KNN settings
+        clone.UseSoftKNN = UseSoftKNN;
+        clone.SoftKNNTemperature = SoftKNNTemperature;
+
+        return clone;
+    }
+
+    /// <summary>
+    /// Creates a deep copy of this KNN model including its training data.
+    /// </summary>
+    /// <returns>A new KNearestNeighborsRegression instance with independent copies of all data.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method overrides the base class DeepCopy to ensure that KNN-specific training data
+    /// is properly deep copied. The resulting model is completely independent of the original -
+    /// modifications to one will not affect the other.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a completely independent copy of your model.
+    ///
+    /// While Clone shares some data with the original (for efficiency), DeepCopy creates
+    /// entirely new copies of everything including:
+    /// - All training feature vectors
+    /// - All training labels
+    /// - All model parameters
+    ///
+    /// Use DeepCopy when you need to modify the copy without affecting the original.
+    /// </para>
+    /// </remarks>
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
+    {
+        // First call base class DeepCopy to deep copy common properties
+        var clone = (KNearestNeighborsRegression<T>)base.DeepCopy();
+
+        // Deep copy KNN-specific training data
+        clone._xTrain = _xTrain.Clone();
+        clone._yTrain = _yTrain.Clone();
+
+        // Copy soft KNN settings (value types are already copied by value)
+        clone.UseSoftKNN = UseSoftKNN;
+        clone.SoftKNNTemperature = SoftKNNTemperature;
+
+        return clone;
+    }
+
     // ===== Soft KNN Support for JIT Compilation =====
 
     /// <summary>

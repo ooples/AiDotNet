@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Extensions;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.ReinforcementLearning.Policies.Exploration
@@ -50,11 +51,7 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
         /// <returns>A sample from the standard normal distribution N(0, 1).</returns>
         protected T BoxMullerSample(Random random)
         {
-            // Box-Muller transform for Gaussian sampling
-            double u1 = random.NextDouble();
-            double u2 = random.NextDouble();
-            double normalSample = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            return NumOps.FromDouble(normalSample);
+            return NumOps.FromDouble(random.NextGaussian());
         }
 
         /// <summary>

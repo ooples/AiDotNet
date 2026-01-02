@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -323,11 +324,7 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         var epsilon = new Tensor<T>(mean.Shape);
         for (int i = 0; i < epsilon.Length; i++)
         {
-            // Box-Muller transform for normal distribution
-            double u1 = _random.NextDouble();
-            double u2 = _random.NextDouble();
-            double z = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
-            epsilon.SetFlat(i, NumOps.FromDouble(z));
+            epsilon.SetFlat(i, NumOps.FromDouble(_random.NextGaussian()));
         }
 
         _lastLatent = Engine.TensorAdd(mean, Engine.TensorMultiply(std, epsilon));
@@ -704,10 +701,7 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         var latent = new Tensor<T>([numNodes, LatentDim]);
         for (int i = 0; i < latent.Length; i++)
         {
-            double u1 = _random.NextDouble();
-            double u2 = _random.NextDouble();
-            double z = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
-            latent.SetFlat(i, NumOps.FromDouble(z));
+            latent.SetFlat(i, NumOps.FromDouble(_random.NextGaussian()));
         }
 
         // Decode to get edge probabilities

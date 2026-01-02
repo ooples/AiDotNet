@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.AutoML;
@@ -463,10 +464,7 @@ public sealed class BayesianOptimizationAutoML<T, TInput, TOutput> : BuiltInSupe
 
     private double NextGaussian()
     {
-        // Box-Muller transform
-        double u1 = Math.Max(1e-12, Random.NextDouble());
-        double u2 = Math.Max(1e-12, Random.NextDouble());
-        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        return Random.NextGaussian();
     }
 
     private static double Clamp01(double value) => value < 0 ? 0 : value > 1 ? 1 : value;

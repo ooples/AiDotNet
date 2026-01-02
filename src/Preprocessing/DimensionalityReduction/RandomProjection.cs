@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -163,11 +164,7 @@ public class RandomProjection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         {
             for (int j = 0; j < nComponents; j++)
             {
-                // Box-Muller transform for Gaussian
-                double u1 = random.NextDouble();
-                double u2 = random.NextDouble();
-                double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                matrix[i, j] = z * scale;
+                matrix[i, j] = random.NextGaussian() * scale;
             }
         }
 

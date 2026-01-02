@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
@@ -674,11 +675,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         var latents = new Tensor<T>(shape);
         for (int i = 0; i < latents.Data.Length; i++)
         {
-            // Standard normal distribution using Box-Muller
-            double u1 = random.NextDouble();
-            double u2 = random.NextDouble();
-            double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            latents.Data[i] = NumOps.FromDouble(normal);
+            latents.Data[i] = NumOps.FromDouble(random.NextGaussian());
         }
         return latents;
     }

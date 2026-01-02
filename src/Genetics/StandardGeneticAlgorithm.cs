@@ -1,3 +1,5 @@
+using AiDotNet.Extensions;
+
 namespace AiDotNet.Genetics;
 
 public class StandardGeneticAlgorithm<T, TInput, TOutput> :
@@ -28,12 +30,8 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
 
     protected override ModelParameterGene<T> MutateGeneGaussian(ModelParameterGene<T> gene)
     {
-        // Box-Muller transform for Gaussian random number
-        double u1 = 1.0 - Random.NextDouble();
-        double u2 = 1.0 - Random.NextDouble();
         double stdDev = 0.1;
-        double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-        double perturbation = randStdNormal * stdDev;
+        double perturbation = Random.NextGaussian() * stdDev;
 
         var clone = new ModelParameterGene<T>(
             gene.Index,
@@ -194,10 +192,7 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
                         // Normal distribution with mean 0, std 0.5
                         for (int i = 0; i < parameters.Length; i++)
                         {
-                            double u1 = 1.0 - Random.NextDouble();
-                            double u2 = 1.0 - Random.NextDouble();
-                            double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-                            parameters[i] = NumOps.FromDouble(randStdNormal * 0.5);
+                            parameters[i] = NumOps.FromDouble(Random.NextGaussian() * 0.5);
                         }
                         break;
 

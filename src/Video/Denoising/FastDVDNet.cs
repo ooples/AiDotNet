@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
@@ -225,10 +226,7 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
 
         for (int i = 0; i < frame.Length; i++)
         {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double noise = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2) * (sigma / 255.0);
-
+            double noise = random.NextGaussian() * (sigma / 255.0);
             double value = Convert.ToDouble(frame.Data[i]) + noise;
             value = MathHelper.Clamp(value, 0.0, 1.0);
             noisy.Data[i] = NumOps.FromDouble(value);
