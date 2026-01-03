@@ -1,4 +1,4 @@
-
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -270,6 +270,13 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _outputBias = new Tensor<T>([embeddingDimension]);
 
         InitializeParameters();
+
+        // Register trainable parameters for GPU memory optimization
+        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -299,6 +306,13 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _outputBias = new Tensor<T>([embeddingDimension]);
 
         InitializeParameters();
+
+        // Register trainable parameters for GPU memory optimization
+        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -945,6 +959,13 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _valueWeights = _valueWeights.Subtract(_valueWeightsGradient.Multiply(learningRate));
         _outputWeights = _outputWeights.Subtract(_outputWeightsGradient.Multiply(learningRate));
         _outputBias = _outputBias.Subtract(_outputBiasGradient.Multiply(learningRate));
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_queryWeights);
+        Engine.InvalidatePersistentTensor(_keyWeights);
+        Engine.InvalidatePersistentTensor(_valueWeights);
+        Engine.InvalidatePersistentTensor(_outputWeights);
+        Engine.InvalidatePersistentTensor(_outputBias);
     }
 
     /// <summary>
@@ -1018,6 +1039,13 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         index += oLen;
 
         _outputBias = new Tensor<T>([biasLen], parameters.Slice(index, biasLen));
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_queryWeights);
+        Engine.InvalidatePersistentTensor(_keyWeights);
+        Engine.InvalidatePersistentTensor(_valueWeights);
+        Engine.InvalidatePersistentTensor(_outputWeights);
+        Engine.InvalidatePersistentTensor(_outputBias);
     }
 
     /// <summary>

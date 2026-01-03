@@ -1,5 +1,5 @@
 using System;
-
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -331,10 +331,14 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         _biases = new Tensor<T>([OutputDepth]);
 
         InitializeParameters();
+
+        // Register trainable parameters for GPU memory persistence
+        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="DeconvolutionalLayer{T}"/> class with the specified 
+    /// Initializes a new instance of the <see cref="DeconvolutionalLayer{T}"/> class with the specified
     /// parameters and a vector activation function.
     /// </summary>
     /// <param name="inputShape">The shape of the input data.</param>
@@ -376,6 +380,10 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         _biases = new Tensor<T>([OutputDepth]);
 
         InitializeParameters();
+
+        // Register trainable parameters for GPU memory persistence
+        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -483,18 +491,35 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     {
         _lastInput = input;
 
-        // Use GPU-accelerated ConvTranspose2D via Engine
-        var stride = new int[] { Stride, Stride };
-        var padding = new int[] { Padding, Padding };
-        var outputPadding = new int[] { 0, 0 };
+        // Get the fused activation type for optimal GPU/CPU performance
+        var fusedActivation = GetFusedActivationType();
 
-        var output = Engine.ConvTranspose2D(input, _kernels, stride, padding, outputPadding);
+        if (fusedActivation != FusedActivationType.None)
+        {
+            // Use FusedConvTranspose2D for optimal GPU kernel fusion (conv transpose + bias + activation)
+            _lastOutput = Engine.FusedConvTranspose2D(
+                input, _kernels, _biases,
+                Stride, Stride,
+                Padding, Padding,
+                0, 0,  // output padding
+                fusedActivation);
+        }
+        else
+        {
+            // Fallback for unsupported activations: use separate operations
+            var stride = new int[] { Stride, Stride };
+            var padding = new int[] { Padding, Padding };
+            var outputPadding = new int[] { 0, 0 };
 
-        // Add bias using broadcast: reshape [OutputDepth] to [1, OutputDepth, 1, 1] for NCHW format
-        var biasReshaped = _biases.Reshape([1, OutputDepth, 1, 1]);
-        var biasedOutput = Engine.TensorBroadcastAdd(output, biasReshaped);
+            var output = Engine.ConvTranspose2D(input, _kernels, stride, padding, outputPadding);
 
-        _lastOutput = ApplyActivation(biasedOutput);
+            // Add bias using broadcast: reshape [OutputDepth] to [1, OutputDepth, 1, 1] for NCHW format
+            var biasReshaped = _biases.Reshape([1, OutputDepth, 1, 1]);
+            var biasedOutput = Engine.TensorBroadcastAdd(output, biasReshaped);
+
+            _lastOutput = ApplyActivation(biasedOutput);
+        }
+
         return _lastOutput;
     }
 
@@ -707,6 +732,10 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
 
         _kernels = Engine.TensorSubtract(_kernels, Engine.TensorMultiplyScalar(_kernelsGradient, learningRate));
         _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasesGradient, learningRate));
+
+        // Invalidate GPU cache after parameter update
+        Engine.InvalidatePersistentTensor(_kernels);
+        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>
@@ -775,6 +804,10 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
 
         _kernels = new Tensor<T>([InputDepth, OutputDepth, KernelSize, KernelSize], kernelVec);
         _biases = new Tensor<T>([OutputDepth], biasVec);
+
+        // Invalidate GPU cache after parameter update
+        Engine.InvalidatePersistentTensor(_kernels);
+        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>

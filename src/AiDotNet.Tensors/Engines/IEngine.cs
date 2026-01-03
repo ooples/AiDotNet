@@ -4070,6 +4070,57 @@ public interface IEngine
         FusedActivationType activation);
 
     /// <summary>
+    /// Performs a fused 3D convolution: output = activation(conv3d(input, kernel) + bias).
+    /// Combines convolution, bias addition, and activation into a single optimized operation.
+    /// </summary>
+    /// <param name="input">Input tensor with shape [batch, channels, depth, height, width].</param>
+    /// <param name="kernel">Convolution kernels with shape [outChannels, inChannels, kD, kH, kW].</param>
+    /// <param name="bias">Optional bias vector with shape [outChannels].</param>
+    /// <param name="strideD">Stride in depth dimension.</param>
+    /// <param name="strideH">Stride in height dimension.</param>
+    /// <param name="strideW">Stride in width dimension.</param>
+    /// <param name="padD">Padding in depth dimension.</param>
+    /// <param name="padH">Padding in height dimension.</param>
+    /// <param name="padW">Padding in width dimension.</param>
+    /// <param name="dilationD">Dilation in depth dimension.</param>
+    /// <param name="dilationH">Dilation in height dimension.</param>
+    /// <param name="dilationW">Dilation in width dimension.</param>
+    /// <param name="activation">Activation function to apply.</param>
+    /// <returns>Output tensor with shape [batch, outChannels, outD, outH, outW].</returns>
+    Tensor<T> FusedConv3D<T>(
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T>? bias,
+        int strideD, int strideH, int strideW,
+        int padD, int padH, int padW,
+        int dilationD, int dilationH, int dilationW,
+        FusedActivationType activation);
+
+    /// <summary>
+    /// Performs a fused transposed 2D convolution: output = activation(convTranspose2d(input, kernel) + bias).
+    /// Combines transposed convolution, bias addition, and activation into a single optimized operation.
+    /// </summary>
+    /// <param name="input">Input tensor with shape [batch, channels, height, width].</param>
+    /// <param name="kernel">Convolution kernels with shape [inChannels, outChannels, kH, kW].</param>
+    /// <param name="bias">Optional bias vector with shape [outChannels].</param>
+    /// <param name="strideH">Stride in height dimension.</param>
+    /// <param name="strideW">Stride in width dimension.</param>
+    /// <param name="padH">Padding in height dimension.</param>
+    /// <param name="padW">Padding in width dimension.</param>
+    /// <param name="outputPadH">Output padding in height dimension.</param>
+    /// <param name="outputPadW">Output padding in width dimension.</param>
+    /// <param name="activation">Activation function to apply.</param>
+    /// <returns>Output tensor with upsampled spatial dimensions.</returns>
+    Tensor<T> FusedConvTranspose2D<T>(
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T>? bias,
+        int strideH, int strideW,
+        int padH, int padW,
+        int outputPadH, int outputPadW,
+        FusedActivationType activation);
+
+    /// <summary>
     /// Performs fused batch normalization with activation.
     /// </summary>
     Tensor<T> FusedBatchNorm<T>(

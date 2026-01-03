@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -396,6 +397,10 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         _biases = new Tensor<T>([_outputDepth * _upscaleFactor * _upscaleFactor]);
 
         InitializeWeights();
+
+        // Register trainable parameters for GPU memory persistence
+        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -441,6 +446,10 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         _biases = new Tensor<T>([_outputDepth * _upscaleFactor * _upscaleFactor]);
 
         InitializeWeights();
+
+        // Register trainable parameters for GPU memory persistence
+        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -547,22 +556,20 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
 
         _lastInput = input4D;
 
-        // Perform convolution using Engine with same padding (input already in NCHW format)
+        // Perform fused convolution + bias (without activation since PixelShuffle must come before activation)
+        // Note: Can't use FusedConv2D with activation because PixelShuffle must occur between conv and activation
         int padSize = _kernelSize / 2;
-        var strideArr = new int[] { 1, 1 };
-        var paddingArr = new int[] { padSize, padSize };
-        var dilationArr = new int[] { 1, 1 };
+        var convOutputNCHW = Engine.FusedConv2D(
+            input4D, _kernels, _biases,
+            1, 1,           // stride
+            padSize, padSize, // padding
+            1, 1,           // dilation
+            FusedActivationType.None);  // No activation - applied after PixelShuffle
 
-        var convOutputNCHW = Engine.Conv2D(input4D, _kernels, strideArr, paddingArr, dilationArr);
-
-        // Add bias using broadcast: reshape to [1, numChannels, 1, 1]
-        int numOutChannels = _outputDepth * _upscaleFactor * _upscaleFactor;
-        var biasReshaped = _biases.Reshape([1, numOutChannels, 1, 1]);
-        convOutputNCHW = Engine.TensorBroadcastAdd(convOutputNCHW, biasReshaped);
-
-        // Perform pixel shuffle using Engine
+        // Perform pixel shuffle using Engine (must come before activation)
         var shuffledNCHW = Engine.PixelShuffle(convOutputNCHW, _upscaleFactor);
 
+        // Apply activation after pixel shuffle
         _lastOutput = ApplyActivation(shuffledNCHW);
 
         // Return with matching dimensions to preserve original tensor rank
@@ -932,6 +939,10 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
 
         // Update biases with momentum (no weight decay for biases)
         _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasMomentum, learningRate));
+
+        // Invalidate GPU cache after parameter updates
+        Engine.InvalidatePersistentTensor(_kernels);
+        Engine.InvalidatePersistentTensor(_biases);
 
         // Clear gradients after update
         _kernelGradients = null;

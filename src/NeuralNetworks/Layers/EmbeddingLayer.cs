@@ -1,5 +1,4 @@
-
-
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -259,6 +258,9 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         _embeddingTensor = new Tensor<T>([vocabularySize, embeddingDimension]);
         InitializeParameters();
+
+        // Register trainable parameters for GPU memory optimization
+        RegisterTrainableParameter(_embeddingTensor, PersistentTensorRole.Embeddings);
     }
 
     /// <summary>
@@ -645,6 +647,13 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             var scaledProjectionGradient = Engine.TensorMultiplyScalar(_projectionWeightsGradient, learningRate);
             _projectionWeights = Engine.TensorSubtract(_projectionWeights, scaledProjectionGradient);
         }
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_embeddingTensor);
+        if (_projectionWeights != null)
+        {
+            Engine.InvalidatePersistentTensor(_projectionWeights);
+        }
     }
 
     /// <summary>
@@ -729,6 +738,8 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (projectionCount == 0)
         {
             _projectionWeights = null;
+            // Notify GPU that tensor data has changed
+            Engine.InvalidatePersistentTensor(_embeddingTensor);
             return;
         }
 
@@ -739,6 +750,13 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         int inputFeatures = projectionCount / embeddingDim;
         _projectionWeights = new Tensor<T>([inputFeatures, embeddingDim], parameters.Slice(expectedParams, projectionCount));
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_embeddingTensor);
+        if (_projectionWeights != null)
+        {
+            Engine.InvalidatePersistentTensor(_projectionWeights);
+        }
     }
 
     /// <summary>

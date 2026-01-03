@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -173,6 +175,10 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         _projectionBias = new Tensor<T>([_embeddingDim]);
 
         InitializeParameters();
+
+        // Register trainable parameters for GPU memory persistence
+        RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_projectionBias, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -530,6 +536,10 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
 
         _projectionWeights = Engine.TensorSubtract(_projectionWeights, Engine.TensorMultiplyScalar(_projectionWeightsGradient, learningRate));
         _projectionBias = Engine.TensorSubtract(_projectionBias, Engine.TensorMultiplyScalar(_projectionBiasGradient, learningRate));
+
+        // Invalidate GPU cache after parameter updates
+        Engine.InvalidatePersistentTensor(_projectionWeights);
+        Engine.InvalidatePersistentTensor(_projectionBias);
     }
 
     /// <summary>
@@ -598,6 +608,10 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         {
             _projectionBias[i] = parameters[index++];
         }
+
+        // Invalidate GPU cache after parameter updates
+        Engine.InvalidatePersistentTensor(_projectionWeights);
+        Engine.InvalidatePersistentTensor(_projectionBias);
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -176,6 +177,20 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         InitializeBiases(_biasI);
         InitializeBiases(_biasC);
         InitializeBiases(_biasO);
+
+        // Register trainable parameters for GPU memory persistence
+        RegisterTrainableParameter(_weightsFi, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_weightsIi, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_weightsCi, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_weightsOi, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_weightsFh, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_weightsIh, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_weightsCh, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_weightsOh, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biasF, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_biasI, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_biasC, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_biasO, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -245,6 +260,20 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         InitializeBiases(_biasI);
         InitializeBiases(_biasC);
         InitializeBiases(_biasO);
+
+        // Register trainable parameters for GPU memory persistence
+        RegisterTrainableParameter(_weightsFi, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_weightsIi, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_weightsCi, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_weightsOi, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_weightsFh, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_weightsIh, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_weightsCh, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_weightsOh, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biasF, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_biasI, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_biasC, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_biasO, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -1169,6 +1198,20 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         _biasC = UpdateParameterWithMomentum(_biasC, "biasC", learningRate);
         _biasO = UpdateParameterWithMomentum(_biasO, "biasO", learningRate);
 
+        // Invalidate GPU cache after parameter updates
+        Engine.InvalidatePersistentTensor(_weightsFi);
+        Engine.InvalidatePersistentTensor(_weightsIi);
+        Engine.InvalidatePersistentTensor(_weightsCi);
+        Engine.InvalidatePersistentTensor(_weightsOi);
+        Engine.InvalidatePersistentTensor(_weightsFh);
+        Engine.InvalidatePersistentTensor(_weightsIh);
+        Engine.InvalidatePersistentTensor(_weightsCh);
+        Engine.InvalidatePersistentTensor(_weightsOh);
+        Engine.InvalidatePersistentTensor(_biasF);
+        Engine.InvalidatePersistentTensor(_biasI);
+        Engine.InvalidatePersistentTensor(_biasC);
+        Engine.InvalidatePersistentTensor(_biasO);
+
         // Clear gradients after update
         _gradients.Clear();
     }
@@ -1384,6 +1427,20 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         CopyVectorToTensor(parameters, _biasI, ref index);
         CopyVectorToTensor(parameters, _biasC, ref index);
         CopyVectorToTensor(parameters, _biasO, ref index);
+
+        // Invalidate GPU cache after parameter updates
+        Engine.InvalidatePersistentTensor(_weightsFi);
+        Engine.InvalidatePersistentTensor(_weightsIi);
+        Engine.InvalidatePersistentTensor(_weightsCi);
+        Engine.InvalidatePersistentTensor(_weightsOi);
+        Engine.InvalidatePersistentTensor(_weightsFh);
+        Engine.InvalidatePersistentTensor(_weightsIh);
+        Engine.InvalidatePersistentTensor(_weightsCh);
+        Engine.InvalidatePersistentTensor(_weightsOh);
+        Engine.InvalidatePersistentTensor(_biasF);
+        Engine.InvalidatePersistentTensor(_biasI);
+        Engine.InvalidatePersistentTensor(_biasC);
+        Engine.InvalidatePersistentTensor(_biasO);
     }
 
     /// <summary>

@@ -1,5 +1,5 @@
 using AiDotNet.Autodiff;
-
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -380,6 +380,17 @@ public class GRULayer<T> : LayerBase<T>
         _bz = new Tensor<T>([_hiddenSize]);
         _br = new Tensor<T>([_hiddenSize]);
         _bh = new Tensor<T>([_hiddenSize]);
+
+        // Register trainable parameters for GPU memory optimization
+        RegisterTrainableParameter(_Wz, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Wr, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Wh, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Uz, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Ur, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Uh, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bz, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_br, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_bh, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -432,6 +443,17 @@ public class GRULayer<T> : LayerBase<T>
         _bz = new Tensor<T>([_hiddenSize]);
         _br = new Tensor<T>([_hiddenSize]);
         _bh = new Tensor<T>([_hiddenSize]);
+
+        // Register trainable parameters for GPU memory optimization
+        RegisterTrainableParameter(_Wz, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Wr, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Wh, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Uz, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Ur, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Uh, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bz, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_br, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_bh, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -1031,6 +1053,17 @@ public class GRULayer<T> : LayerBase<T>
         _bz = Engine.TensorSubtract(_bz, Engine.TensorMultiplyScalar(_dbz, learningRate));
         _br = Engine.TensorSubtract(_br, Engine.TensorMultiplyScalar(_dbr, learningRate));
         _bh = Engine.TensorSubtract(_bh, Engine.TensorMultiplyScalar(_dbh, learningRate));
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_Wz);
+        Engine.InvalidatePersistentTensor(_Wr);
+        Engine.InvalidatePersistentTensor(_Wh);
+        Engine.InvalidatePersistentTensor(_Uz);
+        Engine.InvalidatePersistentTensor(_Ur);
+        Engine.InvalidatePersistentTensor(_Uh);
+        Engine.InvalidatePersistentTensor(_bz);
+        Engine.InvalidatePersistentTensor(_br);
+        Engine.InvalidatePersistentTensor(_bh);
     }
 
     /// <summary>
@@ -1094,6 +1127,17 @@ public class GRULayer<T> : LayerBase<T>
         idx += biasSize;
 
         _bh = Tensor<T>.FromVector(parameters.Slice(idx, biasSize), [_hiddenSize]);
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_Wz);
+        Engine.InvalidatePersistentTensor(_Wr);
+        Engine.InvalidatePersistentTensor(_Wh);
+        Engine.InvalidatePersistentTensor(_Uz);
+        Engine.InvalidatePersistentTensor(_Ur);
+        Engine.InvalidatePersistentTensor(_Uh);
+        Engine.InvalidatePersistentTensor(_bz);
+        Engine.InvalidatePersistentTensor(_br);
+        Engine.InvalidatePersistentTensor(_bh);
     }
 
     /// <summary>

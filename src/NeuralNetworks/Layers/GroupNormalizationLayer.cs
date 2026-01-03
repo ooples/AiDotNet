@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -78,6 +79,10 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         _epsilon = NumericalStabilityHelper.GetEpsilon<T>(epsilon);
         _gamma = Tensor<T>.CreateDefault([numChannels], NumOps.One);
         _beta = Tensor<T>.CreateDefault([numChannels], NumOps.Zero);
+
+        // Register trainable parameters for GPU memory optimization
+        RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
+        RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
     }
 
     /// <summary>
@@ -189,6 +194,10 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
 
         _gamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
         _beta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_gamma);
+        Engine.InvalidatePersistentTensor(_beta);
     }
 
     public override Vector<T> GetParameters()
@@ -208,6 +217,10 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
 
         _gamma = Tensor<T>.FromVector(gammaVec, _gamma.Shape);
         _beta = Tensor<T>.FromVector(betaVec, _beta.Shape);
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_gamma);
+        Engine.InvalidatePersistentTensor(_beta);
     }
 
     public override void ResetState()

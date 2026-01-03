@@ -2,6 +2,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -102,6 +103,13 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         _outputBias = new Tensor<T>(new[] { queryDim });
 
         InitializeParameters();
+
+        // Register trainable parameters for GPU memory optimization
+        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
     }
 
     private void InitializeParameters()
@@ -784,6 +792,13 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         {
             UpdateWeight(_outputBias, _outputBiasGradient, learningRate);
         }
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_queryWeights);
+        Engine.InvalidatePersistentTensor(_keyWeights);
+        Engine.InvalidatePersistentTensor(_valueWeights);
+        Engine.InvalidatePersistentTensor(_outputWeights);
+        Engine.InvalidatePersistentTensor(_outputBias);
     }
 
     private void UpdateWeight(Tensor<T> weight, Tensor<T> gradient, T learningRate)
@@ -822,6 +837,13 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         CopyToTensor(parameters, index, _valueWeights); index += vLen;
         CopyToTensor(parameters, index, _outputWeights); index += oLen;
         CopyToTensor(parameters, index, _outputBias);
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_queryWeights);
+        Engine.InvalidatePersistentTensor(_keyWeights);
+        Engine.InvalidatePersistentTensor(_valueWeights);
+        Engine.InvalidatePersistentTensor(_outputWeights);
+        Engine.InvalidatePersistentTensor(_outputBias);
     }
 
     private void CopyToTensor(Vector<T> source, int offset, Tensor<T> dest)

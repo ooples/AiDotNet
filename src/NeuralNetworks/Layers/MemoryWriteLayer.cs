@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -288,6 +289,13 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _outputBias = new Tensor<T>([memoryDimension]);
 
         InitializeParameters();
+
+        // Register trainable parameters for GPU memory optimization
+        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -328,6 +336,13 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _outputBias = new Tensor<T>([memoryDimension]);
 
         InitializeParameters();
+
+        // Register trainable parameters for GPU memory optimization
+        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -785,6 +800,13 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         var scaledBiasGrad = Engine.TensorMultiplyScalar(_outputBiasGradient, learningRate);
         _outputBias = Engine.TensorSubtract(_outputBias, scaledBiasGrad);
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_queryWeights);
+        Engine.InvalidatePersistentTensor(_keyWeights);
+        Engine.InvalidatePersistentTensor(_valueWeights);
+        Engine.InvalidatePersistentTensor(_outputWeights);
+        Engine.InvalidatePersistentTensor(_outputBias);
     }
 
     /// <summary>
@@ -932,6 +954,13 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Set output bias
         var biasParams = parameters.SubVector(index, biasSize);
         _outputBias = Tensor<T>.FromVector(biasParams);
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_queryWeights);
+        Engine.InvalidatePersistentTensor(_keyWeights);
+        Engine.InvalidatePersistentTensor(_valueWeights);
+        Engine.InvalidatePersistentTensor(_outputWeights);
+        Engine.InvalidatePersistentTensor(_outputBias);
     }
 
     /// <summary>

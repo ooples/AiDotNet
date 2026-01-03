@@ -1,4 +1,4 @@
-
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -346,6 +346,12 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _outputBias = new Tensor<T>([embeddingDimension]);
 
         InitializeLayer(sequenceLength, embeddingDimension, headCount);
+
+        // Register trainable parameters for GPU memory optimization
+        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -400,6 +406,12 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _outputBias = new Tensor<T>([embeddingDimension]);
 
         InitializeLayer(sequenceLength, embeddingDimension, headCount);
+
+        // Register trainable parameters for GPU memory optimization
+        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -860,6 +872,12 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _keyWeights = _keyWeights.Subtract(_keyWeightsGradient.Multiply(learningRate));
         _valueWeights = _valueWeights.Subtract(_valueWeightsGradient.Multiply(learningRate));
         _outputBias = _outputBias.Subtract(_outputBiasGradient.Multiply(learningRate));
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_queryWeights);
+        Engine.InvalidatePersistentTensor(_keyWeights);
+        Engine.InvalidatePersistentTensor(_valueWeights);
+        Engine.InvalidatePersistentTensor(_outputBias);
     }
 
     /// <summary>
@@ -1015,6 +1033,12 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             _outputBias[i] = parameters[index++];
         }
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_queryWeights);
+        Engine.InvalidatePersistentTensor(_keyWeights);
+        Engine.InvalidatePersistentTensor(_valueWeights);
+        Engine.InvalidatePersistentTensor(_outputBias);
     }
 
     /// <summary>

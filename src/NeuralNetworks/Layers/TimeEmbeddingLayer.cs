@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -158,6 +160,12 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
                 _linear2Weights[i, j] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * scale2);
             }
         }
+
+        // Register trainable parameters for GPU memory optimization
+        RegisterTrainableParameter(_linear1Weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_linear1Bias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_linear2Weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_linear2Bias, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -356,6 +364,12 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
         _linear1Bias = Engine.TensorSubtract(_linear1Bias, Engine.TensorMultiplyScalar(_linear1BiasGradient, learningRate));
         _linear2Weights = Engine.TensorSubtract(_linear2Weights, Engine.TensorMultiplyScalar(_linear2WeightsGradient, learningRate));
         _linear2Bias = Engine.TensorSubtract(_linear2Bias, Engine.TensorMultiplyScalar(_linear2BiasGradient, learningRate));
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_linear1Weights);
+        Engine.InvalidatePersistentTensor(_linear1Bias);
+        Engine.InvalidatePersistentTensor(_linear2Weights);
+        Engine.InvalidatePersistentTensor(_linear2Bias);
     }
 
     /// <summary>
@@ -391,6 +405,12 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
         _linear2Weights = Tensor<T>.FromVector(parameters.Slice(offset, size3), [_outputDim, _outputDim]);
         offset += size3;
         _linear2Bias = Tensor<T>.FromVector(parameters.Slice(offset, size4), [_outputDim]);
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_linear1Weights);
+        Engine.InvalidatePersistentTensor(_linear1Bias);
+        Engine.InvalidatePersistentTensor(_linear2Weights);
+        Engine.InvalidatePersistentTensor(_linear2Bias);
     }
 
     /// <summary>

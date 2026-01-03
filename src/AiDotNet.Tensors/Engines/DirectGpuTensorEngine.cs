@@ -725,6 +725,42 @@ public class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
     }
 
     /// <summary>
+    /// GPU-accelerated fused 3D convolution with activation.
+    /// Currently delegates to CPU implementation as GPU Conv3D kernel is not yet available.
+    /// </summary>
+    public new Tensor<T> FusedConv3D<T>(
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T>? bias,
+        int strideD, int strideH, int strideW,
+        int padD, int padH, int padW,
+        int dilationD, int dilationH, int dilationW,
+        FusedActivationType activation)
+    {
+        // TODO: Implement GPU-accelerated Conv3D when backend support is available
+        // For now, delegate to CPU implementation which handles the sequential operations
+        return base.FusedConv3D(input, kernel, bias, strideD, strideH, strideW, padD, padH, padW, dilationD, dilationH, dilationW, activation);
+    }
+
+    /// <summary>
+    /// GPU-accelerated fused transposed 2D convolution with activation.
+    /// Currently delegates to CPU implementation as GPU ConvTranspose2D kernel is not yet available.
+    /// </summary>
+    public new Tensor<T> FusedConvTranspose2D<T>(
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T>? bias,
+        int strideH, int strideW,
+        int padH, int padW,
+        int outputPadH, int outputPadW,
+        FusedActivationType activation)
+    {
+        // TODO: Implement GPU-accelerated ConvTranspose2D when backend support is available
+        // For now, delegate to CPU implementation which handles the sequential operations
+        return base.FusedConvTranspose2D(input, kernel, bias, strideH, strideW, padH, padW, outputPadH, outputPadW, activation);
+    }
+
+    /// <summary>
     /// GPU-accelerated fused batch normalization with activation.
     /// </summary>
     public new Tensor<T> FusedBatchNorm<T>(

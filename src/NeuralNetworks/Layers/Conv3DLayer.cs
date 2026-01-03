@@ -1,4 +1,5 @@
 ﻿using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -213,6 +214,10 @@ public class Conv3DLayer<T> : LayerBase<T>
         _biases = new Tensor<T>([outputChannels]);
 
         InitializeWeights();
+
+        // Register trainable parameters for GPU memory persistence
+        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -263,6 +268,10 @@ public class Conv3DLayer<T> : LayerBase<T>
         _biases = new Tensor<T>([outputChannels]);
 
         InitializeWeights();
+
+        // Register trainable parameters for GPU memory persistence
+        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     #endregion
@@ -417,18 +426,40 @@ public class Conv3DLayer<T> : LayerBase<T>
                 $"Conv3DLayer expects 4D [C,D,H,W] or 5D [N,C,D,H,W] input, got {input.Rank}D.", nameof(input));
         }
 
-        var convOutput = Engine.Conv3D(
-            batchedInput,
-            _kernels,
-            [Stride, Stride, Stride],
-            [Padding, Padding, Padding],
-            [1, 1, 1]);
+        // Get the fused activation type for optimal GPU/CPU performance
+        var fusedActivation = GetFusedActivationType();
 
-        var withBias = AddBiases(convOutput);
-        _lastPreActivation = withBias;
+        Tensor<T> activated;
+        if (fusedActivation != FusedActivationType.None)
+        {
+            // Use FusedConv3D for optimal GPU kernel fusion (conv3d + bias + activation)
+            activated = Engine.FusedConv3D(
+                batchedInput, _kernels, _biases,
+                Stride, Stride, Stride,
+                Padding, Padding, Padding,
+                1, 1, 1,  // dilation
+                fusedActivation);
 
-        var activated = ApplyActivation(withBias);
-        _lastOutput = activated;
+            // Store for backward pass (activated output is also pre-activation for supported activations)
+            _lastPreActivation = activated;
+            _lastOutput = activated;
+        }
+        else
+        {
+            // Fallback for unsupported activations: use separate operations
+            var convOutput = Engine.Conv3D(
+                batchedInput,
+                _kernels,
+                [Stride, Stride, Stride],
+                [Padding, Padding, Padding],
+                [1, 1, 1]);
+
+            var withBias = AddBiases(convOutput);
+            _lastPreActivation = withBias;
+
+            activated = ApplyActivation(withBias);
+            _lastOutput = activated;
+        }
 
         if (!hasBatch && activated.Rank == 5 && activated.Shape[0] == 1)
         {
@@ -603,6 +634,10 @@ public class Conv3DLayer<T> : LayerBase<T>
 
         var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
         _biases = Engine.TensorSubtract(_biases, scaledBiasGrad);
+
+        // Invalidate GPU cache after parameter update
+        Engine.InvalidatePersistentTensor(_kernels);
+        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>
@@ -631,6 +666,10 @@ public class Conv3DLayer<T> : LayerBase<T>
         _kernels = new Tensor<T>(_kernels.Shape, parameters.Slice(index, _kernels.Length));
         index += _kernels.Length;
         _biases = new Tensor<T>(_biases.Shape, parameters.Slice(index, _biases.Length));
+
+        // Invalidate GPU cache after parameter update
+        Engine.InvalidatePersistentTensor(_kernels);
+        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>

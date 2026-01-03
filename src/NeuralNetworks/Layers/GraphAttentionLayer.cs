@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -171,6 +172,11 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _bias = new Tensor<T>([_outputFeatures]);
 
         InitializeParameters();
+
+        // Register trainable parameters for GPU memory optimization
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_attentionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -1274,6 +1280,11 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _attentionWeights = Engine.TensorSubtract(_attentionWeights,
             Engine.TensorMultiplyScalar(_attentionWeightsGradient, learningRate));
         _bias = Engine.TensorSubtract(_bias, Engine.TensorMultiplyScalar(_biasGradient, learningRate));
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_attentionWeights);
+        Engine.InvalidatePersistentTensor(_bias);
     }
 
     /// <inheritdoc/>
@@ -1309,6 +1320,11 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         index += attnCount;
 
         _bias = Tensor<T>.FromVector(parameters.SubVector(index, biasCount));
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_attentionWeights);
+        Engine.InvalidatePersistentTensor(_bias);
     }
 
     /// <inheritdoc/>

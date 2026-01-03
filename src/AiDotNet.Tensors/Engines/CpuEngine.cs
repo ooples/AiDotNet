@@ -15143,6 +15143,66 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
+    public Tensor<T> FusedConv3D<T>(
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T>? bias,
+        int strideD, int strideH, int strideW,
+        int padD, int padH, int padW,
+        int dilationD, int dilationH, int dilationW,
+        FusedActivationType activation)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+
+        // CPU implementation: sequential operations
+        // Step 1: Conv3D
+        var result = Conv3D(input, kernel, new[] { strideD, strideH, strideW }, new[] { padD, padH, padW }, new[] { dilationD, dilationH, dilationW });
+
+        // Step 2: Add bias if provided (reshape to [1, outChannels, 1, 1, 1] for NCDHW broadcast)
+        if (bias != null)
+        {
+            var biasExpanded = bias.Reshape(1, bias.Shape[0], 1, 1, 1);
+            result = TensorBroadcastAdd(result, biasExpanded);
+        }
+
+        // Step 3: Apply activation
+        result = ApplyFusedActivation(result, activation);
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> FusedConvTranspose2D<T>(
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T>? bias,
+        int strideH, int strideW,
+        int padH, int padW,
+        int outputPadH, int outputPadW,
+        FusedActivationType activation)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+
+        // CPU implementation: sequential operations
+        // Step 1: ConvTranspose2D
+        var result = ConvTranspose2D(input, kernel, new[] { strideH, strideW }, new[] { padH, padW }, new[] { outputPadH, outputPadW });
+
+        // Step 2: Add bias if provided (reshape to [1, outChannels, 1, 1] for NCHW broadcast)
+        if (bias != null)
+        {
+            var biasExpanded = bias.Reshape(1, bias.Shape[0], 1, 1);
+            result = TensorBroadcastAdd(result, biasExpanded);
+        }
+
+        // Step 3: Apply activation
+        result = ApplyFusedActivation(result, activation);
+
+        return result;
+    }
+
+    /// <inheritdoc/>
     public Tensor<T> FusedBatchNorm<T>(
         Tensor<T> input,
         Tensor<T> gamma,

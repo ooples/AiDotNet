@@ -1,5 +1,5 @@
 using System.Linq;
-
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -256,6 +256,12 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _Wv = InitializeTensor(new[] { _attentionSize, _inputSize }, scale);
         // Output projection Wo: [inputSize, attentionSize] to project attention output back to input dimension
         _Wo = InitializeTensor(new[] { _inputSize, _attentionSize }, scale);
+
+        // Register trainable parameters for GPU memory optimization
+        RegisterTrainableParameter(_Wq, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Wk, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Wv, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Wo, PersistentTensorRole.Weights);
     }
 
     /// <summary>
@@ -288,6 +294,12 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _Wv = InitializeTensor(new[] { _attentionSize, _inputSize }, scale);
         // Output projection Wo: [inputSize, attentionSize] to project attention output back to input dimension
         _Wo = InitializeTensor(new[] { _inputSize, _attentionSize }, scale);
+
+        // Register trainable parameters for GPU memory optimization
+        RegisterTrainableParameter(_Wq, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Wk, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Wv, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Wo, PersistentTensorRole.Weights);
     }
 
     /// <summary>
@@ -1053,6 +1065,12 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _Wk = _Wk.Subtract(_dWk.Scale(learningRate));
         _Wv = _Wv.Subtract(_dWv.Scale(learningRate));
         _Wo = _Wo.Subtract(_dWo.Scale(learningRate));
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_Wq);
+        Engine.InvalidatePersistentTensor(_Wk);
+        Engine.InvalidatePersistentTensor(_Wv);
+        Engine.InvalidatePersistentTensor(_Wo);
     }
 
     /// <summary>
@@ -1088,6 +1106,11 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Update Wv - slice and copy
         var wvParams = parameters.Slice(startIndex, _Wv.Length);
         _Wv = Tensor<T>.FromVector(wvParams).Reshape(_Wv.Shape);
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_Wq);
+        Engine.InvalidatePersistentTensor(_Wk);
+        Engine.InvalidatePersistentTensor(_Wv);
     }
 
     /// <summary>
