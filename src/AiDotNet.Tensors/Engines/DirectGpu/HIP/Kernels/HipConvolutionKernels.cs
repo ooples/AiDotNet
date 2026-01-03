@@ -7,9 +7,12 @@ internal static class HipConvolutionKernels
 {
     public static string GetSource()
     {
+        // Note: hiprtc provides device intrinsics built-in, no includes needed
         return @"
-#include <hip/hip_runtime.h>
-#include <math.h>
+// HIP RTC Compatibility - no includes needed, device intrinsics are built-in
+#ifndef INFINITY
+#define INFINITY __builtin_huge_valf()
+#endif
 
 extern ""C"" __global__ void im2col(
     const float* input, float* output,

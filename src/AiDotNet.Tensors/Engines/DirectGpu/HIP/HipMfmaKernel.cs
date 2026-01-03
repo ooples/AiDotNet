@@ -24,13 +24,17 @@ internal static class HipMfmaKernel
     /// </summary>
     public static string GetSource()
     {
+        // Note: hiprtc provides device intrinsics built-in, no includes needed
         return @"
 // ===========================================================================
 // AMD MFMA GEMM KERNEL - Real Matrix Core Instructions
 // Target: 25,000+ GFLOPS on MI200, 15,000+ GFLOPS on RX 7900
 // ===========================================================================
 
-#include <hip/hip_runtime.h>
+// HIP RTC Compatibility - no includes needed, device intrinsics are built-in
+#ifndef INFINITY
+#define INFINITY __builtin_huge_valf()
+#endif
 
 // MFMA tile dimensions for gfx90a (MI200)
 // MFMA_F32_32x32x8_F16: 32x32 output tile, K=8 depth per instruction
