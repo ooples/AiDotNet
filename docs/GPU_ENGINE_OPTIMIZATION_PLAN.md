@@ -425,15 +425,16 @@ These layers have significant manual implementations that should use IEngine:
 
 ## Implementation Order
 
-1. **Phase 1: IEngine Interface** ✅ (Partially Complete)
+1. **Phase 1: IEngine Interface** ✅ (Complete)
    - [x] Add `PersistentTensorRole` enum - `src/AiDotNet.Tensors/Engines/PersistentTensorRole.cs`
    - [x] Add `FusedActivationType` enum - `src/AiDotNet.Tensors/Engines/FusedActivationType.cs`
    - [x] Add `RegisterPersistentTensor`/`UnregisterPersistentTensor`/`InvalidatePersistentTensor` to IEngine
    - [x] Add `FusedLinear`, `FusedLinearBackward` to IEngine
    - [x] Add `FusedConv2D`, `FusedBatchNorm` to IEngine
    - [x] Add `LeakyReLU` tensor operation to IEngine
-   - [x] Implement in CpuEngine (CPU fallback path)
-   - [ ] Implement in GpuEngine (DirectGpu path) - pending
+   - [x] Implement in CpuEngine (CPU fallback path with vectorized SIMD operations)
+   - [x] Implement in GpuEngine (DirectGpu path with proper GPU kernels)
+   - [x] Implement persistent tensor GPU buffer caching in DirectGpuTensorEngine
 
 2. **Phase 2: LayerBase Integration**
    - Add `RegisterTrainableParameter` helper
@@ -492,7 +493,43 @@ These layers have significant manual implementations that should use IEngine:
 - Persistent tensor methods are no-ops (CPU doesn't need caching)
 - LeakyReLU uses TensorPrimitivesHelper for optimized implementation
 
+**Completed:**
+- [x] Implement GpuEngine versions using DirectGpu fused kernels
+- [x] Add RmsNormBackward to IDirectGpuBackend
+- [x] Add ScatterAddBackward to IDirectGpuBackend
+
+### 2026-01-02: GpuEngine Fused Operations and Backend Updates
+
+**IDirectGpuBackend.cs Additions:**
+- `RmsNormBackward` - Backward pass for RMS normalization
+- `ScatterAddBackward` - Backward pass for scatter-add operation
+
+**NormalizationKernels.cs Additions (OpenCL):**
+- `rmsnorm_backward` - OpenCL kernel for RMS norm gradient computation
+- `rmsnorm_grad_gamma` - OpenCL kernel for gamma gradient accumulation
+- `scatter_add_backward` - OpenCL kernel for scatter-add backward (gather)
+
+**Backend Implementations:**
+- OpenCL: Full GPU implementation using custom kernels
+- CUDA: Full GPU implementation using custom kernels
+- HIP: Full GPU implementation using custom kernels
+
+**DirectGpuTensorEngine.cs:**
+- `FusedLinear<T>` - GPU-accelerated using GemmBiasRelu/Gelu/Sigmoid/Tanh kernels
+- `FusedBatchNorm<T>` - GPU-accelerated batch normalization with activation
+- `FusedConv2D<T>` - GPU-accelerated using backend.Conv2D with activation
+- `RegisterPersistentTensor<T>` - GPU buffer caching with ConcurrentDictionary
+- `UnregisterPersistentTensor<T>` - Releases cached GPU buffers
+- `InvalidatePersistentTensor<T>` - Re-uploads tensor data to GPU
+
+**CpuFusedOperations.cs (Created):**
+- Vectorized SIMD-optimized fused operations for CPU path
+- `FusedGemmBiasActivation` - TensorPrimitives-based GEMM with fused bias/activation
+- `FusedLayerNormActivation` - Fused layer normalization
+- `FusedResidualLayerNorm` - Fused residual connection with layer norm
+- `FusedScaledSoftmax` - Fused scaling with softmax
+- `FusedBiasDropout` - Fused bias addition with dropout
+
 **Next Steps:**
-- Implement GpuEngine versions using DirectGpu fused kernels
-- Add RmsNormBackward to IDirectGpuBackend
-- Add ScatterAddBackward to IDirectGpuBackend
+- Implement Phase 2: LayerBase Integration
+- Refactor Priority 1 layers to use fused operations
