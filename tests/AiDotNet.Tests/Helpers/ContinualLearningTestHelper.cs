@@ -454,4 +454,38 @@ public class MockLayer<T> : ILayer<T>
             ["parameter.count"] = _parameterCount.ToString()
         };
     }
+
+    // IWeightLoadable<T>
+    public IEnumerable<string> GetParameterNames()
+    {
+        return Enumerable.Empty<string>();
+    }
+
+    public bool TryGetParameter(string name, out Tensor<T>? tensor)
+    {
+        tensor = null;
+        return false;
+    }
+
+    public bool SetParameter(string name, Tensor<T> value)
+    {
+        return false;
+    }
+
+    public int[]? GetParameterShape(string name)
+    {
+        return null;
+    }
+
+    public int NamedParameterCount => 0;
+
+    public WeightLoadValidation ValidateWeights(IEnumerable<string> weightNames, Func<string, string?>? mapping = null)
+    {
+        return new WeightLoadValidation();
+    }
+
+    public WeightLoadResult LoadWeights(Dictionary<string, Tensor<T>> weights, Func<string, string?>? mapping = null, bool strict = false)
+    {
+        return new WeightLoadResult { Success = true };
+    }
 }
