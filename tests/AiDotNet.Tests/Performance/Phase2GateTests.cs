@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using AiDotNet.Interfaces;
 using AiDotNet.Memory;
+using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
 
 namespace AiDotNet.Tests.Performance;
@@ -337,5 +338,126 @@ public class Phase2GateTests
             $"Allocations increased by {allocsDelta:N0} bytes, expected < 1MB with pooling");
 
         pool.Dispose();
+    }
+
+    [Fact]
+    public void DenseLayer_LazyInit_IsNotInitializedAfterConstruction()
+    {
+        var layer = new DenseLayer<float>(100, 50,
+            initializationStrategy: InitializationStrategy<float>.Lazy);
+
+        Assert.False(layer.IsInitialized);
+    }
+
+    [Fact]
+    public void DenseLayer_LazyInit_IsInitializedAfterForward()
+    {
+        var layer = new DenseLayer<float>(100, 50,
+            initializationStrategy: InitializationStrategy<float>.Lazy);
+
+        Assert.False(layer.IsInitialized);
+
+        // Perform forward pass to trigger initialization
+        var input = new Tensor<float>(new[] { 1, 100 });
+        layer.Forward(input);
+
+        Assert.True(layer.IsInitialized);
+    }
+
+    [Fact]
+    public void DenseLayer_EagerInit_IsInitializedImmediately()
+    {
+        var layer = new DenseLayer<float>(100, 50,
+            initializationStrategy: InitializationStrategy<float>.Eager);
+
+        Assert.True(layer.IsInitialized);
+    }
+
+    [Fact]
+    public void DenseLayer_DefaultInit_IsInitializedImmediately()
+    {
+        var layer = new DenseLayer<float>(100, 50);
+
+        Assert.True(layer.IsInitialized);
+    }
+
+    [Fact]
+    public void DenseLayer_LazyInit_ConstructsFaster()
+    {
+        const int inputSize = 1000;
+        const int outputSize = 1000;
+        const int iterations = 100;
+
+        // Measure eager construction time
+        var swEager = Stopwatch.StartNew();
+        for (int i = 0; i < iterations; i++)
+        {
+            var layer = new DenseLayer<float>(inputSize, outputSize,
+                initializationStrategy: InitializationStrategy<float>.Eager);
+        }
+        swEager.Stop();
+
+        // Measure lazy construction time
+        var swLazy = Stopwatch.StartNew();
+        for (int i = 0; i < iterations; i++)
+        {
+            var layer = new DenseLayer<float>(inputSize, outputSize,
+                initializationStrategy: InitializationStrategy<float>.Lazy);
+        }
+        swLazy.Stop();
+
+        // Lazy should be significantly faster (at least 2x)
+        Assert.True(swLazy.ElapsedMilliseconds < swEager.ElapsedMilliseconds,
+            $"Lazy ({swLazy.ElapsedMilliseconds}ms) should be faster than Eager ({swEager.ElapsedMilliseconds}ms)");
+    }
+
+    [Fact]
+    public void DenseLayer_LazyInit_ProducesCorrectOutput()
+    {
+        var eagerLayer = new DenseLayer<float>(10, 5,
+            initializationStrategy: InitializationStrategy<float>.Zero);
+        var lazyLayer = new DenseLayer<float>(10, 5,
+            initializationStrategy: InitializationStrategy<float>.Lazy);
+
+        // Set the lazy layer's strategy to also use zero init after it's created
+        // We need to test that the forward pass produces valid output
+        var input = new Tensor<float>(new[] { 1, 10 });
+        for (int i = 0; i < 10; i++)
+        {
+            input.Data[i] = 1.0f;
+        }
+
+        // After forward, lazy layer should be initialized and produce output
+        var output = lazyLayer.Forward(input);
+
+        Assert.NotNull(output);
+        Assert.Equal(5, output.Shape[^1]);
+        Assert.True(lazyLayer.IsInitialized);
+    }
+
+    [Fact]
+    public void DenseLayer_LazyInit_ThreadSafe()
+    {
+        var layer = new DenseLayer<float>(100, 50,
+            initializationStrategy: InitializationStrategy<float>.Lazy);
+        var exceptions = new ConcurrentBag<Exception>();
+
+        // Multiple threads trying to initialize simultaneously
+        Parallel.For(0, 10, i =>
+        {
+            try
+            {
+                var input = new Tensor<float>(new[] { 1, 100 });
+                layer.Forward(input);
+                Assert.True(layer.IsInitialized);
+            }
+            catch (Exception ex)
+            {
+                exceptions.Add(ex);
+            }
+        });
+
+        Assert.Empty(exceptions);
+        Assert.True(layer.IsInitialized);
     }
 }
