@@ -239,11 +239,19 @@ jobs:
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net8.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~MobileNetTests|FullyQualifiedName~EfficientNetTests)'
-          # VLM tests split from NN-VLM-Other due to 45+ min timeout
-          - name: AiDotNet.Tests - Unit - 10a3a NN-VLM
+          # VLM tests split individually due to 45+ min timeout when combined
+          - name: AiDotNet.Tests - Unit - 10a3a1 NN-Blip
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net8.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~BlipNeuralNetworkTests|FullyQualifiedName~Blip2NeuralNetworkTests|FullyQualifiedName~ClipNeuralNetworkTests)'
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~BlipNeuralNetworkTests'
+          - name: AiDotNet.Tests - Unit - 10a3a2 NN-Blip2
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~Blip2NeuralNetworkTests'
+          - name: AiDotNet.Tests - Unit - 10a3a3 NN-Clip
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~ClipNeuralNetworkTests'
           - name: AiDotNet.Tests - Unit - 10a3b NN-Adapters
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net8.0
@@ -526,9 +534,13 @@ jobs:
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~ResNetNetworkTests|FullyQualifiedName~VGGNetworkTests|FullyQualifiedName~DenseNetTests)'
           - name: Unit 10a2 NN-Efficient
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~MobileNetTests|FullyQualifiedName~EfficientNetTests)'
-          # VLM tests split from NN-VLM-Other due to 45+ min timeout
-          - name: Unit 10a3a NN-VLM
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~BlipNeuralNetworkTests|FullyQualifiedName~Blip2NeuralNetworkTests|FullyQualifiedName~ClipNeuralNetworkTests)'
+          # VLM tests split individually due to 45+ min timeout when combined
+          - name: Unit 10a3a1 NN-Blip
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~BlipNeuralNetworkTests'
+          - name: Unit 10a3a2 NN-Blip2
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~Blip2NeuralNetworkTests'
+          - name: Unit 10a3a3 NN-Clip
+            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~ClipNeuralNetworkTests'
           - name: Unit 10a3b NN-Adapters
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
           - name: Unit 10b-12 Opt-RAG-Reg
